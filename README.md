@@ -31,11 +31,14 @@ MRR's semantic APIs.
 ## Current status
 
 This repository now contains the first executable implementation slice:
-relation-specific Arrow schemas and lossless scalar-row round trips, with
-typed rejection for nested shapes that are not yet admitted. It does not yet
-claim:
+relation-specific Arrow schemas and lossless complete-Fact round trips. The
+batch preserves `FactId`, `RelationId`, `GenerationId`, authority, provenance,
+completeness, validity, field order, and scalar values while rejecting invalid
+facts before projection. Deterministic Arrow IPC file export and bounded import
+are covered by malformed-input, truncation, mutation, and resource-limit tests.
+It does not yet claim:
 
-- a complete MRR-to-Arrow mapping for List and Record shapes or full Fact context;
+- a complete MRR-to-Arrow mapping for List and Record shapes;
 - GraphAr export/import;
 - stable snapshot manifests or CIDs;
 - CAR packaging or an IPFS network integration;
@@ -56,6 +59,24 @@ V1 is deliberately local-first and narrow:
 
 There is no `mrr-ipfs` crate in the V1 plan. Content addressing does not imply
 an IPFS daemon, a public gateway, or public publication.
+
+## Development contract
+
+`asp-rust` is pinned as a development dependency and drives the parser-native
+workspace policy from each crate's `build.rs`. It rejects non-canonical source
+and test layout during ordinary Cargo builds; there is no second style checker
+or source-scanning test harness in this repository.
+
+The complete local gate is the same gate used by CI:
+
+```sh
+cargo fmt --all -- --check
+cargo test --workspace --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+```
+
+CI runs this contract on both Ubuntu and macOS. Workspace lints forbid unsafe
+Rust and enable Clippy's `all` and `pedantic` groups for every member crate.
 
 ## North star
 

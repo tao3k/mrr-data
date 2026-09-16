@@ -390,13 +390,13 @@ crate in V1.
   round-trip evidence;
 - test deterministic root CID across repeated builds;
 - reject unknown schema versions, algorithms, codecs, and self-inconsistent
-  child descriptors;
-- prove that repacking CAR does not change the snapshot root.
+  child descriptors.
 
 ** M2: local content-addressed packaging
 
 - implement memory and filesystem =ContentStore=;
 - write/read CAR with full root and child verification;
+- prove that repacking CAR does not change the snapshot root;
 - enforce import budgets and typed failures;
 - demonstrate identical semantic data can have distinct physical CIDs without
   changing =GenerationId=.

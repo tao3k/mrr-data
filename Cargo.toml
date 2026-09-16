@@ -11,6 +11,7 @@ repository = "https://github.com/tao3k/mrr-data"
 
 [workspace.dependencies]
 arrow-array = "58.4.0"
+arrow-ipc = "58.4.0"
 arrow-schema = "58.4.0"
 meta-relational-reasoning = { git = "https://github.com/tao3k/meta-relational-reasoning.git", rev = "6448b986ece59951aeeea81f577bafd6c3949023" }
 
