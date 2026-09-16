@@ -37,11 +37,18 @@ completeness, validity, field order, and every V1 value shape. Recursive List
 and Record values use Arrow's native nested arrays rather than JSON. Invalid
 facts are rejected before projection; deterministic Arrow IPC file export and
 bounded import are covered by example-based tests, property tests, malformed
-and mutated corpora, resource-limit contracts, and a fuzz target. It does not
-yet claim:
+and mutated corpora, resource-limit contracts, and a fuzz target.
+
+`mrr-data-core` implements the M1 identity boundary: schema namespace
+`mrr.data.snapshot` with a separate numeric version, canonical DAG-CBOR,
+CIDv1/dag-cbor/SHA-256 roots, raw/SHA-256 child CIDs, and typed rejection of
+unknown profiles or self-inconsistent descriptors. It consumes MRR's semantic
+generation, source snapshot, and catalog digests rather than defining a second
+semantic identity system.
+
+The repository does not yet claim:
 
 - GraphAr export/import;
-- stable snapshot manifests or CIDs;
 - CAR packaging or an IPFS network integration;
 - schema-bound query execution.
 
@@ -63,10 +70,11 @@ an IPFS daemon, a public gateway, or public publication.
 
 ## Development contract
 
-`asp-rust` is pinned as a development dependency and drives the parser-native
-workspace policy from each crate's `build.rs`. It rejects non-canonical source
-and test layout during ordinary Cargo builds; there is no second style checker
-or source-scanning test harness in this repository.
+`asp-rust` is pinned as a development dependency. One shared
+`mrr-data-asp-rust-project-policy` Build Support owner drives the parser-native
+workspace policy for every member crate. It rejects non-canonical source and
+test layout during ordinary Cargo builds; there is no second style checker or
+source-scanning test harness in this repository.
 
 The complete local gate is the same gate used by CI:
 

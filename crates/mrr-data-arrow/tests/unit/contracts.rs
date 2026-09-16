@@ -11,8 +11,8 @@ use meta_relational_reasoning::{
 };
 
 use crate::{
-    ARROW_FACT_PROFILE_V1, ArrowRelationError, IpcImportLimits, facts_to_ipc,
-    facts_to_record_batch, ipc_to_facts, record_batch_to_facts,
+    ARROW_FACT_SCHEMA_NAMESPACE, ARROW_FACT_SCHEMA_VERSION, ArrowRelationError, IpcImportLimits,
+    facts_to_ipc, facts_to_record_batch, ipc_to_facts, record_batch_to_facts,
 };
 
 fn id<T>(name: &str) -> T
@@ -143,8 +143,12 @@ fn complete_facts_round_trip_losslessly() {
     let batch = facts_to_record_batch(&relation, &facts).expect("encode facts");
     assert_eq!(record_batch_to_facts(&relation, &batch).unwrap(), facts);
     assert_eq!(
-        batch.schema().metadata()["mrr.profile"],
-        ARROW_FACT_PROFILE_V1
+        batch.schema().metadata()["mrr.schema.namespace"],
+        ARROW_FACT_SCHEMA_NAMESPACE
+    );
+    assert_eq!(
+        batch.schema().metadata()["mrr.schema.version"],
+        ARROW_FACT_SCHEMA_VERSION.to_string()
     );
     assert_eq!(
         batch.schema().field(9).metadata()["mrr.value-schema"],

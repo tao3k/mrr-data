@@ -20,13 +20,11 @@ use meta_relational_reasoning::{
     GenerationId, RelationAuthority, RelationContext, RelationField, RelationSchema, RuleId,
     RulePackId, Value, ValueSchema,
 };
+use mrr_data_core::{ARROW_FACT_SCHEMA_NAMESPACE, ARROW_FACT_SCHEMA_VERSION};
 
 use crate::error::ArrowRelationError;
 use crate::ipc::{IpcImportLimits, check_limit, preflight_ipc};
 use crate::schema::{project_schema_field, project_value_field};
-
-/// Stable metadata identity for complete relation-specific fact batches.
-pub const ARROW_FACT_PROFILE_V1: &str = "mrr.data.arrow.fact-batch.v1";
 
 const FACT_ID_COLUMN: &str = "__mrr_fact_id";
 const GENERATION_ID_COLUMN: &str = "__mrr_generation_id";
@@ -68,7 +66,14 @@ pub fn project_fact_schema(relation: &RelationSchema) -> Result<Schema, ArrowRel
     Ok(Schema::new_with_metadata(
         fields,
         HashMap::from([
-            ("mrr.profile".to_owned(), ARROW_FACT_PROFILE_V1.to_owned()),
+            (
+                "mrr.schema.namespace".to_owned(),
+                ARROW_FACT_SCHEMA_NAMESPACE.to_owned(),
+            ),
+            (
+                "mrr.schema.version".to_owned(),
+                ARROW_FACT_SCHEMA_VERSION.to_string(),
+            ),
             ("mrr.relation-id".to_owned(), relation.id().to_string()),
             ("mrr.predicate".to_owned(), relation.predicate().to_owned()),
         ]),

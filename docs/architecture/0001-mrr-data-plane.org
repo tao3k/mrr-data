@@ -187,15 +187,20 @@ The following equalities are forbidden:
 
 * Content Snapshot Manifest V1
 
-The Content root block has schema identity =mrr.data.snapshot.v1=.  It is never
-used for a task-scoped Context projection.  Its CID is computed over the
-canonical encoded block and is therefore returned alongside the manifest, not
-embedded as a self-referential =root_cid= field.
+The Content root block has the stable schema namespace =mrr.data.snapshot= and
+the separate schema version =1=.  A namespace never embeds a version suffix:
+namespace selects the owning contract and the numeric version selects one wire
+schema within it.  The Content root is never used for a task-scoped Context
+projection.  Its CID is computed over the canonical encoded block and is
+therefore returned alongside the manifest, not embedded as a self-referential
+=root_cid= field.
 
 The logical shape is:
 
 #+begin_src yaml
-schema: mrr.data.snapshot.v1
+schema:
+  namespace: mrr.data.snapshot
+  version: 1
 semantic:
   generation_id: "..."
   semantic_snapshot_digest: "..."
@@ -209,16 +214,20 @@ source:
       content_revision: "..."
 relations:
   - relation_id: "..."
-    relation_schema_digest: "..."
-    arrow_schema_digest: "..."
+    arrow_schema:
+      namespace: mrr.data.arrow.fact-batch
+      version: 1
     row_count: 0
     batches:
       - cid: "..."
         cid_codec: raw
         format: arrow-ipc-file
+        row_count: 0
         byte_length: 0
 graph_projection:
-  profile: mrr.graphar.binary-entity.v1
+  schema:
+    namespace: mrr.graphar.binary-entity
+    version: 1
   graphar_version: "..."
   manifest_cid: "..."
 lineage:
@@ -229,7 +238,7 @@ coverage:
 integrity:
   cid_version: 1
   manifest_codec: dag-cbor
-  multihash: "..."
+  multihash: sha2-256
 #+end_src
 
 =graph_projection= is optional.  A relation descriptor may be Arrow-only.  The
@@ -238,6 +247,14 @@ and never lists its own CID.  The root itself uses =dag-cbor=; Arrow, GraphAr,
 and other opaque child payloads use =raw= unless a registered, frozen codec is
 introduced by a later schema version.  Locations, gateway URLs, credentials,
 mutable tags, and authorization tokens are outside the immutable root.
+
+The manifest deliberately has no independently invented per-relation semantic
+digest or second Arrow-schema digest.  MRR's =RelationCatalogDigest= anchors
+the admitted relation semantics.  The frozen Arrow schema namespace
+=mrr.data.arrow.fact-batch= at version =1= deterministically projects that
+relation schema, and each raw child CID anchors the exact IPC bytes.  A batch
+carries its own row count so admission can prove that the relation total equals
+the checked sum without opening child payloads.
 
 * Lineage and reasoning bundles
 
@@ -291,12 +308,14 @@ Context Graph, but storage co-location cannot collapse their roles.
 - Importing, merging, pinning, or querying Context data cannot promote it into
   Content.  It must re-enter through source and MRR admission.
 
-Context therefore has a distinct root schema, =mrr.data.context.v1=, rather
-than optional fields inside =mrr.data.snapshot.v1=.  Its immutable descriptor
-must contain at least:
+Context therefore has a distinct root schema namespace, =mrr.data.context=,
+rather than optional fields inside =mrr.data.snapshot=.  Its immutable
+descriptor must contain at least:
 
 #+begin_src yaml
-schema: mrr.data.context.v1
+schema:
+  namespace: mrr.data.context
+  version: 1
 content:
   generation_id: "..."
   snapshot_cid: "..."
@@ -309,18 +328,22 @@ scope:
 projection:
   relations:
     - relation_id: "..."
+      arrow_schema:
+        namespace: mrr.data.arrow.fact-batch
+        version: 1
       cid: "..."
       cid_codec: raw
       format: arrow-ipc-file
 integrity:
   cid_version: 1
   manifest_codec: dag-cbor
-  multihash: "..."
+  multihash: sha2-256
 #+end_src
 
-The schema tag makes Content and Context roots non-interchangeable.  Context
-import additionally checks the named Content root, actor/task/capability
-scope, selection policy, and expiry before exposing projected data.
+The schema namespace and version pair makes Content and Context roots
+non-interchangeable.  Context import additionally checks the named Content
+root, actor/task/capability scope, selection policy, and expiry before exposing
+projected data.
 
 This is why Content can calibrate and anchor Context without making Arrow,
 GraphAr, or a graph database the source of truth.
@@ -444,8 +467,13 @@ status does not advance the later data-plane milestones.
 
 ** M1: identity and manifest
 
-- freeze =mrr.data.snapshot.v1= only after the Arrow descriptors have executable
-  round-trip evidence;
+Implementation status: canonical manifest admission, MRR catalog/source
+binding, deterministic DAG-CBOR, frozen CID profiles, typed negative contracts,
+and a golden root vector are implemented.  M1 is accepted only after the
+current-head CI and review receipts are green.
+
+- freeze namespace =mrr.data.snapshot= at schema version =1= only after the
+  Arrow descriptors have executable round-trip evidence;
 - test deterministic root CID across repeated builds;
 - reject unknown schema versions, algorithms, codecs, and self-inconsistent
   child descriptors.

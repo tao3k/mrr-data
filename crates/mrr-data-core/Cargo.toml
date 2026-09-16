@@ -1,6 +1,6 @@
 [package]
-name = "mrr-data-arrow"
-description = "Lossless Arrow interchange for admitted MRR facts"
+name = "mrr-data-core"
+description = "Canonical content identity and snapshot manifests for MRR Data"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,17 +8,16 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-arrow-array.workspace = true
-arrow-buffer.workspace = true
-arrow-ipc.workspace = true
-arrow-schema.workspace = true
-flatbuffers.workspace = true
+cid.workspace = true
 meta-relational-reasoning.workspace = true
-mrr-data-core.workspace = true
+multihash-codetable.workspace = true
+serde.workspace = true
+serde_bytes.workspace = true
+serde_ipld_dagcbor.workspace = true
 
 [dev-dependencies]
 asp-rust = { git = "https://github.com/tao3k/asp-rust", rev = "f88445d971d6b7dfd6336d73e52dc0411921f5bf", default-features = false }
-proptest = "=1.11.0"
+ipld-core.workspace = true
 
 [build-dependencies]
 mrr-data-asp-rust-project-policy.workspace = true

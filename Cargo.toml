@@ -1,5 +1,9 @@
 [workspace]
-members = ["crates/mrr-data-arrow"]
+members = [
+  "build-support/mrr-data-asp-rust-project-policy",
+  "crates/mrr-data-arrow",
+  "crates/mrr-data-core",
+]
 resolver = "2"
 
 [workspace.package]
@@ -16,6 +20,14 @@ arrow-ipc = "58.4.0"
 arrow-schema = "58.4.0"
 flatbuffers = "25.2.10"
 meta-relational-reasoning = { git = "https://github.com/tao3k/meta-relational-reasoning.git", rev = "4bb063f8297238c24c15b890558782e35fbd9ca7" }
+mrr-data-asp-rust-project-policy = { path = "build-support/mrr-data-asp-rust-project-policy", version = "0.1.0" }
+mrr-data-core = { path = "crates/mrr-data-core", version = "0.1.0" }
+cid = { version = "=0.11.3", features = ["serde"] }
+multihash-codetable = { version = "=0.2.2", default-features = false, features = ["sha2", "std"] }
+ipld-core = { version = "=0.4.2", features = ["serde"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_bytes = "=0.11.19"
+serde_ipld_dagcbor = "=0.7.0"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
