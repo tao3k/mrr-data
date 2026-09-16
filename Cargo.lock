@@ -1227,6 +1227,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "mrr-data-graphar"
+version = "0.1.0"
+dependencies = [
+ "asp-rust",
+ "meta-relational-reasoning",
+ "mrr-data-asp-rust-project-policy",
+ "mrr-data-core",
+]
+
+[[package]]
 name = "mrr-identity"
 version = "0.1.0"
 source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=4bb063f8297238c24c15b890558782e35fbd9ca7#4bb063f8297238c24c15b890558782e35fbd9ca7"

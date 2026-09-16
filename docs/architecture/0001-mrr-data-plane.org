@@ -497,6 +497,25 @@ CI and review receipts are green.
 
 ** M3: GraphAr specialization
 
+Implementation status: the first admission slice is implemented in
+=mrr-data-graphar=.  It admits exactly two ordered, non-null =Entity= fields,
+validates every fact through its owning MRR relation, preserves all
+semantic identities and context in a physical-ID-free edge record, and rejects
+n-ary, nullable-endpoint, scalar-endpoint, and invalid-fact inputs.  A
+repartition scenario proves that changing physical grouping does not change
+the projected records.
+
+The crate intentionally does not encode GraphAr YAML, Parquet, chunk IDs, or
+adjacency tables.  At the inspected Apache GraphAr revision
+=6f97f015719ee2586b50116092f59db9fa1945d5=, the official =graphar-rs= binding
+exposes graph/vertex/edge metadata and a vertex data builder, but no edge data
+builder or data reader.  It is an in-tree CXX binding that compiles the upstream
+C++ implementation and requires Arrow C++ development libraries; the unrelated
+crates.io package named =graphar= is not used.  Therefore the next M3 gate is an
+upstream-backed adapter and differential scenario after the official binding
+can write and read edge data.  Absence of that upstream capability must not be
+filled by a second private GraphAr wire implementation.
+
 - implement only the declared binary-Entity projection first;
 - preserve canonical IDs through repartition and compaction;
 - reject n-ary and unsupported value shapes unless a versioned reification

@@ -1,0 +1,21 @@
+[package]
+name = "mrr-data-graphar"
+description = "Fail-closed MRR binary-Entity projection contracts for Apache GraphAr"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+meta-relational-reasoning.workspace = true
+mrr-data-core.workspace = true
+
+[dev-dependencies]
+asp-rust = { git = "https://github.com/tao3k/asp-rust", rev = "f88445d971d6b7dfd6336d73e52dc0411921f5bf", default-features = false }
+
+[build-dependencies]
+mrr-data-asp-rust-project-policy.workspace = true
+
+[lints]
+workspace = true

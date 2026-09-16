@@ -4,6 +4,7 @@ members = [
   "crates/mrr-data-arrow",
   "crates/mrr-data-content",
   "crates/mrr-data-core",
+  "crates/mrr-data-graphar",
 ]
 resolver = "2"
 

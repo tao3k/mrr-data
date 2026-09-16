@@ -31,7 +31,8 @@ MRR's semantic APIs.
 ## Current status
 
 This repository now contains the M0 through M2 executable implementation
-slices. M0 provides relation-specific Arrow schemas and lossless complete-Fact round trips. The
+slices and the first M3 admission slice. M0 provides relation-specific Arrow
+schemas and lossless complete-Fact round trips. The
 batch preserves `FactId`, `RelationId`, `GenerationId`, authority, provenance,
 completeness, validity, field order, and every V1 value shape. Recursive List
 and Record values use Arrow's native nested arrays rather than JSON. Invalid
@@ -57,9 +58,18 @@ block scenario guards against multi-second import regressions without reducing
 the corpus. A slice-only frame preflight rejects declared block/count/aggregate
 limits before the upstream reader allocates block payloads.
 
+`mrr-data-graphar` begins M3 at the semantic boundary. It admits only relations
+with exactly two ordered, non-null `Entity` fields, validates every fact against
+its owning MRR relation, and produces physical-ID-free edge records preserving
+`EntityId`, `FactId`, `RelationId`, `GenerationId`, authority, provenance,
+completeness, and validity. N-ary, nullable-endpoint, scalar-endpoint, and
+invalid-fact inputs fail with typed errors. Repartitioning cannot alter these
+records because GraphAr row IDs, chunks, and adjacency offsets never enter the
+contract.
+
 The repository does not yet claim:
 
-- GraphAr export/import;
+- GraphAr metadata or data export/import through the upstream runtime;
 - an IPFS network integration;
 - schema-bound query execution.
 
