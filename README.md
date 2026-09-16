@@ -54,7 +54,8 @@ full referenced-child closure and length checks, exact catalog verification,
 typed import budgets, and validation-before-commit. CAR block order and extra
 transport blocks may change without changing the snapshot root. A 512-extra-
 block scenario guards against multi-second import regressions without reducing
-the corpus.
+the corpus. A slice-only frame preflight rejects declared block/count/aggregate
+limits before the upstream reader allocates block payloads.
 
 The repository does not yet claim:
 

@@ -566,7 +566,7 @@ impl ManifestWire {
             &self.semantic.entity_catalog_digest,
             "entity_catalog_digest",
         )?;
-        let relations = self
+        let mut relations = self
             .relations
             .into_iter()
             .map(RelationWire::into_descriptor)
@@ -577,9 +577,7 @@ impl ManifestWire {
         {
             return Err(DataError::NonCanonicalRelationOrder);
         }
-        if relations.is_empty() {
-            return Err(DataError::EmptyRelations);
-        }
+        validate_relations(&mut relations)?;
         let mut lineage_batch_cids = self.lineage.batch_cids;
         if lineage_batch_cids.windows(2).any(|pair| pair[0] >= pair[1]) {
             return Err(DataError::NonCanonicalLineageOrder);

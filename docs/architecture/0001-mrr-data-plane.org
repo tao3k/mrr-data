@@ -416,20 +416,20 @@ pub enum ContentCodec {
 }
 
 pub struct ContentBlock<'a> {
-    pub codec: ContentCodec,
-    pub bytes: &'a [u8],
+    codec: ContentCodec,
+    bytes: &'a [u8],
 }
 
 pub trait ContentStore {
-    fn put(&self, block: ContentBlock<'_>) -> Result<Cid, DataError>;
-    fn get(&self, cid: &Cid) -> Result<Vec<u8>, DataError>;
+    fn put(&self, block: ContentBlock<'_>) -> Result<Cid, ContentError>;
+    fn get(&self, cid: &Cid) -> Result<Vec<u8>, ContentError>;
 }
 #+end_src
 
 The store constructs and verifies the CID from the caller-declared codec and
 bytes; it must never sniff a payload or silently select a codec.  These
-signatures are illustrative until the Rust types exist.  They do not authorize
-a parallel semantic model or provider-specific methods in the core.
+types are implemented by =mrr-data-content=.  They do not authorize a parallel
+semantic model or provider-specific methods in the core.
 
 * Repository shape
 
@@ -483,9 +483,10 @@ current-head CI and review receipts are green.
 
 Implementation status: memory and filesystem stores, upstream CARv1
 read/write, full CID/root/referenced-child verification, exact catalog checks,
-typed import budgets, validation-before-commit, repacking invariance, and the
-512-extra-block performance scenario are implemented.  M2 is accepted only
-after current-head CI and review receipts are green.
+pre-allocation frame-budget admission, typed import failures,
+validation-before-commit, repacking invariance, and the 512-extra-block
+performance scenario are implemented.  M2 is accepted only after current-head
+CI and review receipts are green.
 
 - implement memory and filesystem =ContentStore=;
 - write/read CAR with full root and child verification;

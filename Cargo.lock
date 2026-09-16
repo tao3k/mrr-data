@@ -1208,6 +1208,7 @@ dependencies = [
  "mrr-data-asp-rust-project-policy",
  "mrr-data-core",
  "tempfile",
+ "unsigned-varint",
 ]
 
 [[package]]

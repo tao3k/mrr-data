@@ -218,6 +218,22 @@ fn native_admission_rejects_one_arrow_child_claimed_by_two_relations() {
 }
 
 #[test]
+fn decoded_manifest_rejects_one_arrow_child_claimed_by_two_relations() {
+    let bytes = manifest(false).canonical_bytes().unwrap();
+    let mut value: Ipld = serde_ipld_dagcbor::from_slice(&bytes).unwrap();
+    replace(
+        &mut value,
+        &["relations", "1", "batches", "0", "cid"],
+        Ipld::Link(raw_cid(b"alpha-arrow-ipc")),
+    );
+    let aliased = serde_ipld_dagcbor::to_vec(&value).unwrap();
+    assert!(matches!(
+        SnapshotManifest::decode_canonical(&aliased),
+        Err(DataError::DuplicateChild(_))
+    ));
+}
+
+#[test]
 fn decoded_manifest_rejects_the_wrong_resolved_catalog() {
     let decoded = SnapshotManifest::decode_canonical(&manifest(false).canonical_bytes().unwrap())
         .expect("decode");

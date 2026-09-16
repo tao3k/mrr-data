@@ -6,6 +6,7 @@ use cid::Cid;
 use fvm_ipld_car::{Block, CarHeader, CarReader, CarWriter};
 use meta_relational_reasoning::{EntityCatalog, RelationCatalog};
 use mrr_data_core::{SnapshotBlock, SnapshotManifest};
+use unsigned_varint::decode;
 
 use crate::{
     ContentBlock, ContentCodec, ContentError, ContentStore, ImportResource,
@@ -133,6 +134,7 @@ pub fn import_snapshot_car<S: ContentStore>(
         limits.archive_bytes,
         archive.len() as u64,
     )?;
+    preflight_frames(archive, limits)?;
     let mut reader = CarReader::new(Cursor::new(archive))
         .map_err(|error| ContentError::Car(error.to_string()))?;
     if reader.header.roots.len() != 1 {
@@ -207,6 +209,62 @@ pub fn import_snapshot_car<S: ContentStore>(
         manifest,
         block_count: blocks.len(),
     })
+}
+
+fn preflight_frames(mut archive: &[u8], limits: CarImportLimits) -> Result<(), ContentError> {
+    let (header_bytes, remaining) = decode::usize(archive)
+        .map_err(|error| ContentError::Car(format!("invalid CAR header length: {error}")))?;
+    archive = remaining
+        .get(header_bytes..)
+        .ok_or_else(|| ContentError::Car("truncated CAR header".to_owned()))?;
+
+    let cid_bytes = mrr_data_core::raw_cid(&[]).encoded_len() as u64;
+    let max_frame_bytes = limits.block_bytes.saturating_add(cid_bytes);
+    let mut block_count = 0_u64;
+    let mut total_block_bytes = 0_u64;
+    while !archive.is_empty() {
+        let (frame_bytes, remaining) = decode::usize(archive)
+            .map_err(|error| ContentError::Car(format!("invalid CAR block length: {error}")))?;
+        block_count = block_count.saturating_add(1);
+        check_limit(ImportResource::Blocks, limits.blocks, block_count)?;
+        if frame_bytes as u64 > max_frame_bytes {
+            return Err(ContentError::LimitExceeded {
+                resource: ImportResource::BlockBytes,
+                limit: limits.block_bytes,
+                actual: (frame_bytes as u64).saturating_sub(cid_bytes),
+            });
+        }
+        let frame = remaining
+            .get(..frame_bytes)
+            .ok_or_else(|| ContentError::Car("truncated CAR block".to_owned()))?;
+        let mut cursor = Cursor::new(frame);
+        let cid = Cid::read_bytes(&mut cursor)
+            .map_err(|error| ContentError::Car(format!("invalid CAR block CID: {error}")))?;
+        codec_for(&cid)?;
+        let payload_bytes = (frame_bytes as u64)
+            .checked_sub(cursor.position())
+            .ok_or_else(|| ContentError::Car("CAR block CID exceeds frame".to_owned()))?;
+        check_limit(
+            ImportResource::BlockBytes,
+            limits.block_bytes,
+            payload_bytes,
+        )?;
+        total_block_bytes =
+            total_block_bytes
+                .checked_add(payload_bytes)
+                .ok_or(ContentError::LimitExceeded {
+                    resource: ImportResource::TotalBlockBytes,
+                    limit: limits.total_block_bytes,
+                    actual: u64::MAX,
+                })?;
+        check_limit(
+            ImportResource::TotalBlockBytes,
+            limits.total_block_bytes,
+            total_block_bytes,
+        )?;
+        archive = &remaining[frame_bytes..];
+    }
+    Ok(())
 }
 
 fn verify_closure(

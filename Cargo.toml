@@ -31,6 +31,7 @@ serde = { version = "=1.0.229", features = ["derive"] }
 serde_bytes = "=0.11.19"
 serde_ipld_dagcbor = "=0.7.0"
 tempfile = "=3.23.0"
+unsigned-varint = "=0.8.0"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

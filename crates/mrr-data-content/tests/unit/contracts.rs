@@ -13,6 +13,7 @@ use mrr_data_core::{
     SnapshotManifest, SnapshotManifestRequest, raw_cid,
 };
 use tempfile::tempdir;
+use unsigned_varint::encode;
 
 use crate::{
     CarImportLimits, ContentBlock, ContentCodec, ContentError, ContentStore,
@@ -261,7 +262,7 @@ fn import_enforces_each_configured_budget() {
             ImportResource::ArchiveBytes,
         ),
         (
-            CarImportLimits::new(archive.len() as u64, 1, 4_096, 8_192),
+            CarImportLimits::new(archive.len() as u64, 0, 4_096, 8_192),
             ImportResource::Blocks,
         ),
         (
@@ -285,6 +286,30 @@ fn import_enforces_each_configured_budget() {
             Err(ContentError::LimitExceeded { resource: actual, .. }) if actual == resource
         ));
     }
+}
+
+#[test]
+fn import_rejects_oversized_declared_frame_before_materialization() {
+    let (snapshot, _, relations, entities) = fixture();
+    let mut archive = manual_car(vec![*snapshot.cid()], vec![]);
+    let mut length_buffer = encode::usize_buffer();
+    archive.extend_from_slice(encode::usize(1_000_000, &mut length_buffer));
+    archive.extend_from_slice(&raw_cid(b"not-materialized").to_bytes());
+
+    assert_eq!(
+        import_snapshot_car(
+            &archive,
+            CarImportLimits::new(archive.len() as u64, 1, 64, 1_024),
+            &relations,
+            &entities,
+            &MemoryContentStore::default(),
+        ),
+        Err(ContentError::LimitExceeded {
+            resource: ImportResource::BlockBytes,
+            limit: 64,
+            actual: 999_964,
+        })
+    );
 }
 
 #[test]
