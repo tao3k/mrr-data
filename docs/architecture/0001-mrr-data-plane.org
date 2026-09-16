@@ -516,6 +516,13 @@ upstream-backed adapter and differential scenario after the official binding
 can write and read edge data.  Absence of that upstream capability must not be
 filled by a second private GraphAr wire implementation.
 
+The missing official edge-writer binding is tracked upstream by
+[[https://github.com/apache/incubator-graphar/issues/976][GraphAr issue #976]]
+and [[https://github.com/apache/incubator-graphar/pull/977][PR #977]].  MRR Data
+must not pin or claim that interface until the upstream PR is reviewed, merged,
+and available from a published or otherwise explicitly admitted revision.  The
+reader half remains a separate upstream capability gate.
+
 - implement only the declared binary-Entity projection first;
 - preserve canonical IDs through repartition and compaction;
 - reject n-ary and unsupported value shapes unless a versioned reification
