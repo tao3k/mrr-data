@@ -925,7 +925,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 [[package]]
 name = "meta-relational-reasoning"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=cb74d30a2188c06745b4629e7fc62081b7bc1ff3#cb74d30a2188c06745b4629e7fc62081b7bc1ff3"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=4bb063f8297238c24c15b890558782e35fbd9ca7#4bb063f8297238c24c15b890558782e35fbd9ca7"
 dependencies = [
  "ciborium",
  "mrr-ascent",
@@ -946,7 +946,7 @@ dependencies = [
 [[package]]
 name = "mrr-ascent"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=cb74d30a2188c06745b4629e7fc62081b7bc1ff3#cb74d30a2188c06745b4629e7fc62081b7bc1ff3"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=4bb063f8297238c24c15b890558782e35fbd9ca7#4bb063f8297238c24c15b890558782e35fbd9ca7"
 dependencies = [
  "ascent",
  "mrr-asp-rust-project-policy",
@@ -961,7 +961,7 @@ dependencies = [
 [[package]]
 name = "mrr-asp-rust-project-policy"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=cb74d30a2188c06745b4629e7fc62081b7bc1ff3#cb74d30a2188c06745b4629e7fc62081b7bc1ff3"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=4bb063f8297238c24c15b890558782e35fbd9ca7#4bb063f8297238c24c15b890558782e35fbd9ca7"
 dependencies = [
  "asp-rust",
  "asp-rust-build-support",
@@ -972,7 +972,7 @@ dependencies = [
 [[package]]
 name = "mrr-bundle"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=cb74d30a2188c06745b4629e7fc62081b7bc1ff3#cb74d30a2188c06745b4629e7fc62081b7bc1ff3"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=4bb063f8297238c24c15b890558782e35fbd9ca7#4bb063f8297238c24c15b890558782e35fbd9ca7"
 dependencies = [
  "ciborium",
  "mrr-asp-rust-project-policy",
@@ -1010,7 +1010,7 @@ dependencies = [
 [[package]]
 name = "mrr-identity"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=cb74d30a2188c06745b4629e7fc62081b7bc1ff3#cb74d30a2188c06745b4629e7fc62081b7bc1ff3"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=4bb063f8297238c24c15b890558782e35fbd9ca7#4bb063f8297238c24c15b890558782e35fbd9ca7"
 dependencies = [
  "mrr-asp-rust-project-policy",
  "serde",
@@ -1020,7 +1020,7 @@ dependencies = [
 [[package]]
 name = "mrr-intent"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=cb74d30a2188c06745b4629e7fc62081b7bc1ff3#cb74d30a2188c06745b4629e7fc62081b7bc1ff3"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=4bb063f8297238c24c15b890558782e35fbd9ca7#4bb063f8297238c24c15b890558782e35fbd9ca7"
 dependencies = [
  "mrr-asp-rust-project-policy",
  "mrr-identity",
@@ -1030,7 +1030,7 @@ dependencies = [
 [[package]]
 name = "mrr-lineage"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=cb74d30a2188c06745b4629e7fc62081b7bc1ff3#cb74d30a2188c06745b4629e7fc62081b7bc1ff3"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=4bb063f8297238c24c15b890558782e35fbd9ca7#4bb063f8297238c24c15b890558782e35fbd9ca7"
 dependencies = [
  "mrr-asp-rust-project-policy",
  "mrr-identity",
@@ -1040,7 +1040,7 @@ dependencies = [
 [[package]]
 name = "mrr-logic"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=cb74d30a2188c06745b4629e7fc62081b7bc1ff3#cb74d30a2188c06745b4629e7fc62081b7bc1ff3"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=4bb063f8297238c24c15b890558782e35fbd9ca7#4bb063f8297238c24c15b890558782e35fbd9ca7"
 dependencies = [
  "mrr-asp-rust-project-policy",
  "mrr-identity",
@@ -1052,7 +1052,7 @@ dependencies = [
 [[package]]
 name = "mrr-query"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=cb74d30a2188c06745b4629e7fc62081b7bc1ff3#cb74d30a2188c06745b4629e7fc62081b7bc1ff3"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=4bb063f8297238c24c15b890558782e35fbd9ca7#4bb063f8297238c24c15b890558782e35fbd9ca7"
 dependencies = [
  "ciborium",
  "mrr-asp-rust-project-policy",
@@ -1064,7 +1064,7 @@ dependencies = [
 [[package]]
 name = "mrr-relation"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=cb74d30a2188c06745b4629e7fc62081b7bc1ff3#cb74d30a2188c06745b4629e7fc62081b7bc1ff3"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=4bb063f8297238c24c15b890558782e35fbd9ca7#4bb063f8297238c24c15b890558782e35fbd9ca7"
 dependencies = [
  "mrr-asp-rust-project-policy",
  "mrr-identity",
@@ -1074,7 +1074,7 @@ dependencies = [
 [[package]]
 name = "mrr-revision"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=cb74d30a2188c06745b4629e7fc62081b7bc1ff3#cb74d30a2188c06745b4629e7fc62081b7bc1ff3"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=4bb063f8297238c24c15b890558782e35fbd9ca7#4bb063f8297238c24c15b890558782e35fbd9ca7"
 dependencies = [
  "mrr-asp-rust-project-policy",
  "mrr-identity",
@@ -1084,7 +1084,7 @@ dependencies = [
 [[package]]
 name = "mrr-transition"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=cb74d30a2188c06745b4629e7fc62081b7bc1ff3#cb74d30a2188c06745b4629e7fc62081b7bc1ff3"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=4bb063f8297238c24c15b890558782e35fbd9ca7#4bb063f8297238c24c15b890558782e35fbd9ca7"
 dependencies = [
  "mrr-asp-rust-project-policy",
  "mrr-identity",
