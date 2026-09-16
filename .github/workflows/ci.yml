@@ -33,5 +33,23 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Test workspace
         run: cargo test --workspace --locked
+      - name: Check fuzz formatting
+        run: cargo fmt --manifest-path fuzz/Cargo.toml --all -- --check
+      - name: Compile IPC fuzz target
+        run: cargo check --manifest-path fuzz/Cargo.toml --locked
+      - name: Lint IPC fuzz target
+        run: cargo clippy --manifest-path fuzz/Cargo.toml --all-targets --locked -- -D warnings
       - name: Lint workspace
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  fuzz:
+    name: Arrow IPC fuzz (ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@nightly
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --version 0.13.2 --locked
+      - name: Run bounded ASan IPC campaign
+        run: cargo fuzz run ipc_import fuzz/corpus/ipc_import -- -runs=10000 -max_len=65536

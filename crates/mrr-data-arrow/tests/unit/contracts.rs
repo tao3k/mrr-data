@@ -235,6 +235,8 @@ fn ipc_import_limits_fail_closed() {
         )
         .unwrap(),
     );
+    let batch = facts_to_record_batch(&relation, std::slice::from_ref(&fact)).unwrap();
+    let decoded_bytes = batch.get_array_memory_size();
     let bytes = facts_to_ipc(&relation, &[fact]).unwrap();
 
     assert_eq!(
@@ -253,6 +255,53 @@ fn ipc_import_limits_fail_closed() {
         ipc_to_facts(&relation, &bytes, IpcImportLimits::new(bytes.len(), 0, 14)),
         Err(ArrowRelationError::ImportLimitExceeded {
             resource: "rows",
+            limit: 0,
+            actual: 1
+        })
+    );
+    assert_eq!(
+        ipc_to_facts(&relation, &bytes, IpcImportLimits::new(bytes.len(), 1, 13)),
+        Err(ArrowRelationError::ImportLimitExceeded {
+            resource: "columns",
+            limit: 13,
+            actual: 14
+        })
+    );
+    match ipc_to_facts(
+        &relation,
+        &bytes,
+        IpcImportLimits::new(bytes.len(), 1, 14).with_decoded_bytes(decoded_bytes - 1),
+    ) {
+        Err(ArrowRelationError::ImportLimitExceeded {
+            resource: "decoded-bytes",
+            limit,
+            actual,
+        }) => {
+            assert_eq!(limit, decoded_bytes - 1);
+            assert!(actual > limit);
+        }
+        result => panic!("expected decoded-byte limit failure, got {result:?}"),
+    }
+    assert_eq!(
+        ipc_to_facts(
+            &relation,
+            &bytes,
+            IpcImportLimits::new(bytes.len(), 1, 14).with_values(13)
+        ),
+        Err(ArrowRelationError::ImportLimitExceeded {
+            resource: "values",
+            limit: 13,
+            actual: 14
+        })
+    );
+    assert_eq!(
+        ipc_to_facts(
+            &relation,
+            &bytes,
+            IpcImportLimits::new(bytes.len(), 1, 14).with_nesting_depth(0)
+        ),
+        Err(ArrowRelationError::ImportLimitExceeded {
+            resource: "nesting-depth",
             limit: 0,
             actual: 1
         })
@@ -408,43 +457,85 @@ fn invalid_facts_are_rejected_before_arrow_projection() {
 }
 
 #[test]
-fn unsupported_nested_shapes_fail_closed() {
+fn nested_list_and_record_shapes_round_trip_without_json() {
+    let profile_schema = ValueSchema::Record {
+        fields: vec![
+            field("name", ValueSchema::String, false),
+            field(
+                "scores",
+                ValueSchema::List {
+                    element: Box::new(ValueSchema::Integer),
+                    element_nullable: true,
+                },
+                false,
+            ),
+            field(
+                "metadata",
+                ValueSchema::Record {
+                    fields: vec![
+                        field("active", ValueSchema::Boolean, false),
+                        field("note", ValueSchema::String, true),
+                    ],
+                },
+                false,
+            ),
+        ],
+    };
     let relation = RelationSchema::new(
         id("nested"),
         "nested",
-        vec![field(
-            "items",
-            ValueSchema::List {
-                element: Box::new(ValueSchema::Integer),
-                element_nullable: false,
-            },
-            false,
-        )],
+        vec![field("profile", profile_schema, true)],
         vec![],
     )
     .unwrap();
     let source = id::<EntityId>("nested-source");
-    let fact = Fact::new(
-        id("nested-fact"),
-        relation.id(),
-        vec![Value::List(vec![Value::Integer(1)])],
-        RelationContext::new(
-            id("nested-generation"),
-            RelationAuthority::Entity(source),
-            FactProvenance::Source(source),
-            EvidenceCompleteness::Complete,
-            FactValidity::Valid,
+    let context = RelationContext::new(
+        id("nested-generation"),
+        RelationAuthority::Entity(source),
+        FactProvenance::Source(source),
+        EvidenceCompleteness::Complete,
+        FactValidity::Valid,
+    )
+    .unwrap();
+    let facts = vec![
+        Fact::new(
+            id("nested-fact"),
+            relation.id(),
+            vec![Value::Record(vec![
+                ("name".into(), Value::String("Ada".into())),
+                (
+                    "scores".into(),
+                    Value::List(vec![Value::Integer(7), Value::Null, Value::Integer(11)]),
+                ),
+                (
+                    "metadata".into(),
+                    Value::Record(vec![
+                        ("active".into(), Value::Boolean(true)),
+                        ("note".into(), Value::Null),
+                    ]),
+                ),
+            ])],
+            context,
+        ),
+        Fact::new(
+            id("null-nested-fact"),
+            relation.id(),
+            vec![Value::Null],
+            context,
+        ),
+    ];
+
+    let batch = facts_to_record_batch(&relation, &facts).expect("encode nested facts");
+    assert_eq!(record_batch_to_facts(&relation, &batch).unwrap(), facts);
+
+    let ipc = facts_to_ipc(&relation, &facts).expect("encode nested IPC");
+    assert_eq!(
+        ipc_to_facts(
+            &relation,
+            &ipc,
+            IpcImportLimits::new(ipc.len(), facts.len(), 16)
         )
         .unwrap(),
-    );
-    assert_eq!(
-        facts_to_record_batch(&relation, &[fact]),
-        Err(ArrowRelationError::UnsupportedSchema {
-            field: "items".into(),
-            schema: ValueSchema::List {
-                element: Box::new(ValueSchema::Integer),
-                element_nullable: false
-            }
-        })
+        facts
     );
 }

@@ -2,11 +2,14 @@
 #![forbid(unsafe_code)]
 
 mod codec;
+mod error;
+mod schema;
 
 pub use codec::{
-    ARROW_FACT_PROFILE_V1, ArrowRelationError, IpcImportLimits, facts_to_ipc,
-    facts_to_record_batch, ipc_to_facts, project_fact_schema, record_batch_to_facts,
+    ARROW_FACT_PROFILE_V1, IpcImportLimits, facts_to_ipc, facts_to_record_batch, ipc_to_facts,
+    project_fact_schema, record_batch_to_facts,
 };
+pub use error::ArrowRelationError;
 
 #[cfg(test)]
 #[path = "../tests/unit/mod.rs"]

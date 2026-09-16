@@ -6,9 +6,11 @@
 * Status and ownership
 
 This RFC is the canonical design source for =mrr-data=.  It is a proposal, not
-a claim that the complete plane is implemented.  The first executable slice
-proves relation-specific scalar Arrow row round trips and typed rejection of
-unimplemented nested shapes.  The upstream
+a claim that the complete plane is implemented.  The current M0 executable
+slice proves relation-specific complete-Fact Arrow and bounded IPC round trips
+for every V1 value shape, including recursive native Arrow List and Struct
+arrays.  Property tests, typed resource-budget failures, malformed corpora, and
+an IPC fuzz target guard the import boundary.  The upstream
 [[https://github.com/tao3k/meta-relational-reasoning][MRR repository]] owns semantic
 identity, typed relation schemas and facts, generations, revision bindings,
 lineage, queries, transitions, and admission.  This repository owns only their
@@ -376,6 +378,11 @@ crate in V1.
 * Delivery milestones and proof obligations
 
 ** M0: lossless Arrow interchange
+
+Implementation status: the recursive V1 mapping, complete-Fact round trips,
+bounded IPC import, property contracts, and fuzz target are implemented.  M0
+is accepted only after the current-head CI and review receipts are green; this
+status does not advance the later data-plane milestones.
 
 - define every supported MRR value mapping;
 - property-test =Fact -> RecordBatch -> Fact=;

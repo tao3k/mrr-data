@@ -30,15 +30,16 @@ MRR's semantic APIs.
 
 ## Current status
 
-This repository now contains the first executable implementation slice:
+This repository now contains the M0 executable implementation slice:
 relation-specific Arrow schemas and lossless complete-Fact round trips. The
 batch preserves `FactId`, `RelationId`, `GenerationId`, authority, provenance,
-completeness, validity, field order, and scalar values while rejecting invalid
-facts before projection. Deterministic Arrow IPC file export and bounded import
-are covered by malformed-input, truncation, mutation, and resource-limit tests.
-It does not yet claim:
+completeness, validity, field order, and every V1 value shape. Recursive List
+and Record values use Arrow's native nested arrays rather than JSON. Invalid
+facts are rejected before projection; deterministic Arrow IPC file export and
+bounded import are covered by example-based tests, property tests, malformed
+and mutated corpora, resource-limit contracts, and a fuzz target. It does not
+yet claim:
 
-- a complete MRR-to-Arrow mapping for List and Record shapes;
 - GraphAr export/import;
 - stable snapshot manifests or CIDs;
 - CAR packaging or an IPFS network integration;
@@ -73,10 +74,15 @@ The complete local gate is the same gate used by CI:
 cargo fmt --all -- --check
 cargo test --workspace --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo fmt --manifest-path fuzz/Cargo.toml --all -- --check
+cargo check --manifest-path fuzz/Cargo.toml --locked
+cargo clippy --manifest-path fuzz/Cargo.toml --all-targets --locked -- -D warnings
 ```
 
-CI runs this contract on both Ubuntu and macOS. Workspace lints forbid unsafe
-Rust and enable Clippy's `all` and `pedantic` groups for every member crate.
+CI runs this contract on both Ubuntu and macOS, then exercises the IPC import
+boundary with a bounded ASan fuzz campaign on nightly Linux. Workspace lints
+forbid unsafe Rust and enable Clippy's `all` and `pedantic` groups for every
+member crate.
 
 ## North star
 

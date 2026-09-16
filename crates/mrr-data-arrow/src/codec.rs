@@ -9,15 +9,20 @@ use std::{
 };
 
 use arrow_array::{
-    Array, ArrayRef, BinaryArray, BooleanArray, Int64Array, RecordBatch, StringArray,
+    Array, ArrayRef, BinaryArray, BooleanArray, Int64Array, ListArray, RecordBatch, StringArray,
+    StructArray,
 };
+use arrow_buffer::{NullBuffer, OffsetBuffer};
 use arrow_ipc::{reader::FileReaderBuilder, writer::FileWriter};
-use arrow_schema::{DataType, Field, Schema};
+use arrow_schema::{DataType, Field, Fields, Schema};
 use meta_relational_reasoning::{
     DerivationId, EntityId, EvidenceCompleteness, Fact, FactId, FactProvenance, FactValidity,
-    FloatWidth, GenerationId, RelationAuthority, RelationContext, RelationError, RelationField,
-    RelationSchema, RuleId, RulePackId, TemporalUnit, TimezonePolicy, Value, ValueSchema,
+    GenerationId, RelationAuthority, RelationContext, RelationField, RelationSchema, RuleId,
+    RulePackId, Value, ValueSchema,
 };
+
+use crate::error::ArrowRelationError;
+use crate::schema::{project_schema_field, project_value_field};
 
 /// Stable metadata identity for complete relation-specific fact batches.
 pub const ARROW_FACT_PROFILE_V1: &str = "mrr.data.arrow.fact-batch.v1";
@@ -30,103 +35,15 @@ const COMPLETENESS_COLUMN: &str = "__mrr_completeness";
 const INVALIDATED_BY_COLUMN: &str = "__mrr_invalidated_by";
 const SEMANTIC_COLUMN_COUNT: usize = 6;
 
-/// Fail-closed errors from schema projection or row reconstruction.
-#[derive(Debug)]
-pub enum ArrowRelationError {
-    /// The schema is valid MRR but has no admitted lossless V1 Arrow mapping.
-    UnsupportedSchema { field: String, schema: ValueSchema },
-    /// A user field collides with the reserved semantic namespace.
-    ReservedFieldName(String),
-    /// A fact does not satisfy the owning relation contract.
-    InvalidFact { fact: FactId, error: RelationError },
-    /// A value does not satisfy its declared field shape.
-    ValueMismatch { field: String },
-    /// A reserved semantic column contains an invalid value.
-    InvalidSemanticValue { column: &'static str, row: usize },
-    /// An untrusted IPC resource exceeds its caller-owned import budget.
-    ImportLimitExceeded {
-        resource: &'static str,
-        limit: usize,
-        actual: usize,
-    },
-    /// The V1 IPC profile contains anything other than one complete fact batch.
-    UnexpectedBatchCount(usize),
-    /// The upstream Arrow decoder panicked while inspecting malformed IPC.
-    MalformedIpc,
-    /// The Arrow batch does not carry the expected MRR profile or relation.
-    SchemaMismatch(&'static str),
-    /// Arrow rejected a structurally invalid batch.
-    Arrow(arrow_schema::ArrowError),
-}
-
-impl PartialEq for ArrowRelationError {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (
-                Self::UnsupportedSchema {
-                    field: left,
-                    schema: left_schema,
-                },
-                Self::UnsupportedSchema {
-                    field: right,
-                    schema: right_schema,
-                },
-            ) => left == right && left_schema == right_schema,
-            (Self::ReservedFieldName(left), Self::ReservedFieldName(right)) => left == right,
-            (
-                Self::InvalidFact {
-                    fact: left_fact,
-                    error: left_error,
-                },
-                Self::InvalidFact {
-                    fact: right_fact,
-                    error: right_error,
-                },
-            ) => left_fact == right_fact && left_error == right_error,
-            (Self::ValueMismatch { field: left }, Self::ValueMismatch { field: right }) => {
-                left == right
-            }
-            (
-                Self::InvalidSemanticValue {
-                    column: left_column,
-                    row: left_row,
-                },
-                Self::InvalidSemanticValue {
-                    column: right_column,
-                    row: right_row,
-                },
-            ) => left_column == right_column && left_row == right_row,
-            (
-                Self::ImportLimitExceeded {
-                    resource: left_resource,
-                    limit: left_limit,
-                    actual: left_actual,
-                },
-                Self::ImportLimitExceeded {
-                    resource: right_resource,
-                    limit: right_limit,
-                    actual: right_actual,
-                },
-            ) => {
-                left_resource == right_resource
-                    && left_limit == right_limit
-                    && left_actual == right_actual
-            }
-            (Self::UnexpectedBatchCount(left), Self::UnexpectedBatchCount(right)) => left == right,
-            (Self::MalformedIpc, Self::MalformedIpc) => true,
-            (Self::SchemaMismatch(left), Self::SchemaMismatch(right)) => left == right,
-            (Self::Arrow(left), Self::Arrow(right)) => left.to_string() == right.to_string(),
-            _ => false,
-        }
-    }
-}
-
 /// Caller-owned limits for decoding untrusted Arrow IPC fact batches.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct IpcImportLimits {
     bytes: usize,
+    decoded_bytes: usize,
     rows: usize,
     columns: usize,
+    values: usize,
+    nesting_depth: usize,
 }
 
 impl IpcImportLimits {
@@ -134,101 +51,31 @@ impl IpcImportLimits {
     pub const fn new(max_bytes: usize, max_rows: usize, max_columns: usize) -> Self {
         Self {
             bytes: max_bytes,
+            decoded_bytes: max_bytes.saturating_mul(64),
             rows: max_rows,
             columns: max_columns,
+            values: max_rows.saturating_mul(max_columns).saturating_mul(16),
+            nesting_depth: 16,
         }
     }
-}
 
-impl From<arrow_schema::ArrowError> for ArrowRelationError {
-    fn from(error: arrow_schema::ArrowError) -> Self {
-        Self::Arrow(error)
+    #[must_use]
+    pub const fn with_decoded_bytes(mut self, max_decoded_bytes: usize) -> Self {
+        self.decoded_bytes = max_decoded_bytes;
+        self
     }
-}
 
-fn temporal_unit_name(unit: TemporalUnit) -> &'static str {
-    match unit {
-        TemporalUnit::Second => "second",
-        TemporalUnit::Millisecond => "millisecond",
-        TemporalUnit::Microsecond => "microsecond",
-        TemporalUnit::Nanosecond => "nanosecond",
+    #[must_use]
+    pub const fn with_values(mut self, max_values: usize) -> Self {
+        self.values = max_values;
+        self
     }
-}
 
-fn timezone_name(timezone: TimezonePolicy) -> &'static str {
-    match timezone {
-        TimezonePolicy::Naive => "naive",
-        TimezonePolicy::Utc => "utc",
+    #[must_use]
+    pub const fn with_nesting_depth(mut self, max_nesting_depth: usize) -> Self {
+        self.nesting_depth = max_nesting_depth;
+        self
     }
-}
-
-fn value_schema_identity(schema: &ValueSchema) -> Result<String, ()> {
-    match schema {
-        ValueSchema::Entity => Ok("entity:typed-text-v1".to_owned()),
-        ValueSchema::Boolean => Ok("boolean".to_owned()),
-        ValueSchema::Integer => Ok("integer".to_owned()),
-        ValueSchema::Decimal { precision, scale } => {
-            Ok(format!("decimal-lexical:{precision}:{scale}"))
-        }
-        ValueSchema::Float { width } => Ok(match width {
-            FloatWidth::Binary32 => "float-lexical:binary32",
-            FloatWidth::Binary64 => "float-lexical:binary64",
-        }
-        .to_owned()),
-        ValueSchema::String => Ok("string".to_owned()),
-        ValueSchema::ByteString => Ok("byte-string".to_owned()),
-        ValueSchema::Date => Ok("date-lexical".to_owned()),
-        ValueSchema::Time { unit, timezone } => Ok(format!(
-            "time-lexical:{}:{}",
-            temporal_unit_name(*unit),
-            timezone_name(*timezone)
-        )),
-        ValueSchema::Timestamp { unit, timezone } => Ok(format!(
-            "timestamp-lexical:{}:{}",
-            temporal_unit_name(*unit),
-            timezone_name(*timezone)
-        )),
-        ValueSchema::Duration => Ok("duration-lexical:v1".to_owned()),
-        ValueSchema::List { .. } | ValueSchema::Record { .. } => Err(()),
-    }
-}
-
-fn arrow_data_type(schema: &ValueSchema) -> Result<DataType, ()> {
-    match schema {
-        ValueSchema::Boolean => Ok(DataType::Boolean),
-        ValueSchema::Integer => Ok(DataType::Int64),
-        ValueSchema::ByteString => Ok(DataType::Binary),
-        ValueSchema::Entity
-        | ValueSchema::Decimal { .. }
-        | ValueSchema::Float { .. }
-        | ValueSchema::String
-        | ValueSchema::Date
-        | ValueSchema::Time { .. }
-        | ValueSchema::Timestamp { .. }
-        | ValueSchema::Duration => Ok(DataType::Utf8),
-        ValueSchema::List { .. } | ValueSchema::Record { .. } => Err(()),
-    }
-}
-
-fn project_value_field(field: &RelationField) -> Result<Field, ArrowRelationError> {
-    if field.name().starts_with("__mrr_") {
-        return Err(ArrowRelationError::ReservedFieldName(
-            field.name().to_owned(),
-        ));
-    }
-    let data_type =
-        arrow_data_type(field.schema()).map_err(|()| ArrowRelationError::UnsupportedSchema {
-            field: field.name().to_owned(),
-            schema: field.schema().clone(),
-        })?;
-    let value_schema =
-        value_schema_identity(field.schema()).expect("supported schema has metadata");
-    Ok(
-        Field::new(field.name(), data_type, field.nullable()).with_metadata(HashMap::from([
-            ("mrr.value-schema".to_owned(), value_schema),
-            ("mrr.value-schema-version".to_owned(), "v1".to_owned()),
-        ])),
-    )
 }
 
 fn semantic_field(name: &'static str, semantic_type: &'static str, nullable: bool) -> Field {
@@ -366,21 +213,125 @@ fn string_value(
     Ok(value)
 }
 
-fn project_column(
-    field: &RelationField,
-    values: impl Iterator<Item = Value>,
+fn validity(values: &[Value]) -> Option<NullBuffer> {
+    let valid = values
+        .iter()
+        .map(|value| !matches!(value, Value::Null))
+        .collect::<Vec<_>>();
+    (!valid.iter().all(|value| *value)).then(|| NullBuffer::from(valid))
+}
+
+fn project_list(
+    field_name: &str,
+    element: &ValueSchema,
+    element_nullable: bool,
+    nullable: bool,
+    values: &[Value],
 ) -> Result<ArrayRef, ArrowRelationError> {
-    let values = values.collect::<Vec<_>>();
-    let array: ArrayRef = match field.schema() {
+    let mismatch = || ArrowRelationError::ValueMismatch {
+        field: field_name.to_owned(),
+    };
+    let lengths = values
+        .iter()
+        .map(|value| match value {
+            Value::List(items) => Ok(items.len()),
+            Value::Null if nullable => Ok(0),
+            _ => Err(mismatch()),
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let element_count = lengths.iter().try_fold(0_usize, |total, length| {
+        total
+            .checked_add(*length)
+            .filter(|total| i32::try_from(*total).is_ok())
+    });
+    if element_count.is_none() {
+        return Err(mismatch());
+    }
+    let elements = values
+        .iter()
+        .filter_map(|value| match value {
+            Value::List(items) => Some(items.as_slice()),
+            Value::Null => None,
+            _ => unreachable!("list shape checked above"),
+        })
+        .flatten()
+        .cloned()
+        .collect::<Vec<_>>();
+    let child = project_values(
+        &format!("{field_name}[]"),
+        element,
+        element_nullable,
+        &elements,
+    )?;
+    Ok(Arc::new(ListArray::new(
+        Arc::new(project_schema_field("item", element, element_nullable)?),
+        OffsetBuffer::from_lengths(lengths),
+        child,
+        validity(values),
+    )))
+}
+
+fn project_record(
+    field_name: &str,
+    fields: &[RelationField],
+    nullable: bool,
+    values: &[Value],
+) -> Result<ArrayRef, ArrowRelationError> {
+    let records = values
+        .iter()
+        .map(|value| match value {
+            Value::Record(items) => Ok(Some(items)),
+            Value::Null if nullable => Ok(None),
+            _ => Err(ArrowRelationError::ValueMismatch {
+                field: field_name.to_owned(),
+            }),
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let columns = fields
+        .iter()
+        .enumerate()
+        .map(|(index, child_field)| {
+            let child_values = records
+                .iter()
+                .map(|record| record.map_or(Value::Null, |items| items[index].1.clone()))
+                .collect::<Vec<_>>();
+            project_values(
+                &format!("{field_name}.{}", child_field.name()),
+                child_field.schema(),
+                child_field.nullable() || nullable,
+                &child_values,
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Arc::new(StructArray::new(
+        Fields::from(
+            fields
+                .iter()
+                .map(project_value_field)
+                .collect::<Result<Vec<_>, _>>()?,
+        ),
+        columns,
+        validity(values),
+    )))
+}
+
+fn project_values(
+    field_name: &str,
+    schema: &ValueSchema,
+    nullable: bool,
+    values: &[Value],
+) -> Result<ArrayRef, ArrowRelationError> {
+    let mismatch = || ArrowRelationError::ValueMismatch {
+        field: field_name.to_owned(),
+    };
+    let array: ArrayRef = match schema {
         ValueSchema::Boolean => Arc::new(BooleanArray::from_iter(
             values
                 .iter()
                 .map(|value| match value {
                     Value::Boolean(value) => Ok(Some(*value)),
-                    Value::Null if field.nullable() => Ok(None),
-                    _ => Err(ArrowRelationError::ValueMismatch {
-                        field: field.name().to_owned(),
-                    }),
+                    Value::Null if nullable => Ok(None),
+                    _ => Err(mismatch()),
                 })
                 .collect::<Result<Vec<_>, _>>()?,
         )),
@@ -389,10 +340,8 @@ fn project_column(
                 .iter()
                 .map(|value| match value {
                     Value::Integer(value) => Ok(Some(*value)),
-                    Value::Null if field.nullable() => Ok(None),
-                    _ => Err(ArrowRelationError::ValueMismatch {
-                        field: field.name().to_owned(),
-                    }),
+                    Value::Null if nullable => Ok(None),
+                    _ => Err(mismatch()),
                 })
                 .collect::<Result<Vec<_>, _>>()?,
         )),
@@ -401,27 +350,40 @@ fn project_column(
                 .iter()
                 .map(|value| match value {
                     Value::ByteString(value) => Ok(Some(value.as_slice())),
-                    Value::Null if field.nullable() => Ok(None),
-                    _ => Err(ArrowRelationError::ValueMismatch {
-                        field: field.name().to_owned(),
-                    }),
+                    Value::Null if nullable => Ok(None),
+                    _ => Err(mismatch()),
                 })
                 .collect::<Result<Vec<_>, _>>()?,
         )),
-        ValueSchema::List { .. } | ValueSchema::Record { .. } => {
-            return Err(ArrowRelationError::UnsupportedSchema {
-                field: field.name().to_owned(),
-                schema: field.schema().clone(),
-            });
-        }
+        ValueSchema::List {
+            element,
+            element_nullable,
+        } => project_list(field_name, element, *element_nullable, nullable, values)?,
+        ValueSchema::Record { fields } => project_record(field_name, fields, nullable, values)?,
         _ => Arc::new(StringArray::from_iter(
             values
                 .iter()
-                .map(|value| string_value(field, value))
+                .map(|value| {
+                    let synthetic = RelationField::new(field_name, schema.clone(), nullable)
+                        .expect("validated schema and field name");
+                    string_value(&synthetic, value)
+                })
                 .collect::<Result<Vec<_>, _>>()?,
         )),
     };
     Ok(array)
+}
+
+fn project_column(
+    field: &RelationField,
+    values: impl Iterator<Item = Value>,
+) -> Result<ArrayRef, ArrowRelationError> {
+    project_values(
+        field.name(),
+        field.schema(),
+        field.nullable(),
+        &values.collect::<Vec<_>>(),
+    )
 }
 
 /// Encodes validated complete facts without inventing a universal triple layout.
@@ -619,7 +581,37 @@ fn decode_column(
             .as_any()
             .downcast_ref::<BinaryArray>()
             .map(|array| Value::ByteString(array.value(row).to_vec())),
-        ValueSchema::List { .. } | ValueSchema::Record { .. } => None,
+        ValueSchema::List {
+            element,
+            element_nullable,
+        } => array
+            .as_any()
+            .downcast_ref::<ListArray>()
+            .map(|array| {
+                let values = array.value(row);
+                let child = RelationField::new("item", (**element).clone(), *element_nullable)
+                    .expect("validated list element schema");
+                (0..values.len())
+                    .map(|index| decode_column(&child, values.as_ref(), index))
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(Value::List)
+            })
+            .transpose()?,
+        ValueSchema::Record { fields } => array
+            .as_any()
+            .downcast_ref::<StructArray>()
+            .map(|array| {
+                fields
+                    .iter()
+                    .zip(array.columns())
+                    .map(|(child, column)| {
+                        decode_column(child, column.as_ref(), row)
+                            .map(|value| (child.name().to_owned(), value))
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(Value::Record)
+            })
+            .transpose()?,
         _ => array
             .as_any()
             .downcast_ref::<StringArray>()
@@ -689,6 +681,47 @@ fn check_limit(
     }
 }
 
+fn data_type_shape(data_type: &DataType) -> (usize, usize) {
+    match data_type {
+        DataType::List(field) => {
+            let (fields, depth) = data_type_shape(field.data_type());
+            (fields.saturating_add(1), depth.saturating_add(1))
+        }
+        DataType::Struct(fields) => fields.iter().fold((1_usize, 1_usize), |shape, field| {
+            let child = data_type_shape(field.data_type());
+            (
+                shape.0.saturating_add(child.0),
+                shape.1.max(child.1.saturating_add(1)),
+            )
+        }),
+        _ => (1, 1),
+    }
+}
+
+fn schema_shape(schema: &Schema) -> (usize, usize) {
+    schema
+        .fields()
+        .iter()
+        .fold((0_usize, 0_usize), |shape, field| {
+            let child = data_type_shape(field.data_type());
+            (shape.0.saturating_add(child.0), shape.1.max(child.1))
+        })
+}
+
+fn array_value_count(array: &dyn Array) -> usize {
+    if let Some(list) = array.as_any().downcast_ref::<ListArray>() {
+        return array
+            .len()
+            .saturating_add(array_value_count(list.values().as_ref()));
+    }
+    if let Some(record) = array.as_any().downcast_ref::<StructArray>() {
+        return record.columns().iter().fold(array.len(), |count, child| {
+            count.saturating_add(array_value_count(child.as_ref()))
+        });
+    }
+    array.len()
+}
+
 fn decode_ipc_to_facts(
     relation: &RelationSchema,
     bytes: &[u8],
@@ -697,9 +730,17 @@ fn decode_ipc_to_facts(
     check_limit("bytes", limits.bytes, bytes.len())?;
     let reader = FileReaderBuilder::new()
         .with_max_footer_fb_tables(limits.columns.saturating_mul(4).saturating_add(32))
-        .with_max_footer_fb_depth(16)
+        .with_max_footer_fb_depth(limits.nesting_depth.saturating_add(8))
         .build(Cursor::new(bytes))?;
-    check_limit("columns", limits.columns, reader.schema().fields().len())?;
+    let expected = project_fact_schema(relation)?;
+    if reader.schema().as_ref() != &expected {
+        return Err(ArrowRelationError::SchemaMismatch(
+            "Arrow schema does not match relation",
+        ));
+    }
+    let (columns, nesting_depth) = schema_shape(reader.schema().as_ref());
+    check_limit("columns", limits.columns, columns)?;
+    check_limit("nesting-depth", limits.nesting_depth, nesting_depth)?;
     if reader.num_batches() != 1 {
         return Err(ArrowRelationError::UnexpectedBatchCount(
             reader.num_batches(),
@@ -708,6 +749,15 @@ fn decode_ipc_to_facts(
     let mut batches = reader.collect::<Result<Vec<_>, _>>()?;
     let batch = batches.pop().expect("batch count checked");
     check_limit("rows", limits.rows, batch.num_rows())?;
+    check_limit(
+        "decoded-bytes",
+        limits.decoded_bytes,
+        batch.get_array_memory_size(),
+    )?;
+    let values = batch.columns().iter().fold(0_usize, |count, array| {
+        count.saturating_add(array_value_count(array.as_ref()))
+    });
+    check_limit("values", limits.values, values)?;
     record_batch_to_facts(relation, &batch)
 }
 

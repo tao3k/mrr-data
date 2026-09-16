@@ -1,0 +1,23 @@
+[package]
+name = "mrr-data-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "=0.4.13"
+meta-relational-reasoning = { git = "https://github.com/tao3k/meta-relational-reasoning.git", rev = "cb74d30a2188c06745b4629e7fc62081b7bc1ff3" }
+mrr-data-arrow = { path = "../crates/mrr-data-arrow" }
+
+[[bin]]
+name = "ipc_import"
+path = "fuzz_targets/ipc_import.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]
+members = ["."]
