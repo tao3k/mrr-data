@@ -198,6 +198,12 @@ impl PhysicalVertexIndex {
         self.entities.is_empty()
     }
 
+    /// Iterates semantic entities in their physical vertex-ID order.
+    #[must_use]
+    pub fn entities(&self) -> impl ExactSizeIterator<Item = EntityId> + '_ {
+        self.entities.iter().copied()
+    }
+
     /// Resolves a semantic entity to its dense physical vertex ID.
     #[must_use]
     pub fn internal_id(&self, entity: EntityId) -> Option<i64> {

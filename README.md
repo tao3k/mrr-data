@@ -70,9 +70,17 @@ semantic endpoint set, assigns dense GraphAr-local `i64` IDs, and retains the
 bidirectional mapping. The physical ID is never treated as an `EntityId`;
 upstream writers must persist the semantic identity as a property.
 
+The opt-in `upstream-graphar` feature temporarily pins the exact commit behind
+Apache GraphAr PR #977. It writes vertex identity properties, relation/context
+edge properties, adjacency chunks, and official metadata through
+`graphar-rs`/GraphAr C++; it does not implement a private GraphAr serializer.
+Output is staged beside the destination and atomically renamed only after every
+upstream builder and metadata write succeeds. This feature is provisional and
+is not a release dependency until the upstream API is admitted.
+
 The repository does not yet claim:
 
-- GraphAr metadata or data export/import through the upstream runtime;
+- GraphAr import or writer-to-reader round trips through the upstream runtime;
 - an IPFS network integration;
 - schema-bound query execution.
 

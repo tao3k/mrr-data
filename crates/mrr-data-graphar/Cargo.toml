@@ -7,9 +7,15 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+default = []
+upstream-graphar = ["dep:graphar-rs", "dep:tempfile"]
+
 [dependencies]
+graphar-rs = { git = "https://github.com/GTrunSec/incubator-graphar", rev = "1a3706283ed2225350ec5016e81fc33d3b0b14ef", optional = true }
 meta-relational-reasoning.workspace = true
 mrr-data-core.workspace = true
+tempfile = { workspace = true, optional = true }
 
 [dev-dependencies]
 asp-rust = { git = "https://github.com/tao3k/asp-rust", rev = "f88445d971d6b7dfd6336d73e52dc0411921f5bf", default-features = false }

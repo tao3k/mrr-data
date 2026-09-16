@@ -527,6 +527,15 @@ must not pin or claim that interface until the upstream PR is reviewed, merged,
 and available from a published or otherwise explicitly admitted revision.  The
 reader half remains a separate upstream capability gate.
 
+For development only, the =upstream-graphar= Cargo feature pins the immutable
+PR #977 head =1a3706283ed2225350ec5016e81fc33d3b0b14ef= and exercises the
+official Rust/C++ builders.  The adapter writes semantic =EntityId= vertex
+properties plus relation identity and full MRR context on every edge, stages a
+complete dataset, then renames it into place.  This pin is an explicit temporary
+admission, not a released dependency or evidence that upstream review is done.
+Linux and macOS native CI exercise it separately so ordinary Rust feedback does
+not inherit the C++ build latency.
+
 - implement only the declared binary-Entity projection first;
 - preserve canonical IDs through repartition and compaction;
 - reject n-ary and unsupported value shapes unless a versioned reification

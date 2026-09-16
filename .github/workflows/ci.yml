@@ -53,3 +53,39 @@ jobs:
         run: cargo install cargo-fuzz --version 0.13.2 --locked
       - name: Run bounded ASan IPC campaign
         run: cargo fuzz run ipc_import fuzz/corpus/ipc_import -- -runs=10000 -max_len=65536
+
+  graphar:
+    name: Upstream GraphAr (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
+      - name: Install Arrow C++
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            wget -c "https://apache.jfrog.io/artifactory/arrow/$(lsb_release --id --short | tr 'A-Z' 'a-z')/apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb" -P /tmp/
+            sudo apt-get install -y "/tmp/apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb"
+            sudo apt-get update -y
+            sudo apt-get install -y libarrow-dev libarrow-dataset-dev libarrow-acero-dev libarrow-compute-dev libparquet-dev
+          else
+            brew install apache-arrow
+            arrow_prefix="$(brew --prefix apache-arrow)"
+            echo "PKG_CONFIG_PATH=$arrow_prefix/lib/pkgconfig" >> "$GITHUB_ENV"
+            echo "CMAKE_PREFIX_PATH=$arrow_prefix" >> "$GITHUB_ENV"
+            echo "DYLD_FALLBACK_LIBRARY_PATH=$arrow_prefix/lib" >> "$GITHUB_ENV"
+            echo "CXXFLAGS=-I$arrow_prefix/include -Wno-error=deprecated-declarations -Wno-error=macro-redefined" >> "$GITHUB_ENV"
+          fi
+      - name: Test upstream GraphAr writer adapter
+        run: cargo test -p mrr-data-graphar --features upstream-graphar --locked
+      - name: Lint upstream GraphAr writer adapter
+        run: cargo clippy -p mrr-data-graphar --all-targets --features upstream-graphar --locked -- -D warnings
