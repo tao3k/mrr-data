@@ -1,4 +1,4 @@
-use std::{error::Error, fmt};
+use std::{collections::BTreeSet, error::Error, fmt};
 
 use meta_relational_reasoning::{
     EntityId, EvidenceCompleteness, Fact, FactId, FactProvenance, FactValidity, GenerationId,
@@ -166,6 +166,103 @@ impl GraphEdgeRecord {
     }
 }
 
+/// A deterministic dense mapping between semantic entities and `GraphAr` vertex IDs.
+///
+/// `GraphAr` internal IDs are physical row identifiers. They are derived from the
+/// sorted set of edge endpoints and never replace the semantic [`EntityId`].
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PhysicalVertexIndex {
+    entities: Vec<EntityId>,
+}
+
+impl PhysicalVertexIndex {
+    /// Builds an order- and partition-independent index for an edge set.
+    #[must_use]
+    pub fn from_edges(edges: &[GraphEdgeRecord]) -> Self {
+        let entities = edges
+            .iter()
+            .flat_map(|edge| [edge.source(), edge.destination()])
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        Self { entities }
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.entities.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.entities.is_empty()
+    }
+
+    /// Resolves a semantic entity to its dense physical vertex ID.
+    #[must_use]
+    pub fn internal_id(&self, entity: EntityId) -> Option<i64> {
+        self.entities
+            .binary_search(&entity)
+            .ok()
+            .and_then(|index| i64::try_from(index).ok())
+    }
+
+    /// Resolves a physical vertex ID back to its semantic entity.
+    #[must_use]
+    pub fn entity_id(&self, internal_id: i64) -> Option<EntityId> {
+        usize::try_from(internal_id)
+            .ok()
+            .and_then(|index| self.entities.get(index).copied())
+    }
+
+    /// Assigns physical endpoints while retaining the complete semantic edge.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error if the edge was not part of the indexed endpoint set.
+    pub fn index_edge(
+        &self,
+        edge: GraphEdgeRecord,
+    ) -> Result<IndexedGraphEdge, GraphProjectionError> {
+        let source = self
+            .internal_id(edge.source())
+            .ok_or(GraphProjectionError::UnknownEntity(edge.source()))?;
+        let destination = self
+            .internal_id(edge.destination())
+            .ok_or(GraphProjectionError::UnknownEntity(edge.destination()))?;
+        Ok(IndexedGraphEdge {
+            source,
+            destination,
+            semantic: edge,
+        })
+    }
+}
+
+/// A GraphAr-ready pair of physical endpoints plus its semantic source record.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct IndexedGraphEdge {
+    source: i64,
+    destination: i64,
+    semantic: GraphEdgeRecord,
+}
+
+impl IndexedGraphEdge {
+    #[must_use]
+    pub const fn source(&self) -> i64 {
+        self.source
+    }
+
+    #[must_use]
+    pub const fn destination(&self) -> i64 {
+        self.destination
+    }
+
+    #[must_use]
+    pub const fn semantic(&self) -> GraphEdgeRecord {
+        self.semantic
+    }
+}
+
 /// Fail-closed binary-Entity projection errors.
 #[derive(Debug, Eq, PartialEq)]
 pub enum GraphProjectionError {
@@ -174,6 +271,7 @@ pub enum GraphProjectionError {
     NullableEndpoint { field: String },
     UnsupportedEndpoint { field: String, schema: ValueSchema },
     InvalidFact { fact: FactId, error: RelationError },
+    UnknownEntity(EntityId),
     InvariantViolation,
 }
 
@@ -200,6 +298,12 @@ impl fmt::Display for GraphProjectionError {
                 write!(
                     formatter,
                     "fact {fact} violates the admitted relation: {error:?}"
+                )
+            }
+            Self::UnknownEntity(entity) => {
+                write!(
+                    formatter,
+                    "entity {entity} is absent from the physical index"
                 )
             }
             Self::InvariantViolation => formatter

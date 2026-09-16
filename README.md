@@ -65,7 +65,10 @@ its owning MRR relation, and produces physical-ID-free edge records preserving
 completeness, and validity. N-ary, nullable-endpoint, scalar-endpoint, and
 invalid-fact inputs fail with typed errors. Repartitioning cannot alter these
 records because GraphAr row IDs, chunks, and adjacency offsets never enter the
-contract.
+contract. A deterministic physical vertex index then sorts and deduplicates the
+semantic endpoint set, assigns dense GraphAr-local `i64` IDs, and retains the
+bidirectional mapping. The physical ID is never treated as an `EntityId`;
+upstream writers must persist the semantic identity as a property.
 
 The repository does not yet claim:
 

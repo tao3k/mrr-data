@@ -7,7 +7,10 @@
 mod projection;
 
 pub use mrr_data_core::{GRAPHAR_BINARY_ENTITY_NAMESPACE, GRAPHAR_BINARY_ENTITY_VERSION};
-pub use projection::{BinaryEntityProjection, GraphEdgeRecord, GraphProjectionError};
+pub use projection::{
+    BinaryEntityProjection, GraphEdgeRecord, GraphProjectionError, IndexedGraphEdge,
+    PhysicalVertexIndex,
+};
 
 #[cfg(test)]
 #[path = "../tests/unit/mod.rs"]

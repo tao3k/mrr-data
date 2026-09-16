@@ -4,7 +4,7 @@ use meta_relational_reasoning::{
     ValueSchema,
 };
 
-use crate::{BinaryEntityProjection, GraphProjectionError};
+use crate::{BinaryEntityProjection, GraphProjectionError, PhysicalVertexIndex};
 
 fn id<T: CanonicalId>(name: &str) -> T {
     T::from_name(name)
@@ -158,4 +158,59 @@ fn invalid_facts_fail_before_projection() {
         projection.project(&wrong_relation),
         Err(GraphProjectionError::InvalidFact { .. })
     ));
+}
+
+#[test]
+fn physical_vertex_ids_are_dense_and_bidirectional() {
+    let projection = BinaryEntityProjection::admit(&binary_relation()).unwrap();
+    let edges = [
+        projection.project(&fact("edge-1", "alice", "bob")).unwrap(),
+        projection.project(&fact("edge-2", "bob", "carol")).unwrap(),
+    ];
+    let index = PhysicalVertexIndex::from_edges(&edges);
+
+    assert_eq!(index.len(), 3);
+    assert!(!index.is_empty());
+    for physical in 0..3 {
+        let entity = index.entity_id(physical).expect("dense physical ID");
+        assert_eq!(index.internal_id(entity), Some(physical));
+    }
+    assert_eq!(index.entity_id(-1), None);
+
+    let indexed = index.index_edge(edges[0]).unwrap();
+    assert_eq!(index.entity_id(indexed.source()), Some(edges[0].source()));
+    assert_eq!(
+        index.entity_id(indexed.destination()),
+        Some(edges[0].destination())
+    );
+    assert_eq!(indexed.semantic(), edges[0]);
+}
+
+#[test]
+fn physical_vertex_index_is_independent_of_edge_order() {
+    let projection = BinaryEntityProjection::admit(&binary_relation()).unwrap();
+    let mut edges = vec![
+        projection.project(&fact("edge-1", "alice", "bob")).unwrap(),
+        projection.project(&fact("edge-2", "bob", "carol")).unwrap(),
+        projection
+            .project(&fact("edge-3", "carol", "alice"))
+            .unwrap(),
+    ];
+    let forward = PhysicalVertexIndex::from_edges(&edges);
+    edges.reverse();
+    let reversed = PhysicalVertexIndex::from_edges(&edges);
+    assert_eq!(reversed, forward);
+}
+
+#[test]
+fn indexing_rejects_edges_outside_the_admitted_endpoint_set() {
+    let projection = BinaryEntityProjection::admit(&binary_relation()).unwrap();
+    let admitted = projection.project(&fact("edge-1", "alice", "bob")).unwrap();
+    let foreign = projection.project(&fact("edge-2", "carol", "bob")).unwrap();
+    let index = PhysicalVertexIndex::from_edges(&[admitted]);
+
+    assert_eq!(
+        index.index_edge(foreign),
+        Err(GraphProjectionError::UnknownEntity(id("carol")))
+    );
 }

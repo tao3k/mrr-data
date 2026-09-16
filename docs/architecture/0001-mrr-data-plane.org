@@ -503,7 +503,11 @@ validates every fact through its owning MRR relation, preserves all
 semantic identities and context in a physical-ID-free edge record, and rejects
 n-ary, nullable-endpoint, scalar-endpoint, and invalid-fact inputs.  A
 repartition scenario proves that changing physical grouping does not change
-the projected records.
+the projected records.  The implemented physical vertex index sorts and
+deduplicates that endpoint set, assigns dense GraphAr-local =i64= identifiers,
+and retains a bidirectional mapping.  Its result is invariant under edge input
+order.  Internal IDs remain disposable: an upstream writer must persist the
+semantic =EntityId= as a property and import must restore it from that property.
 
 The crate intentionally does not encode GraphAr YAML, Parquet, chunk IDs, or
 adjacency tables.  At the inspected Apache GraphAr revision
