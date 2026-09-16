@@ -185,11 +185,12 @@ The following equalities are forbidden:
 - CAR archive bytes = semantic snapshot identity;
 - source revision = admitted semantic generation.
 
-* Snapshot Manifest V1
+* Content Snapshot Manifest V1
 
-The root block has schema identity =mrr.data.snapshot.v1=.  Its CID is computed
-over the canonical encoded block and is therefore returned alongside the
-manifest, not embedded as a self-referential =root_cid= field.
+The Content root block has schema identity =mrr.data.snapshot.v1=.  It is never
+used for a task-scoped Context projection.  Its CID is computed over the
+canonical encoded block and is therefore returned alongside the manifest, not
+embedded as a self-referential =root_cid= field.
 
 The logical shape is:
 
@@ -213,7 +214,8 @@ relations:
     row_count: 0
     batches:
       - cid: "..."
-        codec: arrow-ipc-file
+        cid_codec: raw
+        format: arrow-ipc-file
         byte_length: 0
 graph_projection:
   profile: mrr.graphar.binary-entity.v1
@@ -231,9 +233,11 @@ integrity:
 #+end_src
 
 =graph_projection= is optional.  A relation descriptor may be Arrow-only.  The
-manifest lists child blocks and algorithms but never its own CID.  Locations,
-gateway URLs, credentials, mutable tags, and authorization tokens are outside
-the immutable root.
+manifest lists each child's CID multicodec separately from its payload format,
+and never lists its own CID.  The root itself uses =dag-cbor=; Arrow, GraphAr,
+and other opaque child payloads use =raw= unless a registered, frozen codec is
+introduced by a later schema version.  Locations, gateway URLs, credentials,
+mutable tags, and authorization tokens are outside the immutable root.
 
 * Lineage and reasoning bundles
 
@@ -286,6 +290,37 @@ Context Graph, but storage co-location cannot collapse their roles.
   decision, not a mutable-cache guess.
 - Importing, merging, pinning, or querying Context data cannot promote it into
   Content.  It must re-enter through source and MRR admission.
+
+Context therefore has a distinct root schema, =mrr.data.context.v1=, rather
+than optional fields inside =mrr.data.snapshot.v1=.  Its immutable descriptor
+must contain at least:
+
+#+begin_src yaml
+schema: mrr.data.context.v1
+content:
+  generation_id: "..."
+  snapshot_cid: "..."
+scope:
+  actor_id: "..."
+  task_id: "..."
+  capability_scope_digest: "..."
+  selection_policy_digest: "..."
+  expires_at: "..."
+projection:
+  relations:
+    - relation_id: "..."
+      cid: "..."
+      cid_codec: raw
+      format: arrow-ipc-file
+integrity:
+  cid_version: 1
+  manifest_codec: dag-cbor
+  multihash: "..."
+#+end_src
+
+The schema tag makes Content and Context roots non-interchangeable.  Context
+import additionally checks the named Content root, actor/task/capability
+scope, selection policy, and expiry before exposing projected data.
 
 This is why Content can calibrate and anchor Context without making Arrow,
 GraphAr, or a graph database the source of truth.
@@ -347,14 +382,26 @@ pub trait GraphSnapshotStore {
         -> Result<GraphSnapshot, DataError>;
 }
 
+pub enum ContentCodec {
+    Raw,
+    DagCbor,
+}
+
+pub struct ContentBlock<'a> {
+    pub codec: ContentCodec,
+    pub bytes: &'a [u8],
+}
+
 pub trait ContentStore {
-    fn put(&self, bytes: &[u8]) -> Result<Cid, DataError>;
+    fn put(&self, block: ContentBlock<'_>) -> Result<Cid, DataError>;
     fn get(&self, cid: &Cid) -> Result<Vec<u8>, DataError>;
 }
 #+end_src
 
-These signatures are illustrative until the Rust types exist.  They do not
-authorize a parallel semantic model or provider-specific methods in the core.
+The store constructs and verifies the CID from the caller-declared codec and
+bytes; it must never sniff a payload or silently select a codec.  These
+signatures are illustrative until the Rust types exist.  They do not authorize
+a parallel semantic model or provider-specific methods in the core.
 
 * Repository shape
 
