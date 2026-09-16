@@ -1,0 +1,430 @@
+#+title: RFC 0001: MRR Data Plane V1
+#+status: proposed
+#+options: toc:2
+#+property: header-args :eval never-export :exports code
+
+* Status and ownership
+
+This RFC is the canonical design source for =mrr-data=.  It is a proposal, not
+an implementation claim.  The upstream
+[[https://github.com/tao3k/meta-relational-reasoning][MRR repository]] owns semantic
+identity, typed relation schemas and facts, generations, revision bindings,
+lineage, queries, transitions, and admission.  This repository owns only their
+physical representation, interchange, persistence, and distribution.
+
+The dependency direction is strict:
+
+#+begin_src mermaid
+flowchart LR
+  S[Source systems]
+  M[MRR semantic contracts]
+  D[mrr-data physical data plane]
+  A[Arrow batches and IPC]
+  G[GraphAr projection]
+  C[CID blocks and CAR]
+  O[filesystem or object store]
+
+  S -->|RevisionBinding + admitted facts| M
+  M -->|one-way dependency| D
+  D --> A
+  D --> G
+  D --> C
+  C --> O
+  A -. no semantic authority .-> M
+  G -. no semantic authority .-> M
+  C -. no semantic authority .-> M
+#+end_src
+
+=mrr-data= is not a graph database, query language, reasoning engine, or a
+second source of truth.  It must not redefine MRR types and MRR must not import
+Arrow, GraphAr, IPLD, CAR, or storage-provider types.
+
+* Design objective
+
+The governing rule is:
+
+#+begin_quote
+One semantic relation model, multiple physical forms.
+#+end_quote
+
+The same admitted MRR generation may have several equivalent physical
+materializations:
+
+- relation-specific Arrow record batches for hot, typed interchange;
+- Parquet-backed GraphAr vertex, edge, and adjacency chunks for graph-scale
+  persistence and selective IO;
+- content-addressed blocks and CAR archives for immutable packaging;
+- local filesystem or object-store locations for controlled availability.
+
+The physical forms are caches or durable representations of the semantic
+generation.  None can admit a fact, create a generation, or turn Context into
+canonical Content.
+
+The performance north star is:
+
+#+begin_quote
+Zero-copy when hot, graph-native when large, content-addressed when durable.
+#+end_quote
+
+* Calibrated upstream roles
+
+** Apache Arrow
+
+[[https://arrow.apache.org/docs/format/Intro.html][Apache Arrow]] defines a
+language-independent columnar memory layout plus IPC protocols.  It is the
+canonical /physical interchange/ form in this proposal, not the canonical
+semantic truth.  MRR facts and schemas remain authoritative.
+
+V1 uses one relation-specific =RecordBatch= schema per MRR =RelationSchema=.
+The user fields preserve declared field order and arity.  Reserved metadata
+columns carry at least =FactId=, =GenerationId=, authority, provenance,
+completeness, and validity.  A universal
+=subject_id/predicate_id/object_id= table is only an optional binary-relation
+view; it cannot represent arbitrary typed n-ary relations without loss.
+
+MRR values require an explicit mapping table before implementation:
+
+| MRR value | V1 Arrow requirement |
+|-----------+----------------------|
+| Entity and typed IDs | fixed-width canonical bytes or a versioned extension type |
+| Integer and Boolean | lossless native primitive |
+| Decimal and Float | preserve current canonical lexical value; no silent f64 coercion |
+| Date, Time, Timestamp, Duration | validate and map with declared units and timezone policy |
+| ByteString and String | binary and UTF-8 respectively |
+| List and Record | declared nested type, never opaque best-effort JSON |
+| Null | valid only where the relation schema explicitly permits it |
+
+The current MRR =ValueType= does not yet carry decimal precision, temporal
+unit, list element type, record shape, or nullability.  Therefore the first
+Arrow implementation must either add an upstream semantic schema extension or
+return a typed unsupported-schema error.  Guessing a physical type would make
+round trips non-deterministic.
+
+** Apache GraphAr
+
+[[https://graphar.apache.org/docs/specification/format/][Apache GraphAr]] is a
+system-independent persistent Property Graph layout.  It describes graph
+metadata, chunked vertex and edge tables, property column groups, and
+source/destination ordered or unordered adjacency layouts corresponding to
+CSR-, CSC-, and COO-style access.  Its payload formats include Parquet and ORC;
+Arrow is =mrr-data='s interchange layer, not a GraphAr payload-format claim.
+
+GraphAr is a specialization, not the universal MRR relation model:
+
+- unary entity relations may become vertex labels or properties;
+- binary Entity-to-Entity relations may become edges;
+- n-ary relations, relations containing non-Entity endpoints, or facts whose
+  identity carries independent semantics require an explicit reification
+  profile or remain Arrow-only;
+- =EntityId= is stored as a stable primary-key property;
+- GraphAr internal vertex IDs, row positions, chunk IDs, and adjacency offsets
+  are disposable physical identities;
+- =FactId= and =RelationId= must survive export, compaction, repartition, and
+  import even when every physical identifier changes.
+
+An adapter must reject a relation that has no declared lossless graph
+projection.  It must never invent endpoint, label, or property semantics.
+
+** CID, IPLD, and CAR
+
+A CID identifies exact encoded bytes.  It does not establish semantic truth,
+authorization, freshness, completeness, or MRR admission.  A semantic
+=GenerationId= may have several equivalent physical snapshot roots, and a new
+physical layout need not create a new semantic generation.
+
+V1 will define one canonical root-manifest encoding before assigning CIDs.
+The normative form should be canonical DAG-CBOR with pinned CID version,
+multicodec, and multihash choices.  JSON or YAML may be rendered for humans but
+must not become an ambiguous hashing surface.
+
+Arrow IPC bytes are not automatically a semantic canonicalization.  Metadata
+ordering, dictionaries, padding, chunking, and writer versions can change the
+bytes without changing logical rows.  The V1 codec must pin and test a
+deterministic encoding profile or define the CID as physical-artifact identity
+only.  It must never claim byte identity is semantic equality.
+
+[[https://ipld.io/specs/transport/car/carv1/][CARv1]] packages a header and
+CID-addressed blocks.  CAR is transport packaging, not the snapshot identity:
+block order and archive composition may differ while retaining the same root
+manifest CID.  Every declared root and referenced child block must be verified
+on import.
+
+Content addressing also does not imply IPFS networking.  V1 includes no IPFS
+daemon, DHT, gateway, pinning-service, or public-publication dependency.
+Default providers are memory and local filesystem; object storage is optional
+and policy-controlled.  Public network publication is always an explicit
+future capability.
+
+* Four identity layers
+
+The design keeps four layers separate:
+
+| Layer | Examples | Owner |
+|-------+----------+-------|
+| Semantic identity | =EntityId=, =RelationId=, =FactId=, =GenerationId= | MRR |
+| Logical data | =RelationSchema=, typed facts, lineage, query IR | MRR |
+| Physical data | Arrow buffers, Parquet files, GraphAr chunks and offsets | mrr-data |
+| Content identity | block CID, root manifest CID, CAR roots | mrr-data |
+
+External source revisions use MRR's =ExternalRevisionIdentity= and
+=RevisionBinding=.  A Jujutsu =ChangeId= and =CommitId= can populate that typed
+provider contract, but JJ is not hard-coded into the core manifest: Git,
+databases, object stores, and web sources need the same boundary.
+
+The following equalities are forbidden:
+
+- CID = =GenerationId=;
+- GraphAr internal vertex ID = =EntityId=;
+- Arrow row position = =FactId=;
+- CAR archive bytes = semantic snapshot identity;
+- source revision = admitted semantic generation.
+
+* Snapshot Manifest V1
+
+The root block has schema identity =mrr.data.snapshot.v1=.  Its CID is computed
+over the canonical encoded block and is therefore returned alongside the
+manifest, not embedded as a self-referential =root_cid= field.
+
+The logical shape is:
+
+#+begin_src yaml
+schema: mrr.data.snapshot.v1
+semantic:
+  generation_id: "..."
+  relation_model_digest: "..."
+source:
+  revision_binding:
+    revision_id: "..."
+    provider: "jj | git | database | object-store | web | ..."
+    logical_change: "..."
+    content_revision: "..."
+relations:
+  - relation_id: "..."
+    relation_schema_digest: "..."
+    arrow_schema_digest: "..."
+    row_count: 0
+    batches:
+      - cid: "..."
+        codec: arrow-ipc-file
+        byte_length: 0
+graph_projection:
+  profile: mrr.graphar.binary-entity.v1
+  graphar_version: "..."
+  manifest_cid: "..."
+lineage:
+  batch_cids: ["..."]
+coverage:
+  kind: complete | partial | unknown
+  declaration_cid: "..."
+integrity:
+  cid_version: 1
+  manifest_codec: dag-cbor
+  multihash: "..."
+#+end_src
+
+=graph_projection= is optional.  A relation descriptor may be Arrow-only.  The
+manifest lists child blocks and algorithms but never its own CID.  Locations,
+gateway URLs, credentials, mutable tags, and authorization tokens are outside
+the immutable root.
+
+* Lineage and reasoning bundles
+
+Content addressing is useful at batch and artifact granularity:
+
+- raw evidence batch CID;
+- normalized relation batch CID;
+- lineage batch CID;
+- rule or rule-pack artifact CID;
+- candidate result batch CID;
+- proof and admission receipt CID;
+- root bundle manifest CID.
+
+Semantic granularity and storage-block granularity are deliberately different.
+The system does not create one IPLD node per fact or derivation edge by
+default.  MRR owns fine-grained =FactId= and =DerivationId= links inside typed
+batches; CIDs make those batches and receipts immutable and distributable.
+
+* Query and execution boundary
+
+MRR's =MetaQueryIr= stays storage-neutral but Property-Graph-specific.  A
+future downstream =BoundDataQuery= may pair it with:
+
+- exact =GenerationId=;
+- relation/catalog digest;
+- physical snapshot root CID;
+- graph-projection profile and manifest CID when required;
+- language/dialect and engine capability profile.
+
+Parsing, schema binding, execution, and semantic admission are separate
+receipts.  The binder must reject unknown or ambiguous labels, incompatible
+property operations, unsupported path modes, stale generations, or snapshot
+drift.  A database result is a candidate until MRR source, lineage,
+completeness, and transition owners admit it.
+
+* Content and Context materialization
+
+=mrr-data= may physically store both a canonical Content Graph and a derived
+Context Graph, but storage co-location cannot collapse their roles.
+
+- A Content snapshot is source-bound, versioned, provenance-bearing, and
+  admitted at a specific MRR generation.
+- A Context snapshot is a bounded projection for an actor, task, capability
+  scope, selection policy, Content generation, and expiry.
+- Every Context root must name the Content =GenerationId= and snapshot root it
+  was projected from.  A new Content generation makes freshness a typed
+  decision, not a mutable-cache guess.
+- Importing, merging, pinning, or querying Context data cannot promote it into
+  Content.  It must re-enter through source and MRR admission.
+
+This is why Content can calibrate and anchor Context without making Arrow,
+GraphAr, or a graph database the source of truth.
+
+* Ecosystem placement
+
+The repository boundary follows the wider system ownership:
+
+| Component | Owned responsibility |
+|-----------+----------------------|
+| MRR | semantic identity, relations, inference candidates, lineage, generations, and admission |
+| mrr-data | physical interchange, persistence, immutable packaging, and controlled distribution |
+| ASP | source/software evidence and typed provider contracts |
+| POO Flow / Marlin | runtime composition, execution policy, ownership, and observability |
+| Wendao and other agents | consumers that construct task Context from admitted Content |
+
+A BYODS-style external reasoner may consume an immutable input bundle and
+return candidate result and proof bundles.  =mrr-data= can package and identify
+those artifacts; MRR decides whether their semantics are admissible, and POO
+Flow owns execution.  This repository must not grow a second scheduler,
+reasoning engine, or observability framework.
+
+* Security and trust boundary
+
+Import follows a fail-closed ladder:
+
+1. authorize the source and enforce byte, block, row, nesting, and
+   decompression budgets;
+2. validate CAR framing, roots, duplicate blocks, and referenced-block
+   closure;
+3. recompute every CID and reject mismatches;
+4. validate Arrow/Parquet/GraphAr structures before exposing native buffers;
+5. validate the exact MRR schema, IDs, types, cardinality, and generation;
+6. run MRR semantic and admission checks.
+
+Apache Arrow explicitly requires validation of untrusted serialized inputs;
+malformed offsets, sizes, UTF-8, or extension metadata can otherwise be unsafe.
+The Arrow C Data Interface is accepted only from trusted in-process producers;
+network or archive input enters through validated serialized formats.
+
+A matching CID proves only byte integrity.  It does not prove that a payload
+is valid Arrow, valid GraphAr, authorized, non-malicious, or admissible MRR
+Content.
+
+* API surface
+
+The first implementation should keep the abstraction surface small:
+
+#+begin_src rust
+pub trait RelationBatchReader {
+    fn schema(&self) -> &RelationSchema;
+    fn next_batch(&mut self) -> Result<Option<RelationBatch>, DataError>;
+}
+
+pub trait GraphSnapshotStore {
+    fn write_snapshot(&self, snapshot: &GraphSnapshot)
+        -> Result<SnapshotRoot, DataError>;
+    fn read_snapshot(&self, root: &SnapshotRoot)
+        -> Result<GraphSnapshot, DataError>;
+}
+
+pub trait ContentStore {
+    fn put(&self, bytes: &[u8]) -> Result<Cid, DataError>;
+    fn get(&self, cid: &Cid) -> Result<Vec<u8>, DataError>;
+}
+#+end_src
+
+These signatures are illustrative until the Rust types exist.  They do not
+authorize a parallel semantic model or provider-specific methods in the core.
+
+* Repository shape
+
+Avoid ten speculative crates before there is implementation pressure.  The V1
+workspace should begin with:
+
+#+begin_example
+mrr-data/
+  crates/
+    mrr-data-core/       # manifest, errors, traits, snapshot descriptors
+    mrr-data-arrow/      # lossless MRR relation <-> Arrow mapping
+    mrr-data-content/    # CID, CAR, memory and filesystem providers
+    mrr-data-graphar/    # gated Property Graph projection
+    mrr-data/            # facade
+#+end_example
+
+Object-store, IPLD-model, or provider crates are split only when their API and
+dependency boundaries become independently useful.  There is no =mrr-ipfs=
+crate in V1.
+
+* Delivery milestones and proof obligations
+
+** M0: identity and manifest
+
+- freeze =mrr.data.snapshot.v1= and canonical DAG-CBOR encoding;
+- test deterministic root CID across repeated builds;
+- reject unknown schema versions, algorithms, codecs, and self-inconsistent
+  child descriptors;
+- prove that repacking CAR does not change the snapshot root.
+
+** M1: lossless Arrow interchange
+
+- define every supported MRR value mapping;
+- property-test =Fact -> RecordBatch -> Fact=;
+- preserve =FactId=, =RelationId=, =GenerationId=, context, field order, and
+  canonical values;
+- reject unsupported or ambiguous schemas rather than coercing them;
+- fuzz untrusted IPC validation.
+
+** M2: local content-addressed packaging
+
+- implement memory and filesystem =ContentStore=;
+- write/read CAR with full root and child verification;
+- enforce import budgets and typed failures;
+- demonstrate identical semantic data can have distinct physical CIDs without
+  changing =GenerationId=.
+
+** M3: GraphAr specialization
+
+- implement only the declared binary-Entity projection first;
+- preserve canonical IDs through repartition and compaction;
+- reject n-ary and unsupported value shapes unless a versioned reification
+  profile exists;
+- run differential read scenarios against an upstream GraphAr implementation.
+
+** M4: controlled distribution
+
+- add an object-store provider behind the same =ContentStore= contract;
+- keep locations and credentials outside immutable manifests;
+- measure selective column and adjacency reads without shrinking the corpus;
+- consider private IPFS transport only after evidence shows a requirement not
+  met by CAR plus object storage.
+
+Every milestone needs positive round trips, typed negative contracts,
+determinism receipts, and performance scenarios.  A passing parser, a matching
+CID, or a readable GraphAr dataset alone is not semantic closure.
+
+* Non-goals for V1
+
+- implementing a graph database or query optimizer;
+- replacing MRR identity, lineage, query, or admission types;
+- universal RDF/triple normalization of n-ary relations;
+- equating physical and semantic identity;
+- public IPFS publication, gateway fallback, or ambient network discovery;
+- silent compatibility modes for unsupported schemas;
+- claiming GraphAr or Arrow integration before round-trip gates pass.
+
+* Primary references
+
+- [[https://arrow.apache.org/docs/format/Intro.html][Apache Arrow format introduction and IPC boundary]]
+- [[https://arrow.apache.org/docs/format/Security.html][Apache Arrow security considerations]]
+- [[https://graphar.apache.org/docs/specification/format/][Apache GraphAr format specification]]
+- [[https://docs.ipfs.tech/concepts/content-addressing/][IPFS content addressing and CIDs]]
+- [[https://ipld.io/specs/transport/car/carv1/][IPLD CARv1 specification]]
