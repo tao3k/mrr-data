@@ -6,11 +6,12 @@
 * Status and ownership
 
 This RFC is the canonical design source for =mrr-data=.  It is a proposal, not
-a claim that the complete plane is implemented.  The current M0 executable
-slice proves relation-specific complete-Fact Arrow and bounded IPC round trips
-for every V1 value shape, including recursive native Arrow List and Struct
-arrays.  Property tests, typed resource-budget failures, malformed corpora, and
-an IPC fuzz target guard the import boundary.  The upstream
+a claim that the complete plane is implemented.  The current M0 through M2
+executable slices prove relation-specific complete-Fact Arrow and bounded IPC
+round trips, canonical snapshot identity, and verified local CARv1 packaging.
+Property tests, typed resource-budget failures, malformed corpora, an IPC fuzz
+target, and a 512-extra-block content-import scenario guard the import
+boundaries.  The upstream
 [[https://github.com/tao3k/meta-relational-reasoning][MRR repository]] owns semantic
 identity, typed relation schemas and facts, generations, revision bindings,
 lineage, queries, transitions, and admission.  This repository owns only their
@@ -479,6 +480,12 @@ current-head CI and review receipts are green.
   child descriptors.
 
 ** M2: local content-addressed packaging
+
+Implementation status: memory and filesystem stores, upstream CARv1
+read/write, full CID/root/referenced-child verification, exact catalog checks,
+typed import budgets, validation-before-commit, repacking invariance, and the
+512-extra-block performance scenario are implemented.  M2 is accepted only
+after current-head CI and review receipts are green.
 
 - implement memory and filesystem =ContentStore=;
 - write/read CAR with full root and child verification;

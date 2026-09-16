@@ -327,6 +327,27 @@ impl SnapshotManifest {
         &self.coverage
     }
 
+    /// Returns the unique physical child CIDs reachable from this root.
+    ///
+    /// The result is sorted by CID bytes so callers can compare closure sets
+    /// without depending on CAR block order.
+    #[must_use]
+    pub fn referenced_cids(&self) -> Vec<Cid> {
+        let mut cids = BTreeSet::new();
+        cids.extend(
+            self.relations
+                .iter()
+                .flat_map(RelationDescriptor::batches)
+                .map(|batch| *batch.cid()),
+        );
+        cids.extend(self.lineage_batch_cids.iter().copied());
+        cids.insert(*self.coverage.declaration_cid());
+        if let Some(graph) = &self.graph_projection {
+            cids.insert(*graph.manifest_cid());
+        }
+        cids.into_iter().collect()
+    }
+
     /// Verifies that externally resolved MRR catalogs exactly match this manifest.
     ///
     /// # Errors

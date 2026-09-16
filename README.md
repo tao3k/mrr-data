@@ -30,8 +30,8 @@ MRR's semantic APIs.
 
 ## Current status
 
-This repository now contains the M0 executable implementation slice:
-relation-specific Arrow schemas and lossless complete-Fact round trips. The
+This repository now contains the M0 through M2 executable implementation
+slices. M0 provides relation-specific Arrow schemas and lossless complete-Fact round trips. The
 batch preserves `FactId`, `RelationId`, `GenerationId`, authority, provenance,
 completeness, validity, field order, and every V1 value shape. Recursive List
 and Record values use Arrow's native nested arrays rather than JSON. Invalid
@@ -46,10 +46,20 @@ unknown profiles or self-inconsistent descriptors. It consumes MRR's semantic
 generation, source snapshot, and catalog digests rather than defining a second
 semantic identity system.
 
+`mrr-data-content` implements the M2 local packaging boundary. Its memory and
+filesystem stores derive and verify every CID from an explicit `raw` or
+`dag-cbor` codec. Snapshot archives use the upstream `fvm_ipld_car` CARv1
+reader/writer, while MRR Data adds single-root admission, duplicate rejection,
+full referenced-child closure and length checks, exact catalog verification,
+typed import budgets, and validation-before-commit. CAR block order and extra
+transport blocks may change without changing the snapshot root. A 512-extra-
+block scenario guards against multi-second import regressions without reducing
+the corpus.
+
 The repository does not yet claim:
 
 - GraphAr export/import;
-- CAR packaging or an IPFS network integration;
+- an IPFS network integration;
 - schema-bound query execution.
 
 The canonical proposal, invariants, V1 manifest boundary, and delivery gates

@@ -41,6 +41,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anyhow"
+version = "1.0.104"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
+
+[[package]]
 name = "arrayvec"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -346,6 +352,15 @@ dependencies = [
  "semver",
  "serde",
  "toml",
+]
+
+[[package]]
+name = "cbor4ii"
+version = "0.2.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b544cf8c89359205f4f990d0e6f3828db42df85b5dac95d09157a250eb0749c4"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -715,6 +730,50 @@ dependencies = [
  "futures-task",
  "pin-project-lite",
  "slab",
+]
+
+[[package]]
+name = "fvm_ipld_blockstore"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "abf4ac541f791ccb38b3d7926045a16636dafda045e768fed58c96f35bead1ae"
+dependencies = [
+ "anyhow",
+ "cid",
+ "multihash-codetable",
+]
+
+[[package]]
+name = "fvm_ipld_car"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36ca69774997f300516f7795e092464c56765c7f5ab63d51061682cbef64772b"
+dependencies = [
+ "cid",
+ "fvm_ipld_blockstore",
+ "fvm_ipld_encoding",
+ "multihash-codetable",
+ "multihash-derive",
+ "serde",
+ "thiserror",
+ "unsigned-varint",
+]
+
+[[package]]
+name = "fvm_ipld_encoding"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "60b78ddd909cfbcb210242e9b19804fbe17aae3866b6be3adcc1ed123484f928"
+dependencies = [
+ "anyhow",
+ "cid",
+ "fvm_ipld_blockstore",
+ "multihash-codetable",
+ "serde",
+ "serde_ipld_dagcbor 0.6.4",
+ "serde_repr",
+ "serde_tuple",
+ "thiserror",
 ]
 
 [[package]]
@@ -1139,6 +1198,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "mrr-data-content"
+version = "0.1.0"
+dependencies = [
+ "asp-rust",
+ "cid",
+ "fvm_ipld_car",
+ "meta-relational-reasoning",
+ "mrr-data-asp-rust-project-policy",
+ "mrr-data-core",
+ "tempfile",
+]
+
+[[package]]
 name = "mrr-data-core"
 version = "0.1.0"
 dependencies = [
@@ -1150,7 +1222,7 @@ dependencies = [
  "multihash-codetable",
  "serde",
  "serde_bytes",
- "serde_ipld_dagcbor",
+ "serde_ipld_dagcbor 0.7.0",
 ]
 
 [[package]]
@@ -1673,11 +1745,23 @@ dependencies = [
 
 [[package]]
 name = "serde_ipld_dagcbor"
+version = "0.6.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46182f4f08349a02b45c998ba3215d3f9de826246ba02bb9dddfe9a2a2100778"
+dependencies = [
+ "cbor4ii 0.2.14",
+ "ipld-core",
+ "scopeguard",
+ "serde",
+]
+
+[[package]]
+name = "serde_ipld_dagcbor"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2918680761336241e07049131fdc59f63c5691a8aaf592a167c0706b473c5fe5"
 dependencies = [
- "cbor4ii",
+ "cbor4ii 1.2.3",
  "ipld-core",
  "scopeguard",
  "serde",
@@ -1697,12 +1781,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_repr"
+version = "0.1.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d3b1629de253c70a0508c3899572da79ca359fdab27c7920ff00406df418906"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.5",
+]
+
+[[package]]
 name = "serde_spanned"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6662b5879511e06e8999a8a235d848113e942c9124f211511b16466ee2995f26"
 dependencies = [
  "serde_core",
+]
+
+[[package]]
+name = "serde_tuple"
+version = "1.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6af196b9c06f0aa5555ab980c01a2527b0f67517da8d68b1731b9d4764846a6f"
+dependencies = [
+ "serde",
+ "serde_tuple_macros",
+]
+
+[[package]]
+name = "serde_tuple_macros"
+version = "1.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec3a1e7d2eadec84deabd46ae061bf480a91a6bce74d25dad375bd656f2e19d8"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -1818,15 +1934,35 @@ dependencies = [
 
 [[package]]
 name = "tempfile"
-version = "3.27.0"
+version = "3.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
+checksum = "2d31c77bdf42a745371d260a26ca7163f1e0924b64afa0b688e61b5a9fa02f16"
 dependencies = [
  "fastrand",
  "getrandom 0.3.4",
  "once_cell",
  "rustix",
  "windows-sys",
+]
+
+[[package]]
+name = "thiserror"
+version = "2.0.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec86235f5fcc2a73650310756d2ac5b138a5780bbbdfae3eeccec992c435ba4f"
+dependencies = [
+ "thiserror-impl",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "2.0.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc04cd3e1236dd4a98afca4569f2deb3f120e5422a4023be2cb683f8486292af"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.5",
 ]
 
 [[package]]

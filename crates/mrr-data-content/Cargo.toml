@@ -1,0 +1,24 @@
+[package]
+name = "mrr-data-content"
+description = "Verified local content stores and CARv1 packaging for MRR Data"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+cid.workspace = true
+fvm_ipld_car.workspace = true
+meta-relational-reasoning.workspace = true
+mrr-data-core.workspace = true
+tempfile.workspace = true
+
+[dev-dependencies]
+asp-rust = { git = "https://github.com/tao3k/asp-rust", rev = "f88445d971d6b7dfd6336d73e52dc0411921f5bf", default-features = false }
+
+[build-dependencies]
+mrr-data-asp-rust-project-policy.workspace = true
+
+[lints]
+workspace = true
