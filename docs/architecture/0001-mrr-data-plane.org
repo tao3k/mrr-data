@@ -358,6 +358,10 @@ Import follows a fail-closed ladder:
 
 Apache Arrow explicitly requires validation of untrusted serialized inputs;
 malformed offsets, sizes, UTF-8, or extension metadata can otherwise be unsafe.
+The V1 bounded importer admits footer, batch, row, recursive-value, and
+uncompressed body budgets before materializing arrays.  It rejects dictionary
+batches and compressed record bodies until their pre-allocation and
+decompression budgets have executable evidence.
 The Arrow C Data Interface is accepted only from trusted in-process producers;
 network or archive input enters through validated serialized formats.
 

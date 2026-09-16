@@ -12,6 +12,7 @@ arrow-array.workspace = true
 arrow-buffer.workspace = true
 arrow-ipc.workspace = true
 arrow-schema.workspace = true
+flatbuffers.workspace = true
 meta-relational-reasoning.workspace = true
 
 [dev-dependencies]

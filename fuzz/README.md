@@ -1,8 +1,10 @@
 # IPC fuzzing
 
-The `ipc_import` target drives arbitrary bytes through the bounded Arrow IPC
-boundary for a recursively nested MRR relation. Run it with the standard Cargo
-fuzz frontend:
+The `ipc_import` target drives arbitrary bytes, a valid recursive seed, bounded
+mutations of that seed, and truncations through the Arrow IPC import boundary.
+This keeps malformed-header coverage while reaching the footer, budget,
+materialization, and semantic reconstruction paths. Run it with the standard
+Cargo fuzz frontend:
 
 ```sh
 cargo fuzz run ipc_import fuzz/corpus/ipc_import

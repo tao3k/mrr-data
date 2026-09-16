@@ -998,6 +998,7 @@ dependencies = [
  "arrow-ipc",
  "arrow-schema",
  "asp-rust",
+ "flatbuffers",
  "meta-relational-reasoning",
  "proptest",
 ]

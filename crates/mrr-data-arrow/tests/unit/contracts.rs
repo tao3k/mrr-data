@@ -270,6 +270,18 @@ fn ipc_import_limits_fail_closed() {
     match ipc_to_facts(
         &relation,
         &bytes,
+        IpcImportLimits::new(bytes.len(), 1, 14).with_decoded_bytes(0),
+    ) {
+        Err(ArrowRelationError::ImportLimitExceeded {
+            resource: "decoded-bytes",
+            limit: 0,
+            actual,
+        }) => assert!(actual > 0, "IPC body must be admitted before decoding"),
+        result => panic!("expected preflight decoded-byte failure, got {result:?}"),
+    }
+    match ipc_to_facts(
+        &relation,
+        &bytes,
         IpcImportLimits::new(bytes.len(), 1, 14).with_decoded_bytes(decoded_bytes - 1),
     ) {
         Err(ArrowRelationError::ImportLimitExceeded {

@@ -23,6 +23,8 @@ pub enum ArrowRelationError {
     },
     /// The V1 IPC profile contains anything other than one complete fact batch.
     UnexpectedBatchCount(usize),
+    /// The IPC file requests a feature excluded from the bounded V1 profile.
+    UnsupportedIpcFeature(&'static str),
     /// The upstream Arrow decoder panicked while inspecting malformed IPC.
     MalformedIpc,
     /// The Arrow batch does not carry the expected MRR profile or relation.
@@ -85,6 +87,9 @@ impl PartialEq for ArrowRelationError {
                     && left_actual == right_actual
             }
             (Self::UnexpectedBatchCount(left), Self::UnexpectedBatchCount(right)) => left == right,
+            (Self::UnsupportedIpcFeature(left), Self::UnsupportedIpcFeature(right)) => {
+                left == right
+            }
             (Self::MalformedIpc, Self::MalformedIpc) => true,
             (Self::SchemaMismatch(left), Self::SchemaMismatch(right)) => left == right,
             (Self::Arrow(left), Self::Arrow(right)) => left.to_string() == right.to_string(),

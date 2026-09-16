@@ -22,6 +22,7 @@ use meta_relational_reasoning::{
 };
 
 use crate::error::ArrowRelationError;
+use crate::ipc::{IpcImportLimits, check_limit, preflight_ipc};
 use crate::schema::{project_schema_field, project_value_field};
 
 /// Stable metadata identity for complete relation-specific fact batches.
@@ -34,49 +35,6 @@ const PROVENANCE_COLUMN: &str = "__mrr_provenance";
 const COMPLETENESS_COLUMN: &str = "__mrr_completeness";
 const INVALIDATED_BY_COLUMN: &str = "__mrr_invalidated_by";
 const SEMANTIC_COLUMN_COUNT: usize = 6;
-
-/// Caller-owned limits for decoding untrusted Arrow IPC fact batches.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct IpcImportLimits {
-    bytes: usize,
-    decoded_bytes: usize,
-    rows: usize,
-    columns: usize,
-    values: usize,
-    nesting_depth: usize,
-}
-
-impl IpcImportLimits {
-    #[must_use]
-    pub const fn new(max_bytes: usize, max_rows: usize, max_columns: usize) -> Self {
-        Self {
-            bytes: max_bytes,
-            decoded_bytes: max_bytes.saturating_mul(64),
-            rows: max_rows,
-            columns: max_columns,
-            values: max_rows.saturating_mul(max_columns).saturating_mul(16),
-            nesting_depth: 16,
-        }
-    }
-
-    #[must_use]
-    pub const fn with_decoded_bytes(mut self, max_decoded_bytes: usize) -> Self {
-        self.decoded_bytes = max_decoded_bytes;
-        self
-    }
-
-    #[must_use]
-    pub const fn with_values(mut self, max_values: usize) -> Self {
-        self.values = max_values;
-        self
-    }
-
-    #[must_use]
-    pub const fn with_nesting_depth(mut self, max_nesting_depth: usize) -> Self {
-        self.nesting_depth = max_nesting_depth;
-        self
-    }
-}
 
 fn semantic_field(name: &'static str, semantic_type: &'static str, nullable: bool) -> Field {
     Field::new(name, DataType::Utf8, nullable).with_metadata(HashMap::from([(
@@ -665,22 +623,6 @@ pub fn record_batch_to_facts(
         .collect()
 }
 
-fn check_limit(
-    resource: &'static str,
-    limit: usize,
-    actual: usize,
-) -> Result<(), ArrowRelationError> {
-    if actual > limit {
-        Err(ArrowRelationError::ImportLimitExceeded {
-            resource,
-            limit,
-            actual,
-        })
-    } else {
-        Ok(())
-    }
-}
-
 fn data_type_shape(data_type: &DataType) -> (usize, usize) {
     match data_type {
         DataType::List(field) => {
@@ -727,7 +669,7 @@ fn decode_ipc_to_facts(
     bytes: &[u8],
     limits: IpcImportLimits,
 ) -> Result<Vec<Fact>, ArrowRelationError> {
-    check_limit("bytes", limits.bytes, bytes.len())?;
+    preflight_ipc(bytes, limits)?;
     let reader = FileReaderBuilder::new()
         .with_max_footer_fb_tables(limits.columns.saturating_mul(4).saturating_add(32))
         .with_max_footer_fb_depth(limits.nesting_depth.saturating_add(8))
@@ -741,13 +683,10 @@ fn decode_ipc_to_facts(
     let (columns, nesting_depth) = schema_shape(reader.schema().as_ref());
     check_limit("columns", limits.columns, columns)?;
     check_limit("nesting-depth", limits.nesting_depth, nesting_depth)?;
-    if reader.num_batches() != 1 {
-        return Err(ArrowRelationError::UnexpectedBatchCount(
-            reader.num_batches(),
-        ));
-    }
-    let mut batches = reader.collect::<Result<Vec<_>, _>>()?;
-    let batch = batches.pop().expect("batch count checked");
+    let batch = reader
+        .into_iter()
+        .next()
+        .expect("preflight requires one batch")?;
     check_limit("rows", limits.rows, batch.num_rows())?;
     check_limit(
         "decoded-bytes",
