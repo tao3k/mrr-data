@@ -188,6 +188,36 @@ fn native_admission_rejects_a_relation_set_outside_the_catalog() {
 }
 
 #[test]
+fn native_admission_rejects_one_arrow_child_claimed_by_two_relations() {
+    let (relations, entities) = catalogs();
+    let cid = raw_cid(b"shared-arrow-ipc");
+    let request = SnapshotManifestRequest::new(
+        semantic_snapshot(false),
+        &relations,
+        &entities,
+        vec![
+            RelationDescriptor::new(
+                relation_id("alpha"),
+                1,
+                vec![BatchDescriptor::new(cid, 1, 16).unwrap()],
+            )
+            .unwrap(),
+            RelationDescriptor::new(
+                relation_id("beta"),
+                1,
+                vec![BatchDescriptor::new(cid, 1, 16).unwrap()],
+            )
+            .unwrap(),
+        ],
+        CoverageDescriptor::new(CoverageKind::Complete, raw_cid(b"coverage")).unwrap(),
+    );
+    assert_eq!(
+        SnapshotManifest::admit(request),
+        Err(DataError::DuplicateChild(Box::new(cid)))
+    );
+}
+
+#[test]
 fn decoded_manifest_rejects_the_wrong_resolved_catalog() {
     let decoded = SnapshotManifest::decode_canonical(&manifest(false).canonical_bytes().unwrap())
         .expect("decode");

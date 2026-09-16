@@ -459,6 +459,12 @@ fn validate_relations(relations: &mut [RelationDescriptor]) -> Result<(), DataEr
             return Err(DataError::DuplicateRelation(pair[0].relation_id));
         }
     }
+    let mut child_cids = BTreeSet::new();
+    for batch in relations.iter().flat_map(RelationDescriptor::batches) {
+        if !child_cids.insert(batch.cid) {
+            return Err(DataError::DuplicateChild(Box::new(batch.cid)));
+        }
+    }
     Ok(())
 }
 
