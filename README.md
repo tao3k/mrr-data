@@ -30,10 +30,12 @@ MRR's semantic APIs.
 
 ## Current status
 
-This repository currently contains a design, not an implementation. In
-particular, it does not yet claim:
+This repository now contains the first executable implementation slice:
+relation-specific Arrow schemas and lossless scalar-row round trips, with
+typed rejection for nested shapes that are not yet admitted. It does not yet
+claim:
 
-- a lossless MRR-to-Arrow mapping;
+- a complete MRR-to-Arrow mapping for List and Record shapes or full Fact context;
 - GraphAr export/import;
 - stable snapshot manifests or CIDs;
 - CAR packaging or an IPFS network integration;
@@ -46,8 +48,8 @@ are in [RFC 0001](docs/architecture/0001-mrr-data-plane.org).
 
 V1 is deliberately local-first and narrow:
 
-1. a deterministic snapshot manifest and identity contract;
-2. lossless relation-specific Arrow round trips;
+1. lossless relation-specific Arrow round trips;
+2. a deterministic snapshot manifest and identity contract over that proven encoding;
 3. CID/CAR packaging backed by memory and the local filesystem;
 4. a gated GraphAr projection for the graph-shaped subset of MRR relations;
 5. object-store support only after the local contract is stable.
@@ -58,4 +60,3 @@ an IPFS daemon, a public gateway, or public publication.
 ## North star
 
 > Zero-copy when hot, graph-native when large, content-addressed when durable.
-

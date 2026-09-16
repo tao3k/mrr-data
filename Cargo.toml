@@ -1,0 +1,22 @@
+[workspace]
+members = ["crates/mrr-data-arrow"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "LGPL-2.1-or-later"
+repository = "https://github.com/tao3k/mrr-data"
+
+[workspace.dependencies]
+arrow-array = "58.4.0"
+arrow-schema = "58.4.0"
+meta-relational-reasoning = { git = "https://github.com/tao3k/meta-relational-reasoning.git", rev = "6448b986ece59951aeeea81f577bafd6c3949023" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = "warn"
+pedantic = "warn"

@@ -6,7 +6,9 @@
 * Status and ownership
 
 This RFC is the canonical design source for =mrr-data=.  It is a proposal, not
-an implementation claim.  The upstream
+a claim that the complete plane is implemented.  The first executable slice
+proves relation-specific scalar Arrow row round trips and typed rejection of
+unimplemented nested shapes.  The upstream
 [[https://github.com/tao3k/meta-relational-reasoning][MRR repository]] owns semantic
 identity, typed relation schemas and facts, generations, revision bindings,
 lineage, queries, transitions, and admission.  This repository owns only their
@@ -86,19 +88,21 @@ MRR values require an explicit mapping table before implementation:
 
 | MRR value | V1 Arrow requirement |
 |-----------+----------------------|
-| Entity and typed IDs | fixed-width canonical bytes or a versioned extension type |
+| Entity and typed IDs | canonical typed text under versioned MRR field metadata in the initial slice; a later fixed-width form requires an upstream lossless digest constructor |
 | Integer and Boolean | lossless native primitive |
 | Decimal and Float | preserve current canonical lexical value; no silent f64 coercion |
-| Date, Time, Timestamp, Duration | validate and map with declared units and timezone policy |
+| Date, Time, Timestamp | preserve declared units and timezone policy |
+| Duration | canonical lexical UTF-8 plus namespaced MRR metadata until MRR defines component semantics |
 | ByteString and String | binary and UTF-8 respectively |
 | List and Record | declared nested type, never opaque best-effort JSON |
 | Null | valid only where the relation schema explicitly permits it |
 
-The current MRR =ValueType= does not yet carry decimal precision, temporal
-unit, list element type, record shape, or nullability.  Therefore the first
-Arrow implementation must either add an upstream semantic schema extension or
-return a typed unsupported-schema error.  Guessing a physical type would make
-round trips non-deterministic.
+The current MRR =ValueSchema= already carries decimal precision and scale,
+float width, temporal unit and timezone policy, recursive list element shape,
+ordered record shape, and field nullability.  The Arrow adapter consumes that
+contract directly and returns a typed unsupported-schema error for any mapping
+it cannot prove lossless.  Duration remains canonical lexical text in MRR V1;
+the adapter must not guess fixed units or calendar semantics from its spelling.
 
 ** Apache GraphAr
 
@@ -191,13 +195,15 @@ The logical shape is:
 schema: mrr.data.snapshot.v1
 semantic:
   generation_id: "..."
-  relation_model_digest: "..."
+  semantic_snapshot_digest: "..."
+  relation_catalog_digest: "..."
+  entity_catalog_digest: "..."
 source:
-  revision_binding:
-    revision_id: "..."
-    provider: "jj | git | database | object-store | web | ..."
-    logical_change: "..."
-    content_revision: "..."
+  revision_bindings:
+    - revision_id: "..."
+      provider: "jj | git | database | object-store | web | ..."
+      logical_change: "..."
+      content_revision: "..."
 relations:
   - relation_id: "..."
     relation_schema_digest: "..."
@@ -250,16 +256,19 @@ MRR's =MetaQueryIr= stays storage-neutral but Property-Graph-specific.  A
 future downstream =BoundDataQuery= may pair it with:
 
 - exact =GenerationId=;
-- relation/catalog digest;
+- exact =RelationCatalogDigest= and =EntityCatalogDigest=;
+- admitted semantic snapshot digest;
 - physical snapshot root CID;
 - graph-projection profile and manifest CID when required;
 - language/dialect and engine capability profile.
 
 Parsing, schema binding, execution, and semantic admission are separate
-receipts.  The binder must reject unknown or ambiguous labels, incompatible
-property operations, unsupported path modes, stale generations, or snapshot
-drift.  A database result is a candidate until MRR source, lineage,
-completeness, and transition owners admit it.
+receipts.  MRR's =CatalogBoundQuery= is the sole owner of unknown or ambiguous
+labels, properties, relation types, and expression typing.  The downstream
+binder consumes that admitted receipt and rejects only physical unavailability,
+unsupported projection/path modes, stale generations, snapshot drift, or
+engine-capability mismatch.  A database result is a candidate until MRR source,
+lineage, completeness, and transition owners admit it.
 
 * Content and Context materialization
 
@@ -366,15 +375,7 @@ crate in V1.
 
 * Delivery milestones and proof obligations
 
-** M0: identity and manifest
-
-- freeze =mrr.data.snapshot.v1= and canonical DAG-CBOR encoding;
-- test deterministic root CID across repeated builds;
-- reject unknown schema versions, algorithms, codecs, and self-inconsistent
-  child descriptors;
-- prove that repacking CAR does not change the snapshot root.
-
-** M1: lossless Arrow interchange
+** M0: lossless Arrow interchange
 
 - define every supported MRR value mapping;
 - property-test =Fact -> RecordBatch -> Fact=;
@@ -382,6 +383,15 @@ crate in V1.
   canonical values;
 - reject unsupported or ambiguous schemas rather than coercing them;
 - fuzz untrusted IPC validation.
+
+** M1: identity and manifest
+
+- freeze =mrr.data.snapshot.v1= only after the Arrow descriptors have executable
+  round-trip evidence;
+- test deterministic root CID across repeated builds;
+- reject unknown schema versions, algorithms, codecs, and self-inconsistent
+  child descriptors;
+- prove that repacking CAR does not change the snapshot root.
 
 ** M2: local content-addressed packaging
 

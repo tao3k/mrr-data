@@ -1,0 +1,16 @@
+[package]
+name = "mrr-data-arrow"
+description = "Lossless Arrow interchange for admitted MRR relation rows"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+arrow-array.workspace = true
+arrow-schema.workspace = true
+meta-relational-reasoning.workspace = true
+
+[lints]
+workspace = true
