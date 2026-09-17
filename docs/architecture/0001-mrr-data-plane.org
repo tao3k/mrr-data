@@ -403,8 +403,11 @@ The default =mrr-data::arrow= facade exposes relation-specific schema
 projection, native =RecordBatch= conversion, and bounded IPC import.  The
 opt-in =mrr-data::content= facade exposes the implemented =ContentStore=,
 =MemoryContentStore=, =FilesystemContentStore=, and CAR operations.  The
-opt-in =mrr-data::graphar= facade exposes the admitted binary-Entity projection
-and, only with =graphar-native=, the provisional upstream writer.
+opt-in =mrr-data::graphar= facade exposes the admitted binary-Entity
+projection and, only with =graphar-native=, the maintained native writer plus
+bounded semantic reader.  The reader reconstructs physical endpoints through
+their persisted =EntityId= properties and re-admits complete facts through the
+owning MRR relation.
 
 There is no V1 =RelationBatchReader= or =GraphSnapshotStore= abstraction.
 Those interfaces would hide materially different Arrow, content, and GraphAr
@@ -533,10 +536,15 @@ The =native-graphar= Cargo feature pins the immutable maintained fork commit
 =5d15afa76aafce27af3643f6f7ca59473a52d07c= and exercises the native Rust/C++
 writer and reader.  The adapter writes semantic =EntityId= vertex
 properties plus relation identity and full MRR context on every edge, stages a
-complete dataset, then renames it into place.  Admission requires an immutable
-fork revision, owner-maintained tests, and Linux/macOS native CI; it does not
-depend on Apache review.  Native CI remains separate so ordinary Rust feedback
-does not inherit the C++ build latency.
+complete dataset, then renames it into place.  Its bounded semantic reader
+resolves physical endpoints through the vertex table, parses every identity
+and context discriminator into its MRR V1 type, reconstructs =Fact= values,
+and re-admits each result through =BinaryEntityProjection=.  Duplicate facts,
+unknown physical endpoints, ambiguous vertex identities, foreign projections,
+malformed contexts, and row-budget overflow fail closed.  Admission requires
+an immutable fork revision, owner-maintained tests, and Linux/macOS native CI;
+it does not depend on Apache review.  Native CI remains separate so ordinary
+Rust feedback does not inherit the C++ build latency.
 
 - implement only the declared binary-Entity projection first;
 - preserve canonical IDs through repartition and compaction;

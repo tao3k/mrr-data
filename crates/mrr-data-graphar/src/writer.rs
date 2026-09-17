@@ -18,11 +18,11 @@ use meta_relational_reasoning::{
 
 use crate::{BinaryEntityProjection, GraphEdgeRecord, GraphProjectionError, PhysicalVertexIndex};
 
-const ENTITY_TYPE: &str = "entity";
-const EDGE_TYPE: &str = "mrr_relation";
+pub(crate) const ENTITY_TYPE: &str = "entity";
+pub(crate) const EDGE_TYPE: &str = "mrr_relation";
 const VERTEX_INFO_FILE: &str = "entity.vertex.yaml";
 const EDGE_INFO_FILE: &str = "entity_mrr_relation_entity.edge.yaml";
-const GRAPH_INFO_FILE: &str = "mrr.graph.yaml";
+pub(crate) const GRAPH_INFO_FILE: &str = "mrr.graph.yaml";
 
 /// Receipt for one dataset written by the project-maintained `GraphAr` runtime.
 #[derive(Clone, Debug, Eq, PartialEq)]

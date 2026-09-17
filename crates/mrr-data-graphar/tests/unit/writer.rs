@@ -3,12 +3,15 @@ use graphar_rs::{
     reader::{read_edge_strings, read_vertex_strings},
 };
 use meta_relational_reasoning::{
-    EntityId, EvidenceCompleteness, Fact, FactId, FactProvenance, FactValidity, GenerationId,
-    RelationAuthority, RelationContext, RelationField, RelationId, RelationSchema, Value,
-    ValueSchema,
+    DerivationId, EntityId, EvidenceCompleteness, Fact, FactId, FactProvenance, FactValidity,
+    GenerationId, RelationAuthority, RelationContext, RelationField, RelationId, RelationSchema,
+    RuleId, Value, ValueSchema,
 };
 
-use crate::{BinaryEntityProjection, GraphArWriteError, write_graphar_dataset};
+use crate::{
+    BinaryEntityProjection, GraphArReadError, GraphArReadLimits, GraphArWriteError,
+    read_graphar_dataset, write_graphar_dataset,
+};
 
 fn id<T: CanonicalId>(name: &str) -> T {
     T::from_name(name)
@@ -32,6 +35,8 @@ canonical_id!(EntityId);
 canonical_id!(FactId);
 canonical_id!(GenerationId);
 canonical_id!(RelationId);
+canonical_id!(DerivationId);
+canonical_id!(RuleId);
 
 fn projection_named(name: &str) -> BinaryEntityProjection {
     let relation = RelationSchema::new(
@@ -151,6 +156,84 @@ fn maintained_graphar_round_trips_vertices_edges_and_metadata() {
     )
     .unwrap_err();
     assert!(budget_error.to_string().contains("exceeding max_rows=1"));
+}
+
+#[test]
+fn maintained_graphar_reconstructs_and_re_admits_complete_mrr_facts() {
+    let projection = projection();
+    let source = fact("edge-1", "alice", "bob");
+    let derived = Fact::new(
+        id("edge-2"),
+        id("knows"),
+        vec![Value::Entity(id("bob")), Value::Entity(id("carol"))],
+        RelationContext::new(
+            id("generation"),
+            RelationAuthority::Rule(id("rule")),
+            FactProvenance::Derivation(id("derivation")),
+            EvidenceCompleteness::Partial,
+            FactValidity::InvalidatedBy(id("superseding-fact")),
+        )
+        .unwrap(),
+    );
+    let expected = [source, derived];
+    let edges = expected
+        .iter()
+        .map(|fact| projection.project(fact).unwrap())
+        .collect::<Vec<_>>();
+    let parent = tempfile::tempdir().unwrap();
+    let output = parent.path().join("semantic-dataset");
+    write_graphar_dataset(&output, &projection, &edges).unwrap();
+
+    let imported = read_graphar_dataset(
+        &output,
+        &projection,
+        GraphArReadLimits::new(3, expected.len()),
+    )
+    .unwrap();
+
+    assert_eq!(imported.root(), output);
+    assert_eq!(imported.vertex_count(), 3);
+    assert_eq!(imported.facts(), expected.as_slice());
+}
+
+#[test]
+fn semantic_reader_enforces_native_row_budgets() {
+    let projection = projection();
+    let facts = [
+        fact("edge-1", "alice", "bob"),
+        fact("edge-2", "bob", "carol"),
+    ];
+    let edges = facts
+        .iter()
+        .map(|fact| projection.project(fact).unwrap())
+        .collect::<Vec<_>>();
+    let parent = tempfile::tempdir().unwrap();
+    let output = parent.path().join("budgeted-dataset");
+    write_graphar_dataset(&output, &projection, &edges).unwrap();
+
+    let error =
+        read_graphar_dataset(&output, &projection, GraphArReadLimits::new(3, 1)).unwrap_err();
+
+    assert!(matches!(error, GraphArReadError::Native(_)));
+    assert!(error.to_string().contains("exceeding max_rows=1"));
+}
+
+#[test]
+fn semantic_reader_rejects_a_foreign_projection() {
+    let projection = projection();
+    let edge = projection.project(&fact("edge-1", "alice", "bob")).unwrap();
+    let parent = tempfile::tempdir().unwrap();
+    let output = parent.path().join("foreign-projection-dataset");
+    write_graphar_dataset(&output, &projection, &[edge]).unwrap();
+
+    let error = read_graphar_dataset(
+        &output,
+        &projection_named("follows"),
+        GraphArReadLimits::new(2, 1),
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, GraphArReadError::PredicateMismatch { .. }));
 }
 
 #[test]
