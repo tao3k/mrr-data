@@ -339,12 +339,19 @@ fn scenario_semantically_reads_ten_thousand_graphar_edges() {
         let semantic_read_elapsed = semantic_read_started.elapsed();
         assert_eq!(imported.vertex_count(), EDGE_COUNT);
         assert_eq!(imported.facts(), expected_facts);
+        assert_eq!(
+            timings.fact_identity_decode(),
+            timings.fact_identity_access() + timings.fact_identity_parse(),
+            "fact identity decode must remain the exact sum of its observable phases"
+        );
         AspRustScenarioObservation::default()
             .with_timing("graph_info", timings.graph_info())
             .with_timing("native_vertex_read", timings.native_vertex_read())
             .with_timing("vertex_admission", timings.vertex_admission())
             .with_timing("edge_storage_read", timings.edge_storage_read())
             .with_timing("arrow_c_stream_import", timings.arrow_c_stream_import())
+            .with_timing("fact_identity_access", timings.fact_identity_access())
+            .with_timing("fact_identity_parse", timings.fact_identity_parse())
             .with_timing("fact_identity_decode", timings.fact_identity_decode())
             .with_timing("fact_materialization", timings.fact_materialization())
             .with_timing("fact_ordering", timings.fact_ordering())

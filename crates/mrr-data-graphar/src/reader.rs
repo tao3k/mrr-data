@@ -78,6 +78,8 @@ pub struct GraphArReadTimings {
     vertex_admission: Duration,
     edge_storage_read: Duration,
     arrow_c_stream_import: Duration,
+    fact_identity_access: Duration,
+    fact_identity_parse: Duration,
     fact_identity_decode: Duration,
     fact_materialization: Duration,
     fact_ordering: Duration,
@@ -128,6 +130,18 @@ impl GraphArReadTimings {
     #[must_use]
     pub const fn fact_identity_decode(self) -> Duration {
         self.fact_identity_decode
+    }
+
+    /// Time spent reading required canonical fact identity text from Arrow columns.
+    #[must_use]
+    pub const fn fact_identity_access(self) -> Duration {
+        self.fact_identity_access
+    }
+
+    /// Time spent parsing canonical fact identity text into typed MRR identities.
+    #[must_use]
+    pub const fn fact_identity_parse(self) -> Duration {
+        self.fact_identity_parse
     }
 
     /// Time spent resolving endpoints and materializing immutable MRR facts.
@@ -281,6 +295,8 @@ pub fn read_graphar_dataset_observed(
             vertex_admission: prepare_timings.vertex_admission(),
             edge_storage_read: prepare_timings.edge_storage_read(),
             arrow_c_stream_import: prepare_timings.arrow_c_stream_import(),
+            fact_identity_access: prepare_timings.fact_identity_access(),
+            fact_identity_parse: prepare_timings.fact_identity_parse(),
             fact_identity_decode: prepare_timings.fact_identity_decode(),
             fact_materialization: prepare_timings.fact_materialization(),
             fact_ordering: prepare_timings.fact_ordering(),

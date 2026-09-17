@@ -49,6 +49,8 @@ pub struct GraphArPrepareTimings {
     vertex_admission: Duration,
     edge_storage_read: Duration,
     arrow_c_stream_import: Duration,
+    fact_identity_access: Duration,
+    fact_identity_parse: Duration,
     fact_identity_decode: Duration,
     fact_materialization: Duration,
     fact_ordering: Duration,
@@ -96,6 +98,18 @@ impl GraphArPrepareTimings {
     #[must_use]
     pub const fn fact_identity_decode(self) -> Duration {
         self.fact_identity_decode
+    }
+
+    /// Time spent reading required canonical fact identity text from Arrow columns.
+    #[must_use]
+    pub const fn fact_identity_access(self) -> Duration {
+        self.fact_identity_access
+    }
+
+    /// Time spent parsing canonical fact identity text into typed MRR identities.
+    #[must_use]
+    pub const fn fact_identity_parse(self) -> Duration {
+        self.fact_identity_parse
     }
 
     /// Time spent resolving endpoints and materializing immutable MRR facts.
@@ -201,6 +215,8 @@ pub fn prepare_graphar_source(
             vertex_admission: vertices.semantic_admission,
             edge_storage_read: edges.storage_read,
             arrow_c_stream_import: edges.c_stream_import,
+            fact_identity_access: facts.identity_access,
+            fact_identity_parse: facts.identity_parse,
             fact_identity_decode: facts.identity_decode,
             fact_materialization: facts.materialization,
             fact_ordering: facts.ordering,
@@ -212,6 +228,8 @@ pub fn prepare_graphar_source(
 struct PreparedFacts {
     values: Vec<Fact>,
     predicates: Vec<Arc<str>>,
+    identity_access: Duration,
+    identity_parse: Duration,
     identity_decode: Duration,
     materialization: Duration,
     ordering: Duration,
@@ -264,19 +282,26 @@ fn prepare_facts(
         .iter()
         .map(EdgeArrowColumns::try_new)
         .collect::<Result<Vec<_>, _>>()?;
-    let identity_decode_started = Instant::now();
-    let fact_ids = columns
-        .iter()
-        .flat_map(|columns| {
-            (0..columns.source.len()).map(|row| {
-                parse_identity(
-                    "fact_id",
-                    required_value(columns.properties[0].value(row), "fact_id")?,
-                )
-            })
-        })
+    let identity_access_started = Instant::now();
+    let fact_identity_values = columns.iter().try_fold(
+        Vec::with_capacity(edge_count),
+        |mut values, columns| -> Result<_, GraphArReadError> {
+            for row in 0..columns.source.len() {
+                values.push(required_value(columns.properties[0].value(row), "fact_id")?);
+            }
+            Ok(values)
+        },
+    )?;
+    let identity_access = identity_access_started.elapsed();
+    debug_assert_eq!(fact_identity_values.len(), edge_count);
+
+    let identity_parse_started = Instant::now();
+    let fact_ids = fact_identity_values
+        .into_iter()
+        .map(|value| parse_identity("fact_id", value))
         .collect::<Result<Vec<_>, _>>()?;
-    let identity_decode = identity_decode_started.elapsed();
+    let identity_parse = identity_parse_started.elapsed();
+    let identity_decode = identity_access + identity_parse;
     debug_assert_eq!(fact_ids.len(), edge_count);
 
     let materialization_started = Instant::now();
@@ -345,6 +370,8 @@ fn prepare_facts(
     Ok(PreparedFacts {
         values,
         predicates,
+        identity_access,
+        identity_parse,
         identity_decode,
         materialization,
         ordering,
