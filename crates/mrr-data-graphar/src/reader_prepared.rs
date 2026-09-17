@@ -8,7 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use arrow_array::{Array, RecordBatch};
+use arrow_array::RecordBatch;
 use graphar_rs::info::GraphInfo;
 use meta_relational_reasoning::{EntityId, Fact, RelationId, Value};
 
