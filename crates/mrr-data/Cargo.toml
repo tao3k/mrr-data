@@ -21,9 +21,6 @@ mrr-data-core = { workspace = true, optional = true }
 mrr-data-graphar = { workspace = true, optional = true }
 mrr-data-profile.workspace = true
 
-[dev-dependencies]
-asp-rust = { git = "https://github.com/tao3k/asp-rust", rev = "3ddd7a15d1e69da4a67e0e0ab84b056fe90d838d", default-features = false }
-
 [build-dependencies]
 mrr-data-asp-rust-project-policy.workspace = true
 

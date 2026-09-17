@@ -104,6 +104,11 @@ jobs:
           fi
       - name: Test maintained GraphAr round-trip
         run: cargo test -p mrr-data-graphar --features native-graphar --locked
+      - name: Verify GraphAr Arrow performance parity
+        run: >-
+          cargo test -p mrr-data-graphar --features native-graphar --locked
+          scenario_semantically_reads_ten_thousand_graphar_edges --
+          --ignored --nocapture
       - name: Check facade GraphAr native feature
         run: cargo check -p mrr-data --no-default-features --features graphar-native --locked
       - name: Lint maintained GraphAr adapter
