@@ -19,8 +19,8 @@ use meta_relational_reasoning::{
 
 use crate::reader::scan_graphar_edge_chunks;
 use crate::{
-    BinaryEntityProjection, GraphArReadError, GraphArReadLimits, GraphArWriteError,
-    prepare_graphar_source, read_graphar_dataset, read_graphar_dataset_observed,
+    BinaryEntityProjection, GraphArReadError, GraphArReadLimits, GraphArReadTimings,
+    GraphArWriteError, prepare_graphar_source, read_graphar_dataset, read_graphar_dataset_observed,
     write_graphar_dataset,
 };
 
@@ -339,27 +339,12 @@ fn scenario_semantically_reads_ten_thousand_graphar_edges() {
         let semantic_read_elapsed = semantic_read_started.elapsed();
         assert_eq!(imported.vertex_count(), EDGE_COUNT);
         assert_eq!(imported.facts(), expected_facts);
-        assert_eq!(
-            timings.fact_identity_decode(),
-            timings.fact_identity_access() + timings.fact_identity_parse(),
-            "fact identity decode must remain the exact sum of its observable phases"
-        );
-        AspRustScenarioObservation::default()
-            .with_timing("graph_info", timings.graph_info())
-            .with_timing("native_vertex_read", timings.native_vertex_read())
-            .with_timing("vertex_admission", timings.vertex_admission())
-            .with_timing("edge_storage_read", timings.edge_storage_read())
-            .with_timing("arrow_c_stream_import", timings.arrow_c_stream_import())
-            .with_timing("fact_identity_access", timings.fact_identity_access())
-            .with_timing("fact_identity_parse", timings.fact_identity_parse())
-            .with_timing("fact_identity_decode", timings.fact_identity_decode())
-            .with_timing("fact_materialization", timings.fact_materialization())
-            .with_timing("fact_ordering", timings.fact_ordering())
-            .with_timing("fact_preparation", timings.fact_preparation())
-            .with_timing("fact_admission", timings.fact_admission())
-            .with_timing("semantic_read_admission", semantic_read_elapsed)
-            .with_metric("vertex_count", EDGE_COUNT as u64)
-            .with_metric("fact_count", imported.facts().len() as u64)
+        observe_semantic_read(
+            timings,
+            semantic_read_elapsed,
+            EDGE_COUNT,
+            imported.facts().len(),
+        )
     })
     .expect("measure GraphAr semantic read Scenario");
     let prepared_measurement = measure_asp_rust_scenario(&prepared_scenario, || {
@@ -387,6 +372,35 @@ fn scenario_semantically_reads_ten_thousand_graphar_edges() {
         write_elapsed.as_micros(),
     );
     assert_graphar_performance_budgets(&parity_measurement, &measurement, &prepared_measurement);
+}
+
+fn observe_semantic_read(
+    timings: GraphArReadTimings,
+    elapsed: Duration,
+    vertex_count: usize,
+    fact_count: usize,
+) -> AspRustScenarioObservation {
+    assert_eq!(
+        timings.fact_identity_decode(),
+        timings.fact_identity_access() + timings.fact_identity_parse(),
+        "fact identity decode must remain the exact sum of its observable phases"
+    );
+    AspRustScenarioObservation::default()
+        .with_timing("graph_info", timings.graph_info())
+        .with_timing("native_vertex_read", timings.native_vertex_read())
+        .with_timing("vertex_admission", timings.vertex_admission())
+        .with_timing("edge_storage_read", timings.edge_storage_read())
+        .with_timing("arrow_c_stream_import", timings.arrow_c_stream_import())
+        .with_timing("fact_identity_access", timings.fact_identity_access())
+        .with_timing("fact_identity_parse", timings.fact_identity_parse())
+        .with_timing("fact_identity_decode", timings.fact_identity_decode())
+        .with_timing("fact_materialization", timings.fact_materialization())
+        .with_timing("fact_ordering", timings.fact_ordering())
+        .with_timing("fact_preparation", timings.fact_preparation())
+        .with_timing("fact_admission", timings.fact_admission())
+        .with_timing("semantic_read_admission", elapsed)
+        .with_metric("vertex_count", vertex_count as u64)
+        .with_metric("fact_count", fact_count as u64)
 }
 
 fn assert_graphar_performance_budgets(
