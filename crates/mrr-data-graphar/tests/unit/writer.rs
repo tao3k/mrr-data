@@ -209,7 +209,7 @@ fn maintained_graphar_reconstructs_and_re_admits_complete_mrr_facts() {
 }
 
 #[test]
-fn prepared_graphar_source_reuses_arrow_batches_and_remains_fail_closed() {
+fn prepared_graphar_source_reuses_semantic_facts_and_remains_fail_closed() {
     let projection = projection();
     let mut expected = vec![
         fact("edge-1", "alice", "bob"),
@@ -304,7 +304,7 @@ fn scenario_semantically_reads_ten_thousand_graphar_edges() {
     let parity_scenario = graphar_arrow_bridge_parity_scenario();
     let prepared_scenario = graphar_prepared_admission_scenario();
     let limits = GraphArReadLimits::new(EDGE_COUNT, EDGE_COUNT);
-    let prepared = prepare_graphar_source(&output, limits).expect("prepare GraphAr Arrow batches");
+    let prepared = prepare_graphar_source(&output, limits).expect("prepare GraphAr semantic facts");
     let parity_iteration = Cell::new(0_usize);
     let parity_measurement = measure_asp_rust_scenario(&parity_scenario, || {
         let iteration = parity_iteration.get();
@@ -345,6 +345,7 @@ fn scenario_semantically_reads_ten_thousand_graphar_edges() {
             .with_timing("vertex_admission", timings.vertex_admission())
             .with_timing("edge_storage_read", timings.edge_storage_read())
             .with_timing("arrow_c_stream_import", timings.arrow_c_stream_import())
+            .with_timing("fact_preparation", timings.fact_preparation())
             .with_timing("fact_admission", timings.fact_admission())
             .with_timing("semantic_read_admission", semantic_read_elapsed)
             .with_metric("vertex_count", EDGE_COUNT as u64)
@@ -354,7 +355,7 @@ fn scenario_semantically_reads_ten_thousand_graphar_edges() {
     let prepared_measurement = measure_asp_rust_scenario(&prepared_scenario, || {
         let (imported, fact_admission) = prepared
             .admit_observed(&projection)
-            .expect("admit prepared GraphAr Arrow batches");
+            .expect("admit prepared GraphAr semantic facts");
         assert_eq!(imported.vertex_count(), EDGE_COUNT);
         assert_eq!(imported.facts(), expected_facts);
         AspRustScenarioObservation::default()
@@ -506,7 +507,7 @@ fn graphar_prepared_admission_scenario() -> AspRustScenario {
     asp_rust_scenario! {
         name: "graphar-prepared-admission-10k",
         package: "mrr-data-graphar",
-        description: "Prepared immutable Arrow batches admit 10,000 canonical MRR facts without re-entering GraphAr storage",
+        description: "Prepared immutable semantic facts admit 10,000 canonical MRR facts without re-entering GraphAr storage",
         fixture_root: "tests/unit/scenarios/graphar_prepared_admission_10k",
         tags: ["graphar", "arrow", "prepared-source", "semantic-admission", "performance"],
         commands: [
@@ -520,7 +521,7 @@ fn graphar_prepared_admission_scenario() -> AspRustScenario {
             max_total: "50ms",
             regression_budget: "10ms",
             memory_budget_bytes: 268_435_456,
-            target_rationale: "GraphAr storage decode and Arrow C Stream import finish before measurement; repeated consumption reuses immutable Rust Arrow batches and measures only typed MRR fact reconstruction and admission.",
+            target_rationale: "GraphAr storage decode, Arrow C Stream import, and projection-independent identity parsing finish before measurement; repeated consumption reuses immutable typed MRR facts and measures only projection-owned re-admission.",
             warmup_iterations: 2,
             measure_iterations: 21,
             metrics: [

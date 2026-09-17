@@ -7,7 +7,7 @@ observed_total = "11707087ns"
 regression_budget = "10ms"
 memory_budget_bytes = 268435456
 observed_memory_bytes = 0
-target_rationale = "GraphAr storage decode and Arrow C Stream import finish before measurement; repeated consumption reuses immutable Rust Arrow batches and measures only typed MRR fact reconstruction and admission."
+target_rationale = "GraphAr storage decode, Arrow C Stream import, and projection-independent identity parsing finish before measurement; repeated consumption reuses immutable typed MRR facts and measures only projection-owned re-admission."
 
 [measurement]
 clock = "std::time::Instant"

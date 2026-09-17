@@ -1,9 +1,17 @@
+//! Native `GraphAr` reads and fail-closed MRR semantic reconstruction.
+
+#[path = "reader_prepared.rs"]
+mod prepared;
+
+pub use prepared::{GraphArPrepareTimings, PreparedGraphArSource, prepare_graphar_source};
+
 use std::{
     collections::{HashMap, HashSet},
     error::Error,
     fmt,
     path::{Path, PathBuf},
     str::FromStr,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -16,8 +24,7 @@ use graphar_rs::{
 };
 use meta_relational_reasoning::{
     DerivationId, EntityId, EvidenceCompleteness, Fact, FactId, FactProvenance, FactValidity,
-    GenerationId, RelationAuthority, RelationContext, RelationContextError, RelationId, RuleId,
-    RulePackId, Value,
+    GenerationId, RelationAuthority, RelationContext, RelationContextError, RuleId, RulePackId,
 };
 
 use crate::writer::{EDGE_TYPE, ENTITY_TYPE, GRAPH_INFO_FILE};
@@ -60,33 +67,7 @@ impl GraphArReadLimits {
 pub struct GraphArDataset {
     root: PathBuf,
     vertex_count: usize,
-    facts: Vec<Fact>,
-}
-
-/// Native `GraphAr` storage decoded into reusable Arrow batches.
-///
-/// Preparing a source performs all metadata, Parquet, and Arrow C Stream work
-/// once. Calling [`Self::admit`] never re-enters the native import closure; it
-/// only validates the retained immutable batches against the supplied MRR
-/// projection.
-#[derive(Clone, Debug)]
-pub struct PreparedGraphArSource {
-    root: PathBuf,
-    physical_entities: Vec<EntityId>,
-    vertex_count: usize,
-    edge_count: usize,
-    edge_batches: Vec<RecordBatch>,
-    timings: GraphArPrepareTimings,
-}
-
-/// Measured phases of preparing native `GraphAr` storage for reuse.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct GraphArPrepareTimings {
-    graph_info: Duration,
-    native_vertex_read: Duration,
-    vertex_admission: Duration,
-    edge_storage_read: Duration,
-    arrow_c_stream_import: Duration,
+    facts: Arc<[Fact]>,
 }
 
 /// Measured phases of one native `GraphAr` semantic read.
@@ -97,6 +78,7 @@ pub struct GraphArReadTimings {
     vertex_admission: Duration,
     edge_storage_read: Duration,
     arrow_c_stream_import: Duration,
+    fact_preparation: Duration,
     fact_admission: Duration,
 }
 
@@ -133,103 +115,16 @@ impl GraphArReadTimings {
         self.arrow_c_stream_import
     }
 
-    /// Time spent reconstructing, validating, and canonically ordering MRR facts.
+    /// Time spent decoding persisted edge fields into immutable MRR facts.
+    #[must_use]
+    pub const fn fact_preparation(self) -> Duration {
+        self.fact_preparation
+    }
+
+    /// Time spent validating prepared MRR facts through their relation projection.
     #[must_use]
     pub const fn fact_admission(self) -> Duration {
         self.fact_admission
-    }
-}
-
-impl GraphArPrepareTimings {
-    /// Time spent loading the `GraphAr` metadata graph.
-    #[must_use]
-    pub const fn graph_info(self) -> Duration {
-        self.graph_info
-    }
-
-    /// Time spent reading vertex Arrow chunks through the native reader.
-    #[must_use]
-    pub const fn native_vertex_read(self) -> Duration {
-        self.native_vertex_read
-    }
-
-    /// Time spent parsing and admitting semantic vertex identities.
-    #[must_use]
-    pub const fn vertex_admission(self) -> Duration {
-        self.vertex_admission
-    }
-
-    /// Time spent reading `GraphAr` adjacency/property storage and exporting a C stream.
-    #[must_use]
-    pub const fn edge_storage_read(self) -> Duration {
-        self.edge_storage_read
-    }
-
-    /// Time spent importing exported C Stream batches into Rust Arrow arrays.
-    #[must_use]
-    pub const fn arrow_c_stream_import(self) -> Duration {
-        self.arrow_c_stream_import
-    }
-}
-
-impl PreparedGraphArSource {
-    #[must_use]
-    pub fn root(&self) -> &Path {
-        &self.root
-    }
-
-    #[must_use]
-    pub const fn vertex_count(&self) -> usize {
-        self.vertex_count
-    }
-
-    #[must_use]
-    pub const fn edge_count(&self) -> usize {
-        self.edge_count
-    }
-
-    #[must_use]
-    pub const fn timings(&self) -> GraphArPrepareTimings {
-        self.timings
-    }
-
-    /// Reconstructs and admits MRR facts exclusively from prepared Arrow batches.
-    ///
-    /// # Errors
-    ///
-    /// Returns a typed error for malformed fields, duplicate identities, invalid
-    /// contexts, or facts rejected by `projection`.
-    pub fn admit(
-        &self,
-        projection: &BinaryEntityProjection,
-    ) -> Result<GraphArDataset, GraphArReadError> {
-        self.admit_observed(projection)
-            .map(|(dataset, _fact_admission)| dataset)
-    }
-
-    /// Admits prepared Arrow batches and reports only MRR fact-admission time.
-    ///
-    /// # Errors
-    ///
-    /// Returns the same fail-closed errors as [`Self::admit`].
-    pub fn admit_observed(
-        &self,
-        projection: &BinaryEntityProjection,
-    ) -> Result<(GraphArDataset, Duration), GraphArReadError> {
-        let facts = admit_facts(
-            &self.edge_batches,
-            self.edge_count,
-            &self.physical_entities,
-            projection,
-        )?;
-        Ok((
-            GraphArDataset {
-                root: self.root.clone(),
-                vertex_count: self.vertex_count,
-                facts: facts.values,
-            },
-            facts.semantic_admission,
-        ))
     }
 }
 
@@ -365,47 +260,10 @@ pub fn read_graphar_dataset_observed(
             vertex_admission: prepare_timings.vertex_admission(),
             edge_storage_read: prepare_timings.edge_storage_read(),
             arrow_c_stream_import: prepare_timings.arrow_c_stream_import(),
+            fact_preparation: prepare_timings.fact_preparation(),
             fact_admission,
         },
     ))
-}
-
-/// Decodes bounded native `GraphAr` storage into reusable immutable Arrow batches.
-///
-/// This is the only public operation that enters the native storage reader.
-/// Repeated semantic consumption should call [`PreparedGraphArSource::admit`]
-/// instead of preparing the same source again.
-///
-/// # Errors
-///
-/// Returns a typed error for resource-budget rejection, malformed vertex
-/// identities, physical/semantic identity ambiguity, Arrow stream failures, or
-/// native `GraphAr` errors.
-pub fn prepare_graphar_source(
-    root: impl AsRef<Path>,
-    limits: GraphArReadLimits,
-) -> Result<PreparedGraphArSource, GraphArReadError> {
-    let root = root.as_ref();
-    let graph_info_started = Instant::now();
-    let graph_info = GraphInfo::load(root.join(GRAPH_INFO_FILE))?;
-    let graph_info_elapsed = graph_info_started.elapsed();
-    let vertices = read_and_admit_vertices(&graph_info, limits.max_vertices)?;
-    let edges = read_edge_batches(&graph_info, limits.max_edges)?;
-
-    Ok(PreparedGraphArSource {
-        root: root.to_path_buf(),
-        physical_entities: vertices.physical_entities,
-        vertex_count: vertices.count,
-        edge_count: edges.count,
-        edge_batches: edges.values,
-        timings: GraphArPrepareTimings {
-            graph_info: graph_info_elapsed,
-            native_vertex_read: vertices.native_read,
-            vertex_admission: vertices.semantic_admission,
-            edge_storage_read: edges.storage_read,
-            arrow_c_stream_import: edges.c_stream_import,
-        },
-    })
 }
 
 struct AdmittedVertices {
@@ -457,11 +315,6 @@ fn read_and_admit_vertices(
     })
 }
 
-struct AdmittedFacts {
-    values: Vec<Fact>,
-    semantic_admission: Duration,
-}
-
 struct PreparedEdges {
     values: Vec<RecordBatch>,
     count: usize,
@@ -496,79 +349,6 @@ fn read_edge_batches(
         count: edge_count,
         storage_read: edge_storage_elapsed,
         c_stream_import: c_stream_import_elapsed,
-    })
-}
-
-fn admit_facts(
-    edge_batches: &[RecordBatch],
-    edge_count: usize,
-    physical_entities: &[EntityId],
-    projection: &BinaryEntityProjection,
-) -> Result<AdmittedFacts, GraphArReadError> {
-    let fact_admission_started = Instant::now();
-    let mut fact_ids = HashSet::with_capacity(edge_count);
-    let mut facts = Vec::with_capacity(edge_count);
-    let mut relation_ids = HashMap::<&str, RelationId>::new();
-    let mut contexts = HashMap::new();
-    for batch in edge_batches {
-        let columns = EdgeArrowColumns::try_new(batch)?;
-        for row in 0..batch.num_rows() {
-            let source = endpoint(physical_entities, "source", columns.source(row)?)?;
-            let destination =
-                endpoint(physical_entities, "destination", columns.destination(row)?)?;
-            let fact_id = parse_identity(
-                "fact_id",
-                required_value(columns.properties[0].value(row), "fact_id")?,
-            )?;
-            if !fact_ids.insert(fact_id) {
-                return Err(GraphArReadError::DuplicateFact(fact_id));
-            }
-            let relation_id = parse_identity_cached(
-                &mut relation_ids,
-                "relation_id",
-                required_value(columns.properties[1].value(row), "relation_id")?,
-            )?;
-            let predicate = required_value(columns.properties[2].value(row), "predicate")?;
-            if predicate != projection.predicate() {
-                return Err(GraphArReadError::PredicateMismatch {
-                    expected: projection.predicate().to_owned(),
-                    actual: predicate.to_owned(),
-                });
-            }
-            let context_key = ContextKey {
-                generation: required_value(columns.properties[3].value(row), "generation_id")?,
-                authority_kind: required_value(columns.properties[4].value(row), "authority_kind")?,
-                authority_id: required_value(columns.properties[5].value(row), "authority_id")?,
-                provenance_kind: required_value(
-                    columns.properties[6].value(row),
-                    "provenance_kind",
-                )?,
-                provenance_id: required_value(columns.properties[7].value(row), "provenance_id")?,
-                completeness: required_value(columns.properties[8].value(row), "completeness")?,
-                validity_kind: required_value(columns.properties[9].value(row), "validity_kind")?,
-                invalidated_by: columns.properties[10].value(row),
-            };
-            let context = if let Some(context) = contexts.get(&context_key) {
-                *context
-            } else {
-                let context = parse_context(context_key, fact_id)?;
-                contexts.insert(context_key, context);
-                context
-            };
-            let fact = Fact::new(
-                fact_id,
-                relation_id,
-                vec![Value::Entity(source), Value::Entity(destination)],
-                context,
-            );
-            projection.project(&fact)?;
-            facts.push(fact);
-        }
-    }
-    facts.sort_unstable_by_key(Fact::id);
-    Ok(AdmittedFacts {
-        values: facts,
-        semantic_admission: fact_admission_started.elapsed(),
     })
 }
 
