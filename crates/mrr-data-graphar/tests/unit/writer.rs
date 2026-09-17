@@ -465,7 +465,7 @@ fn graphar_semantic_read_scenario() -> AspRustScenario {
             memory_budget_bytes: 268_435_456,
             target_rationale: "The native path reads GraphAr Parquet through upstream Arrow chunk readers before typed MRR identity parsing and admission.",
             warmup_iterations: 2,
-            measure_iterations: 11,
+            measure_iterations: 21,
             metrics: [
                 { name: "vertex_count", unit: "count", kind: Exact, target: 10_000 },
                 { name: "fact_count", unit: "count", kind: Exact, target: 10_000 }
@@ -494,7 +494,7 @@ fn graphar_arrow_bridge_parity_scenario() -> AspRustScenario {
             memory_budget_bytes: 268_435_456,
             target_rationale: "The reference phase alternates execution order on the same 10,000-edge fixture and separates GraphAr Parquet/chunk loading from zero-copy Arrow C Stream import into Rust.",
             warmup_iterations: 2,
-            measure_iterations: 11,
+            measure_iterations: 21,
             metrics: [
                 { name: "edge_count", unit: "count", kind: Exact, target: 10_000 }
             ]
@@ -522,7 +522,7 @@ fn graphar_prepared_admission_scenario() -> AspRustScenario {
             memory_budget_bytes: 268_435_456,
             target_rationale: "GraphAr storage decode and Arrow C Stream import finish before measurement; repeated consumption reuses immutable Rust Arrow batches and measures only typed MRR fact reconstruction and admission.",
             warmup_iterations: 2,
-            measure_iterations: 11,
+            measure_iterations: 21,
             metrics: [
                 { name: "fact_count", unit: "count", kind: Exact, target: 10_000 }
             ]
