@@ -1,5 +1,6 @@
 use std::{
     collections::BTreeSet,
+    env,
     error::Error,
     fmt, fs, io,
     path::{Path, PathBuf},
@@ -134,8 +135,20 @@ pub fn write_graphar_dataset(
         .prefix(".mrr-data-graphar-")
         .tempdir_in(parent)
         .map_err(|error| GraphArWriteError::io("create staging directory", &error))?;
+    let committed_root = if output.is_absolute() {
+        output.to_path_buf()
+    } else {
+        env::current_dir()
+            .map_err(|error| GraphArWriteError::io("resolve current directory", &error))?
+            .join(output)
+    };
+    let committed_root = committed_root
+        .to_str()
+        .ok_or_else(|| GraphArWriteError::NonUtf8Path(committed_root.clone()))?;
+    let committed_prefix = format!("{committed_root}/");
 
-    let (vertex_count, edge_count) = write_staged(staging.path(), projection, edges)?;
+    let (vertex_count, edge_count) =
+        write_staged(staging.path(), &committed_prefix, projection, edges)?;
     let staged_path = staging.keep();
     if let Err(error) = fs::rename(&staged_path, output) {
         let _ = fs::remove_dir_all(&staged_path);
@@ -170,6 +183,7 @@ fn validate_batch(
 
 fn write_staged(
     root: &Path,
+    committed_prefix: &str,
     projection: &BinaryEntityProjection,
     edges: &[GraphEdgeRecord],
 ) -> Result<(usize, usize), GraphArWriteError> {
@@ -217,7 +231,7 @@ fn write_staged(
     GraphInfo::builder("mrr_data")
         .push_vertex_info(vertex_info)
         .push_edge_info(edge_info)
-        .prefix("./")
+        .prefix(committed_prefix)
         .version(version)
         .try_build()
         .map_err(upstream)?

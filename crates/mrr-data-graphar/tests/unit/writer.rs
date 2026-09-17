@@ -86,6 +86,7 @@ fn maintained_graphar_round_trips_vertices_edges_and_metadata() {
     let graph_info = GraphInfo::load(receipt.graph_info_path()).unwrap();
     assert_eq!(graph_info.vertex_info_num(), 1);
     assert_eq!(graph_info.edge_info_num(), 1);
+    assert_eq!(graph_info.prefix(), format!("{}/", output.display()));
     assert!(output.join("entity.vertex.yaml").is_file());
     assert!(
         output
