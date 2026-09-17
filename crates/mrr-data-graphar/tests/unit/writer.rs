@@ -4,8 +4,8 @@ use std::{
 };
 
 use asp_rust_build_support::{
-    AspRustScenario, AspRustScenarioObservation, asp_rust_scenario, measure_asp_rust_scenario,
-    render_asp_rust_scenario_benchmark_toml,
+    AspRustScenario, AspRustScenarioMeasurement, AspRustScenarioObservation, asp_rust_scenario,
+    measure_asp_rust_scenario, render_asp_rust_scenario_benchmark_toml,
 };
 use graphar_rs::{
     info::{AdjListType, GraphInfo},
@@ -375,39 +375,45 @@ fn scenario_semantically_reads_ten_thousand_graphar_edges() {
         "mrr-data-graphar-scenario edges={EDGE_COUNT} write_us={}\n{parity_rendered}\n{rendered}\n{prepared_rendered}",
         write_elapsed.as_micros(),
     );
-    let official_p95 = parity_measurement.observed_timings["official_arrow_edge_scan"];
-    let c_stream_import_p95 = parity_measurement.observed_timings["arrow_c_stream_import"];
-    let relative_import_budget = official_p95 / 10;
-    let import_budget = relative_import_budget.min(Duration::from_millis(1));
+    assert_graphar_performance_budgets(&parity_measurement, &measurement, &prepared_measurement);
+}
+
+fn assert_graphar_performance_budgets(
+    parity: &AspRustScenarioMeasurement,
+    semantic_read: &AspRustScenarioMeasurement,
+    prepared_admission: &AspRustScenarioMeasurement,
+) {
+    let official_p95 = parity.observed_timings["official_arrow_edge_scan"];
+    let c_stream_import_p95 = parity.observed_timings["arrow_c_stream_import"];
+    let import_budget = (official_p95 / 10).min(Duration::from_millis(1));
     assert!(
         c_stream_import_p95 <= import_budget,
         "zero-copy Arrow C Stream import of 10,000 edges exceeded its min(1ms, 10% of official read) budget: official={official_p95:?} import={c_stream_import_p95:?} budget={import_budget:?}"
     );
     assert!(
-        measurement.total_p50 <= Duration::from_millis(300),
+        semantic_read.total_p50 <= Duration::from_millis(300),
         "10,000-edge semantic GraphAr read P50 exceeded 300ms: {:?}",
-        measurement.total_p50
+        semantic_read.total_p50
     );
     assert!(
-        measurement.total_p95 <= Duration::from_millis(500),
+        semantic_read.total_p95 <= Duration::from_millis(500),
         "10,000-edge semantic GraphAr read P95 exceeded 500ms: {:?}",
-        measurement.total_p95
+        semantic_read.total_p95
     );
     assert!(
-        prepared_measurement.total_p50 <= Duration::from_millis(25),
+        prepared_admission.total_p50 <= Duration::from_millis(25),
         "10,000-fact prepared admission P50 exceeded 25ms: {:?}",
-        prepared_measurement.total_p50
+        prepared_admission.total_p50
     );
     assert!(
-        prepared_measurement.total_p95 <= Duration::from_millis(50),
+        prepared_admission.total_p95 <= Duration::from_millis(50),
         "10,000-fact prepared admission P95 exceeded 50ms: {:?}",
-        prepared_measurement.total_p95
+        prepared_admission.total_p95
     );
     assert!(
-        prepared_measurement.observed_timings["prepared_fact_admission"]
-            <= Duration::from_millis(20),
+        prepared_admission.observed_timings["prepared_fact_admission"] <= Duration::from_millis(20),
         "10,000-fact prepared semantic admission exceeded 20ms: {:?}",
-        prepared_measurement.observed_timings["prepared_fact_admission"]
+        prepared_admission.observed_timings["prepared_fact_admission"]
     );
 }
 
