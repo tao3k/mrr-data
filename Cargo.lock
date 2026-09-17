@@ -945,7 +945,7 @@ dependencies = [
 [[package]]
 name = "graphar-rs"
 version = "0.1.0"
-source = "git+https://github.com/GTrunSec/incubator-graphar?rev=5341d0e588eac568177754a997c94b0e25fbc084#5341d0e588eac568177754a997c94b0e25fbc084"
+source = "git+https://github.com/GTrunSec/incubator-graphar?rev=5341d0ee6c6bc8b33c3b5edcdcf2484ccf5295ca#5341d0ee6c6bc8b33c3b5edcdcf2484ccf5295ca"
 dependencies = [
  "cmake",
  "cxx",
