@@ -1,20 +1,21 @@
 //! Prepared `GraphAr` source lifecycle and projection-owned re-admission.
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, hash_map::Entry},
+    hash::Hash,
     path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, Instant},
 };
 
-use arrow_array::RecordBatch;
+use arrow_array::{Array, RecordBatch};
 use graphar_rs::info::GraphInfo;
 use meta_relational_reasoning::{EntityId, Fact, RelationId, Value};
 
 use super::{
     BinaryEntityProjection, ContextKey, EdgeArrowColumns, GRAPH_INFO_FILE, GraphArDataset,
     GraphArReadError, GraphArReadLimits, endpoint, parse_context, parse_identity,
-    parse_identity_cached, read_and_admit_vertices, read_edge_batches, required_value,
+    read_and_admit_vertices, read_edge_batches, required_value,
 };
 
 /// Native `GraphAr` storage decoded into reusable semantic facts.
@@ -48,6 +49,9 @@ pub struct GraphArPrepareTimings {
     vertex_admission: Duration,
     edge_storage_read: Duration,
     arrow_c_stream_import: Duration,
+    fact_identity_decode: Duration,
+    fact_materialization: Duration,
+    fact_ordering: Duration,
     fact_preparation: Duration,
 }
 
@@ -86,6 +90,24 @@ impl GraphArPrepareTimings {
     #[must_use]
     pub const fn fact_preparation(self) -> Duration {
         self.fact_preparation
+    }
+
+    /// Time spent decoding persisted canonical fact identities.
+    #[must_use]
+    pub const fn fact_identity_decode(self) -> Duration {
+        self.fact_identity_decode
+    }
+
+    /// Time spent resolving endpoints and materializing immutable MRR facts.
+    #[must_use]
+    pub const fn fact_materialization(self) -> Duration {
+        self.fact_materialization
+    }
+
+    /// Time spent canonically ordering facts and rejecting duplicate identities.
+    #[must_use]
+    pub const fn fact_ordering(self) -> Duration {
+        self.fact_ordering
     }
 }
 
@@ -179,6 +201,9 @@ pub fn prepare_graphar_source(
             vertex_admission: vertices.semantic_admission,
             edge_storage_read: edges.storage_read,
             arrow_c_stream_import: edges.c_stream_import,
+            fact_identity_decode: facts.identity_decode,
+            fact_materialization: facts.materialization,
+            fact_ordering: facts.ordering,
             fact_preparation: facts.semantic_preparation,
         },
     })
@@ -187,7 +212,46 @@ pub fn prepare_graphar_source(
 struct PreparedFacts {
     values: Vec<Fact>,
     predicates: Vec<Arc<str>>,
+    identity_decode: Duration,
+    materialization: Duration,
+    ordering: Duration,
     semantic_preparation: Duration,
+}
+
+struct RunCache<K, V> {
+    last: Option<(K, V)>,
+    values: HashMap<K, V>,
+}
+
+impl<K, V> RunCache<K, V>
+where
+    K: Copy + Eq + Hash,
+    V: Clone,
+{
+    fn with_capacity(capacity: usize) -> Self {
+        Self {
+            last: None,
+            values: HashMap::with_capacity(capacity),
+        }
+    }
+
+    fn get_or_try_insert_with<E>(
+        &mut self,
+        key: K,
+        decode: impl FnOnce(K) -> Result<V, E>,
+    ) -> Result<V, E> {
+        if let Some((last_key, last_value)) = &self.last
+            && *last_key == key
+        {
+            return Ok(last_value.clone());
+        }
+        let value = match self.values.entry(key) {
+            Entry::Occupied(entry) => entry.get().clone(),
+            Entry::Vacant(entry) => entry.insert(decode(key)?).clone(),
+        };
+        self.last = Some((key, value.clone()));
+        Ok(value)
+    }
 }
 
 fn prepare_facts(
@@ -196,34 +260,47 @@ fn prepare_facts(
     physical_entities: &[EntityId],
 ) -> Result<PreparedFacts, GraphArReadError> {
     let fact_preparation_started = Instant::now();
-    let mut fact_ids = HashSet::with_capacity(edge_count);
+    let columns = edge_batches
+        .iter()
+        .map(EdgeArrowColumns::try_new)
+        .collect::<Result<Vec<_>, _>>()?;
+    let identity_decode_started = Instant::now();
+    let fact_ids = columns
+        .iter()
+        .flat_map(|columns| {
+            (0..columns.source.len()).map(|row| {
+                parse_identity(
+                    "fact_id",
+                    required_value(columns.properties[0].value(row), "fact_id")?,
+                )
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let identity_decode = identity_decode_started.elapsed();
+    debug_assert_eq!(fact_ids.len(), edge_count);
+
+    let materialization_started = Instant::now();
     let mut facts = Vec::with_capacity(edge_count);
-    let mut relation_ids = HashMap::<&str, RelationId>::new();
-    let mut contexts = HashMap::new();
-    let mut predicates = HashMap::<&str, Arc<str>>::new();
-    for batch in edge_batches {
-        let columns = EdgeArrowColumns::try_new(batch)?;
-        for row in 0..batch.num_rows() {
+    let mut relation_ids = RunCache::<&str, RelationId>::with_capacity(1);
+    let mut contexts = RunCache::with_capacity(1);
+    let mut predicates = RunCache::<&str, Arc<str>>::with_capacity(1);
+    let mut fact_ids = fact_ids.into_iter();
+    for columns in &columns {
+        for row in 0..columns.source.len() {
             let source = endpoint(physical_entities, "source", columns.source(row)?)?;
             let destination =
                 endpoint(physical_entities, "destination", columns.destination(row)?)?;
-            let fact_id = parse_identity(
-                "fact_id",
-                required_value(columns.properties[0].value(row), "fact_id")?,
-            )?;
-            if !fact_ids.insert(fact_id) {
-                return Err(GraphArReadError::DuplicateFact(fact_id));
-            }
-            let relation_id = parse_identity_cached(
-                &mut relation_ids,
-                "relation_id",
-                required_value(columns.properties[1].value(row), "relation_id")?,
-            )?;
+            let fact_id = fact_ids
+                .next()
+                .expect("decoded fact count matches validated Arrow rows");
+            let relation_value = required_value(columns.properties[1].value(row), "relation_id")?;
+            let relation_id = relation_ids.get_or_try_insert_with(relation_value, |value| {
+                parse_identity("relation_id", value)
+            })?;
             let predicate = required_value(columns.properties[2].value(row), "predicate")?;
-            let predicate = predicates
-                .entry(predicate)
-                .or_insert_with(|| Arc::from(predicate))
-                .clone();
+            let predicate = predicates.get_or_try_insert_with(predicate, |value| {
+                Ok::<_, GraphArReadError>(Arc::from(value))
+            })?;
             let context_key = ContextKey {
                 generation: required_value(columns.properties[3].value(row), "generation_id")?,
                 authority_kind: required_value(columns.properties[4].value(row), "authority_kind")?,
@@ -237,13 +314,8 @@ fn prepare_facts(
                 validity_kind: required_value(columns.properties[9].value(row), "validity_kind")?,
                 invalidated_by: columns.properties[10].value(row),
             };
-            let context = if let Some(context) = contexts.get(&context_key) {
-                *context
-            } else {
-                let context = parse_context(context_key, fact_id)?;
-                contexts.insert(context_key, context);
-                context
-            };
+            let context =
+                contexts.get_or_try_insert_with(context_key, |key| parse_context(key, fact_id))?;
             facts.push(PreparedFact {
                 predicate,
                 value: Fact::new(
@@ -255,14 +327,27 @@ fn prepare_facts(
             });
         }
     }
+    let materialization = materialization_started.elapsed();
+
+    let ordering_started = Instant::now();
     facts.sort_unstable_by_key(|fact| fact.value.id());
+    if let Some(duplicate) = facts
+        .windows(2)
+        .find(|pair| pair[0].value.id() == pair[1].value.id())
+    {
+        return Err(GraphArReadError::DuplicateFact(duplicate[0].value.id()));
+    }
     let (predicates, values) = facts
         .into_iter()
         .map(|fact| (fact.predicate, fact.value))
         .unzip();
+    let ordering = ordering_started.elapsed();
     Ok(PreparedFacts {
         values,
         predicates,
+        identity_decode,
+        materialization,
+        ordering,
         semantic_preparation: fact_preparation_started.elapsed(),
     })
 }

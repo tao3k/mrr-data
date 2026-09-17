@@ -6,7 +6,7 @@ mod prepared;
 pub use prepared::{GraphArPrepareTimings, PreparedGraphArSource, prepare_graphar_source};
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     error::Error,
     fmt,
     path::{Path, PathBuf},
@@ -78,6 +78,9 @@ pub struct GraphArReadTimings {
     vertex_admission: Duration,
     edge_storage_read: Duration,
     arrow_c_stream_import: Duration,
+    fact_identity_decode: Duration,
+    fact_materialization: Duration,
+    fact_ordering: Duration,
     fact_preparation: Duration,
     fact_admission: Duration,
 }
@@ -119,6 +122,24 @@ impl GraphArReadTimings {
     #[must_use]
     pub const fn fact_preparation(self) -> Duration {
         self.fact_preparation
+    }
+
+    /// Time spent decoding persisted canonical fact identities.
+    #[must_use]
+    pub const fn fact_identity_decode(self) -> Duration {
+        self.fact_identity_decode
+    }
+
+    /// Time spent resolving endpoints and materializing immutable MRR facts.
+    #[must_use]
+    pub const fn fact_materialization(self) -> Duration {
+        self.fact_materialization
+    }
+
+    /// Time spent canonically ordering facts and rejecting duplicate identities.
+    #[must_use]
+    pub const fn fact_ordering(self) -> Duration {
+        self.fact_ordering
     }
 
     /// Time spent validating prepared MRR facts through their relation projection.
@@ -260,6 +281,9 @@ pub fn read_graphar_dataset_observed(
             vertex_admission: prepare_timings.vertex_admission(),
             edge_storage_read: prepare_timings.edge_storage_read(),
             arrow_c_stream_import: prepare_timings.arrow_c_stream_import(),
+            fact_identity_decode: prepare_timings.fact_identity_decode(),
+            fact_materialization: prepare_timings.fact_materialization(),
+            fact_ordering: prepare_timings.fact_ordering(),
             fact_preparation: prepare_timings.fact_preparation(),
             fact_admission,
         },
@@ -398,23 +422,6 @@ where
             value: value.to_owned(),
             reason: error.to_string(),
         })
-}
-
-fn parse_identity_cached<'a, T>(
-    cache: &mut HashMap<&'a str, T>,
-    property: &'static str,
-    value: &'a str,
-) -> Result<T, GraphArReadError>
-where
-    T: Copy + FromStr,
-    T::Err: fmt::Display,
-{
-    if let Some(identity) = cache.get(value) {
-        return Ok(*identity);
-    }
-    let identity = parse_identity(property, value)?;
-    cache.insert(value, identity);
-    Ok(identity)
 }
 
 struct EdgeArrowColumns<'a> {
