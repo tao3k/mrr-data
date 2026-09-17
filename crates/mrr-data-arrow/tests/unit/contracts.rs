@@ -130,7 +130,7 @@ fn nested_relation() -> RelationSchema {
 }
 
 fn nested_values(index: usize) -> Vec<Value> {
-    if index % 4 == 0 {
+    if index.is_multiple_of(4) {
         return vec![Value::Null];
     }
     vec![Value::Record(vec![
@@ -146,10 +146,10 @@ fn nested_values(index: usize) -> Vec<Value> {
         (
             "metadata".into(),
             Value::Record(vec![
-                ("active".into(), Value::Boolean(index % 2 == 0)),
+                ("active".into(), Value::Boolean(index.is_multiple_of(2))),
                 (
                     "note".into(),
-                    if index % 3 == 0 {
+                    if index.is_multiple_of(3) {
                         Value::Null
                     } else {
                         Value::String(format!("note-{index}"))

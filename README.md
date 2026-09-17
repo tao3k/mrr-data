@@ -148,7 +148,7 @@ Facade features:
 | `graphar-native` | no | upstream GraphAr C++ writer branch |
 | `content` | no | manifest, CID/DAG-CBOR, CAR, local stores |
 
-CI runs this contract on both Ubuntu and macOS, verifies the declared Rust 1.85
+CI runs this contract on both Ubuntu and macOS, verifies the declared Rust 1.95
 MSRV on Ubuntu, then exercises the IPC import
 boundary with a bounded ASan fuzz campaign on nightly Linux. Workspace lints
 forbid unsafe Rust and enable Clippy's `all` and `pedantic` groups for every

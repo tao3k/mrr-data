@@ -15,12 +15,12 @@ concurrency:
 
 jobs:
   msrv:
-    name: Rust 1.85 MSRV (ubuntu-latest)
+    name: Rust 1.95 MSRV (ubuntu-latest)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: dtolnay/rust-toolchain@1.95.0
       - name: Test workspace at the declared MSRV
         run: cargo test --workspace --locked
 
