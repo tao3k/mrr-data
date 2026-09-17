@@ -45,7 +45,11 @@ completeness, validity, field order, and every V1 value shape. Recursive List
 and Record values use Arrow's native nested arrays rather than JSON. Invalid
 facts are rejected before projection; deterministic Arrow IPC file export and
 bounded import are covered by example-based tests, property tests, malformed
-and mutated corpora, resource-limit contracts, and a fuzz target.
+and mutated corpora, resource-limit contracts, and a fuzz target. The native
+in-process path projects borrowed values into capacity-sized Arrow builders and
+constructs one typed decoder tree per batch instead of cloning columns or
+downcasting every cell. A 10,000-complete-Fact Scenario guards the native
+RecordBatch round trip against multi-second regressions.
 
 The optional `mrr-data-core` manifest engine implements the content identity
 boundary: schema namespace

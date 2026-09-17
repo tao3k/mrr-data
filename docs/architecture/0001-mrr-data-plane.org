@@ -469,9 +469,12 @@ product-priority ranking.  The active priority is Arrow-first:
 Implementation status: the recursive V1 mapping, complete-Fact round trips,
 bounded IPC import, property contracts, and fuzz target are implemented.  M0
 also provides the public facade's default feature.  Its normal dependency graph
-does not import CID, DAG-CBOR, CAR, or GraphAr.  M0 is accepted only after the
-current-head CI and review receipts are green; this status does not advance the
-later data-plane milestones.
+does not import CID, DAG-CBOR, CAR, or GraphAr.  Native projection uses borrowed
+values and capacity-sized Arrow builders; reconstruction prepares one typed
+decoder tree per batch.  A 10,000-complete-Fact Scenario guards this path
+without introducing a C Data or C Stream boundary.  M0 is accepted only after
+the current-head CI and review receipts are green; this status does not advance
+the later data-plane milestones.
 
 - define every supported MRR value mapping;
 - property-test =Fact -> RecordBatch -> Fact=;

@@ -2,6 +2,7 @@
 
 use std::{
     collections::HashMap,
+    fmt::Write as _,
     io::Cursor,
     panic::{AssertUnwindSafe, catch_unwind},
     str::FromStr,
@@ -11,6 +12,7 @@ use std::{
 use arrow_array::{
     Array, ArrayRef, BinaryArray, BooleanArray, Int64Array, ListArray, RecordBatch, StringArray,
     StructArray,
+    builder::{BinaryBuilder, BooleanBuilder, Int64Builder, StringBuilder},
 };
 use arrow_buffer::{NullBuffer, OffsetBuffer};
 use arrow_ipc::{reader::FileReaderBuilder, writer::FileWriter};
@@ -92,19 +94,23 @@ fn validate_facts(relation: &RelationSchema, facts: &[Fact]) -> Result<(), Arrow
     Ok(())
 }
 
-fn authority_identity(authority: RelationAuthority) -> String {
+fn write_authority(builder: &mut StringBuilder, authority: RelationAuthority) {
     match authority {
-        RelationAuthority::Entity(identity) => identity.to_string(),
-        RelationAuthority::Rule(identity) => identity.to_string(),
-        RelationAuthority::RulePack(identity) => identity.to_string(),
+        RelationAuthority::Entity(identity) => write!(builder, "{identity}"),
+        RelationAuthority::Rule(identity) => write!(builder, "{identity}"),
+        RelationAuthority::RulePack(identity) => write!(builder, "{identity}"),
     }
+    .expect("writing to an Arrow string builder is infallible");
+    builder.append_value("");
 }
 
-fn provenance_identity(provenance: FactProvenance) -> String {
+fn write_provenance(builder: &mut StringBuilder, provenance: FactProvenance) {
     match provenance {
-        FactProvenance::Source(identity) => identity.to_string(),
-        FactProvenance::Derivation(identity) => identity.to_string(),
+        FactProvenance::Source(identity) => write!(builder, "{identity}"),
+        FactProvenance::Derivation(identity) => write!(builder, "{identity}"),
     }
+    .expect("writing to an Arrow string builder is infallible");
+    builder.append_value("");
 }
 
 const fn completeness_name(completeness: EvidenceCompleteness) -> &'static str {
@@ -116,70 +122,95 @@ const fn completeness_name(completeness: EvidenceCompleteness) -> &'static str {
 }
 
 fn semantic_columns(facts: &[Fact]) -> Vec<ArrayRef> {
-    let fact_ids = facts
-        .iter()
-        .map(|fact| fact.id().to_string())
-        .collect::<Vec<_>>();
-    let generation_ids = facts
-        .iter()
-        .map(|fact| fact.context().generation().to_string())
-        .collect::<Vec<_>>();
-    let authorities = facts
-        .iter()
-        .map(|fact| authority_identity(fact.context().authority()))
-        .collect::<Vec<_>>();
-    let provenances = facts
-        .iter()
-        .map(|fact| provenance_identity(fact.context().provenance()))
-        .collect::<Vec<_>>();
-    let completeness = facts
-        .iter()
-        .map(|fact| completeness_name(fact.context().completeness()))
-        .collect::<Vec<_>>();
-    let invalidated_by = facts
-        .iter()
-        .map(|fact| match fact.context().validity() {
-            FactValidity::Valid => None,
-            FactValidity::InvalidatedBy(identity) => Some(identity.to_string()),
-        })
-        .collect::<Vec<_>>();
+    let rows = facts.len();
+    let identity_bytes = rows.saturating_mul(80);
+    let mut fact_ids = StringBuilder::with_capacity(rows, identity_bytes);
+    let mut generation_ids = StringBuilder::with_capacity(rows, identity_bytes);
+    let mut authorities = StringBuilder::with_capacity(rows, identity_bytes);
+    let mut provenances = StringBuilder::with_capacity(rows, identity_bytes);
+    let mut completeness = StringBuilder::with_capacity(rows, rows.saturating_mul(8));
+    let mut invalidated_by = StringBuilder::with_capacity(rows, identity_bytes);
+
+    for fact in facts {
+        write!(&mut fact_ids, "{}", fact.id())
+            .expect("writing to an Arrow string builder is infallible");
+        fact_ids.append_value("");
+        write!(&mut generation_ids, "{}", fact.context().generation())
+            .expect("writing to an Arrow string builder is infallible");
+        generation_ids.append_value("");
+        write_authority(&mut authorities, fact.context().authority());
+        write_provenance(&mut provenances, fact.context().provenance());
+        completeness.append_value(completeness_name(fact.context().completeness()));
+        match fact.context().validity() {
+            FactValidity::Valid => invalidated_by.append_null(),
+            FactValidity::InvalidatedBy(identity) => {
+                write!(&mut invalidated_by, "{identity}")
+                    .expect("writing to an Arrow string builder is infallible");
+                invalidated_by.append_value("");
+            }
+        }
+    }
+
     vec![
-        Arc::new(StringArray::from(fact_ids)),
-        Arc::new(StringArray::from(generation_ids)),
-        Arc::new(StringArray::from(authorities)),
-        Arc::new(StringArray::from(provenances)),
-        Arc::new(StringArray::from(completeness)),
-        Arc::new(StringArray::from(invalidated_by)),
+        Arc::new(fact_ids.finish()),
+        Arc::new(generation_ids.finish()),
+        Arc::new(authorities.finish()),
+        Arc::new(provenances.finish()),
+        Arc::new(completeness.finish()),
+        Arc::new(invalidated_by.finish()),
     ]
 }
 
-fn string_value(
-    field: &RelationField,
-    value: &Value,
-) -> Result<Option<String>, ArrowRelationError> {
-    let value = match (field.schema(), value) {
-        (_, Value::Null) if field.nullable() => None,
-        (ValueSchema::Entity, Value::Entity(value)) => Some(value.to_string()),
-        (ValueSchema::Decimal { .. }, Value::Decimal(value))
-        | (ValueSchema::Float { .. }, Value::Float(value))
-        | (ValueSchema::String, Value::String(value))
-        | (ValueSchema::Date, Value::Date(value))
-        | (ValueSchema::Time { .. }, Value::Time(value))
-        | (ValueSchema::Timestamp { .. }, Value::Timestamp(value))
-        | (ValueSchema::Duration, Value::Duration(value)) => Some(value.clone()),
-        _ => {
-            return Err(ArrowRelationError::ValueMismatch {
-                field: field.name().to_owned(),
-            });
-        }
-    };
-    Ok(value)
+#[derive(Clone, Copy)]
+enum ValueRef<'a> {
+    Null,
+    Value(&'a Value),
 }
 
-fn validity(values: &[Value]) -> Option<NullBuffer> {
+impl<'a> From<&'a Value> for ValueRef<'a> {
+    fn from(value: &'a Value) -> Self {
+        match value {
+            Value::Null => Self::Null,
+            value => Self::Value(value),
+        }
+    }
+}
+
+fn append_string_value(
+    builder: &mut StringBuilder,
+    field_name: &str,
+    schema: &ValueSchema,
+    nullable: bool,
+    value: ValueRef<'_>,
+) -> Result<(), ArrowRelationError> {
+    match (schema, value) {
+        (_, ValueRef::Null) if nullable => builder.append_null(),
+        (ValueSchema::Entity, ValueRef::Value(Value::Entity(value))) => {
+            write!(builder, "{value}").expect("writing to an Arrow string builder is infallible");
+            builder.append_value("");
+        }
+        (ValueSchema::Decimal { .. }, ValueRef::Value(Value::Decimal(value)))
+        | (ValueSchema::Float { .. }, ValueRef::Value(Value::Float(value)))
+        | (ValueSchema::String, ValueRef::Value(Value::String(value)))
+        | (ValueSchema::Date, ValueRef::Value(Value::Date(value)))
+        | (ValueSchema::Time { .. }, ValueRef::Value(Value::Time(value)))
+        | (ValueSchema::Timestamp { .. }, ValueRef::Value(Value::Timestamp(value)))
+        | (ValueSchema::Duration, ValueRef::Value(Value::Duration(value))) => {
+            builder.append_value(value);
+        }
+        _ => {
+            return Err(ArrowRelationError::ValueMismatch {
+                field: field_name.to_owned(),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn validity(values: &[ValueRef<'_>]) -> Option<NullBuffer> {
     let valid = values
         .iter()
-        .map(|value| !matches!(value, Value::Null))
+        .map(|value| !matches!(value, ValueRef::Null))
         .collect::<Vec<_>>();
     (!valid.iter().all(|value| *value)).then(|| NullBuffer::from(valid))
 }
@@ -189,7 +220,7 @@ fn project_list(
     element: &ValueSchema,
     element_nullable: bool,
     nullable: bool,
-    values: &[Value],
+    values: &[ValueRef<'_>],
 ) -> Result<ArrayRef, ArrowRelationError> {
     let mismatch = || ArrowRelationError::ValueMismatch {
         field: field_name.to_owned(),
@@ -197,8 +228,8 @@ fn project_list(
     let lengths = values
         .iter()
         .map(|value| match value {
-            Value::List(items) => Ok(items.len()),
-            Value::Null if nullable => Ok(0),
+            ValueRef::Value(Value::List(items)) => Ok(items.len()),
+            ValueRef::Null if nullable => Ok(0),
             _ => Err(mismatch()),
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -213,12 +244,12 @@ fn project_list(
     let elements = values
         .iter()
         .filter_map(|value| match value {
-            Value::List(items) => Some(items.as_slice()),
-            Value::Null => None,
-            _ => unreachable!("list shape checked above"),
+            ValueRef::Value(Value::List(items)) => Some(items.as_slice()),
+            ValueRef::Null => None,
+            ValueRef::Value(_) => unreachable!("list shape checked above"),
         })
         .flatten()
-        .cloned()
+        .map(ValueRef::from)
         .collect::<Vec<_>>();
     let child = project_values(
         &format!("{field_name}[]"),
@@ -238,26 +269,27 @@ fn project_record(
     field_name: &str,
     fields: &[RelationField],
     nullable: bool,
-    values: &[Value],
+    values: &[ValueRef<'_>],
 ) -> Result<ArrayRef, ArrowRelationError> {
-    let records = values
-        .iter()
-        .map(|value| match value {
-            Value::Record(items) => Ok(Some(items)),
-            Value::Null if nullable => Ok(None),
-            _ => Err(ArrowRelationError::ValueMismatch {
-                field: field_name.to_owned(),
-            }),
-        })
-        .collect::<Result<Vec<_>, _>>()?;
     let columns = fields
         .iter()
         .enumerate()
         .map(|(index, child_field)| {
-            let child_values = records
+            let child_values = values
                 .iter()
-                .map(|record| record.map_or(Value::Null, |items| items[index].1.clone()))
-                .collect::<Vec<_>>();
+                .map(|value| match value {
+                    ValueRef::Value(Value::Record(items)) => items
+                        .get(index)
+                        .map(|item| ValueRef::from(&item.1))
+                        .ok_or_else(|| ArrowRelationError::ValueMismatch {
+                            field: field_name.to_owned(),
+                        }),
+                    ValueRef::Null if nullable => Ok(ValueRef::Null),
+                    _ => Err(ArrowRelationError::ValueMismatch {
+                        field: field_name.to_owned(),
+                    }),
+                })
+                .collect::<Result<Vec<_>, _>>()?;
             project_values(
                 &format!("{field_name}.{}", child_field.name()),
                 child_field.schema(),
@@ -282,64 +314,69 @@ fn project_values(
     field_name: &str,
     schema: &ValueSchema,
     nullable: bool,
-    values: &[Value],
+    values: &[ValueRef<'_>],
 ) -> Result<ArrayRef, ArrowRelationError> {
     let mismatch = || ArrowRelationError::ValueMismatch {
         field: field_name.to_owned(),
     };
     let array: ArrayRef = match schema {
-        ValueSchema::Boolean => Arc::new(BooleanArray::from_iter(
-            values
-                .iter()
-                .map(|value| match value {
-                    Value::Boolean(value) => Ok(Some(*value)),
-                    Value::Null if nullable => Ok(None),
-                    _ => Err(mismatch()),
-                })
-                .collect::<Result<Vec<_>, _>>()?,
-        )),
-        ValueSchema::Integer => Arc::new(Int64Array::from_iter(
-            values
-                .iter()
-                .map(|value| match value {
-                    Value::Integer(value) => Ok(Some(*value)),
-                    Value::Null if nullable => Ok(None),
-                    _ => Err(mismatch()),
-                })
-                .collect::<Result<Vec<_>, _>>()?,
-        )),
-        ValueSchema::ByteString => Arc::new(BinaryArray::from_iter(
-            values
-                .iter()
-                .map(|value| match value {
-                    Value::ByteString(value) => Ok(Some(value.as_slice())),
-                    Value::Null if nullable => Ok(None),
-                    _ => Err(mismatch()),
-                })
-                .collect::<Result<Vec<_>, _>>()?,
-        )),
+        ValueSchema::Boolean => {
+            let mut builder = BooleanBuilder::with_capacity(values.len());
+            for value in values {
+                match value {
+                    ValueRef::Value(Value::Boolean(value)) => builder.append_value(*value),
+                    ValueRef::Null if nullable => builder.append_null(),
+                    _ => return Err(mismatch()),
+                }
+            }
+            Arc::new(builder.finish())
+        }
+        ValueSchema::Integer => {
+            let mut builder = Int64Builder::with_capacity(values.len());
+            for value in values {
+                match value {
+                    ValueRef::Value(Value::Integer(value)) => builder.append_value(*value),
+                    ValueRef::Null if nullable => builder.append_null(),
+                    _ => return Err(mismatch()),
+                }
+            }
+            Arc::new(builder.finish())
+        }
+        ValueSchema::ByteString => {
+            let bytes = values.iter().fold(0_usize, |bytes, value| match value {
+                ValueRef::Value(Value::ByteString(value)) => bytes.saturating_add(value.len()),
+                _ => bytes,
+            });
+            let mut builder = BinaryBuilder::with_capacity(values.len(), bytes);
+            for value in values {
+                match value {
+                    ValueRef::Value(Value::ByteString(value)) => builder.append_value(value),
+                    ValueRef::Null if nullable => builder.append_null(),
+                    _ => return Err(mismatch()),
+                }
+            }
+            Arc::new(builder.finish())
+        }
         ValueSchema::List {
             element,
             element_nullable,
         } => project_list(field_name, element, *element_nullable, nullable, values)?,
         ValueSchema::Record { fields } => project_record(field_name, fields, nullable, values)?,
-        _ => Arc::new(StringArray::from_iter(
-            values
-                .iter()
-                .map(|value| {
-                    let synthetic = RelationField::new(field_name, schema.clone(), nullable)
-                        .expect("validated schema and field name");
-                    string_value(&synthetic, value)
-                })
-                .collect::<Result<Vec<_>, _>>()?,
-        )),
+        _ => {
+            let mut builder =
+                StringBuilder::with_capacity(values.len(), values.len().saturating_mul(32));
+            for value in values {
+                append_string_value(&mut builder, field_name, schema, nullable, *value)?;
+            }
+            Arc::new(builder.finish())
+        }
     };
     Ok(array)
 }
 
-fn project_column(
+fn project_column<'a>(
     field: &RelationField,
-    values: impl Iterator<Item = Value>,
+    values: impl Iterator<Item = ValueRef<'a>>,
 ) -> Result<ArrayRef, ArrowRelationError> {
     project_values(
         field.name(),
@@ -368,7 +405,12 @@ pub fn facts_to_record_batch(
             .iter()
             .enumerate()
             .map(|(index, field)| {
-                project_column(field, facts.iter().map(|fact| fact.values()[index].clone()))
+                project_column(
+                    field,
+                    facts
+                        .iter()
+                        .map(|fact| ValueRef::from(&fact.values()[index])),
+                )
             })
             .collect::<Result<Vec<_>, _>>()?,
     );
@@ -392,32 +434,18 @@ pub fn facts_to_ipc(
 }
 
 fn required_string<'a>(
-    batch: &'a RecordBatch,
-    column: usize,
+    array: &'a StringArray,
     row: usize,
     name: &'static str,
 ) -> Result<&'a str, ArrowRelationError> {
-    let array = batch
-        .column(column)
-        .as_any()
-        .downcast_ref::<StringArray>()
-        .filter(|array| !array.is_null(row))
+    let array = (!array.is_null(row))
+        .then_some(array)
         .ok_or(ArrowRelationError::InvalidSemanticValue { column: name, row })?;
     Ok(array.value(row))
 }
 
-fn optional_string<'a>(
-    batch: &'a RecordBatch,
-    column: usize,
-    row: usize,
-    name: &'static str,
-) -> Result<Option<&'a str>, ArrowRelationError> {
-    let array = batch
-        .column(column)
-        .as_any()
-        .downcast_ref::<StringArray>()
-        .ok_or(ArrowRelationError::InvalidSemanticValue { column: name, row })?;
-    Ok((!array.is_null(row)).then(|| array.value(row)))
+fn optional_string(array: &StringArray, row: usize) -> Option<&str> {
+    (!array.is_null(row)).then(|| array.value(row))
 }
 
 fn parse_identity<T: FromStr>(
@@ -474,17 +502,60 @@ fn decode_completeness(
     }
 }
 
-fn decode_context(batch: &RecordBatch, row: usize) -> Result<RelationContext, ArrowRelationError> {
+struct SemanticColumns<'a> {
+    fact_ids: &'a StringArray,
+    generation_ids: &'a StringArray,
+    authorities: &'a StringArray,
+    provenances: &'a StringArray,
+    completeness: &'a StringArray,
+    invalidated_by: &'a StringArray,
+}
+
+impl<'a> SemanticColumns<'a> {
+    fn try_new(batch: &'a RecordBatch) -> Result<Self, ArrowRelationError> {
+        let column = |index: usize, name: &'static str| {
+            batch
+                .column(index)
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .ok_or(ArrowRelationError::InvalidSemanticValue {
+                    column: name,
+                    row: 0,
+                })
+        };
+        Ok(Self {
+            fact_ids: column(0, FACT_ID_COLUMN)?,
+            generation_ids: column(1, GENERATION_ID_COLUMN)?,
+            authorities: column(2, AUTHORITY_COLUMN)?,
+            provenances: column(3, PROVENANCE_COLUMN)?,
+            completeness: column(4, COMPLETENESS_COLUMN)?,
+            invalidated_by: column(5, INVALIDATED_BY_COLUMN)?,
+        })
+    }
+}
+
+fn decode_context(
+    columns: &SemanticColumns<'_>,
+    row: usize,
+) -> Result<RelationContext, ArrowRelationError> {
     let generation = parse_identity::<GenerationId>(
-        required_string(batch, 1, row, GENERATION_ID_COLUMN)?,
+        required_string(columns.generation_ids, row, GENERATION_ID_COLUMN)?,
         GENERATION_ID_COLUMN,
         row,
     )?;
-    let authority = decode_authority(required_string(batch, 2, row, AUTHORITY_COLUMN)?, row)?;
-    let provenance = decode_provenance(required_string(batch, 3, row, PROVENANCE_COLUMN)?, row)?;
-    let completeness =
-        decode_completeness(required_string(batch, 4, row, COMPLETENESS_COLUMN)?, row)?;
-    let validity = optional_string(batch, 5, row, INVALIDATED_BY_COLUMN)?
+    let authority = decode_authority(
+        required_string(columns.authorities, row, AUTHORITY_COLUMN)?,
+        row,
+    )?;
+    let provenance = decode_provenance(
+        required_string(columns.provenances, row, PROVENANCE_COLUMN)?,
+        row,
+    )?;
+    let completeness = decode_completeness(
+        required_string(columns.completeness, row, COMPLETENESS_COLUMN)?,
+        row,
+    )?;
+    let validity = optional_string(columns.invalidated_by, row)
         .map(|value| {
             parse_identity::<FactId>(value, INVALIDATED_BY_COLUMN, row)
                 .map(FactValidity::InvalidatedBy)
@@ -499,11 +570,15 @@ fn decode_context(batch: &RecordBatch, row: usize) -> Result<RelationContext, Ar
     })
 }
 
-fn decode_string(field: &RelationField, value: &str) -> Result<Value, ArrowRelationError> {
-    match field.schema() {
+fn decode_string(
+    field_name: &str,
+    schema: &ValueSchema,
+    value: &str,
+) -> Result<Value, ArrowRelationError> {
+    match schema {
         ValueSchema::Entity => EntityId::from_str(value).map(Value::Entity).map_err(|_| {
             ArrowRelationError::ValueMismatch {
-                field: field.name().to_owned(),
+                field: field_name.to_owned(),
             }
         }),
         ValueSchema::Decimal { .. } => Ok(Value::Decimal(value.to_owned())),
@@ -514,76 +589,171 @@ fn decode_string(field: &RelationField, value: &str) -> Result<Value, ArrowRelat
         ValueSchema::Timestamp { .. } => Ok(Value::Timestamp(value.to_owned())),
         ValueSchema::Duration => Ok(Value::Duration(value.to_owned())),
         _ => Err(ArrowRelationError::ValueMismatch {
-            field: field.name().to_owned(),
+            field: field_name.to_owned(),
         }),
+    }
+}
+
+enum ColumnDecoder<'a> {
+    Boolean(&'a BooleanArray),
+    Integer(&'a Int64Array),
+    Binary(&'a BinaryArray),
+    String(&'a StringArray),
+    List {
+        array: &'a ListArray,
+        child: Box<Self>,
+        element: &'a ValueSchema,
+        element_nullable: bool,
+    },
+    Record {
+        array: &'a StructArray,
+        children: Vec<(&'a RelationField, Self)>,
+    },
+}
+
+impl<'a> ColumnDecoder<'a> {
+    fn try_new(
+        field_name: &str,
+        schema: &'a ValueSchema,
+        array: &'a dyn Array,
+    ) -> Result<Self, ArrowRelationError> {
+        let mismatch = || ArrowRelationError::ValueMismatch {
+            field: field_name.to_owned(),
+        };
+        match schema {
+            ValueSchema::Boolean => array
+                .as_any()
+                .downcast_ref::<BooleanArray>()
+                .map(Self::Boolean)
+                .ok_or_else(mismatch),
+            ValueSchema::Integer => array
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .map(Self::Integer)
+                .ok_or_else(mismatch),
+            ValueSchema::ByteString => array
+                .as_any()
+                .downcast_ref::<BinaryArray>()
+                .map(Self::Binary)
+                .ok_or_else(mismatch),
+            ValueSchema::List {
+                element,
+                element_nullable,
+            } => {
+                let array = array
+                    .as_any()
+                    .downcast_ref::<ListArray>()
+                    .ok_or_else(mismatch)?;
+                let child = Self::try_new(field_name, element, array.values().as_ref())?;
+                Ok(Self::List {
+                    array,
+                    child: Box::new(child),
+                    element,
+                    element_nullable: *element_nullable,
+                })
+            }
+            ValueSchema::Record { fields } => {
+                let array = array
+                    .as_any()
+                    .downcast_ref::<StructArray>()
+                    .ok_or_else(mismatch)?;
+                let children = fields
+                    .iter()
+                    .zip(array.columns())
+                    .map(|(field, column)| {
+                        Self::try_new(field.name(), field.schema(), column.as_ref())
+                            .map(|decoder| (field, decoder))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(Self::Record { array, children })
+            }
+            _ => array
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .map(Self::String)
+                .ok_or_else(mismatch),
+        }
+    }
+
+    fn is_null(&self, row: usize) -> bool {
+        match self {
+            Self::Boolean(array) => array.is_null(row),
+            Self::Integer(array) => array.is_null(row),
+            Self::Binary(array) => array.is_null(row),
+            Self::String(array) => array.is_null(row),
+            Self::List { array, .. } => array.is_null(row),
+            Self::Record { array, .. } => array.is_null(row),
+        }
+    }
+
+    fn decode(
+        &self,
+        field_name: &str,
+        schema: &ValueSchema,
+        nullable: bool,
+        row: usize,
+    ) -> Result<Value, ArrowRelationError> {
+        if self.is_null(row) {
+            return nullable.then_some(Value::Null).ok_or_else(|| {
+                ArrowRelationError::ValueMismatch {
+                    field: field_name.to_owned(),
+                }
+            });
+        }
+        match (self, schema) {
+            (Self::Boolean(array), ValueSchema::Boolean) => Ok(Value::Boolean(array.value(row))),
+            (Self::Integer(array), ValueSchema::Integer) => Ok(Value::Integer(array.value(row))),
+            (Self::Binary(array), ValueSchema::ByteString) => {
+                Ok(Value::ByteString(array.value(row).to_vec()))
+            }
+            (
+                Self::List {
+                    array,
+                    child,
+                    element,
+                    element_nullable,
+                },
+                ValueSchema::List { .. },
+            ) => {
+                let offsets = array.value_offsets();
+                let start = usize::try_from(offsets[row]).map_err(|_| {
+                    ArrowRelationError::ValueMismatch {
+                        field: field_name.to_owned(),
+                    }
+                })?;
+                let end = usize::try_from(offsets[row + 1]).map_err(|_| {
+                    ArrowRelationError::ValueMismatch {
+                        field: field_name.to_owned(),
+                    }
+                })?;
+                (start..end)
+                    .map(|index| child.decode(field_name, element, *element_nullable, index))
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(Value::List)
+            }
+            (Self::Record { children, .. }, ValueSchema::Record { .. }) => children
+                .iter()
+                .map(|(field, decoder)| {
+                    decoder
+                        .decode(field.name(), field.schema(), field.nullable(), row)
+                        .map(|value| (field.name().to_owned(), value))
+                })
+                .collect::<Result<Vec<_>, _>>()
+                .map(Value::Record),
+            (Self::String(array), _) => decode_string(field_name, schema, array.value(row)),
+            _ => Err(ArrowRelationError::ValueMismatch {
+                field: field_name.to_owned(),
+            }),
+        }
     }
 }
 
 fn decode_column(
     field: &RelationField,
-    array: &dyn Array,
+    decoder: &ColumnDecoder<'_>,
     row: usize,
 ) -> Result<Value, ArrowRelationError> {
-    if array.is_null(row) {
-        return field.nullable().then_some(Value::Null).ok_or_else(|| {
-            ArrowRelationError::ValueMismatch {
-                field: field.name().to_owned(),
-            }
-        });
-    }
-    match field.schema() {
-        ValueSchema::Boolean => array
-            .as_any()
-            .downcast_ref::<BooleanArray>()
-            .map(|array| Value::Boolean(array.value(row))),
-        ValueSchema::Integer => array
-            .as_any()
-            .downcast_ref::<Int64Array>()
-            .map(|array| Value::Integer(array.value(row))),
-        ValueSchema::ByteString => array
-            .as_any()
-            .downcast_ref::<BinaryArray>()
-            .map(|array| Value::ByteString(array.value(row).to_vec())),
-        ValueSchema::List {
-            element,
-            element_nullable,
-        } => array
-            .as_any()
-            .downcast_ref::<ListArray>()
-            .map(|array| {
-                let values = array.value(row);
-                let child = RelationField::new("item", (**element).clone(), *element_nullable)
-                    .expect("validated list element schema");
-                (0..values.len())
-                    .map(|index| decode_column(&child, values.as_ref(), index))
-                    .collect::<Result<Vec<_>, _>>()
-                    .map(Value::List)
-            })
-            .transpose()?,
-        ValueSchema::Record { fields } => array
-            .as_any()
-            .downcast_ref::<StructArray>()
-            .map(|array| {
-                fields
-                    .iter()
-                    .zip(array.columns())
-                    .map(|(child, column)| {
-                        decode_column(child, column.as_ref(), row)
-                            .map(|value| (child.name().to_owned(), value))
-                    })
-                    .collect::<Result<Vec<_>, _>>()
-                    .map(Value::Record)
-            })
-            .transpose()?,
-        _ => array
-            .as_any()
-            .downcast_ref::<StringArray>()
-            .map(|array| decode_string(field, array.value(row)))
-            .transpose()?,
-    }
-    .ok_or_else(|| ArrowRelationError::ValueMismatch {
-        field: field.name().to_owned(),
-    })
+    decoder.decode(field.name(), field.schema(), field.nullable(), row)
 }
 
 /// Reconstructs complete semantic facts only when every identity and field agrees.
@@ -602,30 +772,38 @@ pub fn record_batch_to_facts(
             "Arrow schema does not match relation",
         ));
     }
-    (0..batch.num_rows())
-        .map(|row| {
-            let fact_id = parse_identity::<FactId>(
-                required_string(batch, 0, row, FACT_ID_COLUMN)?,
-                FACT_ID_COLUMN,
-                row,
-            )?;
-            let context = decode_context(batch, row)?;
-            let values = relation
-                .fields()
-                .iter()
-                .zip(&batch.columns()[SEMANTIC_COLUMN_COUNT..])
-                .map(|(field, column)| decode_column(field, column.as_ref(), row))
-                .collect::<Result<Vec<_>, _>>()?;
-            let fact = Fact::new(fact_id, relation.id(), values, context);
-            relation
-                .validate_fact(&fact)
-                .map_err(|error| ArrowRelationError::InvalidFact {
-                    fact: fact_id,
-                    error,
-                })?;
-            Ok(fact)
+    let semantic = SemanticColumns::try_new(batch)?;
+    let value_decoders = relation
+        .fields()
+        .iter()
+        .zip(&batch.columns()[SEMANTIC_COLUMN_COUNT..])
+        .map(|(field, column)| {
+            ColumnDecoder::try_new(field.name(), field.schema(), column.as_ref())
+                .map(|decoder| (field, decoder))
         })
-        .collect()
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut facts = Vec::with_capacity(batch.num_rows());
+    for row in 0..batch.num_rows() {
+        let fact_id = parse_identity::<FactId>(
+            required_string(semantic.fact_ids, row, FACT_ID_COLUMN)?,
+            FACT_ID_COLUMN,
+            row,
+        )?;
+        let context = decode_context(&semantic, row)?;
+        let values = value_decoders
+            .iter()
+            .map(|(field, decoder)| decode_column(field, decoder, row))
+            .collect::<Result<Vec<_>, _>>()?;
+        let fact = Fact::new(fact_id, relation.id(), values, context);
+        relation
+            .validate_fact(&fact)
+            .map_err(|error| ArrowRelationError::InvalidFact {
+                fact: fact_id,
+                error,
+            })?;
+        facts.push(fact);
+    }
+    Ok(facts)
 }
 
 fn data_type_shape(data_type: &DataType) -> (usize, usize) {

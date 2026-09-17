@@ -1,6 +1,9 @@
 //! Complete Fact and bounded IPC contracts.
 
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use arrow_array::{ArrayRef, RecordBatch, StringArray};
 use meta_relational_reasoning::{
@@ -184,6 +187,54 @@ fn fact_matrix_round_trips_without_losing_identity_or_context() {
 
     let batch = facts_to_record_batch(&relation, &facts).unwrap();
     assert_eq!(record_batch_to_facts(&relation, &batch).unwrap(), facts);
+}
+
+#[test]
+fn scenario_native_arrow_round_trips_ten_thousand_complete_facts() {
+    const FACT_COUNT: usize = 10_000;
+
+    let relation = scalar_relation();
+    let source = id::<EntityId>("native-scenario-source");
+    let facts = (0..FACT_COUNT)
+        .map(|index| {
+            Fact::new(
+                id(&format!("native-scenario-fact-{index}")),
+                relation.id(),
+                values(
+                    &format!("native-scenario-entity-{index}"),
+                    i64::try_from(index).expect("scenario index fits i64"),
+                ),
+                RelationContext::new(
+                    id(&format!("native-scenario-generation-{}", index % 16)),
+                    RelationAuthority::Entity(source),
+                    FactProvenance::Source(source),
+                    EvidenceCompleteness::Complete,
+                    FactValidity::Valid,
+                )
+                .unwrap(),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let encode_started = Instant::now();
+    let batch = facts_to_record_batch(&relation, &facts).expect("encode native Arrow batch");
+    let encode_elapsed = encode_started.elapsed();
+    let decode_started = Instant::now();
+    let decoded = record_batch_to_facts(&relation, &batch).expect("decode native Arrow batch");
+    let decode_elapsed = decode_started.elapsed();
+
+    assert_eq!(batch.num_rows(), FACT_COUNT);
+    assert_eq!(decoded, facts);
+    assert!(
+        encode_elapsed + decode_elapsed < Duration::from_secs(2),
+        "10,000-row native Arrow round trip exceeded two seconds: encode={encode_elapsed:?}, decode={decode_elapsed:?}"
+    );
+    eprintln!(
+        "mrr-arrow-native-scenario rows={FACT_COUNT} encode_us={} decode_us={} total_us={}",
+        encode_elapsed.as_micros(),
+        decode_elapsed.as_micros(),
+        (encode_elapsed + decode_elapsed).as_micros()
+    );
 }
 
 #[test]
