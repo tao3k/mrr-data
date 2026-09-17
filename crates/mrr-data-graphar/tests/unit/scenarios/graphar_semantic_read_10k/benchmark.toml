@@ -3,7 +3,7 @@ test = "scenario_semantically_reads_ten_thousand_graphar_edges"
 snapshot = "graphar_semantic_read_10k"
 target_total = "300ms"
 max_total = "500ms"
-observed_total = "36508989ns"
+observed_total = "39169907ns"
 regression_budget = "100ms"
 memory_budget_bytes = 268435456
 observed_memory_bytes = 0
@@ -13,62 +13,62 @@ target_rationale = "The native path reads GraphAr Parquet through upstream Arrow
 clock = "std::time::Instant"
 statistic = "p95"
 warmup_iterations = 2
-measure_iterations = 11
-total_p50 = "35056544ns"
-total_p95 = "36508989ns"
-total_p99 = "36508989ns"
-total_max = "36508989ns"
+measure_iterations = 21
+total_p50 = "38513677ns"
+total_p95 = "39169907ns"
+total_p99 = "39263031ns"
+total_max = "39263031ns"
 
 [observed_timings]
-arrow_c_stream_import = "163608ns"
-edge_storage_read = "16437912ns"
-fact_admission = "10527029ns"
-graph_info = "1547675ns"
-native_vertex_read = "3335162ns"
-semantic_read_admission = "35346720ns"
-vertex_admission = "3505133ns"
+arrow_c_stream_import = "175649ns"
+edge_storage_read = "17494307ns"
+fact_admission = "11028647ns"
+graph_info = "1573815ns"
+native_vertex_read = "3429998ns"
+semantic_read_admission = "37884260ns"
+vertex_admission = "3844463ns"
 
 [phase_distributions.arrow_c_stream_import]
-p50 = "132920ns"
-p95 = "163608ns"
-p99 = "163608ns"
-max = "163608ns"
+p50 = "147246ns"
+p95 = "175649ns"
+p99 = "176581ns"
+max = "176581ns"
 
 [phase_distributions.edge_storage_read]
-p50 = "16167721ns"
-p95 = "16437912ns"
-p99 = "16437912ns"
-max = "16437912ns"
+p50 = "17123944ns"
+p95 = "17494307ns"
+p99 = "17721701ns"
+max = "17721701ns"
 
 [phase_distributions.fact_admission]
-p50 = "9410105ns"
-p95 = "10527029ns"
-p99 = "10527029ns"
-max = "10527029ns"
+p50 = "10857487ns"
+p95 = "11028647ns"
+p99 = "11244692ns"
+max = "11244692ns"
 
 [phase_distributions.graph_info]
-p50 = "1475189ns"
-p95 = "1547675ns"
-p99 = "1547675ns"
-max = "1547675ns"
+p50 = "1541625ns"
+p95 = "1573815ns"
+p99 = "1607728ns"
+max = "1607728ns"
 
 [phase_distributions.native_vertex_read]
-p50 = "3200348ns"
-p95 = "3335162ns"
-p99 = "3335162ns"
-max = "3335162ns"
+p50 = "3352082ns"
+p95 = "3429998ns"
+p99 = "3448994ns"
+max = "3448994ns"
 
 [phase_distributions.semantic_read_admission]
-p50 = "34069294ns"
-p95 = "35346720ns"
-p99 = "35346720ns"
-max = "35346720ns"
+p50 = "37203837ns"
+p95 = "37884260ns"
+p99 = "37924366ns"
+max = "37924366ns"
 
 [phase_distributions.vertex_admission]
-p50 = "3387931ns"
-p95 = "3505133ns"
-p99 = "3505133ns"
-max = "3505133ns"
+p50 = "3808196ns"
+p95 = "3844463ns"
+p99 = "3879710ns"
+max = "3879710ns"
 
 [metrics.vertex_count]
 unit = "count"

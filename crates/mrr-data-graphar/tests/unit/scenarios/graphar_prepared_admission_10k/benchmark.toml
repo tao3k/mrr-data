@@ -3,7 +3,7 @@ test = "scenario_semantically_reads_ten_thousand_graphar_edges"
 snapshot = "graphar_prepared_admission_10k"
 target_total = "25ms"
 max_total = "50ms"
-observed_total = "9696265ns"
+observed_total = "11707087ns"
 regression_budget = "10ms"
 memory_budget_bytes = 268435456
 observed_memory_bytes = 0
@@ -13,20 +13,20 @@ target_rationale = "GraphAr storage decode and Arrow C Stream import finish befo
 clock = "std::time::Instant"
 statistic = "p95"
 warmup_iterations = 2
-measure_iterations = 11
-total_p50 = "8913775ns"
-total_p95 = "9696265ns"
-total_p99 = "9696265ns"
-total_max = "9696265ns"
+measure_iterations = 21
+total_p50 = "11209716ns"
+total_p95 = "11707087ns"
+total_p99 = "11762370ns"
+total_max = "11762370ns"
 
 [observed_timings]
-prepared_fact_admission = "8758692ns"
+prepared_fact_admission = "10463801ns"
 
 [phase_distributions.prepared_fact_admission]
-p50 = "8096834ns"
-p95 = "8758692ns"
-p99 = "8758692ns"
-max = "8758692ns"
+p50 = "10096533ns"
+p95 = "10463801ns"
+p99 = "10526447ns"
+max = "10526447ns"
 
 [metrics.fact_count]
 unit = "count"
