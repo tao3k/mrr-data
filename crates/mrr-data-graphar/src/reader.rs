@@ -136,6 +136,10 @@ pub enum GraphArReadError {
         value: String,
     },
     DuplicatePhysicalVertex(i64),
+    NonDensePhysicalVertex {
+        expected: usize,
+        actual: i64,
+    },
     DuplicateEntity(EntityId),
     UnknownPhysicalEndpoint {
         role: &'static str,
@@ -250,7 +254,7 @@ pub fn read_graphar_dataset_observed(
 }
 
 struct AdmittedVertices {
-    physical_entities: HashMap<i64, EntityId>,
+    physical_entities: Vec<EntityId>,
     count: usize,
     native_read: Duration,
     semantic_admission: Duration,
@@ -266,7 +270,7 @@ fn read_and_admit_vertices(
         read_vertex_string_batch(graph_info, ENTITY_TYPE, &vertex_properties, max_vertices)?;
     let native_read = native_vertex_started.elapsed();
     let vertex_admission_started = Instant::now();
-    let mut physical_entities = HashMap::with_capacity(vertices.row_count());
+    let mut physical_entities = Vec::with_capacity(vertices.row_count());
     let mut semantic_entities = HashSet::with_capacity(vertices.row_count());
     for row in 0..vertices.row_count() {
         let physical_id = vertices
@@ -276,12 +280,19 @@ fn read_and_admit_vertices(
             "entity_id",
             required_value(vertices.value(row, 0), "entity_id")?,
         )?;
-        if physical_entities.insert(physical_id, entity).is_some() {
-            return Err(GraphArReadError::DuplicatePhysicalVertex(physical_id));
+        if usize::try_from(physical_id).ok() != Some(row) {
+            if usize::try_from(physical_id).is_ok_and(|id| id < physical_entities.len()) {
+                return Err(GraphArReadError::DuplicatePhysicalVertex(physical_id));
+            }
+            return Err(GraphArReadError::NonDensePhysicalVertex {
+                expected: row,
+                actual: physical_id,
+            });
         }
         if !semantic_entities.insert(entity) {
             return Err(GraphArReadError::DuplicateEntity(entity));
         }
+        physical_entities.push(entity);
     }
     Ok(AdmittedVertices {
         physical_entities,
@@ -299,7 +310,7 @@ struct AdmittedFacts {
 
 fn read_and_admit_facts(
     graph_info: &GraphInfo,
-    physical_entities: &HashMap<i64, EntityId>,
+    physical_entities: &[EntityId],
     projection: &BinaryEntityProjection,
     max_edges: usize,
 ) -> Result<AdmittedFacts, GraphArReadError> {
@@ -565,12 +576,13 @@ fn parse_context(
 }
 
 fn endpoint(
-    entities: &HashMap<i64, EntityId>,
+    entities: &[EntityId],
     role: &'static str,
     id: i64,
 ) -> Result<EntityId, GraphArReadError> {
-    entities
-        .get(&id)
+    usize::try_from(id)
+        .ok()
+        .and_then(|id| entities.get(id))
         .copied()
         .ok_or(GraphArReadError::UnknownPhysicalEndpoint { role, id })
 }

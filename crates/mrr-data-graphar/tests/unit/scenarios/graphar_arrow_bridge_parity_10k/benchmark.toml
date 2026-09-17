@@ -7,7 +7,7 @@ observed_total = "242623125ns"
 regression_budget = "100ms"
 memory_budget_bytes = 268435456
 observed_memory_bytes = 0
-target_rationale = "The reference phase executes GraphAr's official Arrow chunk readers on the same 10,000-edge fixture and property projection as the Rust bridge."
+target_rationale = "The reference phase alternates execution order between GraphAr's official Arrow chunk readers and the Rust bridge on the same 10,000-edge fixture and property projection."
 
 [measurement]
 clock = "std::time::Instant"

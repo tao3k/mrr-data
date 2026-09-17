@@ -1,4 +1,7 @@
-use std::time::{Duration, Instant};
+use std::{
+    cell::Cell,
+    time::{Duration, Instant},
+};
 
 use asp_rust::{RustScenarioBenchmarkStatus, validate_rust_scenario_benchmark};
 use asp_rust_build_support::{
@@ -269,11 +272,23 @@ fn scenario_semantically_reads_ten_thousand_graphar_edges() {
     let scenario = graphar_semantic_read_scenario();
     let parity_scenario = graphar_arrow_bridge_parity_scenario();
     let limits = GraphArReadLimits::new(EDGE_COUNT, EDGE_COUNT);
+    let parity_iteration = Cell::new(0_usize);
     let parity_measurement = measure_asp_rust_scenario(&parity_scenario, || {
-        let (edge_count, official_elapsed) =
-            scan_graphar_edge_chunks(&output, limits).expect("scan official GraphAr Arrow chunks");
-        let (imported, timings) = read_graphar_dataset_observed(&output, &projection, limits)
-            .expect("read GraphAr through the Rust Arrow bridge");
+        let iteration = parity_iteration.get();
+        parity_iteration.set(iteration + 1);
+        let (edge_count, official_elapsed, imported, timings) = if iteration.is_multiple_of(2) {
+            let (edge_count, official_elapsed) = scan_graphar_edge_chunks(&output, limits)
+                .expect("scan official GraphAr Arrow chunks");
+            let (imported, timings) = read_graphar_dataset_observed(&output, &projection, limits)
+                .expect("read GraphAr through the Rust Arrow bridge");
+            (edge_count, official_elapsed, imported, timings)
+        } else {
+            let (imported, timings) = read_graphar_dataset_observed(&output, &projection, limits)
+                .expect("read GraphAr through the Rust Arrow bridge");
+            let (edge_count, official_elapsed) = scan_graphar_edge_chunks(&output, limits)
+                .expect("scan official GraphAr Arrow chunks");
+            (edge_count, official_elapsed, imported, timings)
+        };
         assert_eq!(imported.facts(), expected_facts);
         AspRustScenarioObservation::default()
             .with_timing("official_arrow_edge_scan", official_elapsed)
@@ -403,7 +418,7 @@ fn graphar_arrow_bridge_parity_scenario() -> AspRustScenario {
             max_total: "500ms",
             regression_budget: "100ms",
             memory_budget_bytes: 268_435_456,
-            target_rationale: "The reference phase executes GraphAr's official Arrow chunk readers on the same 10,000-edge fixture and property projection as the Rust bridge.",
+            target_rationale: "The reference phase alternates execution order between GraphAr's official Arrow chunk readers and the Rust bridge on the same 10,000-edge fixture and property projection.",
             warmup_iterations: 2,
             measure_iterations: 11,
             metrics: [
