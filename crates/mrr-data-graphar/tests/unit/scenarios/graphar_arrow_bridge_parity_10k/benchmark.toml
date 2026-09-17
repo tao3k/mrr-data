@@ -3,7 +3,7 @@ test = "scenario_semantically_reads_ten_thousand_graphar_edges"
 snapshot = "graphar_arrow_bridge_parity_10k"
 target_total = "300ms"
 max_total = "500ms"
-observed_total = "23194147ns"
+observed_total = "27485305ns"
 regression_budget = "100ms"
 memory_budget_bytes = 268435456
 observed_memory_bytes = 0
@@ -14,40 +14,40 @@ clock = "std::time::Instant"
 statistic = "p95"
 warmup_iterations = 2
 measure_iterations = 21
-total_p50 = "22310953ns"
-total_p95 = "23194147ns"
-total_p99 = "23631909ns"
-total_max = "23631909ns"
+total_p50 = "22883670ns"
+total_p95 = "27485305ns"
+total_p99 = "28183283ns"
+total_max = "28183283ns"
 
 [observed_timings]
-arrow_c_stream_import = "86160ns"
-graphar_storage_read = "8276463ns"
-official_arrow_edge_scan = "8689316ns"
-rust_graphar_edge_read = "8360330ns"
+arrow_c_stream_import = "38701ns"
+graphar_storage_read = "8202959ns"
+official_arrow_edge_scan = "6239490ns"
+rust_graphar_edge_read = "8230741ns"
 
 [phase_distributions.arrow_c_stream_import]
-p50 = "83476ns"
-p95 = "86160ns"
-p99 = "93310ns"
-max = "93310ns"
+p50 = "28704ns"
+p95 = "38701ns"
+p99 = "40776ns"
+max = "40776ns"
 
 [phase_distributions.graphar_storage_read]
-p50 = "7783066ns"
-p95 = "8276463ns"
-p99 = "8280348ns"
-max = "8280348ns"
+p50 = "5660423ns"
+p95 = "8202959ns"
+p99 = "9194864ns"
+max = "9194864ns"
 
 [phase_distributions.official_arrow_edge_scan]
-p50 = "8029379ns"
-p95 = "8689316ns"
-p99 = "9310245ns"
-max = "9310245ns"
+p50 = "5591053ns"
+p95 = "6239490ns"
+p99 = "6587836ns"
+max = "6587836ns"
 
 [phase_distributions.rust_graphar_edge_read]
-p50 = "7876376ns"
-p95 = "8360330ns"
-p99 = "8365657ns"
-max = "8365657ns"
+p50 = "5690379ns"
+p95 = "8230741ns"
+p99 = "9233565ns"
+max = "9233565ns"
 
 [metrics.edge_count]
 unit = "count"
