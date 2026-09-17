@@ -386,8 +386,11 @@ The V1 bounded importer admits footer, batch, row, recursive-value, and
 uncompressed body budgets before materializing arrays.  It rejects dictionary
 batches and compressed record bodies until their pre-allocation and
 decompression budgets have executable evidence.
-The Arrow C Data Interface is accepted only from trusted in-process producers;
-network or archive input enters through validated serialized formats.
+V1's trusted in-process interchange is the native =arrow-rs= =RecordBatch=
+API.  It does not expose an Arrow C Data or C Stream boundary.  A future ABI
+boundary requires a concrete non-Rust consumer, an explicit ownership contract,
+and separate executable evidence.  Network or archive input enters through
+validated serialized formats.
 
 A matching CID proves only byte integrity.  It does not prove that a payload
 is valid Arrow, valid GraphAr, authorized, non-malicious, or admissible MRR
@@ -395,41 +398,20 @@ Content.
 
 * API surface
 
-The first implementation should keep the abstraction surface small:
+The V1 API follows implemented owners instead of speculative common traits.
+The default =mrr-data::arrow= facade exposes relation-specific schema
+projection, native =RecordBatch= conversion, and bounded IPC import.  The
+opt-in =mrr-data::content= facade exposes the implemented =ContentStore=,
+=MemoryContentStore=, =FilesystemContentStore=, and CAR operations.  The
+opt-in =mrr-data::graphar= facade exposes the admitted binary-Entity projection
+and, only with =graphar-native=, the provisional upstream writer.
 
-#+begin_src rust
-pub trait RelationBatchReader {
-    fn schema(&self) -> &RelationSchema;
-    fn next_batch(&mut self) -> Result<Option<RelationBatch>, DataError>;
-}
-
-pub trait GraphSnapshotStore {
-    fn write_snapshot(&self, snapshot: &GraphSnapshot)
-        -> Result<SnapshotRoot, DataError>;
-    fn read_snapshot(&self, root: &SnapshotRoot)
-        -> Result<GraphSnapshot, DataError>;
-}
-
-pub enum ContentCodec {
-    Raw,
-    DagCbor,
-}
-
-pub struct ContentBlock<'a> {
-    codec: ContentCodec,
-    bytes: &'a [u8],
-}
-
-pub trait ContentStore {
-    fn put(&self, block: ContentBlock<'_>) -> Result<Cid, ContentError>;
-    fn get(&self, cid: &Cid) -> Result<Vec<u8>, ContentError>;
-}
-#+end_src
-
-The store constructs and verifies the CID from the caller-declared codec and
-bytes; it must never sniff a payload or silently select a codec.  These
-types are implemented by =mrr-data-content=.  They do not authorize a parallel
-semantic model or provider-specific methods in the core.
+There is no V1 =RelationBatchReader= or =GraphSnapshotStore= abstraction.
+Those interfaces would hide materially different Arrow, content, and GraphAr
+ownership semantics without an implemented consumer.  A future common trait
+requires an owner and a scenario proving that it removes real duplication.
+The content store constructs and verifies the CID from the caller-declared
+codec and bytes; it must never sniff a payload or silently select a codec.
 
 * Repository shape
 
@@ -543,14 +525,17 @@ filled by a second private GraphAr wire implementation.
 
 The missing official edge-writer binding is tracked upstream by
 [[https://github.com/apache/incubator-graphar/issues/976][GraphAr issue #976]]
-and [[https://github.com/apache/incubator-graphar/pull/977][PR #977]].  MRR Data
-must not pin or claim that interface until the upstream PR is reviewed, merged,
-and available from a published or otherwise explicitly admitted revision.  The
-reader half remains a separate upstream capability gate.
+and [[https://github.com/apache/incubator-graphar/pull/977][PR #977]].  As of
+2026-09-17 the issue remains open and the PR is closed without merge.  MRR Data
+must not claim that interface as upstream-admitted until a replacement or
+reopened contribution is reviewed, merged, and available from a published or
+otherwise explicitly admitted revision.  The reader half remains a separate
+upstream capability gate.
 
 For development only, the =upstream-graphar= Cargo feature pins the immutable
-PR #977 head =1a3706283ed2225350ec5016e81fc33d3b0b14ef= and exercises the
-official Rust/C++ builders.  The adapter writes semantic =EntityId= vertex
+fork commit =1a3706283ed2225350ec5016e81fc33d3b0b14ef= formerly proposed by
+PR #977 and exercises the official Rust/C++ builders.  The adapter writes
+semantic =EntityId= vertex
 properties plus relation identity and full MRR context on every edge, stages a
 complete dataset, then renames it into place.  This pin is an explicit temporary
 admission, not a released dependency or evidence that upstream review is done.

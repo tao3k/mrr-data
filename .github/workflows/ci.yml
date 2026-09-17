@@ -14,6 +14,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  msrv:
+    name: Rust 1.85 MSRV (ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.85.0
+      - name: Test workspace at the declared MSRV
+        run: cargo test --workspace --locked
+
   test:
     name: Rust (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

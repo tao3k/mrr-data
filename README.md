@@ -83,13 +83,15 @@ semantic endpoint set, assigns dense GraphAr-local `i64` IDs, and retains the
 bidirectional mapping. The physical ID is never treated as an `EntityId`;
 upstream writers must persist the semantic identity as a property.
 
-The opt-in `upstream-graphar` feature temporarily pins the exact commit behind
-Apache GraphAr PR #977. It writes vertex identity properties, relation/context
+The opt-in `upstream-graphar` feature temporarily pins the immutable fork
+commit formerly proposed by Apache GraphAr PR #977, which was closed without
+merge on 2026-09-16. It writes vertex identity properties, relation/context
 edge properties, adjacency chunks, and official metadata through
 `graphar-rs`/GraphAr C++; it does not implement a private GraphAr serializer.
 Output is staged beside the destination and atomically renamed only after every
 upstream builder and metadata write succeeds. This feature is provisional and
-is not a release dependency until the upstream API is admitted.
+is not release evidence until a replacement or reopened upstream contribution
+is reviewed and admitted.
 
 The repository does not yet claim:
 
@@ -146,7 +148,8 @@ Facade features:
 | `graphar-native` | no | upstream GraphAr C++ writer branch |
 | `content` | no | manifest, CID/DAG-CBOR, CAR, local stores |
 
-CI runs this contract on both Ubuntu and macOS, then exercises the IPC import
+CI runs this contract on both Ubuntu and macOS, verifies the declared Rust 1.85
+MSRV on Ubuntu, then exercises the IPC import
 boundary with a bounded ASan fuzz campaign on nightly Linux. Workspace lints
 forbid unsafe Rust and enable Clippy's `all` and `pedantic` groups for every
 member crate.
