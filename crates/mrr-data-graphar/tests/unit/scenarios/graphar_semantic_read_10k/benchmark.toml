@@ -1,0 +1,76 @@
+harness = "libtest"
+test = "scenario_semantically_reads_ten_thousand_graphar_edges"
+snapshot = "graphar_semantic_read_10k"
+target_total = "300ms"
+max_total = "500ms"
+observed_total = "197400250ns"
+regression_budget = "100ms"
+memory_budget_bytes = 268435456
+observed_memory_bytes = 0
+target_rationale = "The native path reads GraphAr Parquet through upstream Arrow chunk readers before typed MRR identity parsing and admission."
+
+[measurement]
+clock = "std::time::Instant"
+statistic = "p95"
+warmup_iterations = 2
+measure_iterations = 11
+total_p50 = "88574958ns"
+total_p95 = "197400250ns"
+total_p99 = "197400250ns"
+total_max = "197400250ns"
+
+[observed_timings]
+fact_admission = "56187250ns"
+graph_info = "4110625ns"
+native_edge_read = "146937333ns"
+native_vertex_read = "42905083ns"
+semantic_read_admission = "196424208ns"
+vertex_admission = "11161334ns"
+
+[phase_distributions.fact_admission]
+p50 = "20770834ns"
+p95 = "56187250ns"
+p99 = "56187250ns"
+max = "56187250ns"
+
+[phase_distributions.graph_info]
+p50 = "885583ns"
+p95 = "4110625ns"
+p99 = "4110625ns"
+max = "4110625ns"
+
+[phase_distributions.native_edge_read]
+p50 = "57038792ns"
+p95 = "146937333ns"
+p99 = "146937333ns"
+max = "146937333ns"
+
+[phase_distributions.native_vertex_read]
+p50 = "9570083ns"
+p95 = "42905083ns"
+p99 = "42905083ns"
+max = "42905083ns"
+
+[phase_distributions.semantic_read_admission]
+p50 = "85481708ns"
+p95 = "196424208ns"
+p99 = "196424208ns"
+max = "196424208ns"
+
+[phase_distributions.vertex_admission]
+p50 = "3007834ns"
+p95 = "11161334ns"
+p99 = "11161334ns"
+max = "11161334ns"
+
+[metrics.vertex_count]
+unit = "count"
+kind = "exact"
+target = 10000
+observed = 10000
+
+[metrics.fact_count]
+unit = "count"
+kind = "exact"
+target = 10000
+observed = 10000

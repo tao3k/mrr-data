@@ -1,18 +1,23 @@
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{HashMap, HashSet},
     error::Error,
     fmt,
     path::{Path, PathBuf},
     str::FromStr,
+    time::{Duration, Instant},
 };
 
+use arrow_array::{Array, Int64Array, LargeStringArray, RecordBatch, StringArray};
+#[cfg(test)]
+use graphar_rs::reader::scan_edge_arrow_chunks;
 use graphar_rs::{
     info::{AdjListType, GraphInfo},
-    reader::{read_edge_strings, read_vertex_strings},
+    reader::{read_edge_arrow_batches, read_vertex_string_batch},
 };
 use meta_relational_reasoning::{
     DerivationId, EntityId, EvidenceCompleteness, Fact, FactId, FactProvenance, FactValidity,
-    RelationAuthority, RelationContext, RelationContextError, RuleId, RulePackId, Value,
+    GenerationId, RelationAuthority, RelationContext, RelationContextError, RelationId, RuleId,
+    RulePackId, Value,
 };
 
 use crate::writer::{EDGE_TYPE, ENTITY_TYPE, GRAPH_INFO_FILE};
@@ -56,6 +61,48 @@ pub struct GraphArDataset {
     root: PathBuf,
     vertex_count: usize,
     facts: Vec<Fact>,
+}
+
+/// Measured phases of one native `GraphAr` semantic read.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct GraphArReadTimings {
+    graph_info: Duration,
+    native_vertex_read: Duration,
+    vertex_admission: Duration,
+    native_edge_read: Duration,
+    fact_admission: Duration,
+}
+
+impl GraphArReadTimings {
+    /// Time spent loading the `GraphAr` metadata graph.
+    #[must_use]
+    pub const fn graph_info(self) -> Duration {
+        self.graph_info
+    }
+
+    /// Time spent reading vertex Arrow chunks through the native reader.
+    #[must_use]
+    pub const fn native_vertex_read(self) -> Duration {
+        self.native_vertex_read
+    }
+
+    /// Time spent parsing and admitting semantic vertex identities.
+    #[must_use]
+    pub const fn vertex_admission(self) -> Duration {
+        self.vertex_admission
+    }
+
+    /// Time spent reading adjacency and property Arrow chunks through the native reader.
+    #[must_use]
+    pub const fn native_edge_read(self) -> Duration {
+        self.native_edge_read
+    }
+
+    /// Time spent reconstructing, validating, and canonically ordering MRR facts.
+    #[must_use]
+    pub const fn fact_admission(self) -> Duration {
+        self.fact_admission
+    }
 }
 
 impl GraphArDataset {
@@ -102,6 +149,11 @@ pub enum GraphArReadError {
     UnexpectedInvalidation(FactId),
     Context(RelationContextError),
     Projection(GraphProjectionError),
+    InvalidArrowColumn {
+        index: usize,
+        expected: &'static str,
+    },
+    ArrowStream(String),
     Native(graphar_rs::Error),
 }
 
@@ -153,29 +205,196 @@ pub fn read_graphar_dataset(
     projection: &BinaryEntityProjection,
     limits: GraphArReadLimits,
 ) -> Result<GraphArDataset, GraphArReadError> {
+    read_graphar_dataset_observed(root, projection, limits).map(|(dataset, _timings)| dataset)
+}
+
+/// Reads and semantically admits a native `GraphAr` dataset with typed phase timings.
+///
+/// The timings are intended for ASP Rust Scenario observations. They retain the
+/// boundary between upstream Arrow chunk I/O and MRR-owned semantic admission.
+///
+/// # Errors
+///
+/// Returns the same fail-closed errors as [`read_graphar_dataset`].
+pub fn read_graphar_dataset_observed(
+    root: impl AsRef<Path>,
+    projection: &BinaryEntityProjection,
+    limits: GraphArReadLimits,
+) -> Result<(GraphArDataset, GraphArReadTimings), GraphArReadError> {
     let root = root.as_ref();
+    let graph_info_started = Instant::now();
     let graph_info = GraphInfo::load(root.join(GRAPH_INFO_FILE))?;
-    let vertex_properties = property_names(&VERTEX_PROPERTIES);
-    let vertices = read_vertex_strings(
+    let graph_info_elapsed = graph_info_started.elapsed();
+    let vertices = read_and_admit_vertices(&graph_info, limits.max_vertices)?;
+    let facts = read_and_admit_facts(
         &graph_info,
-        ENTITY_TYPE,
-        &vertex_properties,
-        limits.max_vertices,
+        &vertices.physical_entities,
+        projection,
+        limits.max_edges,
     )?;
-    let mut physical_entities = BTreeMap::new();
-    let mut semantic_entities = BTreeSet::new();
-    for vertex in &vertices {
-        let entity = parse_identity("entity_id", required(vertex.values(), 0, "entity_id")?)?;
-        if physical_entities.insert(vertex.id(), entity).is_some() {
-            return Err(GraphArReadError::DuplicatePhysicalVertex(vertex.id()));
+
+    Ok((
+        GraphArDataset {
+            root: root.to_path_buf(),
+            vertex_count: vertices.count,
+            facts: facts.values,
+        },
+        GraphArReadTimings {
+            graph_info: graph_info_elapsed,
+            native_vertex_read: vertices.native_read,
+            vertex_admission: vertices.semantic_admission,
+            native_edge_read: facts.native_read,
+            fact_admission: facts.semantic_admission,
+        },
+    ))
+}
+
+struct AdmittedVertices {
+    physical_entities: HashMap<i64, EntityId>,
+    count: usize,
+    native_read: Duration,
+    semantic_admission: Duration,
+}
+
+fn read_and_admit_vertices(
+    graph_info: &GraphInfo,
+    max_vertices: usize,
+) -> Result<AdmittedVertices, GraphArReadError> {
+    let vertex_properties = property_names(&VERTEX_PROPERTIES);
+    let native_vertex_started = Instant::now();
+    let vertices =
+        read_vertex_string_batch(graph_info, ENTITY_TYPE, &vertex_properties, max_vertices)?;
+    let native_read = native_vertex_started.elapsed();
+    let vertex_admission_started = Instant::now();
+    let mut physical_entities = HashMap::with_capacity(vertices.row_count());
+    let mut semantic_entities = HashSet::with_capacity(vertices.row_count());
+    for row in 0..vertices.row_count() {
+        let physical_id = vertices
+            .id(row)
+            .ok_or(GraphArReadError::MissingProperty("vertex_id"))?;
+        let entity = parse_identity(
+            "entity_id",
+            required_value(vertices.value(row, 0), "entity_id")?,
+        )?;
+        if physical_entities.insert(physical_id, entity).is_some() {
+            return Err(GraphArReadError::DuplicatePhysicalVertex(physical_id));
         }
         if !semantic_entities.insert(entity) {
             return Err(GraphArReadError::DuplicateEntity(entity));
         }
     }
+    Ok(AdmittedVertices {
+        physical_entities,
+        count: vertices.row_count(),
+        native_read,
+        semantic_admission: vertex_admission_started.elapsed(),
+    })
+}
 
+struct AdmittedFacts {
+    values: Vec<Fact>,
+    native_read: Duration,
+    semantic_admission: Duration,
+}
+
+fn read_and_admit_facts(
+    graph_info: &GraphInfo,
+    physical_entities: &HashMap<i64, EntityId>,
+    projection: &BinaryEntityProjection,
+    max_edges: usize,
+) -> Result<AdmittedFacts, GraphArReadError> {
     let edge_properties = property_names(&EDGE_PROPERTIES);
-    let edges = read_edge_strings(
+    let native_edge_started = Instant::now();
+    let edge_batches = read_edge_arrow_batches(
+        graph_info,
+        ENTITY_TYPE,
+        EDGE_TYPE,
+        ENTITY_TYPE,
+        AdjListType::UnorderedBySource,
+        &edge_properties,
+        max_edges,
+    )?
+    .collect::<Result<Vec<_>, _>>()
+    .map_err(|error| GraphArReadError::ArrowStream(error.to_string()))?;
+    let native_edge_elapsed = native_edge_started.elapsed();
+    let fact_admission_started = Instant::now();
+    let edge_count = edge_batches.iter().map(RecordBatch::num_rows).sum();
+    let mut fact_ids = HashSet::with_capacity(edge_count);
+    let mut facts = Vec::with_capacity(edge_count);
+    let mut relation_ids = HashMap::<&str, RelationId>::new();
+    let mut contexts = HashMap::new();
+    for batch in &edge_batches {
+        let columns = EdgeArrowColumns::try_new(batch)?;
+        for row in 0..batch.num_rows() {
+            let source = endpoint(physical_entities, "source", columns.source(row)?)?;
+            let destination =
+                endpoint(physical_entities, "destination", columns.destination(row)?)?;
+            let fact_id = parse_identity(
+                "fact_id",
+                required_value(columns.properties[0].value(row), "fact_id")?,
+            )?;
+            if !fact_ids.insert(fact_id) {
+                return Err(GraphArReadError::DuplicateFact(fact_id));
+            }
+            let relation_id = parse_identity_cached(
+                &mut relation_ids,
+                "relation_id",
+                required_value(columns.properties[1].value(row), "relation_id")?,
+            )?;
+            let predicate = required_value(columns.properties[2].value(row), "predicate")?;
+            if predicate != projection.predicate() {
+                return Err(GraphArReadError::PredicateMismatch {
+                    expected: projection.predicate().to_owned(),
+                    actual: predicate.to_owned(),
+                });
+            }
+            let context_key = ContextKey {
+                generation: required_value(columns.properties[3].value(row), "generation_id")?,
+                authority_kind: required_value(columns.properties[4].value(row), "authority_kind")?,
+                authority_id: required_value(columns.properties[5].value(row), "authority_id")?,
+                provenance_kind: required_value(
+                    columns.properties[6].value(row),
+                    "provenance_kind",
+                )?,
+                provenance_id: required_value(columns.properties[7].value(row), "provenance_id")?,
+                completeness: required_value(columns.properties[8].value(row), "completeness")?,
+                validity_kind: required_value(columns.properties[9].value(row), "validity_kind")?,
+                invalidated_by: columns.properties[10].value(row),
+            };
+            let context = if let Some(context) = contexts.get(&context_key) {
+                *context
+            } else {
+                let context = parse_context(context_key, fact_id)?;
+                contexts.insert(context_key, context);
+                context
+            };
+            let fact = Fact::new(
+                fact_id,
+                relation_id,
+                vec![Value::Entity(source), Value::Entity(destination)],
+                context,
+            );
+            projection.project(&fact)?;
+            facts.push(fact);
+        }
+    }
+    facts.sort_unstable_by_key(Fact::id);
+    Ok(AdmittedFacts {
+        values: facts,
+        native_read: native_edge_elapsed,
+        semantic_admission: fact_admission_started.elapsed(),
+    })
+}
+
+#[cfg(test)]
+pub(crate) fn scan_graphar_edge_chunks(
+    root: impl AsRef<Path>,
+    limits: GraphArReadLimits,
+) -> Result<(usize, Duration), GraphArReadError> {
+    let graph_info = GraphInfo::load(root.as_ref().join(GRAPH_INFO_FILE))?;
+    let edge_properties = property_names(&EDGE_PROPERTIES);
+    let started = Instant::now();
+    let row_count = scan_edge_arrow_chunks(
         &graph_info,
         ENTITY_TYPE,
         EDGE_TYPE,
@@ -184,53 +403,7 @@ pub fn read_graphar_dataset(
         &edge_properties,
         limits.max_edges,
     )?;
-    let mut facts = Vec::with_capacity(edges.len());
-    let mut fact_ids = BTreeSet::new();
-    for edge in &edges {
-        let source = endpoint(&physical_entities, "source", edge.source())?;
-        let destination = endpoint(&physical_entities, "destination", edge.destination())?;
-        let values = edge.values();
-        let fact_id = parse_identity("fact_id", required(values, 0, "fact_id")?)?;
-        if !fact_ids.insert(fact_id) {
-            return Err(GraphArReadError::DuplicateFact(fact_id));
-        }
-        let relation_id = parse_identity("relation_id", required(values, 1, "relation_id")?)?;
-        let predicate = required(values, 2, "predicate")?;
-        if predicate != projection.predicate() {
-            return Err(GraphArReadError::PredicateMismatch {
-                expected: projection.predicate().to_owned(),
-                actual: predicate.to_owned(),
-            });
-        }
-        let generation = parse_identity("generation_id", required(values, 3, "generation_id")?)?;
-        let authority = parse_authority(
-            required(values, 4, "authority_kind")?,
-            required(values, 5, "authority_id")?,
-        )?;
-        let provenance = parse_provenance(
-            required(values, 6, "provenance_kind")?,
-            required(values, 7, "provenance_id")?,
-        )?;
-        let completeness = parse_completeness(required(values, 8, "completeness")?)?;
-        let validity = parse_validity(values, fact_id)?;
-        let context =
-            RelationContext::new(generation, authority, provenance, completeness, validity)
-                .map_err(GraphArReadError::Context)?;
-        let fact = Fact::new(
-            fact_id,
-            relation_id,
-            vec![Value::Entity(source), Value::Entity(destination)],
-            context,
-        );
-        projection.project(&fact)?;
-        facts.push(fact);
-    }
-
-    Ok(GraphArDataset {
-        root: root.to_path_buf(),
-        vertex_count: vertices.len(),
-        facts,
-    })
+    Ok((row_count, started.elapsed()))
 }
 
 fn property_names<const N: usize>(properties: &[&str; N]) -> Vec<String> {
@@ -240,15 +413,11 @@ fn property_names<const N: usize>(properties: &[&str; N]) -> Vec<String> {
         .collect()
 }
 
-fn required<'a>(
-    values: &'a [Option<String>],
-    index: usize,
+fn required_value<'a>(
+    value: Option<&'a str>,
     property: &'static str,
 ) -> Result<&'a str, GraphArReadError> {
-    values
-        .get(index)
-        .and_then(Option::as_deref)
-        .ok_or(GraphArReadError::MissingProperty(property))
+    value.ok_or(GraphArReadError::MissingProperty(property))
 }
 
 fn parse_identity<T>(property: &'static str, value: &str) -> Result<T, GraphArReadError>
@@ -265,8 +434,138 @@ where
         })
 }
 
+fn parse_identity_cached<'a, T>(
+    cache: &mut HashMap<&'a str, T>,
+    property: &'static str,
+    value: &'a str,
+) -> Result<T, GraphArReadError>
+where
+    T: Copy + FromStr,
+    T::Err: fmt::Display,
+{
+    if let Some(identity) = cache.get(value) {
+        return Ok(*identity);
+    }
+    let identity = parse_identity(property, value)?;
+    cache.insert(value, identity);
+    Ok(identity)
+}
+
+struct EdgeArrowColumns<'a> {
+    source: &'a Int64Array,
+    destination: &'a Int64Array,
+    properties: Vec<Utf8Column<'a>>,
+}
+
+impl<'a> EdgeArrowColumns<'a> {
+    fn try_new(batch: &'a RecordBatch) -> Result<Self, GraphArReadError> {
+        if batch.num_columns() != EDGE_PROPERTIES.len() + 2 {
+            return Err(GraphArReadError::InvalidArrowColumn {
+                index: batch.num_columns(),
+                expected: "source, destination, and all requested edge properties",
+            });
+        }
+        let source = batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .ok_or(GraphArReadError::InvalidArrowColumn {
+                index: 0,
+                expected: "non-null int64 source endpoint",
+            })?;
+        let destination = batch
+            .column(1)
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .ok_or(GraphArReadError::InvalidArrowColumn {
+                index: 1,
+                expected: "non-null int64 destination endpoint",
+            })?;
+        let properties = batch.columns()[2..]
+            .iter()
+            .enumerate()
+            .map(|(offset, column)| Utf8Column::try_new(column.as_ref(), offset + 2))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self {
+            source,
+            destination,
+            properties,
+        })
+    }
+
+    fn source(&self, row: usize) -> Result<i64, GraphArReadError> {
+        required_endpoint(self.source, row, "source")
+    }
+
+    fn destination(&self, row: usize) -> Result<i64, GraphArReadError> {
+        required_endpoint(self.destination, row, "destination")
+    }
+}
+
+fn required_endpoint(
+    column: &Int64Array,
+    row: usize,
+    property: &'static str,
+) -> Result<i64, GraphArReadError> {
+    (!column.is_null(row))
+        .then(|| column.value(row))
+        .ok_or(GraphArReadError::MissingProperty(property))
+}
+
+enum Utf8Column<'a> {
+    Utf8(&'a StringArray),
+    LargeUtf8(&'a LargeStringArray),
+}
+
+impl<'a> Utf8Column<'a> {
+    fn try_new(column: &'a dyn Array, index: usize) -> Result<Self, GraphArReadError> {
+        if let Some(column) = column.as_any().downcast_ref::<StringArray>() {
+            return Ok(Self::Utf8(column));
+        }
+        if let Some(column) = column.as_any().downcast_ref::<LargeStringArray>() {
+            return Ok(Self::LargeUtf8(column));
+        }
+        Err(GraphArReadError::InvalidArrowColumn {
+            index,
+            expected: "UTF-8 or large UTF-8 property",
+        })
+    }
+
+    fn value(&self, row: usize) -> Option<&'a str> {
+        match self {
+            Self::Utf8(column) => (!column.is_null(row)).then(|| column.value(row)),
+            Self::LargeUtf8(column) => (!column.is_null(row)).then(|| column.value(row)),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct ContextKey<'a> {
+    generation: &'a str,
+    authority_kind: &'a str,
+    authority_id: &'a str,
+    provenance_kind: &'a str,
+    provenance_id: &'a str,
+    completeness: &'a str,
+    validity_kind: &'a str,
+    invalidated_by: Option<&'a str>,
+}
+
+fn parse_context(
+    key: ContextKey<'_>,
+    fact_id: FactId,
+) -> Result<RelationContext, GraphArReadError> {
+    let generation = parse_identity::<GenerationId>("generation_id", key.generation)?;
+    let authority = parse_authority(key.authority_kind, key.authority_id)?;
+    let provenance = parse_provenance(key.provenance_kind, key.provenance_id)?;
+    let completeness = parse_completeness(key.completeness)?;
+    let validity = parse_validity(key.validity_kind, key.invalidated_by, fact_id)?;
+    RelationContext::new(generation, authority, provenance, completeness, validity)
+        .map_err(GraphArReadError::Context)
+}
+
 fn endpoint(
-    entities: &BTreeMap<i64, EntityId>,
+    entities: &HashMap<i64, EntityId>,
     role: &'static str,
     id: i64,
 ) -> Result<EntityId, GraphArReadError> {
@@ -316,14 +615,11 @@ fn parse_completeness(value: &str) -> Result<EvidenceCompleteness, GraphArReadEr
 }
 
 fn parse_validity(
-    values: &[Option<String>],
+    validity_kind: &str,
+    invalidated_by: Option<&str>,
     fact_id: FactId,
 ) -> Result<FactValidity, GraphArReadError> {
-    let invalidated_by = values
-        .get(10)
-        .and_then(Option::as_deref)
-        .filter(|value| !value.is_empty());
-    match required(values, 9, "validity_kind")? {
+    match validity_kind {
         "valid" => {
             if invalidated_by.is_some() {
                 return Err(GraphArReadError::UnexpectedInvalidation(fact_id));

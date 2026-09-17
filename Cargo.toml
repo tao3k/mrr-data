@@ -46,3 +46,10 @@ unsafe_code = "forbid"
 [workspace.lints.clippy]
 all = "warn"
 pedantic = "warn"
+
+# Scenario benchmarks execute through libtest. Keep their code generation
+# representative of the optimized Rust consumed by the native GraphAr bridge.
+[profile.test]
+opt-level = 2
+codegen-units = 16
+debug = false

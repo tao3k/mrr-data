@@ -16,7 +16,10 @@ pub use projection::{
     PhysicalVertexIndex,
 };
 #[cfg(feature = "native-graphar")]
-pub use reader::{GraphArDataset, GraphArReadError, GraphArReadLimits, read_graphar_dataset};
+pub use reader::{
+    GraphArDataset, GraphArReadError, GraphArReadLimits, GraphArReadTimings, read_graphar_dataset,
+    read_graphar_dataset_observed,
+};
 #[cfg(feature = "native-graphar")]
 pub use writer::{GraphArDatasetReceipt, GraphArWriteError, write_graphar_dataset};
 

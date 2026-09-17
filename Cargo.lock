@@ -120,6 +120,9 @@ name = "arrow-schema"
 version = "58.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "21ca356ad6425cecb6eb7b28e4f659f1ee7880fbb1a16127de7dd62901efee9e"
+dependencies = [
+ "bitflags",
+]
 
 [[package]]
 name = "arrow-select"
@@ -182,9 +185,9 @@ dependencies = [
 [[package]]
 name = "asp-rust"
 version = "0.1.2"
-source = "git+https://github.com/tao3k/asp-rust?rev=f88445d971d6b7dfd6336d73e52dc0411921f5bf#f88445d971d6b7dfd6336d73e52dc0411921f5bf"
+source = "git+https://github.com/tao3k/asp-rust?rev=3ddd7a15d1e69da4a67e0e0ab84b056fe90d838d#3ddd7a15d1e69da4a67e0e0ab84b056fe90d838d"
 dependencies = [
- "asp-rust-build-support",
+ "asp-rust-build-support 0.1.0 (git+https://github.com/tao3k/asp-rust?rev=3ddd7a15d1e69da4a67e0e0ab84b056fe90d838d)",
  "blake3",
  "cargo-lock",
  "cargo_toml",
@@ -199,6 +202,36 @@ dependencies = [
  "sha2 0.11.0",
  "syn 3.0.5",
  "toml",
+]
+
+[[package]]
+name = "asp-rust"
+version = "0.1.2"
+source = "git+https://github.com/tao3k/asp-rust?rev=f88445d971d6b7dfd6336d73e52dc0411921f5bf#f88445d971d6b7dfd6336d73e52dc0411921f5bf"
+dependencies = [
+ "asp-rust-build-support 0.1.0 (git+https://github.com/tao3k/asp-rust?rev=f88445d971d6b7dfd6336d73e52dc0411921f5bf)",
+ "blake3",
+ "cargo-lock",
+ "cargo_toml",
+ "globset",
+ "libc",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "syn 3.0.5",
+ "toml",
+]
+
+[[package]]
+name = "asp-rust-build-support"
+version = "0.1.0"
+source = "git+https://github.com/tao3k/asp-rust?rev=3ddd7a15d1e69da4a67e0e0ab84b056fe90d838d#3ddd7a15d1e69da4a67e0e0ab84b056fe90d838d"
+dependencies = [
+ "blake3",
 ]
 
 [[package]]
@@ -699,7 +732,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c54e03a951783e8b327515db3f2a2fd0e3bed362a96b066f341ce66ed49b4ead"
 dependencies = [
  "data-encoding",
- "syn 3.0.5",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -945,8 +978,9 @@ dependencies = [
 [[package]]
 name = "graphar-rs"
 version = "0.1.0"
-source = "git+https://github.com/GTrunSec/incubator-graphar?rev=5d15afa76aafce27af3643f6f7ca59473a52d07c#5d15afa76aafce27af3643f6f7ca59473a52d07c"
+source = "git+https://github.com/GTrunSec/incubator-graphar?rev=5230a5119b0d469db666b1ea035bdfb95c7b7611#5230a5119b0d469db666b1ea035bdfb95c7b7611"
 dependencies = [
+ "arrow-array",
  "cmake",
  "cxx",
  "cxx-build",
@@ -1292,8 +1326,8 @@ name = "mrr-asp-rust-project-policy"
 version = "0.1.0"
 source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=4bb063f8297238c24c15b890558782e35fbd9ca7#4bb063f8297238c24c15b890558782e35fbd9ca7"
 dependencies = [
- "asp-rust",
- "asp-rust-build-support",
+ "asp-rust 0.1.2 (git+https://github.com/tao3k/asp-rust?rev=f88445d971d6b7dfd6336d73e52dc0411921f5bf)",
+ "asp-rust-build-support 0.1.0 (git+https://github.com/tao3k/asp-rust?rev=f88445d971d6b7dfd6336d73e52dc0411921f5bf)",
  "serde",
  "serde_json",
 ]
@@ -1318,7 +1352,7 @@ dependencies = [
 name = "mrr-data"
 version = "0.1.0"
 dependencies = [
- "asp-rust",
+ "asp-rust 0.1.2 (git+https://github.com/tao3k/asp-rust?rev=3ddd7a15d1e69da4a67e0e0ab84b056fe90d838d)",
  "mrr-data-arrow",
  "mrr-data-asp-rust-project-policy",
  "mrr-data-content",
@@ -1335,7 +1369,7 @@ dependencies = [
  "arrow-buffer",
  "arrow-ipc",
  "arrow-schema",
- "asp-rust",
+ "asp-rust 0.1.2 (git+https://github.com/tao3k/asp-rust?rev=3ddd7a15d1e69da4a67e0e0ab84b056fe90d838d)",
  "flatbuffers",
  "meta-relational-reasoning",
  "mrr-data-asp-rust-project-policy",
@@ -1347,15 +1381,15 @@ dependencies = [
 name = "mrr-data-asp-rust-project-policy"
 version = "0.1.0"
 dependencies = [
- "asp-rust",
- "asp-rust-build-support",
+ "asp-rust 0.1.2 (git+https://github.com/tao3k/asp-rust?rev=3ddd7a15d1e69da4a67e0e0ab84b056fe90d838d)",
+ "asp-rust-build-support 0.1.0 (git+https://github.com/tao3k/asp-rust?rev=3ddd7a15d1e69da4a67e0e0ab84b056fe90d838d)",
 ]
 
 [[package]]
 name = "mrr-data-content"
 version = "0.1.0"
 dependencies = [
- "asp-rust",
+ "asp-rust 0.1.2 (git+https://github.com/tao3k/asp-rust?rev=3ddd7a15d1e69da4a67e0e0ab84b056fe90d838d)",
  "cid",
  "fvm_ipld_car",
  "meta-relational-reasoning",
@@ -1369,7 +1403,7 @@ dependencies = [
 name = "mrr-data-core"
 version = "0.1.0"
 dependencies = [
- "asp-rust",
+ "asp-rust 0.1.2 (git+https://github.com/tao3k/asp-rust?rev=3ddd7a15d1e69da4a67e0e0ab84b056fe90d838d)",
  "cid",
  "ipld-core",
  "meta-relational-reasoning",
@@ -1385,7 +1419,9 @@ dependencies = [
 name = "mrr-data-graphar"
 version = "0.1.0"
 dependencies = [
- "asp-rust",
+ "arrow-array",
+ "asp-rust 0.1.2 (git+https://github.com/tao3k/asp-rust?rev=3ddd7a15d1e69da4a67e0e0ab84b056fe90d838d)",
+ "asp-rust-build-support 0.1.0 (git+https://github.com/tao3k/asp-rust?rev=3ddd7a15d1e69da4a67e0e0ab84b056fe90d838d)",
  "graphar-rs",
  "meta-relational-reasoning",
  "mrr-data-asp-rust-project-policy",
@@ -1397,7 +1433,7 @@ dependencies = [
 name = "mrr-data-profile"
 version = "0.1.0"
 dependencies = [
- "asp-rust",
+ "asp-rust 0.1.2 (git+https://github.com/tao3k/asp-rust?rev=3ddd7a15d1e69da4a67e0e0ab84b056fe90d838d)",
  "mrr-data-asp-rust-project-policy",
 ]
 

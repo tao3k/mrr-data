@@ -8,7 +8,7 @@ license.workspace = true
 repository.workspace = true
 
 [dev-dependencies]
-asp-rust = { git = "https://github.com/tao3k/asp-rust", rev = "f88445d971d6b7dfd6336d73e52dc0411921f5bf", default-features = false }
+asp-rust = { git = "https://github.com/tao3k/asp-rust", rev = "3ddd7a15d1e69da4a67e0e0ab84b056fe90d838d", default-features = false }
 
 [build-dependencies]
 mrr-data-asp-rust-project-policy.workspace = true

@@ -89,6 +89,12 @@ PR #977 was closed intentionally; Apache merge is not a gate for using our
 maintained extension. It writes vertex identity properties, relation/context
 edge properties, adjacency chunks, and official metadata through
 `graphar-rs`/GraphAr C++; it does not implement a private GraphAr serializer.
+The native reader exports upstream Arrow tables through the Arrow C Stream
+interface, so Rust borrows the official buffers instead of rebuilding every
+row as owned strings. An isolated 10,000-edge ASP Rust Scenario measures the
+official GraphAr reader and the Rust bridge on the identical property
+projection, rejects bridge P95 above 125% of the official P95, and measures MRR
+semantic admission separately.
 Output is staged beside the destination and atomically renamed only after every
 native builder and metadata write succeeds. Admission is owned by the pinned
 fork revision, cross-platform CI, and executable writer/readback Scenarios.

@@ -1,3 +1,10 @@
+use std::time::{Duration, Instant};
+
+use asp_rust::{RustScenarioBenchmarkStatus, validate_rust_scenario_benchmark};
+use asp_rust_build_support::{
+    AspRustScenario, AspRustScenarioObservation, asp_rust_scenario, measure_asp_rust_scenario,
+    render_asp_rust_scenario_benchmark_toml,
+};
 use graphar_rs::{
     info::{AdjListType, GraphInfo},
     reader::{read_edge_strings, read_vertex_strings},
@@ -8,9 +15,10 @@ use meta_relational_reasoning::{
     RuleId, Value, ValueSchema,
 };
 
+use crate::reader::scan_graphar_edge_chunks;
 use crate::{
     BinaryEntityProjection, GraphArReadError, GraphArReadLimits, GraphArWriteError,
-    read_graphar_dataset, write_graphar_dataset,
+    read_graphar_dataset, read_graphar_dataset_observed, write_graphar_dataset,
 };
 
 fn id<T: CanonicalId>(name: &str) -> T {
@@ -175,7 +183,8 @@ fn maintained_graphar_reconstructs_and_re_admits_complete_mrr_facts() {
         )
         .unwrap(),
     );
-    let expected = [source, derived];
+    let mut expected = vec![source, derived];
+    expected.sort_unstable_by_key(Fact::id);
     let edges = expected
         .iter()
         .map(|fact| projection.project(fact).unwrap())
@@ -234,6 +243,193 @@ fn semantic_reader_rejects_a_foreign_projection() {
     .unwrap_err();
 
     assert!(matches!(error, GraphArReadError::PredicateMismatch { .. }));
+}
+
+#[test]
+#[ignore = "run as an isolated ASP Rust performance Scenario"]
+fn scenario_semantically_reads_ten_thousand_graphar_edges() {
+    const EDGE_COUNT: usize = 10_000;
+
+    let projection = projection();
+    let facts = graphar_scenario_facts(&projection, EDGE_COUNT);
+    let mut expected_facts = facts.clone();
+    expected_facts.sort_unstable_by_key(Fact::id);
+    let edges = facts
+        .iter()
+        .map(|fact| projection.project(fact).unwrap())
+        .collect::<Vec<_>>();
+    let parent = tempfile::tempdir().unwrap();
+    let output = parent.path().join("ten-thousand-edge-dataset");
+    let write_started = Instant::now();
+    let receipt = write_graphar_dataset(&output, &projection, &edges).unwrap();
+    let write_elapsed = write_started.elapsed();
+    assert_eq!(receipt.vertex_count(), EDGE_COUNT);
+    assert_eq!(receipt.edge_count(), EDGE_COUNT);
+
+    let scenario = graphar_semantic_read_scenario();
+    let parity_scenario = graphar_arrow_bridge_parity_scenario();
+    let limits = GraphArReadLimits::new(EDGE_COUNT, EDGE_COUNT);
+    let parity_measurement = measure_asp_rust_scenario(&parity_scenario, || {
+        let (edge_count, official_elapsed) =
+            scan_graphar_edge_chunks(&output, limits).expect("scan official GraphAr Arrow chunks");
+        let (imported, timings) = read_graphar_dataset_observed(&output, &projection, limits)
+            .expect("read GraphAr through the Rust Arrow bridge");
+        assert_eq!(imported.facts(), expected_facts);
+        AspRustScenarioObservation::default()
+            .with_timing("official_arrow_edge_scan", official_elapsed)
+            .with_timing("rust_arrow_bridge_read", timings.native_edge_read())
+            .with_metric("edge_count", edge_count as u64)
+    })
+    .expect("measure official GraphAr/Rust Arrow bridge parity Scenario");
+    let measurement = measure_asp_rust_scenario(&scenario, || {
+        let semantic_read_started = Instant::now();
+        let (imported, timings) = read_graphar_dataset_observed(&output, &projection, limits)
+            .expect("read semantic GraphAr dataset");
+        let semantic_read_elapsed = semantic_read_started.elapsed();
+        assert_eq!(imported.vertex_count(), EDGE_COUNT);
+        assert_eq!(imported.facts(), expected_facts);
+        AspRustScenarioObservation::default()
+            .with_timing("graph_info", timings.graph_info())
+            .with_timing("native_vertex_read", timings.native_vertex_read())
+            .with_timing("vertex_admission", timings.vertex_admission())
+            .with_timing("native_edge_read", timings.native_edge_read())
+            .with_timing("fact_admission", timings.fact_admission())
+            .with_timing("semantic_read_admission", semantic_read_elapsed)
+            .with_metric("vertex_count", EDGE_COUNT as u64)
+            .with_metric("fact_count", imported.facts().len() as u64)
+    })
+    .expect("measure GraphAr semantic read Scenario");
+
+    let rendered = render_asp_rust_scenario_benchmark_toml(&scenario, &measurement)
+        .expect("render measured GraphAr Scenario benchmark");
+    let parity_rendered =
+        render_asp_rust_scenario_benchmark_toml(&parity_scenario, &parity_measurement)
+            .expect("render measured GraphAr Arrow bridge parity benchmark");
+    eprintln!(
+        "mrr-data-graphar-scenario edges={EDGE_COUNT} write_us={}\n{parity_rendered}\n{rendered}",
+        write_elapsed.as_micros(),
+    );
+    let official_p95 = parity_measurement.observed_timings["official_arrow_edge_scan"];
+    let bridge_p95 = parity_measurement.observed_timings["rust_arrow_bridge_read"];
+    let bridge_budget = official_p95.saturating_add(official_p95 / 4);
+    assert!(
+        bridge_p95 <= bridge_budget,
+        "Rust bridge regressed more than 25% over the official Arrow chunk reader: official={official_p95:?} bridge={bridge_p95:?} budget={bridge_budget:?}"
+    );
+    assert!(
+        measurement.total_p50 <= Duration::from_millis(300),
+        "10,000-edge semantic GraphAr read P50 exceeded 300ms: {:?}",
+        measurement.total_p50
+    );
+    assert!(
+        measurement.total_p95 <= Duration::from_millis(500),
+        "10,000-edge semantic GraphAr read P95 exceeded 500ms: {:?}",
+        measurement.total_p95
+    );
+}
+
+fn graphar_scenario_facts(projection: &BinaryEntityProjection, edge_count: usize) -> Vec<Fact> {
+    let owner = id::<EntityId>("graphar-scenario-owner");
+    let generation = id::<GenerationId>("graphar-scenario-generation");
+    (0..edge_count)
+        .map(|index| {
+            Fact::new(
+                id(&format!("graphar-scenario-fact-{index}")),
+                projection.relation_id(),
+                vec![
+                    Value::Entity(id(&format!("graphar-scenario-entity-{index}"))),
+                    Value::Entity(id(&format!(
+                        "graphar-scenario-entity-{}",
+                        (index + 1) % edge_count
+                    ))),
+                ],
+                RelationContext::new(
+                    generation,
+                    RelationAuthority::Entity(owner),
+                    FactProvenance::Source(owner),
+                    EvidenceCompleteness::Complete,
+                    FactValidity::Valid,
+                )
+                .unwrap(),
+            )
+        })
+        .collect()
+}
+
+fn graphar_semantic_read_scenario() -> AspRustScenario {
+    asp_rust_scenario! {
+        name: "graphar-semantic-read-10k",
+        package: "mrr-data-graphar",
+        description: "GraphAr Arrow chunks reconstruct and re-admit 10,000 canonical MRR facts",
+        fixture_root: "tests/unit/scenarios/graphar_semantic_read_10k",
+        tags: ["graphar", "arrow", "semantic-admission", "performance"],
+        commands: [
+            { label: "focused", argv: ["cargo", "test", "-p", "mrr-data-graphar", "--features", "native-graphar", "scenario_semantically_reads_ten_thousand_graphar_edges", "--", "--ignored", "--nocapture"] }
+        ],
+        benchmark: {
+            harness: "libtest",
+            test: "scenario_semantically_reads_ten_thousand_graphar_edges",
+            snapshot: "graphar_semantic_read_10k",
+            target_total: "300ms",
+            max_total: "500ms",
+            regression_budget: "100ms",
+            memory_budget_bytes: 268_435_456,
+            target_rationale: "The native path reads GraphAr Parquet through upstream Arrow chunk readers before typed MRR identity parsing and admission.",
+            warmup_iterations: 2,
+            measure_iterations: 11,
+            metrics: [
+                { name: "vertex_count", unit: "count", kind: Exact, target: 10_000 },
+                { name: "fact_count", unit: "count", kind: Exact, target: 10_000 }
+            ]
+        }
+    }
+}
+
+fn graphar_arrow_bridge_parity_scenario() -> AspRustScenario {
+    asp_rust_scenario! {
+        name: "graphar-arrow-bridge-parity-10k",
+        package: "mrr-data-graphar",
+        description: "The Rust columnar bridge stays within the declared noise budget of the official GraphAr Arrow chunk reader",
+        fixture_root: "tests/unit/scenarios/graphar_arrow_bridge_parity_10k",
+        tags: ["graphar", "arrow", "rust-bridge", "performance"],
+        commands: [
+            { label: "focused", argv: ["cargo", "test", "-p", "mrr-data-graphar", "--features", "native-graphar", "scenario_semantically_reads_ten_thousand_graphar_edges", "--", "--ignored", "--nocapture"] }
+        ],
+        benchmark: {
+            harness: "libtest",
+            test: "scenario_semantically_reads_ten_thousand_graphar_edges",
+            snapshot: "graphar_arrow_bridge_parity_10k",
+            target_total: "300ms",
+            max_total: "500ms",
+            regression_budget: "100ms",
+            memory_budget_bytes: 268_435_456,
+            target_rationale: "The reference phase executes GraphAr's official Arrow chunk readers on the same 10,000-edge fixture and property projection as the Rust bridge.",
+            warmup_iterations: 2,
+            measure_iterations: 11,
+            metrics: [
+                { name: "edge_count", unit: "count", kind: Exact, target: 10_000 }
+            ]
+        }
+    }
+}
+
+#[test]
+fn graphar_performance_scenario_contracts_are_admitted_by_asp_rust() {
+    for scenario in [
+        "graphar_arrow_bridge_parity_10k",
+        "graphar_semantic_read_10k",
+    ] {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/unit/scenarios")
+            .join(scenario);
+        let receipt = validate_rust_scenario_benchmark(root)
+            .unwrap_or_else(|error| panic!("validate GraphAr Scenario {scenario}: {error}"));
+        assert_eq!(
+            receipt.status,
+            RustScenarioBenchmarkStatus::Pass,
+            "GraphAr Scenario {scenario} was not admitted: {receipt:#?}"
+        );
+    }
 }
 
 #[test]

@@ -533,10 +533,12 @@ implemented and admitted in the same maintained fork rather than as a private
 reader in MRR Data.
 
 The =native-graphar= Cargo feature pins the immutable maintained fork commit
-=5d15afa76aafce27af3643f6f7ca59473a52d07c= and exercises the native Rust/C++
+=5230a5119b0d469db666b1ea035bdfb95c7b7611= and exercises the native Rust/C++
 writer and reader.  The adapter writes semantic =EntityId= vertex
 properties plus relation identity and full MRR context on every edge, stages a
 complete dataset, then renames it into place.  Its bounded semantic reader
+exports the upstream Arrow tables through the Arrow C Stream interface and
+borrows their buffers in Rust rather than rebuilding owned string rows.  It
 resolves physical endpoints through the vertex table, parses every identity
 and context discriminator into its MRR V1 type, reconstructs =Fact= values,
 and re-admits each result through =BinaryEntityProjection=.  Duplicate facts,
@@ -544,7 +546,15 @@ unknown physical endpoints, ambiguous vertex identities, foreign projections,
 malformed contexts, and row-budget overflow fail closed.  Admission requires
 an immutable fork revision, owner-maintained tests, and Linux/macOS native CI;
 it does not depend on Apache review.  Native CI remains separate so ordinary
-Rust feedback does not inherit the C++ build latency.
+Rust feedback does not inherit the C++ build latency.  An isolated fixed
+10,000-edge Scenario uses two warmups and eleven measured samples.  It runs the
+official GraphAr Arrow readers and the Rust C Stream bridge over the identical
+eleven-property projection, rejects bridge P95 above 125 percent of official
+P95, keeps semantic P50 below =300ms= and P95 below the ASP Rust =500ms= hard
+gate, and records typed I/O and MRR semantic-admission phases separately.  The
+committed reference receipt records official P95 =84.27ms=, bridge P95
+=70.35ms=, and complete semantic-read P95 =197.40ms=; these observations are
+evidence for this revision and platform, not universal throughput claims.
 
 - implement only the declared binary-Entity projection first;
 - preserve canonical IDs through repartition and compaction;
