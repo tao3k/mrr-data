@@ -25,7 +25,7 @@ arrow-buffer = "58.4.0"
 arrow-ipc = "58.4.0"
 arrow-schema = "58.4.0"
 flatbuffers = "25.2.10"
-meta-relational-reasoning = { git = "https://github.com/tao3k/meta-relational-reasoning.git", rev = "4bb063f8297238c24c15b890558782e35fbd9ca7" }
+meta-relational-reasoning = { git = "https://github.com/tao3k/meta-relational-reasoning.git", rev = "ab50119ede5c303b065aba858496ea58c4e4c612" }
 mrr-data-asp-rust-project-policy = { path = "build-support/mrr-data-asp-rust-project-policy", version = "0.1.0" }
 mrr-data-arrow = { path = "crates/mrr-data-arrow", version = "0.1.0" }
 mrr-data-content = { path = "crates/mrr-data-content", version = "0.1.0" }
