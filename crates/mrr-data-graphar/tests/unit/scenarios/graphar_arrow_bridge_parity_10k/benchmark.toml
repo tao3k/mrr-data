@@ -3,37 +3,51 @@ test = "scenario_semantically_reads_ten_thousand_graphar_edges"
 snapshot = "graphar_arrow_bridge_parity_10k"
 target_total = "300ms"
 max_total = "500ms"
-observed_total = "63106542ns"
+observed_total = "53603910ns"
 regression_budget = "100ms"
 memory_budget_bytes = 268435456
 observed_memory_bytes = 0
-target_rationale = "The reference phase alternates execution order between GraphAr's official Arrow chunk readers and the Rust bridge on the same 10,000-edge fixture and property projection."
+target_rationale = "The reference phase alternates execution order on the same 10,000-edge fixture and separates GraphAr Parquet/chunk loading from zero-copy Arrow C Stream import into Rust."
 
 [measurement]
 clock = "std::time::Instant"
 statistic = "p95"
 warmup_iterations = 2
 measure_iterations = 11
-total_p50 = "52508650ns"
-total_p95 = "63106542ns"
-total_p99 = "63106542ns"
-total_max = "63106542ns"
+total_p50 = "52533123ns"
+total_p95 = "53603910ns"
+total_p99 = "53603910ns"
+total_max = "53603910ns"
 
 [observed_timings]
-official_arrow_edge_scan = "20818578ns"
-rust_arrow_bridge_read = "18443527ns"
+arrow_c_stream_import = "180440ns"
+graphar_storage_read = "16220994ns"
+official_arrow_edge_scan = "16078395ns"
+rust_graphar_edge_read = "16355257ns"
+
+[phase_distributions.arrow_c_stream_import]
+p50 = "134263ns"
+p95 = "180440ns"
+p99 = "180440ns"
+max = "180440ns"
+
+[phase_distributions.graphar_storage_read]
+p50 = "15979569ns"
+p95 = "16220994ns"
+p99 = "16220994ns"
+max = "16220994ns"
 
 [phase_distributions.official_arrow_edge_scan]
-p50 = "15823917ns"
-p95 = "20818578ns"
-p99 = "20818578ns"
-max = "20818578ns"
+p50 = "15903146ns"
+p95 = "16078395ns"
+p99 = "16078395ns"
+max = "16078395ns"
 
-[phase_distributions.rust_arrow_bridge_read]
-p50 = "15910903ns"
-p95 = "18443527ns"
-p99 = "18443527ns"
-max = "18443527ns"
+[phase_distributions.rust_graphar_edge_read]
+p50 = "16109975ns"
+p95 = "16355257ns"
+p99 = "16355257ns"
+max = "16355257ns"
 
 [metrics.edge_count]
 unit = "count"
