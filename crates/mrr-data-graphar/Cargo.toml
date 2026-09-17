@@ -12,7 +12,7 @@ default = []
 upstream-graphar = ["dep:graphar-rs", "dep:tempfile"]
 
 [dependencies]
-graphar-rs = { git = "https://github.com/GTrunSec/incubator-graphar", rev = "1a3706283ed2225350ec5016e81fc33d3b0b14ef", optional = true }
+graphar-rs = { git = "https://github.com/GTrunSec/incubator-graphar", rev = "5341d0e588eac568177754a997c94b0e25fbc084", optional = true }
 meta-relational-reasoning.workspace = true
 mrr-data-profile.workspace = true
 tempfile = { workspace = true, optional = true }

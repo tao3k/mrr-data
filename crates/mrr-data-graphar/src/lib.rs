@@ -1,7 +1,7 @@
 //! Fail-closed admission for the MRR V1 binary-Entity `GraphAr` projection.
 //!
 //! This crate owns no `GraphAr` wire format. It produces semantic edge records
-//! that an adapter must hand to the upstream Apache `GraphAr` implementation.
+//! that the adapter hands to the project-maintained Apache `GraphAr` fork.
 #![forbid(unsafe_code)]
 
 mod projection;

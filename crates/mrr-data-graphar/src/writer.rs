@@ -23,7 +23,7 @@ const VERTEX_INFO_FILE: &str = "entity.vertex.yaml";
 const EDGE_INFO_FILE: &str = "entity_mrr_relation_entity.edge.yaml";
 const GRAPH_INFO_FILE: &str = "mrr.graph.yaml";
 
-/// Receipt for one dataset written by the official upstream `GraphAr` runtime.
+/// Receipt for one dataset written by the project-maintained `GraphAr` runtime.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GraphArDatasetReceipt {
     root: PathBuf,
@@ -53,7 +53,7 @@ impl GraphArDatasetReceipt {
     }
 }
 
-/// Fail-closed errors from the temporary upstream-branch writer adapter.
+/// Fail-closed errors from the native `GraphAr` adapter.
 #[derive(Debug)]
 pub enum GraphArWriteError {
     OutputExists(PathBuf),
@@ -107,7 +107,7 @@ impl From<GraphProjectionError> for GraphArWriteError {
     }
 }
 
-/// Writes one admitted binary-Entity relation through upstream `graphar-rs`.
+/// Writes one admitted binary-Entity relation through native `graphar-rs`.
 ///
 /// The destination must not exist. Data and metadata are first written to a
 /// sibling staging directory, then renamed into place as one filesystem commit.

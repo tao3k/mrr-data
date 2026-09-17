@@ -1,4 +1,7 @@
-use graphar_rs::info::GraphInfo;
+use graphar_rs::{
+    info::{AdjListType, GraphInfo},
+    reader::{read_edge_strings, read_vertex_strings},
+};
 use meta_relational_reasoning::{
     EntityId, EvidenceCompleteness, Fact, FactId, FactProvenance, FactValidity, GenerationId,
     RelationAuthority, RelationContext, RelationField, RelationId, RelationSchema, Value,
@@ -66,7 +69,7 @@ fn fact(name: &str, source: &str, destination: &str) -> Fact {
 }
 
 #[test]
-fn upstream_writer_emits_vertices_edges_and_metadata() {
+fn maintained_graphar_round_trips_vertices_edges_and_metadata() {
     let projection = projection();
     let edges = [
         projection.project(&fact("edge-1", "alice", "bob")).unwrap(),
@@ -91,6 +94,62 @@ fn upstream_writer_emits_vertices_edges_and_metadata() {
     );
     assert!(output.join("vertex/entity/vertex_count").is_file());
     assert!(output.join("edge/entity_mrr_relation_entity").is_dir());
+
+    let vertex_properties = vec!["entity_id".to_string()];
+    let vertices = read_vertex_strings(&graph_info, "entity", &vertex_properties, 3).unwrap();
+    assert_eq!(vertices.len(), 3);
+    let entity_ids = vertices
+        .iter()
+        .map(|vertex| vertex.values()[0].clone().unwrap())
+        .collect::<std::collections::BTreeSet<_>>();
+    let expected_entity_ids = ["alice", "bob", "carol"]
+        .map(|name| id::<EntityId>(name).to_string())
+        .into_iter()
+        .collect();
+    assert_eq!(entity_ids, expected_entity_ids);
+
+    let edge_properties = vec![
+        "fact_id".to_string(),
+        "relation_id".to_string(),
+        "predicate".to_string(),
+    ];
+    let read_edges = read_edge_strings(
+        &graph_info,
+        "entity",
+        "mrr_relation",
+        "entity",
+        AdjListType::UnorderedBySource,
+        &edge_properties,
+        2,
+    )
+    .unwrap();
+    assert_eq!(read_edges.len(), 2);
+    let relation_id = projection.relation_id().to_string();
+    assert!(read_edges.iter().all(|edge| {
+        edge.values()[1].as_deref() == Some(relation_id.as_str())
+            && edge.values()[2].as_deref() == Some("knows")
+    }));
+    let fact_ids = read_edges
+        .iter()
+        .map(|edge| edge.values()[0].clone().unwrap())
+        .collect::<std::collections::BTreeSet<_>>();
+    let expected_fact_ids = ["edge-1", "edge-2"]
+        .map(|name| id::<FactId>(name).to_string())
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(fact_ids, expected_fact_ids);
+
+    let budget_error = read_edge_strings(
+        &graph_info,
+        "entity",
+        "mrr_relation",
+        "entity",
+        AdjListType::UnorderedBySource,
+        &edge_properties,
+        1,
+    )
+    .unwrap_err();
+    assert!(budget_error.to_string().contains("exceeding max_rows=1"));
 }
 
 #[test]
