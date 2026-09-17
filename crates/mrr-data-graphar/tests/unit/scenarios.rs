@@ -4,6 +4,7 @@ use asp_rust::{RustScenarioBenchmarkStatus, validate_rust_scenario_benchmark};
 fn graphar_performance_scenario_contracts_are_admitted_by_asp_rust() {
     for scenario in [
         "graphar_arrow_bridge_parity_10k",
+        "graphar_prepared_admission_10k",
         "graphar_semantic_read_10k",
     ] {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
