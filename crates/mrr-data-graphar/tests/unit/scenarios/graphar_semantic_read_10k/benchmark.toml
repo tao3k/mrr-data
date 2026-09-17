@@ -3,7 +3,7 @@ test = "scenario_semantically_reads_ten_thousand_graphar_edges"
 snapshot = "graphar_semantic_read_10k"
 target_total = "300ms"
 max_total = "500ms"
-observed_total = "27392078ns"
+observed_total = "32224368ns"
 regression_budget = "100ms"
 memory_budget_bytes = 268435456
 observed_memory_bytes = 0
@@ -14,89 +14,103 @@ clock = "std::time::Instant"
 statistic = "p95"
 warmup_iterations = 2
 measure_iterations = 21
-total_p50 = "26592026ns"
-total_p95 = "27392078ns"
-total_p99 = "27780880ns"
-total_max = "27780880ns"
+total_p50 = "31613840ns"
+total_p95 = "32224368ns"
+total_p99 = "32273733ns"
+total_max = "32273733ns"
 
 [observed_timings]
-arrow_c_stream_import = "135818ns"
-edge_storage_read = "13633673ns"
-fact_admission = "196847ns"
-fact_identity_decode = "2983539ns"
-fact_materialization = "1226544ns"
-fact_ordering = "1581638ns"
-fact_preparation = "5756721ns"
-graph_info = "1002822ns"
-native_vertex_read = "2581498ns"
-semantic_read_admission = "26838004ns"
-vertex_admission = "3199109ns"
+arrow_c_stream_import = "190687ns"
+edge_storage_read = "16801356ns"
+fact_admission = "836779ns"
+fact_identity_access = "96405ns"
+fact_identity_decode = "1424443ns"
+fact_identity_parse = "1350212ns"
+fact_materialization = "2586501ns"
+fact_ordering = "1885186ns"
+fact_preparation = "5875570ns"
+graph_info = "1634078ns"
+native_vertex_read = "3223440ns"
+semantic_read_admission = "31097954ns"
+vertex_admission = "2047851ns"
 
 [phase_distributions.arrow_c_stream_import]
-p50 = "116935ns"
-p95 = "135818ns"
-p99 = "146729ns"
-max = "146729ns"
+p50 = "162575ns"
+p95 = "190687ns"
+p99 = "194373ns"
+max = "194373ns"
 
 [phase_distributions.edge_storage_read]
-p50 = "12962160ns"
-p95 = "13633673ns"
-p99 = "13646545ns"
-max = "13646545ns"
+p50 = "16383989ns"
+p95 = "16801356ns"
+p99 = "16832263ns"
+max = "16832263ns"
 
 [phase_distributions.fact_admission]
-p50 = "186412ns"
-p95 = "196847ns"
-p99 = "200728ns"
-max = "200728ns"
+p50 = "731080ns"
+p95 = "836779ns"
+p99 = "872182ns"
+max = "872182ns"
+
+[phase_distributions.fact_identity_access]
+p50 = "67431ns"
+p95 = "96405ns"
+p99 = "98538ns"
+max = "98538ns"
 
 [phase_distributions.fact_identity_decode]
-p50 = "2958759ns"
-p95 = "2983539ns"
-p99 = "2990250ns"
-max = "2990250ns"
+p50 = "1398564ns"
+p95 = "1424443ns"
+p99 = "1433447ns"
+max = "1433447ns"
+
+[phase_distributions.fact_identity_parse]
+p50 = "1326035ns"
+p95 = "1350212ns"
+p99 = "1359906ns"
+max = "1359906ns"
 
 [phase_distributions.fact_materialization]
-p50 = "1204549ns"
-p95 = "1226544ns"
-p99 = "1312480ns"
-max = "1312480ns"
+p50 = "2530387ns"
+p95 = "2586501ns"
+p99 = "2638640ns"
+max = "2638640ns"
 
 [phase_distributions.fact_ordering]
-p50 = "1551188ns"
-p95 = "1581638ns"
-p99 = "1584656ns"
-max = "1584656ns"
+p50 = "1872967ns"
+p95 = "1885186ns"
+p99 = "1905206ns"
+max = "1905206ns"
 
 [phase_distributions.fact_preparation]
-p50 = "5725901ns"
-p95 = "5756721ns"
-p99 = "5844429ns"
-max = "5844429ns"
+p50 = "5802970ns"
+p95 = "5875570ns"
+p99 = "5904834ns"
+max = "5904834ns"
 
 [phase_distributions.graph_info]
-p50 = "993730ns"
-p95 = "1002822ns"
-p99 = "1043074ns"
-max = "1043074ns"
+p50 = "1621570ns"
+p95 = "1634078ns"
+p99 = "1743983ns"
+max = "1743983ns"
 
 [phase_distributions.native_vertex_read]
-p50 = "2391872ns"
-p95 = "2581498ns"
-p99 = "2596807ns"
-max = "2596807ns"
+p50 = "3188376ns"
+p95 = "3223440ns"
+p99 = "3236429ns"
+max = "3236429ns"
 
 [phase_distributions.semantic_read_admission]
-p50 = "26042420ns"
-p95 = "26838004ns"
-p99 = "27238825ns"
-max = "27238825ns"
+p50 = "30498713ns"
+p95 = "31097954ns"
+p99 = "31123793ns"
+max = "31123793ns"
 
 [phase_distributions.vertex_admission]
-p50 = "3136009ns"
-p95 = "3199109ns"
-p99 = "3552804ns"
-max = "3552804ns"
+p50 = "2025938ns"
+p95 = "2047851ns"
+p99 = "2082593ns"
+max = "2082593ns"
 
 [metrics.vertex_count]
 unit = "count"
