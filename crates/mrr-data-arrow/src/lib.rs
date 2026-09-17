@@ -5,6 +5,7 @@ mod codec;
 mod error;
 mod ipc;
 mod schema;
+mod semantic;
 
 pub use codec::{
     facts_to_ipc, facts_to_record_batch, ipc_to_facts, project_fact_schema, record_batch_to_facts,

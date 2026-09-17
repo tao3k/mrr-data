@@ -96,6 +96,70 @@ fn values(entity: &str, count: i64) -> Vec<Value> {
     ]
 }
 
+fn nested_relation() -> RelationSchema {
+    let profile_schema = ValueSchema::Record {
+        fields: vec![
+            field("name", ValueSchema::String, false),
+            field(
+                "scores",
+                ValueSchema::List {
+                    element: Box::new(ValueSchema::Integer),
+                    element_nullable: true,
+                },
+                false,
+            ),
+            field(
+                "metadata",
+                ValueSchema::Record {
+                    fields: vec![
+                        field("active", ValueSchema::Boolean, false),
+                        field("note", ValueSchema::String, true),
+                    ],
+                },
+                false,
+            ),
+        ],
+    };
+    RelationSchema::new(
+        id("nested"),
+        "nested",
+        vec![field("profile", profile_schema, true)],
+        vec![],
+    )
+    .expect("valid nested relation")
+}
+
+fn nested_values(index: usize) -> Vec<Value> {
+    if index % 4 == 0 {
+        return vec![Value::Null];
+    }
+    vec![Value::Record(vec![
+        ("name".into(), Value::String(format!("profile-{index}"))),
+        (
+            "scores".into(),
+            Value::List(vec![
+                Value::Integer(i64::try_from(index).expect("index fits i64")),
+                Value::Null,
+                Value::Integer(i64::try_from(index + 1).expect("index fits i64")),
+            ]),
+        ),
+        (
+            "metadata".into(),
+            Value::Record(vec![
+                ("active".into(), Value::Boolean(index % 2 == 0)),
+                (
+                    "note".into(),
+                    if index % 3 == 0 {
+                        Value::Null
+                    } else {
+                        Value::String(format!("note-{index}"))
+                    },
+                ),
+            ]),
+        ),
+    ])]
+}
+
 #[test]
 fn complete_facts_round_trip_losslessly() {
     let relation = scalar_relation();
@@ -192,6 +256,7 @@ fn fact_matrix_round_trips_without_losing_identity_or_context() {
 #[test]
 fn scenario_native_arrow_round_trips_ten_thousand_complete_facts() {
     const FACT_COUNT: usize = 10_000;
+    const SAMPLE_COUNT: usize = 11;
 
     let relation = scalar_relation();
     let source = id::<EntityId>("native-scenario-source");
@@ -216,24 +281,45 @@ fn scenario_native_arrow_round_trips_ten_thousand_complete_facts() {
         })
         .collect::<Vec<_>>();
 
-    let encode_started = Instant::now();
-    let batch = facts_to_record_batch(&relation, &facts).expect("encode native Arrow batch");
-    let encode_elapsed = encode_started.elapsed();
-    let decode_started = Instant::now();
-    let decoded = record_batch_to_facts(&relation, &batch).expect("decode native Arrow batch");
-    let decode_elapsed = decode_started.elapsed();
+    let warm_batch = facts_to_record_batch(&relation, &facts).expect("warm native Arrow encoder");
+    assert_eq!(
+        record_batch_to_facts(&relation, &warm_batch).expect("warm native Arrow decoder"),
+        facts
+    );
 
-    assert_eq!(batch.num_rows(), FACT_COUNT);
-    assert_eq!(decoded, facts);
+    let mut encode_samples = Vec::with_capacity(SAMPLE_COUNT);
+    let mut decode_samples = Vec::with_capacity(SAMPLE_COUNT);
+    let mut total_samples = Vec::with_capacity(SAMPLE_COUNT);
+    for _ in 0..SAMPLE_COUNT {
+        let encode_started = Instant::now();
+        let batch = facts_to_record_batch(&relation, &facts).expect("encode native Arrow batch");
+        let encode_elapsed = encode_started.elapsed();
+        let decode_started = Instant::now();
+        let decoded = record_batch_to_facts(&relation, &batch).expect("decode native Arrow batch");
+        let decode_elapsed = decode_started.elapsed();
+
+        assert_eq!(batch.num_rows(), FACT_COUNT);
+        assert_eq!(decoded, facts);
+        encode_samples.push(encode_elapsed);
+        decode_samples.push(decode_elapsed);
+        total_samples.push(encode_elapsed + decode_elapsed);
+    }
+    encode_samples.sort_unstable();
+    decode_samples.sort_unstable();
+    total_samples.sort_unstable();
+    let encode_p50 = encode_samples[SAMPLE_COUNT / 2];
+    let decode_p50 = decode_samples[SAMPLE_COUNT / 2];
+    let total_p50 = total_samples[SAMPLE_COUNT / 2];
+
     assert!(
-        encode_elapsed + decode_elapsed < Duration::from_secs(2),
-        "10,000-row native Arrow round trip exceeded two seconds: encode={encode_elapsed:?}, decode={decode_elapsed:?}"
+        total_p50 < Duration::from_secs(2),
+        "10,000-row native Arrow round-trip P50 exceeded two seconds: encode={encode_p50:?}, decode={decode_p50:?}, total={total_p50:?}"
     );
     eprintln!(
-        "mrr-arrow-native-scenario rows={FACT_COUNT} encode_us={} decode_us={} total_us={}",
-        encode_elapsed.as_micros(),
-        decode_elapsed.as_micros(),
-        (encode_elapsed + decode_elapsed).as_micros()
+        "mrr-arrow-native-scenario rows={FACT_COUNT} samples={SAMPLE_COUNT} encode_p50_us={} decode_p50_us={} total_p50_us={}",
+        encode_p50.as_micros(),
+        decode_p50.as_micros(),
+        total_p50.as_micros()
     );
 }
 
@@ -525,36 +611,7 @@ fn invalid_facts_are_rejected_before_arrow_projection() {
 
 #[test]
 fn nested_list_and_record_shapes_round_trip_without_json() {
-    let profile_schema = ValueSchema::Record {
-        fields: vec![
-            field("name", ValueSchema::String, false),
-            field(
-                "scores",
-                ValueSchema::List {
-                    element: Box::new(ValueSchema::Integer),
-                    element_nullable: true,
-                },
-                false,
-            ),
-            field(
-                "metadata",
-                ValueSchema::Record {
-                    fields: vec![
-                        field("active", ValueSchema::Boolean, false),
-                        field("note", ValueSchema::String, true),
-                    ],
-                },
-                false,
-            ),
-        ],
-    };
-    let relation = RelationSchema::new(
-        id("nested"),
-        "nested",
-        vec![field("profile", profile_schema, true)],
-        vec![],
-    )
-    .unwrap();
+    let relation = nested_relation();
     let source = id::<EntityId>("nested-source");
     let context = RelationContext::new(
         id("nested-generation"),
@@ -565,29 +622,11 @@ fn nested_list_and_record_shapes_round_trip_without_json() {
     )
     .unwrap();
     let facts = vec![
-        Fact::new(
-            id("nested-fact"),
-            relation.id(),
-            vec![Value::Record(vec![
-                ("name".into(), Value::String("Ada".into())),
-                (
-                    "scores".into(),
-                    Value::List(vec![Value::Integer(7), Value::Null, Value::Integer(11)]),
-                ),
-                (
-                    "metadata".into(),
-                    Value::Record(vec![
-                        ("active".into(), Value::Boolean(true)),
-                        ("note".into(), Value::Null),
-                    ]),
-                ),
-            ])],
-            context,
-        ),
+        Fact::new(id("nested-fact"), relation.id(), nested_values(3), context),
         Fact::new(
             id("null-nested-fact"),
             relation.id(),
-            vec![Value::Null],
+            nested_values(0),
             context,
         ),
     ];
@@ -604,5 +643,52 @@ fn nested_list_and_record_shapes_round_trip_without_json() {
         )
         .unwrap(),
         facts
+    );
+}
+
+#[test]
+fn scenario_native_arrow_round_trips_ten_thousand_nested_null_heavy_facts() {
+    const FACT_COUNT: usize = 10_000;
+
+    let relation = nested_relation();
+    let source = id::<EntityId>("nested-scenario-source");
+    let context = RelationContext::new(
+        id("nested-scenario-generation"),
+        RelationAuthority::Entity(source),
+        FactProvenance::Source(source),
+        EvidenceCompleteness::Complete,
+        FactValidity::Valid,
+    )
+    .expect("valid repeated context");
+    let facts = (0..FACT_COUNT)
+        .map(|index| {
+            Fact::new(
+                id(&format!("nested-scenario-fact-{index}")),
+                relation.id(),
+                nested_values(index),
+                context,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let encode_started = Instant::now();
+    let batch = facts_to_record_batch(&relation, &facts).expect("encode nested Arrow batch");
+    let encode_elapsed = encode_started.elapsed();
+    let decode_started = Instant::now();
+    let decoded = record_batch_to_facts(&relation, &batch).expect("decode nested Arrow batch");
+    let decode_elapsed = decode_started.elapsed();
+
+    assert_eq!(batch.num_rows(), FACT_COUNT);
+    assert_eq!(decoded, facts);
+    assert!(
+        encode_elapsed + decode_elapsed < Duration::from_secs(3),
+        "10,000-row nested Arrow round trip exceeded three seconds: encode={encode_elapsed:?}, decode={decode_elapsed:?}"
+    );
+    eprintln!(
+        "mrr-arrow-nested-scenario rows={FACT_COUNT} null_rows={} encode_us={} decode_us={} total_us={}",
+        FACT_COUNT / 4,
+        encode_elapsed.as_micros(),
+        decode_elapsed.as_micros(),
+        (encode_elapsed + decode_elapsed).as_micros()
     );
 }

@@ -16,32 +16,16 @@ use arrow_array::{
 };
 use arrow_buffer::{NullBuffer, OffsetBuffer};
 use arrow_ipc::{reader::FileReaderBuilder, writer::FileWriter};
-use arrow_schema::{DataType, Field, Fields, Schema};
+use arrow_schema::{DataType, Fields, Schema};
 use meta_relational_reasoning::{
-    DerivationId, EntityId, EvidenceCompleteness, Fact, FactId, FactProvenance, FactValidity,
-    GenerationId, RelationAuthority, RelationContext, RelationField, RelationSchema, RuleId,
-    RulePackId, Value, ValueSchema,
+    EntityId, Fact, RelationField, RelationSchema, Value, ValueSchema,
 };
 use mrr_data_profile::{ARROW_FACT_SCHEMA_NAMESPACE, ARROW_FACT_SCHEMA_VERSION};
 
 use crate::error::ArrowRelationError;
 use crate::ipc::{IpcImportLimits, check_limit, preflight_ipc};
 use crate::schema::{project_schema_field, project_value_field};
-
-const FACT_ID_COLUMN: &str = "__mrr_fact_id";
-const GENERATION_ID_COLUMN: &str = "__mrr_generation_id";
-const AUTHORITY_COLUMN: &str = "__mrr_authority";
-const PROVENANCE_COLUMN: &str = "__mrr_provenance";
-const COMPLETENESS_COLUMN: &str = "__mrr_completeness";
-const INVALIDATED_BY_COLUMN: &str = "__mrr_invalidated_by";
-const SEMANTIC_COLUMN_COUNT: usize = 6;
-
-fn semantic_field(name: &'static str, semantic_type: &'static str, nullable: bool) -> Field {
-    Field::new(name, DataType::Utf8, nullable).with_metadata(HashMap::from([(
-        "mrr.semantic-column".to_owned(),
-        semantic_type.to_owned(),
-    )]))
-}
+use crate::semantic::{self, Decoder as SemanticDecoder};
 
 /// Projects one semantic relation into its complete fact-batch Arrow schema.
 ///
@@ -50,14 +34,7 @@ fn semantic_field(name: &'static str, semantic_type: &'static str, nullable: boo
 /// Returns [`ArrowRelationError::UnsupportedSchema`] when a field has no
 /// admitted lossless mapping in this profile.
 pub fn project_fact_schema(relation: &RelationSchema) -> Result<Schema, ArrowRelationError> {
-    let mut fields = vec![
-        semantic_field(FACT_ID_COLUMN, "fact-id", false),
-        semantic_field(GENERATION_ID_COLUMN, "generation-id", false),
-        semantic_field(AUTHORITY_COLUMN, "relation-authority", false),
-        semantic_field(PROVENANCE_COLUMN, "fact-provenance", false),
-        semantic_field(COMPLETENESS_COLUMN, "evidence-completeness", false),
-        semantic_field(INVALIDATED_BY_COLUMN, "invalidated-by-fact-id", true),
-    ];
+    let mut fields = semantic::fields();
     fields.extend(
         relation
             .fields()
@@ -92,73 +69,6 @@ fn validate_facts(relation: &RelationSchema, facts: &[Fact]) -> Result<(), Arrow
             })?;
     }
     Ok(())
-}
-
-fn write_authority(builder: &mut StringBuilder, authority: RelationAuthority) {
-    match authority {
-        RelationAuthority::Entity(identity) => write!(builder, "{identity}"),
-        RelationAuthority::Rule(identity) => write!(builder, "{identity}"),
-        RelationAuthority::RulePack(identity) => write!(builder, "{identity}"),
-    }
-    .expect("writing to an Arrow string builder is infallible");
-    builder.append_value("");
-}
-
-fn write_provenance(builder: &mut StringBuilder, provenance: FactProvenance) {
-    match provenance {
-        FactProvenance::Source(identity) => write!(builder, "{identity}"),
-        FactProvenance::Derivation(identity) => write!(builder, "{identity}"),
-    }
-    .expect("writing to an Arrow string builder is infallible");
-    builder.append_value("");
-}
-
-const fn completeness_name(completeness: EvidenceCompleteness) -> &'static str {
-    match completeness {
-        EvidenceCompleteness::Complete => "complete",
-        EvidenceCompleteness::Partial => "partial",
-        EvidenceCompleteness::Unknown => "unknown",
-    }
-}
-
-fn semantic_columns(facts: &[Fact]) -> Vec<ArrayRef> {
-    let rows = facts.len();
-    let identity_bytes = rows.saturating_mul(80);
-    let mut fact_ids = StringBuilder::with_capacity(rows, identity_bytes);
-    let mut generation_ids = StringBuilder::with_capacity(rows, identity_bytes);
-    let mut authorities = StringBuilder::with_capacity(rows, identity_bytes);
-    let mut provenances = StringBuilder::with_capacity(rows, identity_bytes);
-    let mut completeness = StringBuilder::with_capacity(rows, rows.saturating_mul(8));
-    let mut invalidated_by = StringBuilder::with_capacity(rows, identity_bytes);
-
-    for fact in facts {
-        write!(&mut fact_ids, "{}", fact.id())
-            .expect("writing to an Arrow string builder is infallible");
-        fact_ids.append_value("");
-        write!(&mut generation_ids, "{}", fact.context().generation())
-            .expect("writing to an Arrow string builder is infallible");
-        generation_ids.append_value("");
-        write_authority(&mut authorities, fact.context().authority());
-        write_provenance(&mut provenances, fact.context().provenance());
-        completeness.append_value(completeness_name(fact.context().completeness()));
-        match fact.context().validity() {
-            FactValidity::Valid => invalidated_by.append_null(),
-            FactValidity::InvalidatedBy(identity) => {
-                write!(&mut invalidated_by, "{identity}")
-                    .expect("writing to an Arrow string builder is infallible");
-                invalidated_by.append_value("");
-            }
-        }
-    }
-
-    vec![
-        Arc::new(fact_ids.finish()),
-        Arc::new(generation_ids.finish()),
-        Arc::new(authorities.finish()),
-        Arc::new(provenances.finish()),
-        Arc::new(completeness.finish()),
-        Arc::new(invalidated_by.finish()),
-    ]
 }
 
 #[derive(Clone, Copy)]
@@ -398,7 +308,7 @@ pub fn facts_to_record_batch(
 ) -> Result<RecordBatch, ArrowRelationError> {
     validate_facts(relation, facts)?;
     let schema = Arc::new(project_fact_schema(relation)?);
-    let mut columns = semantic_columns(facts);
+    let mut columns = semantic::encode_columns(facts);
     columns.extend(
         relation
             .fields()
@@ -431,143 +341,6 @@ pub fn facts_to_ipc(
     let mut writer = FileWriter::try_new(Vec::new(), batch.schema().as_ref())?;
     writer.write(&batch)?;
     writer.into_inner().map_err(Into::into)
-}
-
-fn required_string<'a>(
-    array: &'a StringArray,
-    row: usize,
-    name: &'static str,
-) -> Result<&'a str, ArrowRelationError> {
-    let array = (!array.is_null(row))
-        .then_some(array)
-        .ok_or(ArrowRelationError::InvalidSemanticValue { column: name, row })?;
-    Ok(array.value(row))
-}
-
-fn optional_string(array: &StringArray, row: usize) -> Option<&str> {
-    (!array.is_null(row)).then(|| array.value(row))
-}
-
-fn parse_identity<T: FromStr>(
-    value: &str,
-    column: &'static str,
-    row: usize,
-) -> Result<T, ArrowRelationError> {
-    value
-        .parse()
-        .map_err(|_| ArrowRelationError::InvalidSemanticValue { column, row })
-}
-
-fn decode_authority(value: &str, row: usize) -> Result<RelationAuthority, ArrowRelationError> {
-    if let Ok(identity) = value.parse::<EntityId>() {
-        return Ok(RelationAuthority::Entity(identity));
-    }
-    if let Ok(identity) = value.parse::<RuleId>() {
-        return Ok(RelationAuthority::Rule(identity));
-    }
-    value
-        .parse::<RulePackId>()
-        .map(RelationAuthority::RulePack)
-        .map_err(|_| ArrowRelationError::InvalidSemanticValue {
-            column: AUTHORITY_COLUMN,
-            row,
-        })
-}
-
-fn decode_provenance(value: &str, row: usize) -> Result<FactProvenance, ArrowRelationError> {
-    if let Ok(identity) = value.parse::<EntityId>() {
-        return Ok(FactProvenance::Source(identity));
-    }
-    value
-        .parse::<DerivationId>()
-        .map(FactProvenance::Derivation)
-        .map_err(|_| ArrowRelationError::InvalidSemanticValue {
-            column: PROVENANCE_COLUMN,
-            row,
-        })
-}
-
-fn decode_completeness(
-    value: &str,
-    row: usize,
-) -> Result<EvidenceCompleteness, ArrowRelationError> {
-    match value {
-        "complete" => Ok(EvidenceCompleteness::Complete),
-        "partial" => Ok(EvidenceCompleteness::Partial),
-        "unknown" => Ok(EvidenceCompleteness::Unknown),
-        _ => Err(ArrowRelationError::InvalidSemanticValue {
-            column: COMPLETENESS_COLUMN,
-            row,
-        }),
-    }
-}
-
-struct SemanticColumns<'a> {
-    fact_ids: &'a StringArray,
-    generation_ids: &'a StringArray,
-    authorities: &'a StringArray,
-    provenances: &'a StringArray,
-    completeness: &'a StringArray,
-    invalidated_by: &'a StringArray,
-}
-
-impl<'a> SemanticColumns<'a> {
-    fn try_new(batch: &'a RecordBatch) -> Result<Self, ArrowRelationError> {
-        let column = |index: usize, name: &'static str| {
-            batch
-                .column(index)
-                .as_any()
-                .downcast_ref::<StringArray>()
-                .ok_or(ArrowRelationError::InvalidSemanticValue {
-                    column: name,
-                    row: 0,
-                })
-        };
-        Ok(Self {
-            fact_ids: column(0, FACT_ID_COLUMN)?,
-            generation_ids: column(1, GENERATION_ID_COLUMN)?,
-            authorities: column(2, AUTHORITY_COLUMN)?,
-            provenances: column(3, PROVENANCE_COLUMN)?,
-            completeness: column(4, COMPLETENESS_COLUMN)?,
-            invalidated_by: column(5, INVALIDATED_BY_COLUMN)?,
-        })
-    }
-}
-
-fn decode_context(
-    columns: &SemanticColumns<'_>,
-    row: usize,
-) -> Result<RelationContext, ArrowRelationError> {
-    let generation = parse_identity::<GenerationId>(
-        required_string(columns.generation_ids, row, GENERATION_ID_COLUMN)?,
-        GENERATION_ID_COLUMN,
-        row,
-    )?;
-    let authority = decode_authority(
-        required_string(columns.authorities, row, AUTHORITY_COLUMN)?,
-        row,
-    )?;
-    let provenance = decode_provenance(
-        required_string(columns.provenances, row, PROVENANCE_COLUMN)?,
-        row,
-    )?;
-    let completeness = decode_completeness(
-        required_string(columns.completeness, row, COMPLETENESS_COLUMN)?,
-        row,
-    )?;
-    let validity = optional_string(columns.invalidated_by, row)
-        .map(|value| {
-            parse_identity::<FactId>(value, INVALIDATED_BY_COLUMN, row)
-                .map(FactValidity::InvalidatedBy)
-        })
-        .transpose()?
-        .unwrap_or(FactValidity::Valid);
-    RelationContext::new(generation, authority, provenance, completeness, validity).map_err(|_| {
-        ArrowRelationError::InvalidSemanticValue {
-            column: AUTHORITY_COLUMN,
-            row,
-        }
-    })
 }
 
 fn decode_string(
@@ -772,11 +545,11 @@ pub fn record_batch_to_facts(
             "Arrow schema does not match relation",
         ));
     }
-    let semantic = SemanticColumns::try_new(batch)?;
+    let mut semantic = SemanticDecoder::try_new(batch)?;
     let value_decoders = relation
         .fields()
         .iter()
-        .zip(&batch.columns()[SEMANTIC_COLUMN_COUNT..])
+        .zip(&batch.columns()[semantic::COLUMN_COUNT..])
         .map(|(field, column)| {
             ColumnDecoder::try_new(field.name(), field.schema(), column.as_ref())
                 .map(|decoder| (field, decoder))
@@ -784,12 +557,8 @@ pub fn record_batch_to_facts(
         .collect::<Result<Vec<_>, _>>()?;
     let mut facts = Vec::with_capacity(batch.num_rows());
     for row in 0..batch.num_rows() {
-        let fact_id = parse_identity::<FactId>(
-            required_string(semantic.fact_ids, row, FACT_ID_COLUMN)?,
-            FACT_ID_COLUMN,
-            row,
-        )?;
-        let context = decode_context(&semantic, row)?;
+        let fact_id = semantic.fact_id(row)?;
+        let context = semantic.context(row)?;
         let values = value_decoders
             .iter()
             .map(|(field, decoder)| decode_column(field, decoder, row))
