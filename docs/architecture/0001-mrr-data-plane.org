@@ -523,24 +523,23 @@ upstream-backed adapter and differential scenario after the official binding
 can write and read edge data.  Absence of that upstream capability must not be
 filled by a second private GraphAr wire implementation.
 
-The missing official edge-writer binding is tracked upstream by
+The Apache proposal for the edge-writer binding is recorded by
 [[https://github.com/apache/incubator-graphar/issues/976][GraphAr issue #976]]
-and [[https://github.com/apache/incubator-graphar/pull/977][PR #977]].  As of
-2026-09-17 the issue remains open and the PR is closed without merge.  MRR Data
-must not claim that interface as upstream-admitted until a replacement or
-reopened contribution is reviewed, merged, and available from a published or
-otherwise explicitly admitted revision.  The reader half remains a separate
-upstream capability gate.
+and [[https://github.com/apache/incubator-graphar/pull/977][PR #977]].  The PR
+was closed intentionally: =GTrunSec/incubator-graphar= is the maintained source
+for this extension, and an Apache merge is not a current release gate.  Apache
+=main= remains a compatibility and synchronization baseline.  The reader half
+must be implemented and admitted in the same maintained fork rather than by
+adding a private reader to MRR Data.
 
-For development only, the =upstream-graphar= Cargo feature pins the immutable
-fork commit =1a3706283ed2225350ec5016e81fc33d3b0b14ef= formerly proposed by
-PR #977 and exercises the official Rust/C++ builders.  The adapter writes
-semantic =EntityId= vertex
+The =upstream-graphar= Cargo feature currently pins the immutable maintained
+fork commit =1a3706283ed2225350ec5016e81fc33d3b0b14ef= and exercises the native
+Rust/C++ builders.  The adapter writes semantic =EntityId= vertex
 properties plus relation identity and full MRR context on every edge, stages a
-complete dataset, then renames it into place.  This pin is an explicit temporary
-admission, not a released dependency or evidence that upstream review is done.
-Linux and macOS native CI exercise it separately so ordinary Rust feedback does
-not inherit the C++ build latency.
+complete dataset, then renames it into place.  Admission requires an immutable
+fork revision, owner-maintained tests, and Linux/macOS native CI; it does not
+depend on Apache review.  Native CI remains separate so ordinary Rust feedback
+does not inherit the C++ build latency.
 
 - implement only the declared binary-Entity projection first;
 - preserve canonical IDs through repartition and compaction;
