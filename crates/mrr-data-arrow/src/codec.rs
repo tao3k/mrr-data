@@ -20,7 +20,7 @@ use meta_relational_reasoning::{
     GenerationId, RelationAuthority, RelationContext, RelationField, RelationSchema, RuleId,
     RulePackId, Value, ValueSchema,
 };
-use mrr_data_core::{ARROW_FACT_SCHEMA_NAMESPACE, ARROW_FACT_SCHEMA_VERSION};
+use mrr_data_profile::{ARROW_FACT_SCHEMA_NAMESPACE, ARROW_FACT_SCHEMA_VERSION};
 
 use crate::error::ArrowRelationError;
 use crate::ipc::{IpcImportLimits, check_limit, preflight_ipc};

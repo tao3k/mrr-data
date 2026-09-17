@@ -1,0 +1,31 @@
+[package]
+name = "mrr-data"
+description = "Arrow-first physical data plane for Meta-Relational Reasoning"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = ["arrow"]
+arrow = ["dep:mrr-data-arrow"]
+content = ["dep:mrr-data-content", "dep:mrr-data-core"]
+graphar = ["dep:mrr-data-graphar"]
+graphar-native = ["graphar", "mrr-data-graphar/upstream-graphar"]
+
+[dependencies]
+mrr-data-arrow = { workspace = true, optional = true }
+mrr-data-content = { workspace = true, optional = true }
+mrr-data-core = { workspace = true, optional = true }
+mrr-data-graphar = { workspace = true, optional = true }
+mrr-data-profile.workspace = true
+
+[dev-dependencies]
+asp-rust = { git = "https://github.com/tao3k/asp-rust", rev = "f88445d971d6b7dfd6336d73e52dc0411921f5bf", default-features = false }
+
+[build-dependencies]
+mrr-data-asp-rust-project-policy.workspace = true
+
+[lints]
+workspace = true

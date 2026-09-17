@@ -24,9 +24,9 @@ flowchart LR
   S[Source systems]
   M[MRR semantic contracts]
   D[mrr-data physical data plane]
-  A[Arrow batches and IPC]
-  G[GraphAr projection]
-  C[CID blocks and CAR]
+  A[Arrow batches and IPC - default]
+  G[GraphAr projection - opt-in]
+  C[CID blocks and CAR - opt-in]
   O[filesystem or object store]
 
   S -->|RevisionBinding + admitted facts| M
@@ -439,11 +439,12 @@ workspace should begin with:
 #+begin_example
 mrr-data/
   crates/
-    mrr-data-core/       # manifest, errors, traits, snapshot descriptors
+    mrr-data/            # public facade; Arrow enabled by default
+    mrr-data-profile/    # dependency-light namespaces and numeric versions
     mrr-data-arrow/      # lossless MRR relation <-> Arrow mapping
+    mrr-data-core/       # optional manifest admission and snapshot descriptors
     mrr-data-content/    # CID, CAR, memory and filesystem providers
     mrr-data-graphar/    # gated Property Graph projection
-    mrr-data/            # facade
 #+end_example
 
 Object-store, IPLD-model, or provider crates are split only when their API and
@@ -452,12 +453,25 @@ crate in V1.
 
 * Delivery milestones and proof obligations
 
+Milestone numbers record implementation and proof dependencies; they are not a
+product-priority ranking.  The active priority is Arrow-first:
+
+1. keep the public facade's default dependency graph limited to Arrow and the
+   dependency-light profile crate;
+2. close trusted in-process Arrow interchange and its performance evidence;
+3. close upstream GraphAr writer/read-back evidence for graph-shaped data;
+4. maintain manifest and local CID/CAR packaging as an explicit opt-in;
+5. defer remote distribution, including IPFS, until a concrete requirement and
+   scenario justify it.
+
 ** M0: lossless Arrow interchange
 
 Implementation status: the recursive V1 mapping, complete-Fact round trips,
 bounded IPC import, property contracts, and fuzz target are implemented.  M0
-is accepted only after the current-head CI and review receipts are green; this
-status does not advance the later data-plane milestones.
+also provides the public facade's default feature.  Its normal dependency graph
+does not import CID, DAG-CBOR, CAR, or GraphAr.  M0 is accepted only after the
+current-head CI and review receipts are green; this status does not advance the
+later data-plane milestones.
 
 - define every supported MRR value mapping;
 - property-test =Fact -> RecordBatch -> Fact=;
@@ -470,8 +484,10 @@ status does not advance the later data-plane milestones.
 
 Implementation status: canonical manifest admission, MRR catalog/source
 binding, deterministic DAG-CBOR, frozen CID profiles, typed negative contracts,
-and a golden root vector are implemented.  M1 is accepted only after the
-current-head CI and review receipts are green.
+and a golden root vector are implemented.  This capability is retained behind
+the facade's explicit =content= feature; it is not part of the default Arrow
+dependency graph.  M1 is accepted only after the current-head CI and review
+receipts are green.
 
 - freeze namespace =mrr.data.snapshot= at schema version =1= only after the
   Arrow descriptors have executable round-trip evidence;
@@ -485,8 +501,10 @@ Implementation status: memory and filesystem stores, upstream CARv1
 read/write, full CID/root/referenced-child verification, exact catalog checks,
 pre-allocation frame-budget admission, typed import failures,
 validation-before-commit, repacking invariance, and the 512-extra-block
-performance scenario are implemented.  M2 is accepted only after current-head
-CI and review receipts are green.
+performance scenario are implemented.  This local packaging capability is
+retained behind the facade's explicit =content= feature; its implementation
+status does not make content addressing a current product priority.  M2 is
+accepted only after current-head CI and review receipts are green.
 
 - implement memory and filesystem =ContentStore=;
 - write/read CAR with full root and child verification;

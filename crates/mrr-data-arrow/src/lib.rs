@@ -11,7 +11,7 @@ pub use codec::{
 };
 pub use error::ArrowRelationError;
 pub use ipc::IpcImportLimits;
-pub use mrr_data_core::{ARROW_FACT_SCHEMA_NAMESPACE, ARROW_FACT_SCHEMA_VERSION};
+pub use mrr_data_profile::{ARROW_FACT_SCHEMA_NAMESPACE, ARROW_FACT_SCHEMA_VERSION};
 
 #[cfg(test)]
 #[path = "../tests/unit/mod.rs"]

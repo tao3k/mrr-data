@@ -1,10 +1,12 @@
 [workspace]
 members = [
   "build-support/mrr-data-asp-rust-project-policy",
+  "crates/mrr-data",
   "crates/mrr-data-arrow",
   "crates/mrr-data-content",
   "crates/mrr-data-core",
   "crates/mrr-data-graphar",
+  "crates/mrr-data-profile",
 ]
 resolver = "2"
 
@@ -23,7 +25,11 @@ arrow-schema = "58.4.0"
 flatbuffers = "25.2.10"
 meta-relational-reasoning = { git = "https://github.com/tao3k/meta-relational-reasoning.git", rev = "4bb063f8297238c24c15b890558782e35fbd9ca7" }
 mrr-data-asp-rust-project-policy = { path = "build-support/mrr-data-asp-rust-project-policy", version = "0.1.0" }
+mrr-data-arrow = { path = "crates/mrr-data-arrow", version = "0.1.0" }
+mrr-data-content = { path = "crates/mrr-data-content", version = "0.1.0" }
 mrr-data-core = { path = "crates/mrr-data-core", version = "0.1.0" }
+mrr-data-graphar = { path = "crates/mrr-data-graphar", version = "0.1.0" }
+mrr-data-profile = { path = "crates/mrr-data-profile", version = "0.1.0" }
 cid = { version = "=0.11.3", features = ["serde"] }
 fvm_ipld_car = "=0.9.1"
 multihash-codetable = { version = "=0.2.2", default-features = false, features = ["sha2", "std"] }

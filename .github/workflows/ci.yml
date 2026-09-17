@@ -33,6 +33,13 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Test workspace
         run: cargo test --workspace --locked
+      - name: Check facade feature contract
+        run: |
+          cargo check -p mrr-data --locked
+          cargo check -p mrr-data --no-default-features --locked
+          cargo check -p mrr-data --no-default-features --features content,graphar --locked
+          cargo test -p mrr-data --no-default-features --locked
+          cargo test -p mrr-data --no-default-features --features content,graphar --locked
       - name: Check fuzz formatting
         run: cargo fmt --manifest-path fuzz/Cargo.toml --all -- --check
       - name: Compile IPC fuzz target
@@ -87,5 +94,7 @@ jobs:
           fi
       - name: Test upstream GraphAr writer adapter
         run: cargo test -p mrr-data-graphar --features upstream-graphar --locked
+      - name: Check facade GraphAr native feature
+        run: cargo check -p mrr-data --no-default-features --features graphar-native --locked
       - name: Lint upstream GraphAr writer adapter
         run: cargo clippy -p mrr-data-graphar --all-targets --features upstream-graphar --locked -- -D warnings

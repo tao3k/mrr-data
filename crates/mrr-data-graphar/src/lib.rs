@@ -8,7 +8,7 @@ mod projection;
 #[cfg(feature = "upstream-graphar")]
 mod writer;
 
-pub use mrr_data_core::{GRAPHAR_BINARY_ENTITY_NAMESPACE, GRAPHAR_BINARY_ENTITY_VERSION};
+pub use mrr_data_profile::{GRAPHAR_BINARY_ENTITY_NAMESPACE, GRAPHAR_BINARY_ENTITY_VERSION};
 pub use projection::{
     BinaryEntityProjection, GraphEdgeRecord, GraphProjectionError, IndexedGraphEdge,
     PhysicalVertexIndex,

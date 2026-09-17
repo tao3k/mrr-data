@@ -14,7 +14,7 @@ arrow-ipc.workspace = true
 arrow-schema.workspace = true
 flatbuffers.workspace = true
 meta-relational-reasoning.workspace = true
-mrr-data-core.workspace = true
+mrr-data-profile.workspace = true
 
 [dev-dependencies]
 asp-rust = { git = "https://github.com/tao3k/asp-rust", rev = "f88445d971d6b7dfd6336d73e52dc0411921f5bf", default-features = false }

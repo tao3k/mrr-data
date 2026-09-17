@@ -1315,6 +1315,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "mrr-data"
+version = "0.1.0"
+dependencies = [
+ "asp-rust",
+ "mrr-data-arrow",
+ "mrr-data-asp-rust-project-policy",
+ "mrr-data-content",
+ "mrr-data-core",
+ "mrr-data-graphar",
+ "mrr-data-profile",
+]
+
+[[package]]
 name = "mrr-data-arrow"
 version = "0.1.0"
 dependencies = [
@@ -1326,7 +1339,7 @@ dependencies = [
  "flatbuffers",
  "meta-relational-reasoning",
  "mrr-data-asp-rust-project-policy",
- "mrr-data-core",
+ "mrr-data-profile",
  "proptest",
 ]
 
@@ -1361,6 +1374,7 @@ dependencies = [
  "ipld-core",
  "meta-relational-reasoning",
  "mrr-data-asp-rust-project-policy",
+ "mrr-data-profile",
  "multihash-codetable",
  "serde",
  "serde_bytes",
@@ -1375,8 +1389,16 @@ dependencies = [
  "graphar-rs",
  "meta-relational-reasoning",
  "mrr-data-asp-rust-project-policy",
- "mrr-data-core",
+ "mrr-data-profile",
  "tempfile",
+]
+
+[[package]]
+name = "mrr-data-profile"
+version = "0.1.0"
+dependencies = [
+ "asp-rust",
+ "mrr-data-asp-rust-project-policy",
 ]
 
 [[package]]

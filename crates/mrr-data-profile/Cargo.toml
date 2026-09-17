@@ -1,24 +1,14 @@
 [package]
-name = "mrr-data-core"
-description = "Canonical content identity and snapshot manifests for MRR Data"
+name = "mrr-data-profile"
+description = "Dependency-light schema and physical profile identifiers for MRR Data"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
-[dependencies]
-cid.workspace = true
-meta-relational-reasoning.workspace = true
-multihash-codetable.workspace = true
-mrr-data-profile.workspace = true
-serde.workspace = true
-serde_bytes.workspace = true
-serde_ipld_dagcbor.workspace = true
-
 [dev-dependencies]
 asp-rust = { git = "https://github.com/tao3k/asp-rust", rev = "f88445d971d6b7dfd6336d73e52dc0411921f5bf", default-features = false }
-ipld-core.workspace = true
 
 [build-dependencies]
 mrr-data-asp-rust-project-policy.workspace = true
