@@ -63,6 +63,32 @@ pub struct GraphArDataset {
     facts: Vec<Fact>,
 }
 
+/// Native `GraphAr` storage decoded into reusable Arrow batches.
+///
+/// Preparing a source performs all metadata, Parquet, and Arrow C Stream work
+/// once. Calling [`Self::admit`] never re-enters the native import closure; it
+/// only validates the retained immutable batches against the supplied MRR
+/// projection.
+#[derive(Clone, Debug)]
+pub struct PreparedGraphArSource {
+    root: PathBuf,
+    physical_entities: Vec<EntityId>,
+    vertex_count: usize,
+    edge_count: usize,
+    edge_batches: Vec<RecordBatch>,
+    timings: GraphArPrepareTimings,
+}
+
+/// Measured phases of preparing native `GraphAr` storage for reuse.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct GraphArPrepareTimings {
+    graph_info: Duration,
+    native_vertex_read: Duration,
+    vertex_admission: Duration,
+    edge_storage_read: Duration,
+    arrow_c_stream_import: Duration,
+}
+
 /// Measured phases of one native `GraphAr` semantic read.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct GraphArReadTimings {
@@ -111,6 +137,99 @@ impl GraphArReadTimings {
     #[must_use]
     pub const fn fact_admission(self) -> Duration {
         self.fact_admission
+    }
+}
+
+impl GraphArPrepareTimings {
+    /// Time spent loading the `GraphAr` metadata graph.
+    #[must_use]
+    pub const fn graph_info(self) -> Duration {
+        self.graph_info
+    }
+
+    /// Time spent reading vertex Arrow chunks through the native reader.
+    #[must_use]
+    pub const fn native_vertex_read(self) -> Duration {
+        self.native_vertex_read
+    }
+
+    /// Time spent parsing and admitting semantic vertex identities.
+    #[must_use]
+    pub const fn vertex_admission(self) -> Duration {
+        self.vertex_admission
+    }
+
+    /// Time spent reading `GraphAr` adjacency/property storage and exporting a C stream.
+    #[must_use]
+    pub const fn edge_storage_read(self) -> Duration {
+        self.edge_storage_read
+    }
+
+    /// Time spent importing exported C Stream batches into Rust Arrow arrays.
+    #[must_use]
+    pub const fn arrow_c_stream_import(self) -> Duration {
+        self.arrow_c_stream_import
+    }
+}
+
+impl PreparedGraphArSource {
+    #[must_use]
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
+    #[must_use]
+    pub const fn vertex_count(&self) -> usize {
+        self.vertex_count
+    }
+
+    #[must_use]
+    pub const fn edge_count(&self) -> usize {
+        self.edge_count
+    }
+
+    #[must_use]
+    pub const fn timings(&self) -> GraphArPrepareTimings {
+        self.timings
+    }
+
+    /// Reconstructs and admits MRR facts exclusively from prepared Arrow batches.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error for malformed fields, duplicate identities, invalid
+    /// contexts, or facts rejected by `projection`.
+    pub fn admit(
+        &self,
+        projection: &BinaryEntityProjection,
+    ) -> Result<GraphArDataset, GraphArReadError> {
+        self.admit_observed(projection)
+            .map(|(dataset, _fact_admission)| dataset)
+    }
+
+    /// Admits prepared Arrow batches and reports only MRR fact-admission time.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same fail-closed errors as [`Self::admit`].
+    pub fn admit_observed(
+        &self,
+        projection: &BinaryEntityProjection,
+    ) -> Result<(GraphArDataset, Duration), GraphArReadError> {
+        let facts = admit_facts(
+            &self.edge_batches,
+            self.edge_count,
+            &self.physical_entities,
+            projection,
+        )?;
+        Ok((
+            GraphArDataset {
+                root: self.root.clone(),
+                vertex_count: self.vertex_count,
+                facts: facts.values,
+            },
+            facts.semantic_admission,
+        ))
     }
 }
 
@@ -234,33 +353,59 @@ pub fn read_graphar_dataset_observed(
     projection: &BinaryEntityProjection,
     limits: GraphArReadLimits,
 ) -> Result<(GraphArDataset, GraphArReadTimings), GraphArReadError> {
+    let prepared = prepare_graphar_source(root, limits)?;
+    let prepare_timings = prepared.timings();
+    let (dataset, fact_admission) = prepared.admit_observed(projection)?;
+
+    Ok((
+        dataset,
+        GraphArReadTimings {
+            graph_info: prepare_timings.graph_info(),
+            native_vertex_read: prepare_timings.native_vertex_read(),
+            vertex_admission: prepare_timings.vertex_admission(),
+            edge_storage_read: prepare_timings.edge_storage_read(),
+            arrow_c_stream_import: prepare_timings.arrow_c_stream_import(),
+            fact_admission,
+        },
+    ))
+}
+
+/// Decodes bounded native `GraphAr` storage into reusable immutable Arrow batches.
+///
+/// This is the only public operation that enters the native storage reader.
+/// Repeated semantic consumption should call [`PreparedGraphArSource::admit`]
+/// instead of preparing the same source again.
+///
+/// # Errors
+///
+/// Returns a typed error for resource-budget rejection, malformed vertex
+/// identities, physical/semantic identity ambiguity, Arrow stream failures, or
+/// native `GraphAr` errors.
+pub fn prepare_graphar_source(
+    root: impl AsRef<Path>,
+    limits: GraphArReadLimits,
+) -> Result<PreparedGraphArSource, GraphArReadError> {
     let root = root.as_ref();
     let graph_info_started = Instant::now();
     let graph_info = GraphInfo::load(root.join(GRAPH_INFO_FILE))?;
     let graph_info_elapsed = graph_info_started.elapsed();
     let vertices = read_and_admit_vertices(&graph_info, limits.max_vertices)?;
-    let facts = read_and_admit_facts(
-        &graph_info,
-        &vertices.physical_entities,
-        projection,
-        limits.max_edges,
-    )?;
+    let edges = read_edge_batches(&graph_info, limits.max_edges)?;
 
-    Ok((
-        GraphArDataset {
-            root: root.to_path_buf(),
-            vertex_count: vertices.count,
-            facts: facts.values,
-        },
-        GraphArReadTimings {
+    Ok(PreparedGraphArSource {
+        root: root.to_path_buf(),
+        physical_entities: vertices.physical_entities,
+        vertex_count: vertices.count,
+        edge_count: edges.count,
+        edge_batches: edges.values,
+        timings: GraphArPrepareTimings {
             graph_info: graph_info_elapsed,
             native_vertex_read: vertices.native_read,
             vertex_admission: vertices.semantic_admission,
-            edge_storage_read: facts.storage_read,
-            arrow_c_stream_import: facts.c_stream_import,
-            fact_admission: facts.semantic_admission,
+            edge_storage_read: edges.storage_read,
+            arrow_c_stream_import: edges.c_stream_import,
         },
-    ))
+    })
 }
 
 struct AdmittedVertices {
@@ -314,17 +459,20 @@ fn read_and_admit_vertices(
 
 struct AdmittedFacts {
     values: Vec<Fact>,
-    storage_read: Duration,
-    c_stream_import: Duration,
     semantic_admission: Duration,
 }
 
-fn read_and_admit_facts(
+struct PreparedEdges {
+    values: Vec<RecordBatch>,
+    count: usize,
+    storage_read: Duration,
+    c_stream_import: Duration,
+}
+
+fn read_edge_batches(
     graph_info: &GraphInfo,
-    physical_entities: &[EntityId],
-    projection: &BinaryEntityProjection,
     max_edges: usize,
-) -> Result<AdmittedFacts, GraphArReadError> {
+) -> Result<PreparedEdges, GraphArReadError> {
     let edge_properties = property_names(&EDGE_PROPERTIES);
     let edge_storage_started = Instant::now();
     let edge_stream = read_edge_arrow_batches(
@@ -342,13 +490,27 @@ fn read_and_admit_facts(
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| GraphArReadError::ArrowStream(error.to_string()))?;
     let c_stream_import_elapsed = c_stream_import_started.elapsed();
-    let fact_admission_started = Instant::now();
     let edge_count = edge_batches.iter().map(RecordBatch::num_rows).sum();
+    Ok(PreparedEdges {
+        values: edge_batches,
+        count: edge_count,
+        storage_read: edge_storage_elapsed,
+        c_stream_import: c_stream_import_elapsed,
+    })
+}
+
+fn admit_facts(
+    edge_batches: &[RecordBatch],
+    edge_count: usize,
+    physical_entities: &[EntityId],
+    projection: &BinaryEntityProjection,
+) -> Result<AdmittedFacts, GraphArReadError> {
+    let fact_admission_started = Instant::now();
     let mut fact_ids = HashSet::with_capacity(edge_count);
     let mut facts = Vec::with_capacity(edge_count);
     let mut relation_ids = HashMap::<&str, RelationId>::new();
     let mut contexts = HashMap::new();
-    for batch in &edge_batches {
+    for batch in edge_batches {
         let columns = EdgeArrowColumns::try_new(batch)?;
         for row in 0..batch.num_rows() {
             let source = endpoint(physical_entities, "source", columns.source(row)?)?;
@@ -406,8 +568,6 @@ fn read_and_admit_facts(
     facts.sort_unstable_by_key(Fact::id);
     Ok(AdmittedFacts {
         values: facts,
-        storage_read: edge_storage_elapsed,
-        c_stream_import: c_stream_import_elapsed,
         semantic_admission: fact_admission_started.elapsed(),
     })
 }
