@@ -9,7 +9,7 @@ repository.workspace = true
 
 [features]
 default = []
-upstream-graphar = ["dep:graphar-rs", "dep:tempfile"]
+native-graphar = ["dep:graphar-rs", "dep:tempfile"]
 
 [dependencies]
 graphar-rs = { git = "https://github.com/GTrunSec/incubator-graphar", rev = "5d15afa76aafce27af3643f6f7ca59473a52d07c", optional = true }

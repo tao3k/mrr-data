@@ -1,3 +1,3 @@
 mod projection;
-#[cfg(feature = "upstream-graphar")]
+#[cfg(feature = "native-graphar")]
 mod writer;

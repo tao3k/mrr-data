@@ -72,7 +72,7 @@ jobs:
         run: cargo fuzz run ipc_import fuzz/corpus/ipc_import -- -runs=10000 -max_len=65536
 
   graphar:
-    name: Upstream GraphAr (${{ matrix.os }})
+    name: Maintained GraphAr (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -102,9 +102,9 @@ jobs:
             echo "DYLD_FALLBACK_LIBRARY_PATH=$arrow_prefix/lib" >> "$GITHUB_ENV"
             echo "CXXFLAGS=-I$arrow_prefix/include -Wno-error=deprecated-declarations -Wno-error=macro-redefined" >> "$GITHUB_ENV"
           fi
-      - name: Test upstream GraphAr writer adapter
-        run: cargo test -p mrr-data-graphar --features upstream-graphar --locked
+      - name: Test maintained GraphAr round-trip
+        run: cargo test -p mrr-data-graphar --features native-graphar --locked
       - name: Check facade GraphAr native feature
         run: cargo check -p mrr-data --no-default-features --features graphar-native --locked
-      - name: Lint upstream GraphAr writer adapter
-        run: cargo clippy -p mrr-data-graphar --all-targets --features upstream-graphar --locked -- -D warnings
+      - name: Lint maintained GraphAr adapter
+        run: cargo clippy -p mrr-data-graphar --all-targets --features native-graphar --locked -- -D warnings

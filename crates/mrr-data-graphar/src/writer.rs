@@ -71,7 +71,7 @@ pub enum GraphArWriteError {
         kind: io::ErrorKind,
     },
     Projection(GraphProjectionError),
-    Upstream(graphar_rs::Error),
+    Native(graphar_rs::Error),
 }
 
 impl GraphArWriteError {
@@ -86,7 +86,7 @@ impl GraphArWriteError {
 impl fmt::Display for GraphArWriteError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Upstream(error) => write!(formatter, "upstream GraphAr: {error}"),
+            Self::Native(error) => write!(formatter, "native GraphAr: {error}"),
             other => write!(formatter, "{other:?}"),
         }
     }
@@ -96,7 +96,7 @@ impl Error for GraphArWriteError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Projection(error) => Some(error),
-            Self::Upstream(error) => Some(error),
+            Self::Native(error) => Some(error),
             _ => None,
         }
     }
@@ -353,5 +353,5 @@ fn add_edge_properties(
 }
 
 fn upstream(error: graphar_rs::Error) -> GraphArWriteError {
-    GraphArWriteError::Upstream(error)
+    GraphArWriteError::Native(error)
 }

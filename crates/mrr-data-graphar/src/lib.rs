@@ -5,7 +5,7 @@
 #![forbid(unsafe_code)]
 
 mod projection;
-#[cfg(feature = "upstream-graphar")]
+#[cfg(feature = "native-graphar")]
 mod writer;
 
 pub use mrr_data_profile::{GRAPHAR_BINARY_ENTITY_NAMESPACE, GRAPHAR_BINARY_ENTITY_VERSION};
@@ -13,7 +13,7 @@ pub use projection::{
     BinaryEntityProjection, GraphEdgeRecord, GraphProjectionError, IndexedGraphEdge,
     PhysicalVertexIndex,
 };
-#[cfg(feature = "upstream-graphar")]
+#[cfg(feature = "native-graphar")]
 pub use writer::{GraphArDatasetReceipt, GraphArWriteError, write_graphar_dataset};
 
 #[cfg(test)]

@@ -16,7 +16,7 @@ forms are explicitly selected:
 
 - default `arrow`: typed in-memory and IPC interchange;
 - optional `graphar`: persistent Property Graph projection contracts;
-- optional `graphar-native`: the admitted upstream GraphAr C++ writer;
+- optional `graphar-native`: the admitted maintained GraphAr C++ data path;
 - optional `content`: CID/DAG-CBOR manifests, CAR, and local content stores.
 
 The dependency direction is one way:
@@ -81,9 +81,9 @@ records because GraphAr row IDs, chunks, and adjacency offsets never enter the
 contract. A deterministic physical vertex index then sorts and deduplicates the
 semantic endpoint set, assigns dense GraphAr-local `i64` IDs, and retains the
 bidirectional mapping. The physical ID is never treated as an `EntityId`;
-upstream writers must persist the semantic identity as a property.
+native writers must persist the semantic identity as a property.
 
-The opt-in `upstream-graphar` feature pins an immutable revision of the
+The opt-in `native-graphar` feature pins an immutable revision of the
 `GTrunSec/incubator-graphar` fork maintained by this project. Apache GraphAr
 PR #977 was closed intentionally; Apache merge is not a gate for using our
 maintained extension. It writes vertex identity properties, relation/context
@@ -95,7 +95,7 @@ fork revision, cross-platform CI, and executable writer/readback Scenarios.
 
 The repository does not yet claim:
 
-- GraphAr import or writer-to-reader round trips through the upstream runtime;
+- general GraphAr import beyond the admitted binary-Entity profile;
 - an IPFS network integration;
 - schema-bound query execution.
 
@@ -145,7 +145,7 @@ Facade features:
 |---|---:|---|
 | `arrow` | yes | RecordBatch and bounded Arrow IPC |
 | `graphar` | no | semantic Property Graph projection |
-| `graphar-native` | no | upstream GraphAr C++ writer branch |
+| `graphar-native` | no | maintained GraphAr C++ writer/readback path |
 | `content` | no | manifest, CID/DAG-CBOR, CAR, local stores |
 
 CI runs this contract on both Ubuntu and macOS, verifies the declared Rust 1.95

@@ -441,7 +441,7 @@ product-priority ranking.  The active priority is Arrow-first:
 1. keep the public facade's default dependency graph limited to Arrow and the
    dependency-light profile crate;
 2. close trusted in-process Arrow interchange and its performance evidence;
-3. close upstream GraphAr writer/read-back evidence for graph-shaped data;
+3. close maintained GraphAr writer/read-back evidence for graph-shaped data;
 4. maintain manifest and local CID/CAR packaging as an explicit opt-in;
 5. defer remote distribution, including IPFS, until a concrete requirement and
    scenario justify it.
@@ -509,32 +509,29 @@ repartition scenario proves that changing physical grouping does not change
 the projected records.  The implemented physical vertex index sorts and
 deduplicates that endpoint set, assigns dense GraphAr-local =i64= identifiers,
 and retains a bidirectional mapping.  Its result is invariant under edge input
-order.  Internal IDs remain disposable: an upstream writer must persist the
+order.  Internal IDs remain disposable: the native writer must persist the
 semantic =EntityId= as a property and import must restore it from that property.
 
 The crate intentionally does not encode GraphAr YAML, Parquet, chunk IDs, or
-adjacency tables.  At the inspected Apache GraphAr revision
-=6f97f015719ee2586b50116092f59db9fa1945d5=, the official =graphar-rs= binding
-exposes graph/vertex/edge metadata and a vertex data builder, but no edge data
-builder or data reader.  It is an in-tree CXX binding that compiles the upstream
-C++ implementation and requires Arrow C++ development libraries; the unrelated
-crates.io package named =graphar= is not used.  Therefore the next M3 gate is an
-upstream-backed adapter and differential scenario after the official binding
-can write and read edge data.  Absence of that upstream capability must not be
-filled by a second private GraphAr wire implementation.
+adjacency tables.  The maintained =graphar-rs= binding is an in-tree CXX
+binding that compiles the Apache GraphAr C++ implementation and requires Arrow
+C++ development libraries; the unrelated crates.io package named =graphar= is
+not used.  It exposes the edge writer and bounded high-level collection reader
+needed by the admitted profile, so MRR Data composes the native API instead of
+introducing a second private GraphAr wire implementation.
 
 The Apache proposal for the edge-writer binding is recorded by
 [[https://github.com/apache/incubator-graphar/issues/976][GraphAr issue #976]]
 and [[https://github.com/apache/incubator-graphar/pull/977][PR #977]].  The PR
 was closed intentionally: =GTrunSec/incubator-graphar= is the maintained source
 for this extension, and an Apache merge is not a current release gate.  Apache
-=main= remains a compatibility and synchronization baseline.  The reader half
-must be implemented and admitted in the same maintained fork rather than by
-adding a private reader to MRR Data.
+=main= remains a compatibility and synchronization baseline.  The reader is
+implemented and admitted in the same maintained fork rather than as a private
+reader in MRR Data.
 
-The =upstream-graphar= Cargo feature currently pins the immutable maintained
-fork commit =1a3706283ed2225350ec5016e81fc33d3b0b14ef= and exercises the native
-Rust/C++ builders.  The adapter writes semantic =EntityId= vertex
+The =native-graphar= Cargo feature pins the immutable maintained fork commit
+=5d15afa76aafce27af3643f6f7ca59473a52d07c= and exercises the native Rust/C++
+writer and reader.  The adapter writes semantic =EntityId= vertex
 properties plus relation identity and full MRR context on every edge, stages a
 complete dataset, then renames it into place.  Admission requires an immutable
 fork revision, owner-maintained tests, and Linux/macOS native CI; it does not
@@ -545,7 +542,7 @@ does not inherit the C++ build latency.
 - preserve canonical IDs through repartition and compaction;
 - reject n-ary and unsupported value shapes unless a versioned reification
   profile exists;
-- run differential read scenarios against an upstream GraphAr implementation.
+- run differential read scenarios against the maintained GraphAr implementation.
 
 ** M4: controlled distribution
 

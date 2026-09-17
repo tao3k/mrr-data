@@ -12,7 +12,7 @@ default = ["arrow"]
 arrow = ["dep:mrr-data-arrow"]
 content = ["dep:mrr-data-content", "dep:mrr-data-core"]
 graphar = ["dep:mrr-data-graphar"]
-graphar-native = ["graphar", "mrr-data-graphar/upstream-graphar"]
+graphar-native = ["graphar", "mrr-data-graphar/native-graphar"]
 
 [dependencies]
 mrr-data-arrow = { workspace = true, optional = true }
