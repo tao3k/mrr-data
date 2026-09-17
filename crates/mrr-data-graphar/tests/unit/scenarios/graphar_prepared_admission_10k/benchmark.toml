@@ -3,7 +3,7 @@ test = "scenario_semantically_reads_ten_thousand_graphar_edges"
 snapshot = "graphar_prepared_admission_10k"
 target_total = "25ms"
 max_total = "50ms"
-observed_total = "524406ns"
+observed_total = "407711ns"
 regression_budget = "10ms"
 memory_budget_bytes = 268435456
 observed_memory_bytes = 0
@@ -14,19 +14,19 @@ clock = "std::time::Instant"
 statistic = "p95"
 warmup_iterations = 2
 measure_iterations = 21
-total_p50 = "459614ns"
-total_p95 = "524406ns"
-total_p99 = "527691ns"
-total_max = "527691ns"
+total_p50 = "395028ns"
+total_p95 = "407711ns"
+total_p99 = "407938ns"
+total_max = "407938ns"
 
 [observed_timings]
-prepared_fact_admission = "256803ns"
+prepared_fact_admission = "196225ns"
 
 [phase_distributions.prepared_fact_admission]
-p50 = "246834ns"
-p95 = "256803ns"
-p99 = "258295ns"
-max = "258295ns"
+p50 = "186987ns"
+p95 = "196225ns"
+p99 = "197727ns"
+max = "197727ns"
 
 [metrics.fact_count]
 unit = "count"
