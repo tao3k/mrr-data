@@ -289,9 +289,12 @@ fn scenario_semantically_reads_ten_thousand_graphar_edges() {
             (edge_count, official_elapsed, imported, timings)
         };
         assert_eq!(imported.facts(), expected_facts);
+        let rust_graphar_edge_read = timings.edge_storage_read() + timings.arrow_c_stream_import();
         AspRustScenarioObservation::default()
             .with_timing("official_arrow_edge_scan", official_elapsed)
-            .with_timing("rust_arrow_bridge_read", timings.native_edge_read())
+            .with_timing("rust_graphar_edge_read", rust_graphar_edge_read)
+            .with_timing("graphar_storage_read", timings.edge_storage_read())
+            .with_timing("arrow_c_stream_import", timings.arrow_c_stream_import())
             .with_metric("edge_count", edge_count as u64)
     })
     .expect("measure official GraphAr/Rust Arrow bridge parity Scenario");
@@ -306,7 +309,8 @@ fn scenario_semantically_reads_ten_thousand_graphar_edges() {
             .with_timing("graph_info", timings.graph_info())
             .with_timing("native_vertex_read", timings.native_vertex_read())
             .with_timing("vertex_admission", timings.vertex_admission())
-            .with_timing("native_edge_read", timings.native_edge_read())
+            .with_timing("edge_storage_read", timings.edge_storage_read())
+            .with_timing("arrow_c_stream_import", timings.arrow_c_stream_import())
             .with_timing("fact_admission", timings.fact_admission())
             .with_timing("semantic_read_admission", semantic_read_elapsed)
             .with_metric("vertex_count", EDGE_COUNT as u64)
@@ -324,11 +328,16 @@ fn scenario_semantically_reads_ten_thousand_graphar_edges() {
         write_elapsed.as_micros(),
     );
     let official_p95 = parity_measurement.observed_timings["official_arrow_edge_scan"];
-    let bridge_p95 = parity_measurement.observed_timings["rust_arrow_bridge_read"];
+    let bridge_p95 = parity_measurement.observed_timings["rust_graphar_edge_read"];
+    let c_stream_import_p95 = parity_measurement.observed_timings["arrow_c_stream_import"];
     let bridge_budget = official_p95.saturating_add(official_p95 / 4);
     assert!(
         bridge_p95 <= bridge_budget,
         "Rust bridge regressed more than 25% over the official Arrow chunk reader: official={official_p95:?} bridge={bridge_p95:?} budget={bridge_budget:?}"
+    );
+    assert!(
+        c_stream_import_p95 <= Duration::from_millis(1),
+        "zero-copy Arrow C Stream import of 10,000 edges exceeded 1ms: {c_stream_import_p95:?}"
     );
     assert!(
         measurement.total_p50 <= Duration::from_millis(300),
@@ -417,7 +426,7 @@ fn graphar_arrow_bridge_parity_scenario() -> AspRustScenario {
             max_total: "500ms",
             regression_budget: "100ms",
             memory_budget_bytes: 268_435_456,
-            target_rationale: "The reference phase alternates execution order between GraphAr's official Arrow chunk readers and the Rust bridge on the same 10,000-edge fixture and property projection.",
+            target_rationale: "The reference phase alternates execution order on the same 10,000-edge fixture and separates GraphAr Parquet/chunk loading from zero-copy Arrow C Stream import into Rust.",
             warmup_iterations: 2,
             measure_iterations: 11,
             metrics: [

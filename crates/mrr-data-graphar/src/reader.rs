@@ -69,7 +69,8 @@ pub struct GraphArReadTimings {
     graph_info: Duration,
     native_vertex_read: Duration,
     vertex_admission: Duration,
-    native_edge_read: Duration,
+    edge_storage_read: Duration,
+    arrow_c_stream_import: Duration,
     fact_admission: Duration,
 }
 
@@ -92,10 +93,18 @@ impl GraphArReadTimings {
         self.vertex_admission
     }
 
-    /// Time spent reading adjacency and property Arrow chunks through the native reader.
+    /// Time spent reading GraphAr adjacency/property storage and exporting a C stream.
     #[must_use]
-    pub const fn native_edge_read(self) -> Duration {
-        self.native_edge_read
+    pub const fn edge_storage_read(self) -> Duration {
+        self.edge_storage_read
+    }
+
+    /// Time spent importing exported C Stream batches into Rust Arrow arrays.
+    ///
+    /// Arrow buffer ownership crosses the ABI here without copying the buffers.
+    #[must_use]
+    pub const fn arrow_c_stream_import(self) -> Duration {
+        self.arrow_c_stream_import
     }
 
     /// Time spent reconstructing, validating, and canonically ordering MRR facts.
@@ -247,7 +256,8 @@ pub fn read_graphar_dataset_observed(
             graph_info: graph_info_elapsed,
             native_vertex_read: vertices.native_read,
             vertex_admission: vertices.semantic_admission,
-            native_edge_read: facts.native_read,
+            edge_storage_read: facts.storage_read,
+            arrow_c_stream_import: facts.c_stream_import,
             fact_admission: facts.semantic_admission,
         },
     ))
@@ -304,7 +314,8 @@ fn read_and_admit_vertices(
 
 struct AdmittedFacts {
     values: Vec<Fact>,
-    native_read: Duration,
+    storage_read: Duration,
+    c_stream_import: Duration,
     semantic_admission: Duration,
 }
 
@@ -315,8 +326,8 @@ fn read_and_admit_facts(
     max_edges: usize,
 ) -> Result<AdmittedFacts, GraphArReadError> {
     let edge_properties = property_names(&EDGE_PROPERTIES);
-    let native_edge_started = Instant::now();
-    let edge_batches = read_edge_arrow_batches(
+    let edge_storage_started = Instant::now();
+    let edge_stream = read_edge_arrow_batches(
         graph_info,
         ENTITY_TYPE,
         EDGE_TYPE,
@@ -324,10 +335,13 @@ fn read_and_admit_facts(
         AdjListType::UnorderedBySource,
         &edge_properties,
         max_edges,
-    )?
-    .collect::<Result<Vec<_>, _>>()
-    .map_err(|error| GraphArReadError::ArrowStream(error.to_string()))?;
-    let native_edge_elapsed = native_edge_started.elapsed();
+    )?;
+    let edge_storage_elapsed = edge_storage_started.elapsed();
+    let c_stream_import_started = Instant::now();
+    let edge_batches = edge_stream
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| GraphArReadError::ArrowStream(error.to_string()))?;
+    let c_stream_import_elapsed = c_stream_import_started.elapsed();
     let fact_admission_started = Instant::now();
     let edge_count = edge_batches.iter().map(RecordBatch::num_rows).sum();
     let mut fact_ids = HashSet::with_capacity(edge_count);
@@ -392,7 +406,8 @@ fn read_and_admit_facts(
     facts.sort_unstable_by_key(Fact::id);
     Ok(AdmittedFacts {
         values: facts,
-        native_read: native_edge_elapsed,
+        storage_read: edge_storage_elapsed,
+        c_stream_import: c_stream_import_elapsed,
         semantic_admission: fact_admission_started.elapsed(),
     })
 }
