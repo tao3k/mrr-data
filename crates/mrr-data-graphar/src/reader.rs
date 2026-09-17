@@ -93,7 +93,7 @@ impl GraphArReadTimings {
         self.vertex_admission
     }
 
-    /// Time spent reading GraphAr adjacency/property storage and exporting a C stream.
+    /// Time spent reading `GraphAr` adjacency/property storage and exporting a C stream.
     #[must_use]
     pub const fn edge_storage_read(self) -> Duration {
         self.edge_storage_read
