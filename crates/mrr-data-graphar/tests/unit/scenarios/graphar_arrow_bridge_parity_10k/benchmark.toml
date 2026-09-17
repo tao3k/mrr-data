@@ -3,7 +3,7 @@ test = "scenario_semantically_reads_ten_thousand_graphar_edges"
 snapshot = "graphar_arrow_bridge_parity_10k"
 target_total = "300ms"
 max_total = "500ms"
-observed_total = "242623125ns"
+observed_total = "63106542ns"
 regression_budget = "100ms"
 memory_budget_bytes = 268435456
 observed_memory_bytes = 0
@@ -14,26 +14,26 @@ clock = "std::time::Instant"
 statistic = "p95"
 warmup_iterations = 2
 measure_iterations = 11
-total_p50 = "146036333ns"
-total_p95 = "242623125ns"
-total_p99 = "242623125ns"
-total_max = "242623125ns"
+total_p50 = "52508650ns"
+total_p95 = "63106542ns"
+total_p99 = "63106542ns"
+total_max = "63106542ns"
 
 [observed_timings]
-official_arrow_edge_scan = "84271583ns"
-rust_arrow_bridge_read = "70346792ns"
+official_arrow_edge_scan = "20818578ns"
+rust_arrow_bridge_read = "18443527ns"
 
 [phase_distributions.official_arrow_edge_scan]
-p50 = "55397583ns"
-p95 = "84271583ns"
-p99 = "84271583ns"
-max = "84271583ns"
+p50 = "15823917ns"
+p95 = "20818578ns"
+p99 = "20818578ns"
+max = "20818578ns"
 
 [phase_distributions.rust_arrow_bridge_read]
-p50 = "48572541ns"
-p95 = "70346792ns"
-p99 = "70346792ns"
-max = "70346792ns"
+p50 = "15910903ns"
+p95 = "18443527ns"
+p99 = "18443527ns"
+max = "18443527ns"
 
 [metrics.edge_count]
 unit = "count"

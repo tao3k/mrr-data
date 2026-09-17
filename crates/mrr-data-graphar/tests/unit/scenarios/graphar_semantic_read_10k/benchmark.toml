@@ -3,7 +3,7 @@ test = "scenario_semantically_reads_ten_thousand_graphar_edges"
 snapshot = "graphar_semantic_read_10k"
 target_total = "300ms"
 max_total = "500ms"
-observed_total = "197400250ns"
+observed_total = "35227635ns"
 regression_budget = "100ms"
 memory_budget_bytes = 268435456
 observed_memory_bytes = 0
@@ -14,54 +14,54 @@ clock = "std::time::Instant"
 statistic = "p95"
 warmup_iterations = 2
 measure_iterations = 11
-total_p50 = "88574958ns"
-total_p95 = "197400250ns"
-total_p99 = "197400250ns"
-total_max = "197400250ns"
+total_p50 = "34320857ns"
+total_p95 = "35227635ns"
+total_p99 = "35227635ns"
+total_max = "35227635ns"
 
 [observed_timings]
-fact_admission = "56187250ns"
-graph_info = "4110625ns"
-native_edge_read = "146937333ns"
-native_vertex_read = "42905083ns"
-semantic_read_admission = "196424208ns"
-vertex_admission = "11161334ns"
+fact_admission = "9781894ns"
+graph_info = "1441970ns"
+native_edge_read = "16125611ns"
+native_vertex_read = "3018412ns"
+semantic_read_admission = "34020325ns"
+vertex_admission = "3418270ns"
 
 [phase_distributions.fact_admission]
-p50 = "20770834ns"
-p95 = "56187250ns"
-p99 = "56187250ns"
-max = "56187250ns"
+p50 = "9297557ns"
+p95 = "9781894ns"
+p99 = "9781894ns"
+max = "9781894ns"
 
 [phase_distributions.graph_info]
-p50 = "885583ns"
-p95 = "4110625ns"
-p99 = "4110625ns"
-max = "4110625ns"
+p50 = "1425780ns"
+p95 = "1441970ns"
+p99 = "1441970ns"
+max = "1441970ns"
 
 [phase_distributions.native_edge_read]
-p50 = "57038792ns"
-p95 = "146937333ns"
-p99 = "146937333ns"
-max = "146937333ns"
+p50 = "15923092ns"
+p95 = "16125611ns"
+p99 = "16125611ns"
+max = "16125611ns"
 
 [phase_distributions.native_vertex_read]
-p50 = "9570083ns"
-p95 = "42905083ns"
-p99 = "42905083ns"
-max = "42905083ns"
+p50 = "2995889ns"
+p95 = "3018412ns"
+p99 = "3018412ns"
+max = "3018412ns"
 
 [phase_distributions.semantic_read_admission]
-p50 = "85481708ns"
-p95 = "196424208ns"
-p99 = "196424208ns"
-max = "196424208ns"
+p50 = "33276673ns"
+p95 = "34020325ns"
+p99 = "34020325ns"
+max = "34020325ns"
 
 [phase_distributions.vertex_admission]
-p50 = "3007834ns"
-p95 = "11161334ns"
-p99 = "11161334ns"
-max = "11161334ns"
+p50 = "3303485ns"
+p95 = "3418270ns"
+p99 = "3418270ns"
+max = "3418270ns"
 
 [metrics.vertex_count]
 unit = "count"
