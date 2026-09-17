@@ -18,6 +18,7 @@ use meta_relational_reasoning::{
 };
 
 use crate::reader::scan_graphar_edge_chunks;
+use crate::writer::{EDGE_CHUNK_SIZE, VERTEX_CHUNK_SIZE};
 use crate::{
     BinaryEntityProjection, GraphArReadError, GraphArReadLimits, GraphArReadTimings,
     GraphArWriteError, prepare_graphar_source, read_graphar_dataset, read_graphar_dataset_observed,
@@ -103,6 +104,16 @@ fn maintained_graphar_round_trips_vertices_edges_and_metadata() {
     assert_eq!(graph_info.vertex_info_num(), 1);
     assert_eq!(graph_info.edge_info_num(), 1);
     assert_eq!(graph_info.prefix(), format!("{}/", output.display()));
+    assert_eq!(
+        graph_info.vertex_info("entity").unwrap().chunk_size(),
+        VERTEX_CHUNK_SIZE
+    );
+    let edge_info = graph_info
+        .edge_info("entity", "mrr_relation", "entity")
+        .unwrap();
+    assert_eq!(edge_info.chunk_size(), EDGE_CHUNK_SIZE);
+    assert_eq!(edge_info.src_chunk_size(), VERTEX_CHUNK_SIZE);
+    assert_eq!(edge_info.dst_chunk_size(), VERTEX_CHUNK_SIZE);
     assert!(output.join("entity.vertex.yaml").is_file());
     assert!(
         output

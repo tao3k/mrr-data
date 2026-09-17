@@ -20,6 +20,10 @@ use crate::{BinaryEntityProjection, GraphEdgeRecord, GraphProjectionError, Physi
 
 pub(crate) const ENTITY_TYPE: &str = "entity";
 pub(crate) const EDGE_TYPE: &str = "mrr_relation";
+// GraphAr's format specification recommends these empirical defaults to avoid
+// small-file and file-parser overhead while retaining bounded chunk reads.
+pub(crate) const VERTEX_CHUNK_SIZE: i64 = 1 << 18;
+pub(crate) const EDGE_CHUNK_SIZE: i64 = 1 << 22;
 const VERTEX_INFO_FILE: &str = "entity.vertex.yaml";
 const EDGE_INFO_FILE: &str = "entity_mrr_relation_entity.edge.yaml";
 pub(crate) const GRAPH_INFO_FILE: &str = "mrr.graph.yaml";
@@ -252,7 +256,7 @@ fn vertex_info(version: InfoVersion) -> Result<VertexInfo, GraphArWriteError> {
         )],
         "properties/",
     );
-    VertexInfo::builder(ENTITY_TYPE, 1024)
+    VertexInfo::builder(ENTITY_TYPE, VERTEX_CHUNK_SIZE)
         .push_property_group(group)
         .prefix("vertex/entity/")
         .version(version)
@@ -286,18 +290,25 @@ fn edge_info(version: InfoVersion) -> Result<EdgeInfo, GraphArWriteError> {
         }),
         "properties/",
     );
-    EdgeInfo::builder(ENTITY_TYPE, EDGE_TYPE, ENTITY_TYPE, 1024, 1024, 1024)
-        .directed(true)
-        .push_adjacent_list(AdjacentList::new(
-            AdjListType::UnorderedBySource,
-            FileType::Parquet,
-            Some("unordered_by_source/"),
-        ))
-        .push_property_group(group)
-        .prefix("edge/entity_mrr_relation_entity/")
-        .version(version)
-        .try_build()
-        .map_err(upstream)
+    EdgeInfo::builder(
+        ENTITY_TYPE,
+        EDGE_TYPE,
+        ENTITY_TYPE,
+        EDGE_CHUNK_SIZE,
+        VERTEX_CHUNK_SIZE,
+        VERTEX_CHUNK_SIZE,
+    )
+    .directed(true)
+    .push_adjacent_list(AdjacentList::new(
+        AdjListType::UnorderedBySource,
+        FileType::Parquet,
+        Some("unordered_by_source/"),
+    ))
+    .push_property_group(group)
+    .prefix("edge/entity_mrr_relation_entity/")
+    .version(version)
+    .try_build()
+    .map_err(upstream)
 }
 
 fn property_group<const N: usize>(
