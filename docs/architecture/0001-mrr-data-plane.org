@@ -305,6 +305,15 @@ completeness, and transition owners admit it through
 =admit_query_result_candidate=.  This protocol is implemented; general Arrow
 and GraphAr query executors remain a later engine-specific milestone.
 
+The native GraphAr contract suite covers the first differential adapter slice.
+It sends the same admitted binary-Entity facts through an Arrow =RecordBatch=
+round trip and the maintained GraphAr write/read path, binds each physical
+output to its exact engine profile, and requires identical
+=CandidateQueryResult= and =QueryResultAdmissionReceipt= values.  The test-only
+projection is deliberately fixed to that declared relation shape; it is
+evidence for identity and physical-representation parity, not a second query
+evaluator or a general GQL execution claim.
+
 * Content and Context materialization
 
 =mrr-data= may physically store both a canonical Content Graph and a derived

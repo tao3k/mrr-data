@@ -1231,7 +1231,9 @@ dependencies = [
  "arrow-array",
  "graphar-rs",
  "meta-relational-reasoning",
+ "mrr-data-arrow",
  "mrr-data-asp-rust-build-support",
+ "mrr-data-core",
  "mrr-data-profile",
  "tempfile",
 ]

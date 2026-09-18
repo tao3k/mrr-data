@@ -66,6 +66,12 @@ profile. The executor returns storage-neutral columns and rows without an
 identity envelope; `mrr-data-core` injects the immutable MRR query binding and
 returns a `CandidateQueryResult` for MRR to admit. Arrow and GraphAr adapters
 therefore cannot create a parallel result-admission authority.
+The native GraphAr suite exercises the first differential slice: one admitted
+binary-Entity relation is independently round-tripped through Arrow and the
+maintained GraphAr reader, projected through exact bound engine profiles, and
+required to produce both an identical candidate and an identical MRR admission
+receipt. This is physical-adapter parity for the declared slice, not a claim of
+a general GQL query engine.
 
 The optional `mrr-data-content` crate implements local packaging. Its memory and
 filesystem stores derive and verify every CID from an explicit `raw` or

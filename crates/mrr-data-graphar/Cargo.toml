@@ -20,6 +20,8 @@ tempfile = { workspace = true, optional = true }
 
 [dev-dependencies]
 mrr-data-asp-rust-build-support.workspace = true
+mrr-data-arrow.workspace = true
+mrr-data-core.workspace = true
 
 [lints]
 workspace = true
