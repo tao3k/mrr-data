@@ -61,6 +61,11 @@ semantic identity system. Its physical binder consumes MRR's admitted
 `CatalogBoundQuery` and a verified `SnapshotBlock`, then rejects only physical
 identity drift, unavailable GraphAr projection data, or unsupported engine
 features. Query typing and result admission remain owned by MRR.
+Its physical execution bridge accepts only an executor with the exact bound
+profile. The executor returns storage-neutral columns and rows without an
+identity envelope; `mrr-data-core` injects the immutable MRR query binding and
+returns a `CandidateQueryResult` for MRR to admit. Arrow and GraphAr adapters
+therefore cannot create a parallel result-admission authority.
 
 The optional `mrr-data-content` crate implements local packaging. Its memory and
 filesystem stores derive and verify every CID from an explicit `raw` or
@@ -106,7 +111,7 @@ The repository does not yet claim:
 
 - general GraphAr import beyond the admitted binary-Entity profile;
 - an IPFS network integration;
-- schema-bound query execution.
+- a general Arrow or GraphAr implementation of schema-bound query execution.
 
 The canonical proposal, invariants, V1 manifest boundary, and delivery gates
 are in [RFC 0001](docs/architecture/0001-mrr-data-plane.org).

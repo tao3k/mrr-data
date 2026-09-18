@@ -292,9 +292,18 @@ labels, properties, relation types, and expression typing.  The downstream
 binder consumes that admitted receipt and rejects only physical unavailability,
 unsupported projection/path modes, stale generations, snapshot drift, or
 engine-capability mismatch.  The binder consumes a verified =SnapshotBlock= so
-the physical root cannot drift from the manifest it checked.  A database result
-is a candidate until MRR source, lineage, completeness, and transition owners
-admit it through =admit_query_result_candidate=.
+the physical root cannot drift from the manifest it checked.
+
+The execution bridge preserves that ownership boundary.  A
+=DataQueryExecutor= must expose the exact =DataEngineProfile= used by the
+binding and returns only a =PhysicalQueryOutput= of storage-neutral columns and
+rows.  =execute_data_query= rejects profile drift before invoking the engine,
+then injects =QueryResultBinding::for_query= from the immutable
+=CatalogBoundQuery=.  The engine cannot supply or replace this identity.  The
+output remains a =CandidateQueryResult= until MRR source, lineage,
+completeness, and transition owners admit it through
+=admit_query_result_candidate=.  This protocol is implemented; general Arrow
+and GraphAr query executors remain a later engine-specific milestone.
 
 * Content and Context materialization
 
