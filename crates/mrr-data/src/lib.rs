@@ -8,6 +8,10 @@ pub use mrr_data_profile as profile;
 #[cfg(feature = "arrow")]
 pub use mrr_data_arrow as arrow;
 
+/// `DataFusion` execution for the admitted single-hop binary Entity slice.
+#[cfg(feature = "datafusion")]
+pub use mrr_data_datafusion as datafusion;
+
 /// Snapshot manifests and content identity contracts.
 #[cfg(feature = "content")]
 pub use mrr_data_core as manifest;

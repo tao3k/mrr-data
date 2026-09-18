@@ -5,17 +5,18 @@ use meta_relational_reasoning::{
     EntitySchema, EvidenceCompleteness, Expression, ExternalRevisionIdentity, Fact, FactId,
     FactProvenance, FactValidity, GenerationId, GraphPattern, NodePattern, PathPattern,
     PathSegment, Projection, QueryId, QueryOperatorId, QueryResult, QueryResultLimits,
-    QueryResultValue, QueryTemplate, ReasoningBundle, ReasoningBundleDeclaration,
-    RelationAuthority, RelationCatalog, RelationContext, RelationField, RelationId,
-    RelationPattern, RelationSchema, RevisionBinding, SemanticSnapshot, SetQuantifier, Value,
-    ValueSchema, admit_query_result_candidate, bind_query_to_catalog,
+    QueryTemplate, ReasoningBundle, ReasoningBundleDeclaration, RelationAuthority, RelationCatalog,
+    RelationContext, RelationField, RelationId, RelationPattern, RelationSchema, RevisionBinding,
+    SemanticSnapshot, SetQuantifier, Value, ValueSchema, admit_query_result_candidate,
+    bind_query_to_catalog,
 };
 use mrr_data_arrow::{facts_to_record_batch, record_batch_to_facts};
 use mrr_data_core::{
-    BatchDescriptor, CoverageDescriptor, CoverageKind, DataEngineProfile,
-    GraphProjectionDescriptor, PhysicalQueryOutput, RelationDescriptor, SnapshotBlock,
-    SnapshotManifest, SnapshotManifestRequest, bind_data_query, project_data_query_output, raw_cid,
+    BatchDescriptor, CoverageDescriptor, CoverageKind, GraphProjectionDescriptor,
+    RelationDescriptor, SnapshotBlock, SnapshotManifest, SnapshotManifestRequest, bind_data_query,
+    project_data_query_output, raw_cid,
 };
+use mrr_data_datafusion::{datafusion_engine_profile, execute_binary_entity_query};
 
 use crate::{
     BinaryEntityProjection, GraphArReadLimits, read_graphar_dataset, write_graphar_dataset,
@@ -200,40 +201,23 @@ fn snapshot(relation: &RelationSchema, row_count: usize) -> SnapshotBlock {
     SnapshotBlock::encode(manifest).unwrap()
 }
 
-fn output_from_facts(facts: &[Fact]) -> PhysicalQueryOutput {
-    let rows = facts
-        .iter()
-        .map(|fact| {
-            let [Value::Entity(source), Value::Entity(target)] = fact.values() else {
-                panic!("binary Entity relation was admitted before execution")
-            };
-            vec![
-                QueryResultValue::node(*source, entity_type()),
-                QueryResultValue::node(*target, entity_type()),
-            ]
-        })
-        .collect();
-    PhysicalQueryOutput::new(
-        vec![
-            Binding::new("source_entity").unwrap(),
-            Binding::new("target_entity").unwrap(),
-        ],
-        rows,
-    )
-}
-
-fn execute(
+async fn execute(
     query: &CatalogBoundQuery,
     snapshot: &SnapshotBlock,
-    profile: &DataEngineProfile,
+    relation: &RelationSchema,
     physical_facts: &[Fact],
 ) -> CandidateQueryResult {
-    let bound = bind_data_query(query, snapshot, profile).unwrap();
-    project_data_query_output(&bound, profile, output_from_facts(physical_facts)).unwrap()
+    let profile = datafusion_engine_profile().unwrap();
+    let bound = bind_data_query(query, snapshot, &profile).unwrap();
+    let batch = facts_to_record_batch(relation, physical_facts).unwrap();
+    let output = execute_binary_entity_query(query, relation, batch)
+        .await
+        .unwrap();
+    project_data_query_output(&bound, &profile, output).unwrap()
 }
 
-#[test]
-fn arrow_and_maintained_graphar_project_one_identical_mrr_candidate() {
+#[tokio::test]
+async fn arrow_and_maintained_graphar_execute_one_identical_datafusion_candidate() {
     let relation = relation();
     let facts = facts(&relation);
     let query = bound_query(&relation);
@@ -253,18 +237,8 @@ fn arrow_and_maintained_graphar_project_one_identical_mrr_candidate() {
     let graphar =
         read_graphar_dataset(&graphar_root, &projection, GraphArReadLimits::new(16, 16)).unwrap();
 
-    let arrow_candidate = execute(
-        &query,
-        &snapshot,
-        &DataEngineProfile::new("arrow-round-trip", false, []).unwrap(),
-        &arrow_facts,
-    );
-    let graphar_candidate = execute(
-        &query,
-        &snapshot,
-        &DataEngineProfile::new("graphar-native", true, []).unwrap(),
-        graphar.facts(),
-    );
+    let arrow_candidate = execute(&query, &snapshot, &relation, &arrow_facts).await;
+    let graphar_candidate = execute(&query, &snapshot, &relation, graphar.facts()).await;
     assert_eq!(arrow_candidate, graphar_candidate);
 
     let limits = QueryResultLimits::new(

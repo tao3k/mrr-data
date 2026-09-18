@@ -15,6 +15,7 @@ materializes those contracts as typed Apache Arrow batches. Additional physical
 forms are explicitly selected:
 
 - default `arrow`: typed in-memory and IPC interchange;
+- optional `datafusion`: execution of the admitted single-hop binary-Entity slice;
 - optional `graphar`: persistent Property Graph projection contracts;
 - optional `graphar-native`: the admitted maintained GraphAr C++ data path;
 - optional `content`: CID/DAG-CBOR manifests, CAR, and local content stores.
@@ -23,6 +24,7 @@ The dependency direction is one way:
 
 ```text
 meta-relational-reasoning  <-  mrr-data(default: Arrow)
+                                      \-> DataFusion (opt-in)
                                       \-> GraphAr (opt-in)
                                       \-> CID / CAR (opt-in)
 ```
@@ -67,12 +69,17 @@ lifecycle and return storage-neutral columns and rows without an identity
 envelope; `mrr-data-core` injects the immutable MRR query binding and returns a
 `CandidateQueryResult` for MRR to admit. Arrow and GraphAr adapters therefore
 cannot create a parallel execution framework or result-admission authority.
-The native GraphAr suite exercises the first differential slice: one admitted
-binary-Entity relation is independently round-tripped through Arrow and the
-maintained GraphAr reader, projected through exact bound engine profiles, and
-required to produce both an identical candidate and an identical MRR admission
-receipt. This is physical-adapter parity for the declared slice, not a claim of
-a general GQL query engine.
+The optional `mrr-data-datafusion` adapter executes one deliberately narrow
+slice: exactly one outgoing hop over a two-column, non-null `Entity` relation,
+`RETURN ALL`, and direct endpoint projections. It builds DataFusion expressions
+directly from admitted MRR IR rather than reparsing SQL, owns no async runtime,
+and returns only storage-neutral physical output. Unsupported filters, path
+shapes, projection expressions, aggregation, ordering, grouping, pagination,
+and `DISTINCT` fail closed. The native GraphAr suite supplies both an Arrow
+round trip and the maintained GraphAr reader to this same DataFusion plan, then
+requires identical candidates and identical MRR admission receipts. This is
+real engine parity for the declared slice, not a claim of a general GQL query
+engine.
 
 The optional `mrr-data-content` crate implements local packaging. Its memory and
 filesystem stores derive and verify every CID from an explicit `raw` or
@@ -118,7 +125,7 @@ The repository does not yet claim:
 
 - general GraphAr import beyond the admitted binary-Entity profile;
 - an IPFS network integration;
-- a general Arrow or GraphAr implementation of schema-bound query execution.
+- general schema-bound query execution beyond the admitted DataFusion slice.
 
 The canonical proposal, invariants, V1 manifest boundary, and delivery gates
 are in [RFC 0001](docs/architecture/0001-mrr-data-plane.org).
@@ -129,9 +136,10 @@ V1 is deliberately Arrow-first and narrow:
 
 1. lossless relation-specific Arrow round trips;
 2. trusted in-process Arrow interchange and performance evidence;
-3. a gated GraphAr projection for graph-shaped MRR relations;
-4. optional deterministic snapshot manifests and local CID/CAR packaging;
-5. remote distribution only after a concrete requirement is demonstrated.
+3. opt-in DataFusion execution for the first exact MRR query slice;
+4. a gated GraphAr projection for graph-shaped MRR relations;
+5. optional deterministic snapshot manifests and local CID/CAR packaging;
+6. remote distribution only after a concrete requirement is demonstrated.
 
 There is no `mrr-ipfs` crate in the V1 plan. Content addressing does not imply
 an IPFS daemon, a public gateway, or public publication.
@@ -158,6 +166,7 @@ cargo clippy --manifest-path fuzz/Cargo.toml --all-targets --locked -- -D warnin
 cargo check -p mrr-data --locked
 cargo check -p mrr-data --no-default-features --locked
 cargo check -p mrr-data --no-default-features --features content,graphar --locked
+cargo check -p mrr-data --no-default-features --features datafusion --locked
 cargo test -p mrr-data --no-default-features --locked
 cargo test -p mrr-data --no-default-features --features content,graphar --locked
 ```
@@ -167,6 +176,7 @@ Facade features:
 | Feature | Default | Boundary |
 |---|---:|---|
 | `arrow` | yes | RecordBatch and bounded Arrow IPC |
+| `datafusion` | no | single-hop binary-Entity physical query execution |
 | `graphar` | no | semantic Property Graph projection |
 | `graphar-native` | no | maintained GraphAr C++ writer/readback path |
 | `content` | no | manifest, CID/DAG-CBOR, CAR, local stores |

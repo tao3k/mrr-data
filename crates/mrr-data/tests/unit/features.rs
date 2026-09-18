@@ -30,3 +30,14 @@ fn graphar_surface_is_available_when_selected() {
         crate::profile::GRAPHAR_BINARY_ENTITY_NAMESPACE
     );
 }
+
+#[test]
+#[cfg(feature = "datafusion")]
+fn datafusion_surface_is_available_when_selected() {
+    assert_eq!(
+        crate::datafusion::datafusion_engine_profile()
+            .unwrap()
+            .name(),
+        "datafusion-arrow"
+    );
+}

@@ -25,6 +25,7 @@ flowchart LR
   M[MRR semantic contracts]
   D[mrr-data physical data plane]
   A[Arrow batches and IPC - default]
+  F[DataFusion execution - opt-in]
   G[GraphAr projection - opt-in]
   C[CID blocks and CAR - opt-in]
   O[filesystem or object store]
@@ -32,10 +33,12 @@ flowchart LR
   S -->|RevisionBinding + admitted facts| M
   M -->|one-way dependency| D
   D --> A
+  D --> F
   D --> G
   D --> C
   C --> O
   A -. no semantic authority .-> M
+  F -. no semantic authority .-> M
   G -. no semantic authority .-> M
   C -. no semantic authority .-> M
 #+end_src
@@ -303,17 +306,19 @@ producer's =DataEngineProfile= against the physical binding, then injects
 engine cannot supply or replace this identity.  The output remains a
 =CandidateQueryResult= until MRR source, lineage, completeness, and transition
 owners admit it through =admit_query_result_candidate=.  This protocol is
-implemented; general Arrow and GraphAr query executors remain a later
-engine-specific milestone.
+implemented.  The first opt-in engine adapter lowers the admitted single-hop
+binary-Entity slice directly to DataFusion expressions without reparsing SQL.
+It owns no async runtime and rejects every undeclared shape before execution;
+general query execution remains a later engine-specific milestone.
 
-The native GraphAr contract suite covers the first differential adapter slice.
+The native GraphAr contract suite covers the first differential engine slice.
 It sends the same admitted binary-Entity facts through an Arrow =RecordBatch=
-round trip and the maintained GraphAr write/read path, binds each physical
-output to its exact engine profile, and requires identical
-=CandidateQueryResult= and =QueryResultAdmissionReceipt= values.  The test-only
-projection is deliberately fixed to that declared relation shape; it is
-evidence for identity and physical-representation parity, not a second query
-evaluator or a general GQL execution claim.
+round trip and the maintained GraphAr write/read path, rebuilds an Arrow batch
+from each physical result, and executes both through the same DataFusion plan.
+The exact =DataEngineProfile= projection must then produce identical
+=CandidateQueryResult= and =QueryResultAdmissionReceipt= values.  This is
+evidence for engine and physical-representation parity over the declared
+slice, not a general GQL execution claim.
 
 * Content and Context materialization
 
@@ -450,6 +455,7 @@ mrr-data/
     mrr-data-arrow/      # lossless MRR relation <-> Arrow mapping
     mrr-data-core/       # optional manifest admission and snapshot descriptors
     mrr-data-content/    # CID, CAR, memory and filesystem providers
+    mrr-data-datafusion/ # opt-in exact-slice physical query execution
     mrr-data-graphar/    # gated Property Graph projection
 #+end_example
 
@@ -465,9 +471,10 @@ product-priority ranking.  The active priority is Arrow-first:
 1. keep the public facade's default dependency graph limited to Arrow and the
    dependency-light profile crate;
 2. close trusted in-process Arrow interchange and its performance evidence;
-3. close maintained GraphAr writer/read-back evidence for graph-shaped data;
-4. maintain manifest and local CID/CAR packaging as an explicit opt-in;
-5. defer remote distribution, including IPFS, until a concrete requirement and
+3. extend opt-in DataFusion execution only through typed, differential slices;
+4. close maintained GraphAr writer/read-back evidence for graph-shaped data;
+5. maintain manifest and local CID/CAR packaging as an explicit opt-in;
+6. defer remote distribution, including IPFS, until a concrete requirement and
    scenario justify it.
 
 ** M0: lossless Arrow interchange
