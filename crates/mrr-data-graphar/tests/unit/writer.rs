@@ -476,6 +476,12 @@ fn assert_graphar_performance_budgets(
     prepared_admission: &AspRustScenarioMeasurement,
 ) {
     let official_p95 = parity.observed_timings["official_arrow_edge_scan"];
+    let native_offset_p95 = parity.observed_timings["graphar_edge_native_read"];
+    let native_offset_budget = (official_p95 * 95) / 100;
+    assert!(
+        native_offset_p95 <= native_offset_budget,
+        "native Parquet string offsets must reduce the same-run GraphAr edge read P95 by at least 5%: official={official_p95:?} native={native_offset_p95:?} budget={native_offset_budget:?}"
+    );
     let c_stream_import_p95 = parity.observed_timings["arrow_c_stream_import"];
     let import_budget = (official_p95 / 10).min(Duration::from_millis(1));
     assert!(
@@ -570,7 +576,7 @@ fn graphar_arrow_bridge_parity_scenario() -> AspRustScenario {
     asp_rust_scenario! {
         name: "graphar-arrow-bridge-parity-10k",
         package: "mrr-data-graphar",
-        description: "The zero-copy Arrow C Stream import remains below one millisecond and ten percent of the official GraphAr read",
+        description: "Native Parquet string offsets improve same-run GraphAr reads while zero-copy Arrow C Stream import stays bounded",
         fixture_root: "tests/unit/scenarios/graphar_arrow_bridge_parity_10k",
         tags: ["graphar", "arrow", "rust-bridge", "performance"],
         commands: [
@@ -584,7 +590,7 @@ fn graphar_arrow_bridge_parity_scenario() -> AspRustScenario {
             max_total: "500ms",
             regression_budget: "100ms",
             memory_budget_bytes: 268_435_456,
-            target_rationale: "The reference phase alternates execution order on the same 10,000-edge fixture and separates GraphAr Parquet/chunk loading from zero-copy Arrow C Stream import into Rust.",
+            target_rationale: "The reference phase alternates execution order on the same 10,000-edge fixture, requires native Parquet offsets to reduce read P95 by at least five percent, and separately bounds zero-copy Arrow C Stream import.",
             warmup_iterations: 2,
             measure_iterations: 21,
             metrics: [
