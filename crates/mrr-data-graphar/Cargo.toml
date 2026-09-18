@@ -13,7 +13,7 @@ native-graphar = ["dep:arrow-array", "dep:graphar-rs", "dep:tempfile"]
 
 [dependencies]
 arrow-array = { workspace = true, optional = true }
-graphar-rs = { git = "https://github.com/GTrunSec/incubator-graphar", rev = "d6adb1da775b99832dcd5b89b4dfa2682abce88c", optional = true }
+graphar-rs = { git = "https://github.com/GTrunSec/incubator-graphar", rev = "5a3df03bc9a0bc64a0b97d802901c00d5adb2370", optional = true }
 meta-relational-reasoning.workspace = true
 mrr-data-profile.workspace = true
 tempfile = { workspace = true, optional = true }
