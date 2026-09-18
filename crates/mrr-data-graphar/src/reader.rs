@@ -70,7 +70,7 @@ pub struct GraphArDataset {
     facts: Arc<[Fact]>,
 }
 
-/// Native GraphAr and Arrow phases within one edge-storage read.
+/// Native `GraphAr` and Arrow phases within one edge-storage read.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct GraphArNativeEdgeTimings {
     collection_lookup: Duration,
@@ -151,7 +151,7 @@ impl GraphArNativeEdgeTimings {
         self.concatenate
     }
 
-    /// Complete native GraphAr read time before stream export.
+    /// Complete native `GraphAr` read time before stream export.
     #[must_use]
     pub const fn native_read(self) -> Duration {
         self.native_read

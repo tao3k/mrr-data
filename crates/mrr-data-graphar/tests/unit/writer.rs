@@ -355,7 +355,7 @@ fn scenario_semantically_reads_ten_thousand_graphar_edges() {
         assert_eq!(imported.vertex_count(), EDGE_COUNT);
         assert_eq!(imported.facts(), expected_facts);
         observe_semantic_read(
-            timings,
+            &timings,
             semantic_read_elapsed,
             EDGE_COUNT,
             imported.facts().len(),
@@ -390,7 +390,7 @@ fn scenario_semantically_reads_ten_thousand_graphar_edges() {
 }
 
 fn observe_semantic_read(
-    timings: GraphArReadTimings,
+    timings: &GraphArReadTimings,
     elapsed: Duration,
     vertex_count: usize,
     fact_count: usize,
