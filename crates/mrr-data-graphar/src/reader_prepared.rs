@@ -10,7 +10,7 @@ use std::{
 
 use arrow_array::RecordBatch;
 use graphar_rs::info::GraphInfo;
-use meta_relational_reasoning::{EntityId, Fact, FactId, RelationId, Value};
+use meta_relational_reasoning::{EntityId, Fact, RelationId, Value};
 
 use super::{
     BinaryEntityProjection, ContextKey, EdgeArrowColumns, GRAPH_INFO_FILE, GraphArDataset,
@@ -33,6 +33,12 @@ pub struct PreparedGraphArSource {
     facts: Arc<[Fact]>,
     predicates: Arc<[Arc<str>]>,
     timings: GraphArPrepareTimings,
+}
+
+#[derive(Clone, Debug)]
+struct PreparedFact {
+    predicate: Arc<str>,
+    value: Fact,
 }
 
 /// Measured phases of preparing native `GraphAr` storage for reuse.
@@ -127,9 +133,7 @@ impl GraphArPrepareTimings {
         self.fact_duplicate_check
     }
 
-    /// Time spent splitting ordered facts after materialization.
-    ///
-    /// This is zero when preparation materializes both projections directly.
+    /// Time spent splitting ordered prepared facts into predicate and value projections.
     #[must_use]
     pub const fn fact_projection_split(self) -> Duration {
         self.fact_projection_split
@@ -259,23 +263,12 @@ struct PreparedFacts {
     semantic_preparation: Duration,
 }
 
-#[derive(Clone, Copy)]
-struct LocatedFactId {
-    value: FactId,
-    batch: usize,
-    row: usize,
-}
-
-struct OrderedFactIds {
-    values: Vec<LocatedFactId>,
-    sort: Duration,
-    duplicate_check: Duration,
-}
-
-struct MaterializedFacts {
+struct OrderedFacts {
     values: Vec<Fact>,
     predicates: Vec<Arc<str>>,
-    elapsed: Duration,
+    sort: Duration,
+    duplicate_check: Duration,
+    projection_split: Duration,
 }
 
 struct RunCache<K, V> {
@@ -325,15 +318,11 @@ fn prepare_facts(
         .map(EdgeArrowColumns::try_new)
         .collect::<Result<Vec<_>, _>>()?;
     let identity_access_started = Instant::now();
-    let fact_identity_values = columns.iter().enumerate().try_fold(
+    let fact_identity_values = columns.iter().try_fold(
         Vec::with_capacity(edge_count),
-        |mut values, (batch, columns)| -> Result<_, GraphArReadError> {
+        |mut values, columns| -> Result<_, GraphArReadError> {
             for row in 0..columns.source.len() {
-                values.push((
-                    required_value(columns.properties[0].value(row), "fact_id")?,
-                    batch,
-                    row,
-                ));
+                values.push(required_value(columns.properties[0].value(row), "fact_id")?);
             }
             Ok(values)
         },
@@ -344,100 +333,104 @@ fn prepare_facts(
     let identity_parse_started = Instant::now();
     let fact_ids = fact_identity_values
         .into_iter()
-        .map(|(value, batch, row)| {
-            parse_identity("fact_id", value).map(|value| LocatedFactId { value, batch, row })
-        })
+        .map(|value| parse_identity("fact_id", value))
         .collect::<Result<Vec<_>, _>>()?;
     let identity_parse = identity_parse_started.elapsed();
     let identity_decode = identity_access + identity_parse;
     debug_assert_eq!(fact_ids.len(), edge_count);
 
-    let ordered = order_fact_ids(fact_ids)?;
-    let materialized = materialize_facts(&columns, &ordered.values, physical_entities)?;
-    let projection_split = Duration::ZERO;
-    let ordering = ordered.sort + ordered.duplicate_check + projection_split;
+    let materialization_started = Instant::now();
+    let mut facts = Vec::with_capacity(edge_count);
+    let mut relation_ids = RunCache::<&str, RelationId>::with_capacity(1);
+    let mut contexts = RunCache::with_capacity(1);
+    let mut predicates = RunCache::<&str, Arc<str>>::with_capacity(1);
+    let mut fact_ids = fact_ids.into_iter();
+    for columns in &columns {
+        for row in 0..columns.source.len() {
+            let source = endpoint(physical_entities, "source", columns.source(row)?)?;
+            let destination =
+                endpoint(physical_entities, "destination", columns.destination(row)?)?;
+            let fact_id = fact_ids
+                .next()
+                .expect("decoded fact count matches validated Arrow rows");
+            let relation_value = required_value(columns.properties[1].value(row), "relation_id")?;
+            let relation_id = relation_ids.get_or_try_insert_with(relation_value, |value| {
+                parse_identity("relation_id", value)
+            })?;
+            let predicate = required_value(columns.properties[2].value(row), "predicate")?;
+            let predicate = predicates.get_or_try_insert_with(predicate, |value| {
+                Ok::<_, GraphArReadError>(Arc::from(value))
+            })?;
+            let context_key = ContextKey {
+                generation: required_value(columns.properties[3].value(row), "generation_id")?,
+                authority_kind: required_value(columns.properties[4].value(row), "authority_kind")?,
+                authority_id: required_value(columns.properties[5].value(row), "authority_id")?,
+                provenance_kind: required_value(
+                    columns.properties[6].value(row),
+                    "provenance_kind",
+                )?,
+                provenance_id: required_value(columns.properties[7].value(row), "provenance_id")?,
+                completeness: required_value(columns.properties[8].value(row), "completeness")?,
+                validity_kind: required_value(columns.properties[9].value(row), "validity_kind")?,
+                invalidated_by: columns.properties[10].value(row),
+            };
+            let context =
+                contexts.get_or_try_insert_with(context_key, |key| parse_context(key, fact_id))?;
+            facts.push(PreparedFact {
+                predicate,
+                value: Fact::new(
+                    fact_id,
+                    relation_id,
+                    vec![Value::Entity(source), Value::Entity(destination)],
+                    context,
+                ),
+            });
+        }
+    }
+    let materialization = materialization_started.elapsed();
+
+    let ordered = order_prepared_facts(facts)?;
+    let ordering = ordered.sort + ordered.duplicate_check + ordered.projection_split;
     Ok(PreparedFacts {
-        values: materialized.values,
-        predicates: materialized.predicates,
+        values: ordered.values,
+        predicates: ordered.predicates,
         identity_access,
         identity_parse,
         identity_decode,
-        materialization: materialized.elapsed,
+        materialization,
         sort: ordered.sort,
         duplicate_check: ordered.duplicate_check,
-        projection_split,
+        projection_split: ordered.projection_split,
         ordering,
         semantic_preparation: fact_preparation_started.elapsed(),
     })
 }
 
-fn materialize_facts(
-    columns: &[EdgeArrowColumns<'_>],
-    fact_ids: &[LocatedFactId],
-    physical_entities: &[EntityId],
-) -> Result<MaterializedFacts, GraphArReadError> {
-    let materialization_started = Instant::now();
-    let mut values = Vec::with_capacity(fact_ids.len());
-    let mut fact_predicates = Vec::with_capacity(fact_ids.len());
-    let mut relation_ids = RunCache::<&str, RelationId>::with_capacity(1);
-    let mut contexts = RunCache::with_capacity(1);
-    let mut predicates = RunCache::<&str, Arc<str>>::with_capacity(1);
-    for located in fact_ids {
-        let columns = &columns[located.batch];
-        let row = located.row;
-        let source = endpoint(physical_entities, "source", columns.source(row)?)?;
-        let destination = endpoint(physical_entities, "destination", columns.destination(row)?)?;
-        let relation_value = required_value(columns.properties[1].value(row), "relation_id")?;
-        let relation_id = relation_ids
-            .get_or_try_insert_with(relation_value, |value| parse_identity("relation_id", value))?;
-        let predicate = required_value(columns.properties[2].value(row), "predicate")?;
-        let predicate = predicates.get_or_try_insert_with(predicate, |value| {
-            Ok::<_, GraphArReadError>(Arc::from(value))
-        })?;
-        let context_key = ContextKey {
-            generation: required_value(columns.properties[3].value(row), "generation_id")?,
-            authority_kind: required_value(columns.properties[4].value(row), "authority_kind")?,
-            authority_id: required_value(columns.properties[5].value(row), "authority_id")?,
-            provenance_kind: required_value(columns.properties[6].value(row), "provenance_kind")?,
-            provenance_id: required_value(columns.properties[7].value(row), "provenance_id")?,
-            completeness: required_value(columns.properties[8].value(row), "completeness")?,
-            validity_kind: required_value(columns.properties[9].value(row), "validity_kind")?,
-            invalidated_by: columns.properties[10].value(row),
-        };
-        let context = contexts
-            .get_or_try_insert_with(context_key, |key| parse_context(key, located.value))?;
-        fact_predicates.push(predicate);
-        values.push(Fact::new(
-            located.value,
-            relation_id,
-            vec![Value::Entity(source), Value::Entity(destination)],
-            context,
-        ));
-    }
-    Ok(MaterializedFacts {
-        values,
-        predicates: fact_predicates,
-        elapsed: materialization_started.elapsed(),
-    })
-}
-
-fn order_fact_ids(mut fact_ids: Vec<LocatedFactId>) -> Result<OrderedFactIds, GraphArReadError> {
+fn order_prepared_facts(mut facts: Vec<PreparedFact>) -> Result<OrderedFacts, GraphArReadError> {
     let sort_started = Instant::now();
-    fact_ids.sort_unstable_by_key(|fact| fact.value);
+    facts.sort_unstable_by_key(|fact| fact.value.id());
     let sort = sort_started.elapsed();
 
     let duplicate_check_started = Instant::now();
-    if let Some(duplicate) = fact_ids
+    if let Some(duplicate) = facts
         .windows(2)
-        .find(|pair| pair[0].value == pair[1].value)
+        .find(|pair| pair[0].value.id() == pair[1].value.id())
     {
-        return Err(GraphArReadError::DuplicateFact(duplicate[0].value));
+        return Err(GraphArReadError::DuplicateFact(duplicate[0].value.id()));
     }
     let duplicate_check = duplicate_check_started.elapsed();
-    Ok(OrderedFactIds {
-        values: fact_ids,
+
+    let projection_split_started = Instant::now();
+    let (predicates, values) = facts
+        .into_iter()
+        .map(|fact| (fact.predicate, fact.value))
+        .unzip();
+    Ok(OrderedFacts {
+        values,
+        predicates,
         sort,
         duplicate_check,
+        projection_split: projection_split_started.elapsed(),
     })
 }
 
