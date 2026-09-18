@@ -1,5 +1,6 @@
 use std::{
     cell::Cell,
+    path::Path,
     time::{Duration, Instant},
 };
 
@@ -320,62 +321,7 @@ fn scenario_semantically_reads_ten_thousand_graphar_edges() {
     let parity_measurement = measure_asp_rust_scenario(&parity_scenario, || {
         let iteration = parity_iteration.get();
         parity_iteration.set(iteration + 1);
-        let read_official = || {
-            scan_graphar_edge_chunks(&output, limits).expect("scan official GraphAr Arrow chunks")
-        };
-        let read_native = || {
-            read_graphar_dataset_observed(&output, &projection, limits)
-                .expect("read GraphAr through the Rust Arrow bridge")
-        };
-        let (official_first, native_first, native_second, official_second) =
-            if iteration.is_multiple_of(2) {
-                let official_first = read_official();
-                let native_first = read_native();
-                let native_second = read_native();
-                let official_second = read_official();
-                (official_first, native_first, native_second, official_second)
-            } else {
-                let native_first = read_native();
-                let official_first = read_official();
-                let official_second = read_official();
-                let native_second = read_native();
-                (official_first, native_first, native_second, official_second)
-            };
-        let (edge_count, official_first_elapsed) = official_first;
-        let (second_edge_count, official_second_elapsed) = official_second;
-        assert_eq!(second_edge_count, edge_count);
-        let (imported, timings) = native_first;
-        let (second_imported, second_timings) = native_second;
-        assert_eq!(imported.facts(), expected_facts);
-        assert_eq!(second_imported.facts(), expected_facts);
-        let official_elapsed = (official_first_elapsed + official_second_elapsed) / 2;
-        let native_read =
-            (timings.native_edge().native_read() + second_timings.native_edge().native_read()) / 2;
-        let rust_graphar_edge_read = (timings.edge_storage_read()
-            + timings.arrow_c_stream_import()
-            + second_timings.edge_storage_read()
-            + second_timings.arrow_c_stream_import())
-            / 2;
-        let native_budget = (official_elapsed * 95) / 100;
-        observe_native_edge_read(
-            AspRustScenarioObservation::default()
-                .with_timing("official_arrow_edge_scan", official_elapsed)
-                .with_timing("paired_native_edge_read", native_read)
-                .with_timing("rust_graphar_edge_read", rust_graphar_edge_read)
-                .with_timing("graphar_storage_read", timings.edge_storage_read())
-                .with_timing("arrow_c_stream_import", timings.arrow_c_stream_import())
-                .with_timing(
-                    "paired_native_budget_overrun",
-                    native_read.saturating_sub(native_budget),
-                )
-                .with_timing(
-                    "paired_native_time_saved",
-                    official_elapsed.saturating_sub(native_read),
-                )
-                .with_metric("edge_count", edge_count as u64),
-            timings.native_edge(),
-            timings.edge_storage_read(),
-        )
+        observe_graphar_arrow_parity(&output, &projection, limits, &expected_facts, iteration)
     })
     .expect("measure official GraphAr/Rust Arrow bridge parity Scenario");
     let measurement = measure_asp_rust_scenario(&scenario, || {
@@ -418,6 +364,71 @@ fn scenario_semantically_reads_ten_thousand_graphar_edges() {
         write_elapsed.as_micros(),
     );
     assert_graphar_performance_budgets(&parity_measurement, &measurement, &prepared_measurement);
+}
+
+fn observe_graphar_arrow_parity(
+    output: &Path,
+    projection: &BinaryEntityProjection,
+    limits: GraphArReadLimits,
+    expected_facts: &[Fact],
+    iteration: usize,
+) -> AspRustScenarioObservation {
+    let read_official =
+        || scan_graphar_edge_chunks(output, limits).expect("scan official GraphAr Arrow chunks");
+    let read_native = || {
+        read_graphar_dataset_observed(output, projection, limits)
+            .expect("read GraphAr through the Rust Arrow bridge")
+    };
+    let (official_first, native_first, native_second, official_second) =
+        if iteration.is_multiple_of(2) {
+            (
+                read_official(),
+                read_native(),
+                read_native(),
+                read_official(),
+            )
+        } else {
+            let native_first = read_native();
+            let official_first = read_official();
+            let official_second = read_official();
+            let native_second = read_native();
+            (official_first, native_first, native_second, official_second)
+        };
+    let (edge_count, official_first_elapsed) = official_first;
+    let (second_edge_count, official_second_elapsed) = official_second;
+    assert_eq!(second_edge_count, edge_count);
+    let (imported, timings) = native_first;
+    let (second_imported, second_timings) = native_second;
+    assert_eq!(imported.facts(), expected_facts);
+    assert_eq!(second_imported.facts(), expected_facts);
+    let official_elapsed = (official_first_elapsed + official_second_elapsed) / 2;
+    let native_read =
+        (timings.native_edge().native_read() + second_timings.native_edge().native_read()) / 2;
+    let rust_graphar_edge_read = (timings.edge_storage_read()
+        + timings.arrow_c_stream_import()
+        + second_timings.edge_storage_read()
+        + second_timings.arrow_c_stream_import())
+        / 2;
+    let native_budget = (official_elapsed * 95) / 100;
+    observe_native_edge_read(
+        AspRustScenarioObservation::default()
+            .with_timing("official_arrow_edge_scan", official_elapsed)
+            .with_timing("paired_native_edge_read", native_read)
+            .with_timing("rust_graphar_edge_read", rust_graphar_edge_read)
+            .with_timing("graphar_storage_read", timings.edge_storage_read())
+            .with_timing("arrow_c_stream_import", timings.arrow_c_stream_import())
+            .with_timing(
+                "paired_native_budget_overrun",
+                native_read.saturating_sub(native_budget),
+            )
+            .with_timing(
+                "paired_native_time_saved",
+                official_elapsed.saturating_sub(native_read),
+            )
+            .with_metric("edge_count", edge_count as u64),
+        timings.native_edge(),
+        timings.edge_storage_read(),
+    )
 }
 
 fn observe_semantic_read(
