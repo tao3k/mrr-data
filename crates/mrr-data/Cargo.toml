@@ -21,8 +21,8 @@ mrr-data-core = { workspace = true, optional = true }
 mrr-data-graphar = { workspace = true, optional = true }
 mrr-data-profile.workspace = true
 
-[build-dependencies]
-mrr-data-asp-rust-project-policy.workspace = true
+[dev-dependencies]
+mrr-data-asp-rust-build-support.workspace = true
 
 [lints]
 workspace = true

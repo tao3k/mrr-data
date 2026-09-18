@@ -124,10 +124,12 @@ an IPFS daemon, a public gateway, or public publication.
 ## Development contract
 
 `asp-rust` is pinned as a development dependency. One shared
-`mrr-data-asp-rust-project-policy` Build Support owner drives the parser-native
-workspace policy for every member crate. It rejects non-canonical source and
-test layout during ordinary Cargo builds; there is no second style checker or
-source-scanning test harness in this repository.
+`mrr-data-asp-rust-build-support` owner drives the parser-native workspace
+policy for every member crate. Product crates reach it only through
+`[dev-dependencies]`; their normal and build graphs stay free of ASP Rust.
+Package gates compose into the existing unit suites, and the facade runs the
+workspace gate once. There is no second style checker or one-process-per-gate
+test harness in this repository.
 
 The complete local gate is the same gate used by CI:
 

@@ -19,11 +19,7 @@ mrr-data-profile.workspace = true
 tempfile = { workspace = true, optional = true }
 
 [dev-dependencies]
-asp-rust.workspace = true
-asp-rust-build-support.workspace = true
-
-[build-dependencies]
-mrr-data-asp-rust-project-policy.workspace = true
+mrr-data-asp-rust-build-support.workspace = true
 
 [lints]
 workspace = true

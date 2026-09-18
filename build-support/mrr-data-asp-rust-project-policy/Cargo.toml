@@ -1,5 +1,5 @@
 [package]
-name = "mrr-data-asp-rust-project-policy"
+name = "mrr-data-asp-rust-build-support"
 description = "Shared ASP Rust workspace policy owner for MRR Data"
 version.workspace = true
 edition.workspace = true
@@ -7,14 +7,9 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-build = "build.rs"
 
 [dependencies]
 asp-rust.workspace = true
-
-[build-dependencies]
-asp-rust.workspace = true
-asp-rust-build-support.workspace = true
 
 [lints]
 workspace = true

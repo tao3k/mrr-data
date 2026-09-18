@@ -18,9 +18,7 @@ serde_ipld_dagcbor.workspace = true
 
 [dev-dependencies]
 ipld-core.workspace = true
-
-[build-dependencies]
-mrr-data-asp-rust-project-policy.workspace = true
+mrr-data-asp-rust-build-support.workspace = true
 
 [lints]
 workspace = true

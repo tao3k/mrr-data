@@ -18,15 +18,15 @@ license = "LGPL-2.1-or-later"
 repository = "https://github.com/tao3k/mrr-data"
 
 [workspace.dependencies]
-asp-rust = { git = "https://github.com/tao3k/asp-rust", rev = "37463881f5ea5bb5a0f9f84e9a5f43f2cc9aa741", default-features = false }
-asp-rust-build-support = { git = "https://github.com/tao3k/asp-rust", rev = "37463881f5ea5bb5a0f9f84e9a5f43f2cc9aa741" }
+asp-rust = { git = "https://github.com/tao3k/asp-rust", rev = "2419414ee5379bad89506496e3eaab928df68daf", default-features = false }
+asp-rust-build-support = { git = "https://github.com/tao3k/asp-rust", rev = "2419414ee5379bad89506496e3eaab928df68daf" }
 arrow-array = "58.4.0"
 arrow-buffer = "58.4.0"
 arrow-ipc = "58.4.0"
 arrow-schema = "58.4.0"
 flatbuffers = "25.2.10"
-meta-relational-reasoning = { git = "https://github.com/tao3k/meta-relational-reasoning.git", rev = "0a8eb5bcb703e85592c198101e44ccf6e611c335" }
-mrr-data-asp-rust-project-policy = { path = "build-support/mrr-data-asp-rust-project-policy", version = "0.1.0" }
+meta-relational-reasoning = { git = "https://github.com/tao3k/meta-relational-reasoning.git", rev = "fcff395d803aff5279522de63ef4e53755c6965f", version = "0.1.0" }
+mrr-data-asp-rust-build-support = { path = "build-support/mrr-data-asp-rust-project-policy", version = "0.1.0" }
 mrr-data-arrow = { path = "crates/mrr-data-arrow", version = "0.1.0" }
 mrr-data-content = { path = "crates/mrr-data-content", version = "0.1.0" }
 mrr-data-core = { path = "crates/mrr-data-core", version = "0.1.0" }

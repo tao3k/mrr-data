@@ -1,4 +1,6 @@
-use asp_rust::{RustScenarioBenchmarkStatus, validate_rust_scenario_benchmark};
+use mrr_data_asp_rust_build_support::asp_rust::{
+    RustScenarioBenchmarkStatus, validate_rust_scenario_benchmark,
+};
 
 #[test]
 fn graphar_performance_scenario_contracts_are_admitted_by_asp_rust() {

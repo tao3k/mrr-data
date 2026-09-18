@@ -15,8 +15,8 @@ mrr-data-core.workspace = true
 tempfile.workspace = true
 unsigned-varint.workspace = true
 
-[build-dependencies]
-mrr-data-asp-rust-project-policy.workspace = true
+[dev-dependencies]
+mrr-data-asp-rust-build-support.workspace = true
 
 [lints]
 workspace = true
