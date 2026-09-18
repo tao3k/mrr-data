@@ -4,6 +4,7 @@
 mod error;
 mod manifest;
 mod profile;
+mod query_binding;
 
 pub use error::DataError;
 pub use manifest::{
@@ -15,6 +16,9 @@ pub use profile::{
     DAG_CBOR_CODEC, DAG_CBOR_CODEC_NAME, GRAPHAR_BINARY_ENTITY_NAMESPACE,
     GRAPHAR_BINARY_ENTITY_VERSION, RAW_CODEC, RAW_CODEC_NAME, SHA2_256_CODE, SHA2_256_NAME,
     SNAPSHOT_SCHEMA_NAMESPACE, SNAPSHOT_SCHEMA_VERSION, dag_cbor_cid,
+};
+pub use query_binding::{
+    BoundDataQuery, DataEngineProfile, DataQueryBindingError, DataQueryFeature, bind_data_query,
 };
 
 #[cfg(test)]

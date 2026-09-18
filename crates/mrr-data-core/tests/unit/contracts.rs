@@ -3,15 +3,20 @@ use std::collections::BTreeMap;
 use cid::Cid;
 use ipld_core::ipld::Ipld;
 use meta_relational_reasoning::{
-    EntityCatalog, EntityId, EntitySchema, ExternalRevisionIdentity, GenerationId, RelationCatalog,
-    RelationField, RelationId, RelationSchema, RevisionBinding, SemanticSnapshot, ValueSchema,
+    Binding, CatalogBoundQuery, Direction, EntityCatalog, EntityId, EntitySchema, Expression,
+    ExternalRevisionIdentity, GenerationId, GraphPattern, NodePattern, PathPattern, PathSegment,
+    Projection, QueryId, QueryOperatorId, QueryResult, QueryTemplate, ReasoningBundle,
+    ReasoningBundleDeclaration, RelationCatalog, RelationField, RelationId, RelationPattern,
+    RelationSchema, RevisionBinding, SemanticSnapshot, SetQuantifier, ValueSchema,
+    bind_query_to_catalog,
 };
 use multihash_codetable::{Code, MultihashDigest};
 
 use crate::{
-    BatchDescriptor, CoverageDescriptor, CoverageKind, DAG_CBOR_CODEC, DataError,
-    GraphProjectionDescriptor, RAW_CODEC, RelationDescriptor, SnapshotBlock, SnapshotManifest,
-    SnapshotManifestRequest, raw_cid,
+    BatchDescriptor, CoverageDescriptor, CoverageKind, DAG_CBOR_CODEC, DataEngineProfile,
+    DataError, DataQueryBindingError, DataQueryFeature, GraphProjectionDescriptor, RAW_CODEC,
+    RelationDescriptor, SnapshotBlock, SnapshotManifest, SnapshotManifestRequest, bind_data_query,
+    raw_cid,
 };
 
 fn relation_id(name: &str) -> RelationId {
@@ -78,6 +83,14 @@ fn manifest(reverse: bool) -> SnapshotManifest {
 }
 
 fn manifest_with_graph(reverse: bool, with_graph: bool) -> SnapshotManifest {
+    manifest_for_semantic(semantic_snapshot(reverse), with_graph, reverse)
+}
+
+fn manifest_for_semantic(
+    semantic_snapshot: SemanticSnapshot,
+    with_graph: bool,
+    reverse: bool,
+) -> SnapshotManifest {
     let (relations, entities) = catalogs();
     let alpha = descriptor("alpha", b"alpha-arrow-ipc", 2);
     let beta = descriptor("beta", b"beta-arrow-ipc", 3);
@@ -94,7 +107,7 @@ fn manifest_with_graph(reverse: bool, with_graph: bool) -> SnapshotManifest {
         vec![lineage_a, lineage_b]
     };
     let mut request = SnapshotManifestRequest::new(
-        semantic_snapshot(reverse),
+        semantic_snapshot,
         &relations,
         &entities,
         relation_descriptors,
@@ -108,6 +121,135 @@ fn manifest_with_graph(reverse: bool, with_graph: bool) -> SnapshotManifest {
         );
     }
     SnapshotManifest::admit(request).expect("manifest")
+}
+
+fn alternate_semantic_snapshot(generation: GenerationId, revision: &str) -> SemanticSnapshot {
+    SemanticSnapshot::admit(
+        generation,
+        vec![
+            RevisionBinding::admit(
+                ExternalRevisionIdentity::new("git", "repository:alternate", revision).unwrap(),
+                generation,
+            )
+            .unwrap(),
+        ],
+    )
+    .unwrap()
+}
+
+fn bound_query(max_hops: Option<u32>) -> CatalogBoundQuery {
+    let entity = EntityId::from_canonical_bytes("entity:fixture").unwrap();
+    let query_id = QueryId::from_canonical_bytes("query:fixture").unwrap();
+    let operator = |name: &str| QueryOperatorId::from_canonical_bytes(name).unwrap();
+    let binding = |name: &str| Binding::new(name).unwrap();
+    let query = meta_relational_reasoning::MetaQueryIr::new(
+        query_id,
+        GraphPattern::new(
+            operator("graph:fixture"),
+            vec![PathPattern::new(
+                NodePattern::new(binding("source"), vec![entity]),
+                vec![PathSegment::new(
+                    RelationPattern::new(
+                        Some(binding("edge")),
+                        vec![relation_id("alpha")],
+                        Direction::Outgoing,
+                        1,
+                        max_hops,
+                    )
+                    .unwrap(),
+                    NodePattern::new(binding("target"), vec![entity]),
+                )],
+            )],
+        )
+        .unwrap(),
+        vec![],
+        QueryResult::returning(SetQuantifier::All).with_projections(vec![Projection::new(
+            operator("projection:fixture"),
+            Expression::Binding(binding("source")),
+            binding("source_entity"),
+        )]),
+    )
+    .unwrap();
+    let bundle = ReasoningBundle::admit(ReasoningBundleDeclaration {
+        relations: vec![relation_schema("alpha"), relation_schema("beta")],
+        entities: vec![EntitySchema::new(entity, "Fixture", vec![]).unwrap()],
+        query_templates: vec![QueryTemplate::new(query, vec![])],
+        ..ReasoningBundleDeclaration::default()
+    })
+    .unwrap();
+    bind_query_to_catalog(&bundle, query_id, &semantic_snapshot(false)).unwrap()
+}
+
+#[test]
+fn admitted_query_binds_to_exact_physical_snapshot_and_graph_projection() {
+    let snapshot = SnapshotBlock::encode(manifest_with_graph(false, true)).unwrap();
+    let engine = DataEngineProfile::new("graphar-native", true, []).unwrap();
+    let bound = bind_data_query(&bound_query(Some(1)), &snapshot, &engine).unwrap();
+
+    assert_eq!(bound.snapshot_root(), snapshot.cid());
+    assert_eq!(
+        bound.graph_projection_manifest(),
+        snapshot
+            .manifest()
+            .graph_projection()
+            .map(GraphProjectionDescriptor::manifest_cid)
+    );
+    assert_eq!(bound.engine().name(), "graphar-native");
+}
+
+#[test]
+fn graph_projection_requirement_is_fail_closed() {
+    let snapshot = SnapshotBlock::encode(manifest(false)).unwrap();
+    let engine = DataEngineProfile::new("graphar-native", true, []).unwrap();
+
+    assert_eq!(
+        bind_data_query(&bound_query(Some(1)), &snapshot, &engine),
+        Err(DataQueryBindingError::GraphProjectionRequired)
+    );
+}
+
+#[test]
+fn engine_must_admit_every_required_path_feature() {
+    let snapshot = SnapshotBlock::encode(manifest_with_graph(false, true)).unwrap();
+    let engine = DataEngineProfile::new("bounded-path-engine", true, []).unwrap();
+
+    assert_eq!(
+        bind_data_query(&bound_query(None), &snapshot, &engine),
+        Err(DataQueryBindingError::UnsupportedFeature(
+            DataQueryFeature::UnboundedPath
+        ))
+    );
+}
+
+#[test]
+fn physical_binding_rejects_generation_and_snapshot_drift() {
+    let query = bound_query(Some(1));
+    let engine = DataEngineProfile::new("arrow-native", false, []).unwrap();
+    let other_generation = GenerationId::from_canonical_bytes("generation:other").unwrap();
+    let stale = SnapshotBlock::encode(manifest_for_semantic(
+        alternate_semantic_snapshot(other_generation, "commit:other"),
+        false,
+        false,
+    ))
+    .unwrap();
+    assert_eq!(
+        bind_data_query(&query, &stale, &engine),
+        Err(DataQueryBindingError::GenerationMismatch {
+            query: query.generation(),
+            snapshot: other_generation,
+        })
+    );
+
+    let drifted = SnapshotBlock::encode(manifest_for_semantic(
+        alternate_semantic_snapshot(query.generation(), "commit:drifted"),
+        false,
+        false,
+    ))
+    .unwrap();
+    assert_eq!(
+        bind_data_query(&query, &drifted, &engine),
+        Err(DataQueryBindingError::SemanticSnapshotMismatch)
+    );
 }
 
 #[test]

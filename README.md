@@ -57,7 +57,10 @@ boundary: schema namespace
 CIDv1/dag-cbor/SHA-256 roots, raw/SHA-256 child CIDs, and typed rejection of
 unknown profiles or self-inconsistent descriptors. It consumes MRR's semantic
 generation, source snapshot, and catalog digests rather than defining a second
-semantic identity system.
+semantic identity system. Its physical binder consumes MRR's admitted
+`CatalogBoundQuery` and a verified `SnapshotBlock`, then rejects only physical
+identity drift, unavailable GraphAr projection data, or unsupported engine
+features. Query typing and result admission remain owned by MRR.
 
 The optional `mrr-data-content` crate implements local packaging. Its memory and
 filesystem stores derive and verify every CID from an explicit `raw` or

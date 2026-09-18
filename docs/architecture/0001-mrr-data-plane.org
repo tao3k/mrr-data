@@ -276,23 +276,25 @@ batches; CIDs make those batches and receipts immutable and distributable.
 
 * Query and execution boundary
 
-MRR's =MetaQueryIr= stays storage-neutral but Property-Graph-specific.  A
-future downstream =BoundDataQuery= may pair it with:
+MRR's =MetaQueryIr= stays storage-neutral but Property-Graph-specific.
+=mrr-data-core= now admits a downstream =BoundDataQuery= that pairs it with:
 
 - exact =GenerationId=;
 - exact =RelationCatalogDigest= and =EntityCatalogDigest=;
 - admitted semantic snapshot digest;
 - physical snapshot root CID;
 - graph-projection profile and manifest CID when required;
-- language/dialect and engine capability profile.
+- a physical engine capability profile.
 
 Parsing, schema binding, execution, and semantic admission are separate
 receipts.  MRR's =CatalogBoundQuery= is the sole owner of unknown or ambiguous
 labels, properties, relation types, and expression typing.  The downstream
 binder consumes that admitted receipt and rejects only physical unavailability,
 unsupported projection/path modes, stale generations, snapshot drift, or
-engine-capability mismatch.  A database result is a candidate until MRR source,
-lineage, completeness, and transition owners admit it.
+engine-capability mismatch.  The binder consumes a verified =SnapshotBlock= so
+the physical root cannot drift from the manifest it checked.  A database result
+is a candidate until MRR source, lineage, completeness, and transition owners
+admit it through =admit_query_result_candidate=.
 
 * Content and Context materialization
 
