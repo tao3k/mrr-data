@@ -544,7 +544,7 @@ implemented and admitted in the same maintained fork rather than as a private
 reader in MRR Data.
 
 The =native-graphar= Cargo feature pins the immutable maintained fork commit
-=5230a5119b0d469db666b1ea035bdfb95c7b7611= and exercises the native Rust/C++
+=4d4b29715d9825bd3e9b78589cfb863880b9d1d8= and exercises the native Rust/C++
 writer and reader.  The adapter writes semantic =EntityId= vertex
 properties plus relation identity and full MRR context on every edge, stages a
 complete dataset, then renames it into place.  Its bounded semantic reader
@@ -558,14 +558,17 @@ malformed contexts, and row-budget overflow fail closed.  Admission requires
 an immutable fork revision, owner-maintained tests, and Linux/macOS native CI;
 it does not depend on Apache review.  Native CI remains separate so ordinary
 Rust feedback does not inherit the C++ build latency.  An isolated fixed
-10,000-edge Scenario uses two warmups and eleven measured samples.  It runs the
-official GraphAr Arrow readers and the Rust C Stream bridge over the identical
-eleven-property projection, rejects bridge P95 above 125 percent of official
-P95, keeps semantic P50 below =300ms= and P95 below the ASP Rust =500ms= hard
-gate, and records typed I/O and MRR semantic-admission phases separately.  The
-committed reference receipt records official P95 =84.27ms=, bridge P95
-=70.35ms=, and complete semantic-read P95 =197.40ms=; these observations are
-evidence for this revision and platform, not universal throughput claims.
+10,000-edge Scenario uses two warmups and 41 measured samples, alternating
+ABBA and BAAB execution order over the identical eleven-property projection.
+It rejects the maintained native Parquet path unless its median paired sample
+is at least five percent faster than the official GraphAr read, retains
+P50/P95/P99/max distributions for diagnosis, and independently rejects Arrow
+C Stream import above =min(1ms, 10% of official P95)=.  Semantic read keeps
+P50 below =300ms= and P95 below =500ms=; prepared semantic admission keeps P50
+below =25ms= and P95 below =50ms=.  The committed local reference receipt
+records official P50 =9.76ms=, native P50 =8.35ms=, Arrow C Stream import P95
+=0.18ms=, and complete parity-scenario P95 =228.05ms=.  These observations are
+evidence for this revision and host only, not universal throughput claims.
 
 - implement only the declared binary-Entity projection first;
 - preserve canonical IDs through repartition and compaction;
