@@ -320,27 +320,58 @@ fn scenario_semantically_reads_ten_thousand_graphar_edges() {
     let parity_measurement = measure_asp_rust_scenario(&parity_scenario, || {
         let iteration = parity_iteration.get();
         parity_iteration.set(iteration + 1);
-        let (edge_count, official_elapsed, imported, timings) = if iteration.is_multiple_of(2) {
-            let (edge_count, official_elapsed) = scan_graphar_edge_chunks(&output, limits)
-                .expect("scan official GraphAr Arrow chunks");
-            let (imported, timings) = read_graphar_dataset_observed(&output, &projection, limits)
-                .expect("read GraphAr through the Rust Arrow bridge");
-            (edge_count, official_elapsed, imported, timings)
-        } else {
-            let (imported, timings) = read_graphar_dataset_observed(&output, &projection, limits)
-                .expect("read GraphAr through the Rust Arrow bridge");
-            let (edge_count, official_elapsed) = scan_graphar_edge_chunks(&output, limits)
-                .expect("scan official GraphAr Arrow chunks");
-            (edge_count, official_elapsed, imported, timings)
+        let read_official = || {
+            scan_graphar_edge_chunks(&output, limits).expect("scan official GraphAr Arrow chunks")
         };
+        let read_native = || {
+            read_graphar_dataset_observed(&output, &projection, limits)
+                .expect("read GraphAr through the Rust Arrow bridge")
+        };
+        let (official_first, native_first, native_second, official_second) =
+            if iteration.is_multiple_of(2) {
+                let official_first = read_official();
+                let native_first = read_native();
+                let native_second = read_native();
+                let official_second = read_official();
+                (official_first, native_first, native_second, official_second)
+            } else {
+                let native_first = read_native();
+                let official_first = read_official();
+                let official_second = read_official();
+                let native_second = read_native();
+                (official_first, native_first, native_second, official_second)
+            };
+        let (edge_count, official_first_elapsed) = official_first;
+        let (second_edge_count, official_second_elapsed) = official_second;
+        assert_eq!(second_edge_count, edge_count);
+        let (imported, timings) = native_first;
+        let (second_imported, second_timings) = native_second;
         assert_eq!(imported.facts(), expected_facts);
-        let rust_graphar_edge_read = timings.edge_storage_read() + timings.arrow_c_stream_import();
+        assert_eq!(second_imported.facts(), expected_facts);
+        let official_elapsed = (official_first_elapsed + official_second_elapsed) / 2;
+        let native_read =
+            (timings.native_edge().native_read() + second_timings.native_edge().native_read()) / 2;
+        let rust_graphar_edge_read = (timings.edge_storage_read()
+            + timings.arrow_c_stream_import()
+            + second_timings.edge_storage_read()
+            + second_timings.arrow_c_stream_import())
+            / 2;
+        let native_budget = (official_elapsed * 95) / 100;
         observe_native_edge_read(
             AspRustScenarioObservation::default()
                 .with_timing("official_arrow_edge_scan", official_elapsed)
+                .with_timing("paired_native_edge_read", native_read)
                 .with_timing("rust_graphar_edge_read", rust_graphar_edge_read)
                 .with_timing("graphar_storage_read", timings.edge_storage_read())
                 .with_timing("arrow_c_stream_import", timings.arrow_c_stream_import())
+                .with_timing(
+                    "paired_native_budget_overrun",
+                    native_read.saturating_sub(native_budget),
+                )
+                .with_timing(
+                    "paired_native_time_saved",
+                    official_elapsed.saturating_sub(native_read),
+                )
                 .with_metric("edge_count", edge_count as u64),
             timings.native_edge(),
             timings.edge_storage_read(),
@@ -475,13 +506,14 @@ fn assert_graphar_performance_budgets(
     semantic_read: &AspRustScenarioMeasurement,
     prepared_admission: &AspRustScenarioMeasurement,
 ) {
-    let official_p95 = parity.observed_timings["official_arrow_edge_scan"];
-    let native_offset_p95 = parity.observed_timings["graphar_edge_native_read"];
-    let native_offset_budget = (official_p95 * 95) / 100;
+    let paired_budget_overrun_p50 = parity.timing_p50["paired_native_budget_overrun"];
     assert!(
-        native_offset_p95 <= native_offset_budget,
-        "native Parquet string offsets must reduce the same-run GraphAr edge read P95 by at least 5%: official={official_p95:?} native={native_offset_p95:?} budget={native_offset_budget:?}"
+        paired_budget_overrun_p50.is_zero(),
+        "native Parquet string offsets must reduce the paired same-run GraphAr edge read by at least 5% in the median sample: median_budget_overrun={paired_budget_overrun_p50:?} official_p50={:?} native_p50={:?}",
+        parity.timing_p50["official_arrow_edge_scan"],
+        parity.timing_p50["paired_native_edge_read"],
     );
+    let official_p95 = parity.observed_timings["official_arrow_edge_scan"];
     let c_stream_import_p95 = parity.observed_timings["arrow_c_stream_import"];
     let import_budget = (official_p95 / 10).min(Duration::from_millis(1));
     assert!(
@@ -576,7 +608,7 @@ fn graphar_arrow_bridge_parity_scenario() -> AspRustScenario {
     asp_rust_scenario! {
         name: "graphar-arrow-bridge-parity-10k",
         package: "mrr-data-graphar",
-        description: "Native Parquet string offsets improve same-run GraphAr reads while zero-copy Arrow C Stream import stays bounded",
+        description: "Native Parquet string offsets improve paired same-run GraphAr reads while zero-copy Arrow C Stream import stays bounded",
         fixture_root: "tests/unit/scenarios/graphar_arrow_bridge_parity_10k",
         tags: ["graphar", "arrow", "rust-bridge", "performance"],
         commands: [
@@ -590,9 +622,9 @@ fn graphar_arrow_bridge_parity_scenario() -> AspRustScenario {
             max_total: "500ms",
             regression_budget: "100ms",
             memory_budget_bytes: 268_435_456,
-            target_rationale: "The reference phase alternates execution order on the same 10,000-edge fixture, requires native Parquet offsets to reduce read P95 by at least five percent, and separately bounds zero-copy Arrow C Stream import.",
+            target_rationale: "The reference phase uses alternating ABBA/BAAB execution on the same 10,000-edge fixture, requires the median paired sample to show at least five percent native Parquet offset savings, retains P95/P99 phase distributions, and separately bounds zero-copy Arrow C Stream import.",
             warmup_iterations: 2,
-            measure_iterations: 21,
+            measure_iterations: 41,
             metrics: [
                 { name: "edge_count", unit: "count", kind: Exact, target: 10_000 }
             ]

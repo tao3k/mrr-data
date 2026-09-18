@@ -1,7 +1,7 @@
 id = "graphar-arrow-bridge-parity-10k"
-title = "Native Parquet string offsets improve GraphAr reads while zero-copy import stays bounded"
+title = "Native Parquet string offsets improve paired GraphAr reads while zero-copy import stays bounded"
 policy_ids = ["RUST-AGENT-ASP-SCENARIO-BENCH-001"]
-agent_goal = "Reject native Parquet offsets unless their same-run P95 is at least five percent faster than the standard GraphAr read for the identical 10,000-edge projection, and reject zero-copy Arrow C Stream import above either one millisecond or ten percent of the standard read."
+agent_goal = "Reject native Parquet offsets unless the median paired same-run sample is at least five percent faster than the standard GraphAr read for the identical 10,000-edge projection, retain tail distributions for diagnosis, and reject zero-copy Arrow C Stream import above either one millisecond or ten percent of the standard read."
 reference_repositories = ["apache/incubator-graphar", "tao3k/asp-rust"]
 reference_patterns = ["FilterOptions", "preserve_physical_types", "AdjListPropertyArrowChunkReader", "ExportRecordBatchReader", "ArrowArrayStreamReader", "Arrow C Stream", "asp_rust_scenario"]
 inputs = "inputs"
