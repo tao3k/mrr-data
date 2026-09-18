@@ -3,7 +3,7 @@ test = "scenario_semantically_reads_ten_thousand_graphar_edges"
 snapshot = "graphar_semantic_read_10k"
 target_total = "300ms"
 max_total = "500ms"
-observed_total = "11095371ns"
+observed_total = "15107028ns"
 regression_budget = "100ms"
 memory_budget_bytes = 268435456
 observed_memory_bytes = 0
@@ -14,124 +14,215 @@ clock = "std::time::Instant"
 statistic = "p95"
 warmup_iterations = 2
 measure_iterations = 21
-total_p50 = "10578996ns"
-total_p95 = "11095371ns"
-total_p99 = "11388898ns"
-total_max = "11388898ns"
+total_p50 = "14556396ns"
+total_p95 = "15107028ns"
+total_p99 = "15339730ns"
+total_max = "15339730ns"
 
 [observed_timings]
-arrow_c_stream_import = "26011ns"
-edge_storage_read = "4034738ns"
-fact_admission = "194515ns"
-fact_duplicate_check = "25671ns"
-fact_identity_access = "40362ns"
-fact_identity_decode = "776352ns"
-fact_identity_parse = "737198ns"
-fact_materialization = "1200014ns"
-fact_ordering = "1396702ns"
-fact_preparation = "3372502ns"
-fact_projection_split = "205624ns"
-fact_sort = "1191471ns"
-graph_info = "256946ns"
-native_vertex_read = "1330530ns"
-semantic_read_admission = "10404414ns"
-vertex_admission = "948281ns"
+arrow_c_stream_import = "30276ns"
+edge_storage_read = "5296863ns"
+fact_admission = "216644ns"
+fact_duplicate_check = "30150ns"
+fact_identity_access = "55434ns"
+fact_identity_decode = "1126582ns"
+fact_identity_parse = "1071282ns"
+fact_materialization = "1651071ns"
+fact_ordering = "2087474ns"
+fact_preparation = "4819212ns"
+fact_projection_split = "317818ns"
+fact_sort = "1738262ns"
+graph_info = "357877ns"
+graphar_edge_adjacency_read = "636030ns"
+graphar_edge_bridge_overhead = "31493ns"
+graphar_edge_chunk_advance = "0ns"
+graphar_edge_collection_lookup = "30803ns"
+graphar_edge_column_projection = "1062ns"
+graphar_edge_concatenate = "3479ns"
+graphar_edge_native_classified = "5266697ns"
+graphar_edge_native_read = "5267454ns"
+graphar_edge_native_unclassified = "837ns"
+graphar_edge_property_read = "4580695ns"
+graphar_edge_reader_setup = "14919ns"
+graphar_edge_stream_export = "398ns"
+graphar_edge_table_assembly = "3373ns"
+native_vertex_read = "2090777ns"
+semantic_read_admission = "14364270ns"
+vertex_admission = "1319363ns"
 
 [phase_distributions.arrow_c_stream_import]
-p50 = "21327ns"
-p95 = "26011ns"
-p99 = "26871ns"
-max = "26871ns"
+p50 = "28141ns"
+p95 = "30276ns"
+p99 = "30595ns"
+max = "30595ns"
 
 [phase_distributions.edge_storage_read]
-p50 = "3732507ns"
-p95 = "4034738ns"
-p99 = "4205864ns"
-max = "4205864ns"
+p50 = "5080671ns"
+p95 = "5296863ns"
+p99 = "5801903ns"
+max = "5801903ns"
 
 [phase_distributions.fact_admission]
-p50 = "179275ns"
-p95 = "194515ns"
-p99 = "195018ns"
-max = "195018ns"
+p50 = "203293ns"
+p95 = "216644ns"
+p99 = "339139ns"
+max = "339139ns"
 
 [phase_distributions.fact_duplicate_check]
-p50 = "22302ns"
-p95 = "25671ns"
-p99 = "25804ns"
-max = "25804ns"
+p50 = "24499ns"
+p95 = "30150ns"
+p99 = "39471ns"
+max = "39471ns"
 
 [phase_distributions.fact_identity_access]
-p50 = "39106ns"
-p95 = "40362ns"
-p99 = "41500ns"
-max = "41500ns"
+p50 = "53359ns"
+p95 = "55434ns"
+p99 = "64602ns"
+max = "64602ns"
 
 [phase_distributions.fact_identity_decode]
-p50 = "771624ns"
-p95 = "776352ns"
-p99 = "777239ns"
-max = "777239ns"
+p50 = "1089697ns"
+p95 = "1126582ns"
+p99 = "1277579ns"
+max = "1277579ns"
 
 [phase_distributions.fact_identity_parse]
-p50 = "732464ns"
-p95 = "737198ns"
-p99 = "737407ns"
-max = "737407ns"
+p50 = "1038706ns"
+p95 = "1071282ns"
+p99 = "1212977ns"
+max = "1212977ns"
 
 [phase_distributions.fact_materialization]
-p50 = "1097518ns"
-p95 = "1200014ns"
-p99 = "1292082ns"
-max = "1292082ns"
+p50 = "1381558ns"
+p95 = "1651071ns"
+p99 = "1884198ns"
+max = "1884198ns"
 
 [phase_distributions.fact_ordering]
-p50 = "1352152ns"
-p95 = "1396702ns"
-p99 = "1399973ns"
-max = "1399973ns"
+p50 = "1894654ns"
+p95 = "2087474ns"
+p99 = "2285800ns"
+max = "2285800ns"
 
 [phase_distributions.fact_preparation]
-p50 = "3230414ns"
-p95 = "3372502ns"
-p99 = "3382362ns"
-max = "3382362ns"
+p50 = "4392353ns"
+p95 = "4819212ns"
+p99 = "5235932ns"
+max = "5235932ns"
 
 [phase_distributions.fact_projection_split]
-p50 = "172568ns"
-p95 = "205624ns"
-p99 = "219724ns"
-max = "219724ns"
+p50 = "279121ns"
+p95 = "317818ns"
+p99 = "320966ns"
+max = "320966ns"
 
 [phase_distributions.fact_sort]
-p50 = "1145343ns"
-p95 = "1191471ns"
-p99 = "1196814ns"
-max = "1196814ns"
+p50 = "1588147ns"
+p95 = "1738262ns"
+p99 = "1943714ns"
+max = "1943714ns"
 
 [phase_distributions.graph_info]
-p50 = "243819ns"
-p95 = "256946ns"
-p99 = "280347ns"
-max = "280347ns"
+p50 = "341689ns"
+p95 = "357877ns"
+p99 = "362195ns"
+max = "362195ns"
+
+[phase_distributions.graphar_edge_adjacency_read]
+p50 = "563664ns"
+p95 = "636030ns"
+p99 = "670562ns"
+max = "670562ns"
+
+[phase_distributions.graphar_edge_bridge_overhead]
+p50 = "29302ns"
+p95 = "31493ns"
+p99 = "40069ns"
+max = "40069ns"
+
+[phase_distributions.graphar_edge_chunk_advance]
+p50 = "0ns"
+p95 = "0ns"
+p99 = "0ns"
+max = "0ns"
+
+[phase_distributions.graphar_edge_collection_lookup]
+p50 = "26612ns"
+p95 = "30803ns"
+p99 = "50120ns"
+max = "50120ns"
+
+[phase_distributions.graphar_edge_column_projection]
+p50 = "984ns"
+p95 = "1062ns"
+p99 = "12171ns"
+max = "12171ns"
+
+[phase_distributions.graphar_edge_concatenate]
+p50 = "3133ns"
+p95 = "3479ns"
+p99 = "3727ns"
+max = "3727ns"
+
+[phase_distributions.graphar_edge_native_classified]
+p50 = "5049823ns"
+p95 = "5266697ns"
+p99 = "5771247ns"
+max = "5771247ns"
+
+[phase_distributions.graphar_edge_native_read]
+p50 = "5050586ns"
+p95 = "5267454ns"
+p99 = "5771993ns"
+max = "5771993ns"
+
+[phase_distributions.graphar_edge_native_unclassified]
+p50 = "757ns"
+p95 = "837ns"
+p99 = "853ns"
+max = "853ns"
+
+[phase_distributions.graphar_edge_property_read]
+p50 = "4430572ns"
+p95 = "4580695ns"
+p99 = "5142955ns"
+max = "5142955ns"
+
+[phase_distributions.graphar_edge_reader_setup]
+p50 = "13780ns"
+p95 = "14919ns"
+p99 = "17902ns"
+max = "17902ns"
+
+[phase_distributions.graphar_edge_stream_export]
+p50 = "299ns"
+p95 = "398ns"
+p99 = "471ns"
+max = "471ns"
+
+[phase_distributions.graphar_edge_table_assembly]
+p50 = "3189ns"
+p95 = "3373ns"
+p99 = "3886ns"
+max = "3886ns"
 
 [phase_distributions.native_vertex_read]
-p50 = "1262916ns"
-p95 = "1330530ns"
-p99 = "1333732ns"
-max = "1333732ns"
+p50 = "1876438ns"
+p95 = "2090777ns"
+p99 = "2578445ns"
+max = "2578445ns"
 
 [phase_distributions.semantic_read_admission]
-p50 = "9990048ns"
-p95 = "10404414ns"
-p99 = "10684985ns"
-max = "10684985ns"
+p50 = "13800675ns"
+p95 = "14364270ns"
+p99 = "14591306ns"
+max = "14591306ns"
 
 [phase_distributions.vertex_admission]
-p50 = "937481ns"
-p95 = "948281ns"
-p99 = "956328ns"
-max = "956328ns"
+p50 = "1269007ns"
+p95 = "1319363ns"
+p99 = "1384029ns"
+max = "1384029ns"
 
 [metrics.vertex_count]
 unit = "count"
