@@ -263,6 +263,14 @@ struct PreparedFacts {
     semantic_preparation: Duration,
 }
 
+struct OrderedFacts {
+    values: Vec<Fact>,
+    predicates: Vec<Arc<str>>,
+    sort: Duration,
+    duplicate_check: Duration,
+    projection_split: Duration,
+}
+
 struct RunCache<K, V> {
     last: Option<(K, V)>,
     values: HashMap<K, V>,
@@ -381,6 +389,24 @@ fn prepare_facts(
     }
     let materialization = materialization_started.elapsed();
 
+    let ordered = order_prepared_facts(facts)?;
+    let ordering = ordered.sort + ordered.duplicate_check + ordered.projection_split;
+    Ok(PreparedFacts {
+        values: ordered.values,
+        predicates: ordered.predicates,
+        identity_access,
+        identity_parse,
+        identity_decode,
+        materialization,
+        sort: ordered.sort,
+        duplicate_check: ordered.duplicate_check,
+        projection_split: ordered.projection_split,
+        ordering,
+        semantic_preparation: fact_preparation_started.elapsed(),
+    })
+}
+
+fn order_prepared_facts(mut facts: Vec<PreparedFact>) -> Result<OrderedFacts, GraphArReadError> {
     let sort_started = Instant::now();
     facts.sort_unstable_by_key(|fact| fact.value.id());
     let sort = sort_started.elapsed();
@@ -399,20 +425,12 @@ fn prepare_facts(
         .into_iter()
         .map(|fact| (fact.predicate, fact.value))
         .unzip();
-    let projection_split = projection_split_started.elapsed();
-    let ordering = sort + duplicate_check + projection_split;
-    Ok(PreparedFacts {
+    Ok(OrderedFacts {
         values,
         predicates,
-        identity_access,
-        identity_parse,
-        identity_decode,
-        materialization,
         sort,
         duplicate_check,
-        projection_split,
-        ordering,
-        semantic_preparation: fact_preparation_started.elapsed(),
+        projection_split: projection_split_started.elapsed(),
     })
 }
 
