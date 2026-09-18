@@ -82,6 +82,9 @@ pub struct GraphArReadTimings {
     fact_identity_parse: Duration,
     fact_identity_decode: Duration,
     fact_materialization: Duration,
+    fact_sort: Duration,
+    fact_duplicate_check: Duration,
+    fact_projection_split: Duration,
     fact_ordering: Duration,
     fact_preparation: Duration,
     fact_admission: Duration,
@@ -148,6 +151,24 @@ impl GraphArReadTimings {
     #[must_use]
     pub const fn fact_materialization(self) -> Duration {
         self.fact_materialization
+    }
+
+    /// Time spent canonically sorting prepared facts by identity.
+    #[must_use]
+    pub const fn fact_sort(self) -> Duration {
+        self.fact_sort
+    }
+
+    /// Time spent rejecting duplicate fact identities after canonical sorting.
+    #[must_use]
+    pub const fn fact_duplicate_check(self) -> Duration {
+        self.fact_duplicate_check
+    }
+
+    /// Time spent splitting ordered prepared facts into predicate and value projections.
+    #[must_use]
+    pub const fn fact_projection_split(self) -> Duration {
+        self.fact_projection_split
     }
 
     /// Time spent canonically ordering facts and rejecting duplicate identities.
@@ -299,6 +320,9 @@ pub fn read_graphar_dataset_observed(
             fact_identity_parse: prepare_timings.fact_identity_parse(),
             fact_identity_decode: prepare_timings.fact_identity_decode(),
             fact_materialization: prepare_timings.fact_materialization(),
+            fact_sort: prepare_timings.fact_sort(),
+            fact_duplicate_check: prepare_timings.fact_duplicate_check(),
+            fact_projection_split: prepare_timings.fact_projection_split(),
             fact_ordering: prepare_timings.fact_ordering(),
             fact_preparation: prepare_timings.fact_preparation(),
             fact_admission,

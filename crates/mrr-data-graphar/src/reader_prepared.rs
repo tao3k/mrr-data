@@ -53,6 +53,9 @@ pub struct GraphArPrepareTimings {
     fact_identity_parse: Duration,
     fact_identity_decode: Duration,
     fact_materialization: Duration,
+    fact_sort: Duration,
+    fact_duplicate_check: Duration,
+    fact_projection_split: Duration,
     fact_ordering: Duration,
     fact_preparation: Duration,
 }
@@ -116,6 +119,24 @@ impl GraphArPrepareTimings {
     #[must_use]
     pub const fn fact_materialization(self) -> Duration {
         self.fact_materialization
+    }
+
+    /// Time spent canonically sorting prepared facts by identity.
+    #[must_use]
+    pub const fn fact_sort(self) -> Duration {
+        self.fact_sort
+    }
+
+    /// Time spent rejecting duplicate fact identities after canonical sorting.
+    #[must_use]
+    pub const fn fact_duplicate_check(self) -> Duration {
+        self.fact_duplicate_check
+    }
+
+    /// Time spent splitting ordered prepared facts into predicate and value projections.
+    #[must_use]
+    pub const fn fact_projection_split(self) -> Duration {
+        self.fact_projection_split
     }
 
     /// Time spent canonically ordering facts and rejecting duplicate identities.
@@ -219,6 +240,9 @@ pub fn prepare_graphar_source(
             fact_identity_parse: facts.identity_parse,
             fact_identity_decode: facts.identity_decode,
             fact_materialization: facts.materialization,
+            fact_sort: facts.sort,
+            fact_duplicate_check: facts.duplicate_check,
+            fact_projection_split: facts.projection_split,
             fact_ordering: facts.ordering,
             fact_preparation: facts.semantic_preparation,
         },
@@ -232,6 +256,9 @@ struct PreparedFacts {
     identity_parse: Duration,
     identity_decode: Duration,
     materialization: Duration,
+    sort: Duration,
+    duplicate_check: Duration,
+    projection_split: Duration,
     ordering: Duration,
     semantic_preparation: Duration,
 }
@@ -354,19 +381,26 @@ fn prepare_facts(
     }
     let materialization = materialization_started.elapsed();
 
-    let ordering_started = Instant::now();
+    let sort_started = Instant::now();
     facts.sort_unstable_by_key(|fact| fact.value.id());
+    let sort = sort_started.elapsed();
+
+    let duplicate_check_started = Instant::now();
     if let Some(duplicate) = facts
         .windows(2)
         .find(|pair| pair[0].value.id() == pair[1].value.id())
     {
         return Err(GraphArReadError::DuplicateFact(duplicate[0].value.id()));
     }
+    let duplicate_check = duplicate_check_started.elapsed();
+
+    let projection_split_started = Instant::now();
     let (predicates, values) = facts
         .into_iter()
         .map(|fact| (fact.predicate, fact.value))
         .unzip();
-    let ordering = ordering_started.elapsed();
+    let projection_split = projection_split_started.elapsed();
+    let ordering = sort + duplicate_check + projection_split;
     Ok(PreparedFacts {
         values,
         predicates,
@@ -374,6 +408,9 @@ fn prepare_facts(
         identity_parse,
         identity_decode,
         materialization,
+        sort,
+        duplicate_check,
+        projection_split,
         ordering,
         semantic_preparation: fact_preparation_started.elapsed(),
     })

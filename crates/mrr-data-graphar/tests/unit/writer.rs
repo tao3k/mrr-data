@@ -396,6 +396,11 @@ fn observe_semantic_read(
         timings.fact_identity_access() + timings.fact_identity_parse(),
         "fact identity decode must remain the exact sum of its observable phases"
     );
+    assert_eq!(
+        timings.fact_ordering(),
+        timings.fact_sort() + timings.fact_duplicate_check() + timings.fact_projection_split(),
+        "fact ordering must remain the exact sum of its observable phases"
+    );
     AspRustScenarioObservation::default()
         .with_timing("graph_info", timings.graph_info())
         .with_timing("native_vertex_read", timings.native_vertex_read())
@@ -406,6 +411,9 @@ fn observe_semantic_read(
         .with_timing("fact_identity_parse", timings.fact_identity_parse())
         .with_timing("fact_identity_decode", timings.fact_identity_decode())
         .with_timing("fact_materialization", timings.fact_materialization())
+        .with_timing("fact_sort", timings.fact_sort())
+        .with_timing("fact_duplicate_check", timings.fact_duplicate_check())
+        .with_timing("fact_projection_split", timings.fact_projection_split())
         .with_timing("fact_ordering", timings.fact_ordering())
         .with_timing("fact_preparation", timings.fact_preparation())
         .with_timing("fact_admission", timings.fact_admission())
