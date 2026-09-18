@@ -18,8 +18,8 @@ pub use profile::{
     SNAPSHOT_SCHEMA_NAMESPACE, SNAPSHOT_SCHEMA_VERSION, dag_cbor_cid,
 };
 pub use query_binding::{
-    BoundDataQuery, DataEngineProfile, DataQueryBindingError, DataQueryExecutionError,
-    DataQueryExecutor, DataQueryFeature, PhysicalQueryOutput, bind_data_query, execute_data_query,
+    BoundDataQuery, DataEngineProfile, DataQueryBindingError, DataQueryFeature,
+    DataQueryOutputError, PhysicalQueryOutput, bind_data_query, project_data_query_output,
 };
 
 #[cfg(test)]

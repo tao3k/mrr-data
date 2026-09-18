@@ -1,4 +1,3 @@
-use std::convert::Infallible;
 use std::num::NonZeroUsize;
 
 use meta_relational_reasoning::{
@@ -13,10 +12,9 @@ use meta_relational_reasoning::{
 };
 use mrr_data_arrow::{facts_to_record_batch, record_batch_to_facts};
 use mrr_data_core::{
-    BatchDescriptor, BoundDataQuery, CoverageDescriptor, CoverageKind, DataEngineProfile,
-    DataQueryExecutor, GraphProjectionDescriptor, PhysicalQueryOutput, RelationDescriptor,
-    SnapshotBlock, SnapshotManifest, SnapshotManifestRequest, bind_data_query, execute_data_query,
-    raw_cid,
+    BatchDescriptor, CoverageDescriptor, CoverageKind, DataEngineProfile,
+    GraphProjectionDescriptor, PhysicalQueryOutput, RelationDescriptor, SnapshotBlock,
+    SnapshotManifest, SnapshotManifestRequest, bind_data_query, project_data_query_output, raw_cid,
 };
 
 use crate::{
@@ -224,38 +222,14 @@ fn output_from_facts(facts: &[Fact]) -> PhysicalQueryOutput {
     )
 }
 
-struct RoundTripExecutor {
-    profile: DataEngineProfile,
-    output: PhysicalQueryOutput,
-}
-
-impl DataQueryExecutor for RoundTripExecutor {
-    type Error = Infallible;
-
-    fn profile(&self) -> &DataEngineProfile {
-        &self.profile
-    }
-
-    fn execute(&self, _query: &BoundDataQuery) -> Result<PhysicalQueryOutput, Self::Error> {
-        Ok(self.output.clone())
-    }
-}
-
 fn execute(
     query: &CatalogBoundQuery,
     snapshot: &SnapshotBlock,
-    profile: DataEngineProfile,
+    profile: &DataEngineProfile,
     physical_facts: &[Fact],
 ) -> CandidateQueryResult {
-    let bound = bind_data_query(query, snapshot, &profile).unwrap();
-    execute_data_query(
-        &bound,
-        &RoundTripExecutor {
-            profile,
-            output: output_from_facts(physical_facts),
-        },
-    )
-    .unwrap()
+    let bound = bind_data_query(query, snapshot, profile).unwrap();
+    project_data_query_output(&bound, profile, output_from_facts(physical_facts)).unwrap()
 }
 
 #[test]
@@ -282,13 +256,13 @@ fn arrow_and_maintained_graphar_project_one_identical_mrr_candidate() {
     let arrow_candidate = execute(
         &query,
         &snapshot,
-        DataEngineProfile::new("arrow-round-trip", false, []).unwrap(),
+        &DataEngineProfile::new("arrow-round-trip", false, []).unwrap(),
         &arrow_facts,
     );
     let graphar_candidate = execute(
         &query,
         &snapshot,
-        DataEngineProfile::new("graphar-native", true, []).unwrap(),
+        &DataEngineProfile::new("graphar-native", true, []).unwrap(),
         graphar.facts(),
     );
     assert_eq!(arrow_candidate, graphar_candidate);

@@ -61,11 +61,12 @@ semantic identity system. Its physical binder consumes MRR's admitted
 `CatalogBoundQuery` and a verified `SnapshotBlock`, then rejects only physical
 identity drift, unavailable GraphAr projection data, or unsupported engine
 features. Query typing and result admission remain owned by MRR.
-Its physical execution bridge accepts only an executor with the exact bound
-profile. The executor returns storage-neutral columns and rows without an
-identity envelope; `mrr-data-core` injects the immutable MRR query binding and
-returns a `CandidateQueryResult` for MRR to admit. Arrow and GraphAr adapters
-therefore cannot create a parallel result-admission authority.
+Its physical output bridge accepts only rows produced under the exact bound
+engine profile. Engines keep their native synchronous or asynchronous
+lifecycle and return storage-neutral columns and rows without an identity
+envelope; `mrr-data-core` injects the immutable MRR query binding and returns a
+`CandidateQueryResult` for MRR to admit. Arrow and GraphAr adapters therefore
+cannot create a parallel execution framework or result-admission authority.
 The native GraphAr suite exercises the first differential slice: one admitted
 binary-Entity relation is independently round-tripped through Arrow and the
 maintained GraphAr reader, projected through exact bound engine profiles, and

@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::convert::Infallible;
 use std::num::NonZeroUsize;
 
 use cid::Cid;
@@ -16,9 +15,9 @@ use multihash_codetable::{Code, MultihashDigest};
 
 use crate::{
     BatchDescriptor, CoverageDescriptor, CoverageKind, DAG_CBOR_CODEC, DataEngineProfile,
-    DataError, DataQueryBindingError, DataQueryExecutionError, DataQueryExecutor, DataQueryFeature,
+    DataError, DataQueryBindingError, DataQueryFeature, DataQueryOutputError,
     GraphProjectionDescriptor, PhysicalQueryOutput, RAW_CODEC, RelationDescriptor, SnapshotBlock,
-    SnapshotManifest, SnapshotManifestRequest, bind_data_query, execute_data_query, raw_cid,
+    SnapshotManifest, SnapshotManifestRequest, bind_data_query, project_data_query_output, raw_cid,
 };
 
 fn relation_id(name: &str) -> RelationId {
@@ -182,23 +181,6 @@ fn bound_query(max_hops: Option<u32>) -> CatalogBoundQuery {
     bind_query_to_catalog(&bundle, query_id, &semantic_snapshot(false)).unwrap()
 }
 
-struct FixtureExecutor {
-    profile: DataEngineProfile,
-    output: PhysicalQueryOutput,
-}
-
-impl DataQueryExecutor for FixtureExecutor {
-    type Error = Infallible;
-
-    fn profile(&self) -> &DataEngineProfile {
-        &self.profile
-    }
-
-    fn execute(&self, _query: &crate::BoundDataQuery) -> Result<PhysicalQueryOutput, Self::Error> {
-        Ok(self.output.clone())
-    }
-}
-
 #[test]
 fn admitted_query_binds_to_exact_physical_snapshot_and_graph_projection() {
     let snapshot = SnapshotBlock::encode(manifest_with_graph(false, true)).unwrap();
@@ -221,23 +203,21 @@ fn physical_execution_injects_binding_then_mrr_admits_the_candidate() {
     let snapshot = SnapshotBlock::encode(manifest(false)).unwrap();
     let profile = DataEngineProfile::new("arrow-native", false, []).unwrap();
     let bound = bind_data_query(&bound_query(Some(1)), &snapshot, &profile).unwrap();
-    let executor = FixtureExecutor {
-        profile,
-        output: PhysicalQueryOutput::new(
-            vec![Binding::new("source_entity").unwrap()],
-            vec![vec![QueryResultValue::node(
-                EntityId::from_canonical_bytes("entity:row").unwrap(),
-                EntityId::from_canonical_bytes("entity:fixture").unwrap(),
-            )]],
-        ),
-    };
+    let output = PhysicalQueryOutput::new(
+        vec![Binding::new("source_entity").unwrap()],
+        vec![vec![QueryResultValue::node(
+            EntityId::from_canonical_bytes("entity:row").unwrap(),
+            EntityId::from_canonical_bytes("entity:fixture").unwrap(),
+        )]],
+    );
 
-    let candidate = execute_data_query(&bound, &executor).unwrap();
+    let expected_rows = output.rows().to_vec();
+    let candidate = project_data_query_output(&bound, &profile, output).unwrap();
     assert_eq!(
         candidate.binding().query_binding_digest(),
         bound.query().digest()
     );
-    assert_eq!(candidate.rows(), executor.output.rows());
+    assert_eq!(candidate.rows(), expected_rows);
     let receipt = admit_query_result_candidate(
         bound.query(),
         &candidate,
@@ -248,20 +228,21 @@ fn physical_execution_injects_binding_then_mrr_admits_the_candidate() {
 }
 
 #[test]
-fn physical_execution_rejects_an_executor_outside_the_bound_profile() {
+fn physical_output_rejects_a_producer_outside_the_bound_profile() {
     let snapshot = SnapshotBlock::encode(manifest(false)).unwrap();
     let profile = DataEngineProfile::new("arrow-native", false, []).unwrap();
     let bound = bind_data_query(&bound_query(Some(1)), &snapshot, &profile).unwrap();
-    let executor = FixtureExecutor {
-        profile: DataEngineProfile::new("graphar-native", false, []).unwrap(),
-        output: PhysicalQueryOutput::new(Vec::new(), Vec::new()),
-    };
+    let producer_profile = DataEngineProfile::new("graphar-native", false, []).unwrap();
 
     assert_eq!(
-        execute_data_query(&bound, &executor),
-        Err(DataQueryExecutionError::EngineProfileMismatch {
+        project_data_query_output(
+            &bound,
+            &producer_profile,
+            PhysicalQueryOutput::new(Vec::new(), Vec::new()),
+        ),
+        Err(DataQueryOutputError::EngineProfileMismatch {
             bound: "arrow-native".to_owned(),
-            executor: "graphar-native".to_owned(),
+            actual: "graphar-native".to_owned(),
         })
     );
 }

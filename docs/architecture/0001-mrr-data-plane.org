@@ -294,16 +294,17 @@ unsupported projection/path modes, stale generations, snapshot drift, or
 engine-capability mismatch.  The binder consumes a verified =SnapshotBlock= so
 the physical root cannot drift from the manifest it checked.
 
-The execution bridge preserves that ownership boundary.  A
-=DataQueryExecutor= must expose the exact =DataEngineProfile= used by the
-binding and returns only a =PhysicalQueryOutput= of storage-neutral columns and
-rows.  =execute_data_query= rejects profile drift before invoking the engine,
-then injects =QueryResultBinding::for_query= from the immutable
-=CatalogBoundQuery=.  The engine cannot supply or replace this identity.  The
-output remains a =CandidateQueryResult= until MRR source, lineage,
-completeness, and transition owners admit it through
-=admit_query_result_candidate=.  This protocol is implemented; general Arrow
-and GraphAr query executors remain a later engine-specific milestone.
+The physical output bridge preserves that ownership boundary without owning a
+second engine lifecycle.  Each engine executes through its native synchronous
+or asynchronous API and returns only a =PhysicalQueryOutput= of
+storage-neutral columns and rows.  =project_data_query_output= checks the
+producer's =DataEngineProfile= against the physical binding, then injects
+=QueryResultBinding::for_query= from the immutable =CatalogBoundQuery=.  The
+engine cannot supply or replace this identity.  The output remains a
+=CandidateQueryResult= until MRR source, lineage, completeness, and transition
+owners admit it through =admit_query_result_candidate=.  This protocol is
+implemented; general Arrow and GraphAr query executors remain a later
+engine-specific milestone.
 
 The native GraphAr contract suite covers the first differential adapter slice.
 It sends the same admitted binary-Entity facts through an Arrow =RecordBatch=

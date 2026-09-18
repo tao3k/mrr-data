@@ -43,35 +43,17 @@ pub struct BoundDataQuery {
 /// Storage-neutral rows produced by one physical engine invocation.
 ///
 /// This value intentionally carries no semantic identity. The identity is
-/// injected from [`BoundDataQuery`] only after the executor profile is checked.
+/// injected from [`BoundDataQuery`] only after the producer profile is checked.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PhysicalQueryOutput {
     columns: Vec<Binding>,
     rows: Vec<Vec<QueryResultValue>>,
 }
 
-/// A physical executor for one already-bound query.
-///
-/// Implementations may read Arrow, `GraphAr`, or another admitted physical form,
-/// but they cannot manufacture the MRR result binding returned to the caller.
-pub trait DataQueryExecutor {
-    type Error;
-
-    fn profile(&self) -> &DataEngineProfile;
-
-    /// Produces storage-neutral rows for the exact physical binding.
-    ///
-    /// # Errors
-    ///
-    /// Returns the implementation's typed read, planning, or execution failure.
-    fn execute(&self, query: &BoundDataQuery) -> Result<PhysicalQueryOutput, Self::Error>;
-}
-
-/// Physical execution failures before MRR result admission.
+/// Physical output projection failures before MRR result admission.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum DataQueryExecutionError<E> {
-    EngineProfileMismatch { bound: String, executor: String },
-    Executor(E),
+pub enum DataQueryOutputError {
+    EngineProfileMismatch { bound: String, actual: String },
 }
 
 /// Physical reasons an admitted MRR query cannot execute against a snapshot.
@@ -97,19 +79,18 @@ impl fmt::Display for DataQueryBindingError {
 
 impl std::error::Error for DataQueryBindingError {}
 
-impl<E: fmt::Display> fmt::Display for DataQueryExecutionError<E> {
+impl fmt::Display for DataQueryOutputError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::EngineProfileMismatch { bound, executor } => write!(
+            Self::EngineProfileMismatch { bound, actual } => write!(
                 formatter,
-                "query is bound to engine `{bound}`, not executor `{executor}`"
+                "query is bound to engine `{bound}`, not output producer `{actual}`"
             ),
-            Self::Executor(error) => error.fmt(formatter),
         }
     }
 }
 
-impl<E: std::error::Error + 'static> std::error::Error for DataQueryExecutionError<E> {}
+impl std::error::Error for DataQueryOutputError {}
 
 impl DataEngineProfile {
     /// Admits one named engine profile and its optional execution features.
@@ -189,33 +170,30 @@ impl PhysicalQueryOutput {
     }
 }
 
-/// Executes a physically bound query and projects its rows into an MRR-owned
-/// result candidate.
+/// Projects physical engine output into an MRR-owned result candidate.
 ///
-/// This function performs no result admission. It only checks that the selected
-/// executor exactly matches the profile used during physical binding, executes
-/// it, and injects the immutable semantic identity from the admitted query.
-/// Callers must pass the returned candidate to MRR's
-/// `admit_query_result_candidate` boundary.
+/// This function owns no engine lifecycle and performs no result admission. An
+/// engine executes through its native synchronous or asynchronous API, then
+/// supplies storage-neutral output together with its selected profile. This
+/// boundary checks the profile against the physical binding and injects the
+/// immutable semantic identity from the admitted query. Callers must pass the
+/// returned candidate to MRR's `admit_query_result_candidate` boundary.
 ///
 /// # Errors
 ///
-/// Returns [`DataQueryExecutionError::EngineProfileMismatch`] before execution
-/// when the executor differs from the bound profile, or preserves the
-/// executor's own typed failure.
-pub fn execute_data_query<E: DataQueryExecutor>(
+/// Returns [`DataQueryOutputError::EngineProfileMismatch`] when the engine that
+/// produced `output` differs from the bound profile.
+pub fn project_data_query_output(
     query: &BoundDataQuery,
-    executor: &E,
-) -> Result<CandidateQueryResult, DataQueryExecutionError<E::Error>> {
-    if executor.profile() != query.engine() {
-        return Err(DataQueryExecutionError::EngineProfileMismatch {
+    engine: &DataEngineProfile,
+    output: PhysicalQueryOutput,
+) -> Result<CandidateQueryResult, DataQueryOutputError> {
+    if engine != query.engine() {
+        return Err(DataQueryOutputError::EngineProfileMismatch {
             bound: query.engine().name().to_owned(),
-            executor: executor.profile().name().to_owned(),
+            actual: engine.name().to_owned(),
         });
     }
-    let output = executor
-        .execute(query)
-        .map_err(DataQueryExecutionError::Executor)?;
     Ok(CandidateQueryResult::new(
         QueryResultBinding::for_query(query.query()),
         output.columns,
