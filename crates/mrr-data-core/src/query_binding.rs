@@ -6,7 +6,7 @@ use std::fmt;
 use cid::Cid;
 use meta_relational_reasoning::{
     Binding, CandidateQueryResult, CatalogBoundQuery, Direction, GenerationId, PageValue,
-    QueryResultBinding, QueryResultValue,
+    QueryResultBinding, QueryResultValue, RelationId,
 };
 
 use crate::SnapshotBlock;
@@ -71,6 +71,17 @@ pub enum DataQueryBindingError {
     UnsupportedFeature(DataQueryFeature),
 }
 
+/// Physical identity failures when selecting a graph source for a bound query.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DataGraphSourceBindingError {
+    GraphProjectionRequired,
+    SourceRelationUnavailable(RelationId),
+    GraphProjectionManifestMismatch {
+        expected: Box<Cid>,
+        actual: Box<Cid>,
+    },
+}
+
 impl fmt::Display for DataQueryBindingError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(formatter, "{self:?}")
@@ -78,6 +89,14 @@ impl fmt::Display for DataQueryBindingError {
 }
 
 impl std::error::Error for DataQueryBindingError {}
+
+impl fmt::Display for DataGraphSourceBindingError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{self:?}")
+    }
+}
+
+impl std::error::Error for DataGraphSourceBindingError {}
 
 impl fmt::Display for DataQueryOutputError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -252,6 +271,46 @@ pub fn bind_data_query(
         graph_projection_manifest,
         engine: engine.clone(),
     })
+}
+
+/// Admits one relation-specific graph source against an immutable query binding.
+///
+/// This boundary checks physical identity only. It neither opens storage nor
+/// owns an engine lifecycle; storage adapters project their source metadata to
+/// `relation` and `projection_manifest`, then retain their native execution API.
+///
+/// # Errors
+///
+/// Returns [`DataGraphSourceBindingError`] when the bound snapshot has no graph
+/// projection, the query does not reference `relation`, or the supplied
+/// manifest differs from the projection selected during query binding.
+pub fn admit_graph_projection_source(
+    query: &BoundDataQuery,
+    relation: RelationId,
+    projection_manifest: &Cid,
+) -> Result<(), DataGraphSourceBindingError> {
+    let expected_manifest = query
+        .graph_projection_manifest()
+        .ok_or(DataGraphSourceBindingError::GraphProjectionRequired)?;
+    let relation_is_referenced = query.query().query().graph().paths().iter().any(|path| {
+        path.segments()
+            .iter()
+            .any(|segment| segment.relation().types().contains(&relation))
+    });
+    if !relation_is_referenced {
+        return Err(DataGraphSourceBindingError::SourceRelationUnavailable(
+            relation,
+        ));
+    }
+    if projection_manifest != expected_manifest {
+        return Err(
+            DataGraphSourceBindingError::GraphProjectionManifestMismatch {
+                expected: Box::new(*expected_manifest),
+                actual: Box::new(*projection_manifest),
+            },
+        );
+    }
+    Ok(())
 }
 
 fn required_features(query: &CatalogBoundQuery) -> BTreeSet<DataQueryFeature> {

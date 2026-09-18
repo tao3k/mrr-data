@@ -111,6 +111,8 @@ jobs:
           scenario_semantically_reads_ten_thousand_graphar_edges --
           --ignored --nocapture
       - name: Check facade GraphAr native feature
-        run: cargo check -p mrr-data --no-default-features --features graphar-native --locked
+        run: |
+          cargo check -p mrr-data --no-default-features --features graphar-native --locked
+          cargo check -p mrr-data --no-default-features --features content,graphar-native --locked
       - name: Lint maintained GraphAr adapter
         run: cargo clippy -p mrr-data-graphar --all-targets --features native-graphar --locked -- -D warnings

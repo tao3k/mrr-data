@@ -330,6 +330,14 @@ without adding that database to =mrr-data=.  Its catalog, indexes, statistics,
 and CSR caches are derived state and must be rebuildable from the GraphAr
 source plus the MRR snapshot manifest.
 
+When both =content= and =graphar= are selected, the facade composes these
+otherwise independent crates at =admit_graphar_query_source=.  This boundary
+requires the source relation to occur in the MRR-owned query and re-hashes the
+current GraphAr metadata against the exact raw projection-manifest CID carried
+by =BoundDataQuery=.  Successful admission returns only the original immutable
+source descriptor for downstream native registration; it creates no engine,
+connection, catalog, or executor abstraction.
+
 * Content and Context materialization
 
 =mrr-data= may physically store both a canonical Content Graph and a derived

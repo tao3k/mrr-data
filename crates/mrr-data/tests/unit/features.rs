@@ -33,6 +33,13 @@ fn graphar_surface_is_available_when_selected() {
 }
 
 #[test]
+#[cfg(all(feature = "content", feature = "graphar"))]
+fn graphar_query_source_admission_is_available_from_the_composed_facade() {
+    let _ = core::mem::size_of::<crate::GraphArQuerySourceBindingError>();
+    let _ = crate::admit_graphar_query_source;
+}
+
+#[test]
 #[cfg(feature = "datafusion")]
 fn datafusion_surface_is_available_when_selected() {
     assert_eq!(

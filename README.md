@@ -93,6 +93,13 @@ indexes, statistics, CSR caches, and connections remain rebuildable downstream
 state; GraphAr remains the durable physical graph projection and MRR remains
 the semantic authority.
 
+With the explicit `content,graphar` feature composition, downstream code can
+call `admit_graphar_query_source` before registering that descriptor. The
+boundary rejects a source relation outside the MRR-owned query and re-hashes
+the current GraphAr metadata against the exact projection manifest CID already
+carried by `BoundDataQuery`. It still creates no database connection or engine
+lifecycle.
+
 The optional `mrr-data-content` crate implements local packaging. Its memory and
 filesystem stores derive and verify every CID from an explicit `raw` or
 `dag-cbor` codec. Snapshot archives use the upstream `fvm_ipld_car` CARv1

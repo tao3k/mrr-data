@@ -15,9 +15,10 @@ use multihash_codetable::{Code, MultihashDigest};
 
 use crate::{
     BatchDescriptor, CoverageDescriptor, CoverageKind, DAG_CBOR_CODEC, DataEngineProfile,
-    DataError, DataQueryBindingError, DataQueryFeature, DataQueryOutputError,
-    GraphProjectionDescriptor, PhysicalQueryOutput, RAW_CODEC, RelationDescriptor, SnapshotBlock,
-    SnapshotManifest, SnapshotManifestRequest, bind_data_query, project_data_query_output, raw_cid,
+    DataError, DataGraphSourceBindingError, DataQueryBindingError, DataQueryFeature,
+    DataQueryOutputError, GraphProjectionDescriptor, PhysicalQueryOutput, RAW_CODEC,
+    RelationDescriptor, SnapshotBlock, SnapshotManifest, SnapshotManifestRequest,
+    admit_graph_projection_source, bind_data_query, project_data_query_output, raw_cid,
 };
 
 fn relation_id(name: &str) -> RelationId {
@@ -196,6 +197,44 @@ fn admitted_query_binds_to_exact_physical_snapshot_and_graph_projection() {
             .map(GraphProjectionDescriptor::manifest_cid)
     );
     assert_eq!(bound.engine().name(), "graphar-native");
+}
+
+#[test]
+fn graph_source_must_match_bound_relation_and_projection_manifest() {
+    let snapshot = SnapshotBlock::encode(manifest_with_graph(false, true)).unwrap();
+    let engine = DataEngineProfile::new("graphar-native", true, []).unwrap();
+    let bound = bind_data_query(&bound_query(Some(1)), &snapshot, &engine).unwrap();
+    let expected = raw_cid(b"graphar-manifest");
+
+    admit_graph_projection_source(&bound, relation_id("alpha"), &expected).unwrap();
+    assert_eq!(
+        admit_graph_projection_source(&bound, relation_id("beta"), &expected),
+        Err(DataGraphSourceBindingError::SourceRelationUnavailable(
+            relation_id("beta")
+        ))
+    );
+    let drifted = raw_cid(b"graphar-manifest-drifted");
+    assert_eq!(
+        admit_graph_projection_source(&bound, relation_id("alpha"), &drifted),
+        Err(
+            DataGraphSourceBindingError::GraphProjectionManifestMismatch {
+                expected: Box::new(expected),
+                actual: Box::new(drifted),
+            }
+        )
+    );
+}
+
+#[test]
+fn graph_source_requires_a_projection_in_the_bound_snapshot() {
+    let snapshot = SnapshotBlock::encode(manifest(false)).unwrap();
+    let engine = DataEngineProfile::new("arrow-native", false, []).unwrap();
+    let bound = bind_data_query(&bound_query(Some(1)), &snapshot, &engine).unwrap();
+
+    assert_eq!(
+        admit_graph_projection_source(&bound, relation_id("alpha"), &raw_cid(b"graphar-manifest")),
+        Err(DataGraphSourceBindingError::GraphProjectionRequired)
+    );
 }
 
 #[test]
