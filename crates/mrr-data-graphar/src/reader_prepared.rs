@@ -408,7 +408,7 @@ fn prepare_facts(
 
 fn order_prepared_facts(mut facts: Vec<PreparedFact>) -> Result<OrderedFacts, GraphArReadError> {
     let sort_started = Instant::now();
-    facts.sort_unstable_by_key(|fact| fact.value.id());
+    facts.sort_by_cached_key(|fact| fact.value.id());
     let sort = sort_started.elapsed();
 
     let duplicate_check_started = Instant::now();
