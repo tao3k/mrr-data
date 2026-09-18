@@ -21,9 +21,9 @@ use mrr_data_asp_rust_build_support::asp_rust_build_support::{
 use crate::reader::scan_graphar_edge_chunks;
 use crate::writer::{EDGE_CHUNK_SIZE, VERTEX_CHUNK_SIZE};
 use crate::{
-    BinaryEntityProjection, GraphArNativeEdgeTimings, GraphArReadError, GraphArReadLimits,
-    GraphArReadTimings, GraphArWriteError, prepare_graphar_source, read_graphar_dataset,
-    read_graphar_dataset_observed, write_graphar_dataset,
+    BinaryEntityProjection, GraphArNativeEdgeTimings, GraphArQuerySource, GraphArReadError,
+    GraphArReadLimits, GraphArReadTimings, GraphArWriteError, prepare_graphar_source,
+    read_graphar_dataset, read_graphar_dataset_observed, write_graphar_dataset,
 };
 
 fn id<T: CanonicalId>(name: &str) -> T {
@@ -86,6 +86,25 @@ fn fact(name: &str, source: &str, destination: &str) -> Fact {
     )
 }
 
+fn assert_query_source(
+    source: &GraphArQuerySource,
+    root: &Path,
+    projection: &BinaryEntityProjection,
+) {
+    assert_eq!(source.root(), root);
+    assert_eq!(source.relation_id(), projection.relation_id());
+    assert_eq!(source.predicate(), "knows");
+    assert_eq!(source.source_field(), "source");
+    assert_eq!(source.destination_field(), "destination");
+    assert_eq!(source.vertex_count(), 3);
+    assert_eq!(source.edge_count(), 2);
+    assert_eq!(source.vertex_label(), "entity");
+    assert_eq!(source.edge_label(), "mrr_relation");
+    assert_eq!(source.entity_identity_property(), "entity_id");
+    assert_eq!(source.fact_identity_property(), "fact_id");
+    assert_eq!(source.generation_property(), "generation_id");
+}
+
 #[test]
 fn maintained_graphar_round_trips_vertices_edges_and_metadata() {
     let projection = projection();
@@ -101,6 +120,9 @@ fn maintained_graphar_round_trips_vertices_edges_and_metadata() {
     assert_eq!(receipt.vertex_count(), 3);
     assert_eq!(receipt.edge_count(), 2);
     assert!(receipt.graph_info_path().is_file());
+    let query_source = receipt.query_source();
+    assert_query_source(query_source, &output, &projection);
+    assert_eq!(query_source.graph_info_path(), receipt.graph_info_path());
     let graph_info = GraphInfo::load(receipt.graph_info_path()).unwrap();
     assert_eq!(graph_info.vertex_info_num(), 1);
     assert_eq!(graph_info.edge_info_num(), 1);
@@ -242,12 +264,19 @@ fn prepared_graphar_source_reuses_semantic_facts_and_remains_fail_closed() {
     assert_eq!(prepared.vertex_count(), 3);
     assert_eq!(prepared.edge_count(), 2);
 
+    let query_source = prepared.query_source(&projection).unwrap();
+    assert_query_source(&query_source, &output, &projection);
+
     let first = prepared.admit(&projection).unwrap();
     let second = prepared.admit(&projection).unwrap();
     assert_eq!(first.facts(), expected.as_slice());
     assert_eq!(second, first);
 
     let error = prepared.admit(&projection_named("follows")).unwrap_err();
+    assert!(matches!(error, GraphArReadError::PredicateMismatch { .. }));
+    let error = prepared
+        .query_source(&projection_named("follows"))
+        .unwrap_err();
     assert!(matches!(error, GraphArReadError::PredicateMismatch { .. }));
 }
 

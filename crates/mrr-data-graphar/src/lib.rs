@@ -5,6 +5,7 @@
 #![forbid(unsafe_code)]
 
 mod projection;
+mod query_source;
 #[cfg(feature = "native-graphar")]
 mod reader;
 #[cfg(feature = "native-graphar")]
@@ -15,6 +16,7 @@ pub use projection::{
     BinaryEntityProjection, GraphEdgeRecord, GraphProjectionError, IndexedGraphEdge,
     PhysicalVertexIndex,
 };
+pub use query_source::GraphArQuerySource;
 #[cfg(feature = "native-graphar")]
 pub use reader::{
     GraphArDataset, GraphArNativeEdgeTimings, GraphArPrepareTimings, GraphArReadError,

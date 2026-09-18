@@ -81,6 +81,18 @@ requires identical candidates and identical MRR admission receipts. This is
 real engine parity for the declared slice, not a claim of a general GQL query
 engine.
 
+Native GraphAr publication also returns a `GraphArQuerySource`. This immutable,
+database-neutral value pins the dataset root, canonical GraphAr metadata entry
+point, admitted MRR relation and endpoint roles, stable semantic identity
+properties, and row counts. Preparing an existing GraphAr source can project
+the same descriptor without re-entering native storage. A downstream crate may
+therefore depend on `mrr-data` plus DuckDB/DuckGQL, DataFusion, or another
+engine and register the exact source without this repository importing a
+database, emitting SQL, or defining another engine lifecycle. Database catalog,
+indexes, statistics, CSR caches, and connections remain rebuildable downstream
+state; GraphAr remains the durable physical graph projection and MRR remains
+the semantic authority.
+
 The optional `mrr-data-content` crate implements local packaging. Its memory and
 filesystem stores derive and verify every CID from an explicit `raw` or
 `dag-cbor` codec. Snapshot archives use the upstream `fvm_ipld_car` CARv1
@@ -126,6 +138,7 @@ The repository does not yet claim:
 - general GraphAr import beyond the admitted binary-Entity profile;
 - an IPFS network integration;
 - general schema-bound query execution beyond the admitted DataFusion slice.
+- a built-in DuckDB/DuckGQL dependency or database-owned source of truth.
 
 The canonical proposal, invariants, V1 manifest boundary, and delivery gates
 are in [RFC 0001](docs/architecture/0001-mrr-data-plane.org).

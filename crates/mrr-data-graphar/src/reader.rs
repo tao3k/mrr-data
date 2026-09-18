@@ -27,7 +27,7 @@ use meta_relational_reasoning::{
     GenerationId, RelationAuthority, RelationContext, RelationContextError, RuleId, RulePackId,
 };
 
-use crate::writer::{EDGE_TYPE, ENTITY_TYPE, GRAPH_INFO_FILE};
+use crate::query_source::{EDGE_TYPE, ENTITY_TYPE, GRAPH_INFO_FILE};
 use crate::{BinaryEntityProjection, GraphProjectionError};
 
 const VERTEX_PROPERTIES: [&str; 1] = ["entity_id"];

@@ -12,6 +12,8 @@ use arrow_array::RecordBatch;
 use graphar_rs::info::GraphInfo;
 use meta_relational_reasoning::{EntityId, Fact, RelationId, Value};
 
+use crate::GraphArQuerySource;
+
 use super::{
     BinaryEntityProjection, ContextKey, EdgeArrowColumns, GRAPH_INFO_FILE, GraphArDataset,
     GraphArNativeEdgeTimings, GraphArReadError, GraphArReadLimits, endpoint, parse_context,
@@ -172,6 +174,29 @@ impl PreparedGraphArSource {
     #[must_use]
     pub const fn timings(&self) -> GraphArPrepareTimings {
         self.timings
+    }
+
+    /// Validates the prepared source and projects database-neutral registration metadata.
+    ///
+    /// This operation does not re-enter native storage or expose a database
+    /// lifecycle. Downstream adapters may combine the returned descriptor with
+    /// their own engine dependency.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed projection error when the prepared immutable facts do
+    /// not belong to `projection`.
+    pub fn query_source(
+        &self,
+        projection: &BinaryEntityProjection,
+    ) -> Result<GraphArQuerySource, GraphArReadError> {
+        admit_prepared_facts(&self.facts, &self.predicates, projection)?;
+        Ok(GraphArQuerySource::new(
+            self.root.clone(),
+            projection,
+            self.vertex_count,
+            self.edge_count,
+        ))
     }
 
     /// Re-admits MRR facts exclusively from prepared immutable semantic values.

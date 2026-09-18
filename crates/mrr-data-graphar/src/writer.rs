@@ -16,45 +16,52 @@ use meta_relational_reasoning::{
     EvidenceCompleteness, FactId, FactProvenance, FactValidity, RelationAuthority, RelationId,
 };
 
-use crate::{BinaryEntityProjection, GraphEdgeRecord, GraphProjectionError, PhysicalVertexIndex};
+use crate::query_source::{
+    EDGE_TYPE, ENTITY_ID_PROPERTY, ENTITY_TYPE, FACT_ID_PROPERTY, GRAPH_INFO_FILE,
+};
+use crate::{
+    BinaryEntityProjection, GraphArQuerySource, GraphEdgeRecord, GraphProjectionError,
+    PhysicalVertexIndex,
+};
 
-pub(crate) const ENTITY_TYPE: &str = "entity";
-pub(crate) const EDGE_TYPE: &str = "mrr_relation";
 // GraphAr's format specification recommends these empirical defaults to avoid
 // small-file and file-parser overhead while retaining bounded chunk reads.
 pub(crate) const VERTEX_CHUNK_SIZE: i64 = 1 << 18;
 pub(crate) const EDGE_CHUNK_SIZE: i64 = 1 << 22;
 const VERTEX_INFO_FILE: &str = "entity.vertex.yaml";
 const EDGE_INFO_FILE: &str = "entity_mrr_relation_entity.edge.yaml";
-pub(crate) const GRAPH_INFO_FILE: &str = "mrr.graph.yaml";
 
 /// Receipt for one dataset written by the project-maintained `GraphAr` runtime.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GraphArDatasetReceipt {
-    root: PathBuf,
-    vertex_count: usize,
-    edge_count: usize,
+    query_source: GraphArQuerySource,
 }
 
 impl GraphArDatasetReceipt {
     #[must_use]
     pub fn root(&self) -> &Path {
-        &self.root
+        self.query_source.root()
     }
 
     #[must_use]
     pub const fn vertex_count(&self) -> usize {
-        self.vertex_count
+        self.query_source.vertex_count()
     }
 
     #[must_use]
     pub const fn edge_count(&self) -> usize {
-        self.edge_count
+        self.query_source.edge_count()
     }
 
     #[must_use]
     pub fn graph_info_path(&self) -> PathBuf {
-        self.root.join(GRAPH_INFO_FILE)
+        self.query_source.graph_info_path()
+    }
+
+    /// Database-neutral descriptor for downstream query-engine registration.
+    #[must_use]
+    pub const fn query_source(&self) -> &GraphArQuerySource {
+        &self.query_source
     }
 }
 
@@ -159,9 +166,12 @@ pub fn write_graphar_dataset(
         return Err(GraphArWriteError::io("commit dataset", &error));
     }
     Ok(GraphArDatasetReceipt {
-        root: output.to_path_buf(),
-        vertex_count,
-        edge_count,
+        query_source: GraphArQuerySource::new(
+            output.to_path_buf(),
+            projection,
+            vertex_count,
+            edge_count,
+        ),
     })
 }
 
@@ -205,7 +215,7 @@ fn write_staged(
     let mut vertices = VerticesBuilder::try_new(&vertex_info, &prefix, 0).map_err(upstream)?;
     for entity in index.entities() {
         let mut vertex = Vertex::new();
-        vertex.add_property_string("entity_id", entity.to_string());
+        vertex.add_property_string(ENTITY_ID_PROPERTY, entity.to_string());
         vertices.add_vertex(vertex).map_err(upstream)?;
     }
     vertices.dump().map_err(upstream)?;
@@ -248,7 +258,7 @@ fn write_staged(
 fn vertex_info(version: InfoVersion) -> Result<VertexInfo, GraphArWriteError> {
     let group = property_group(
         [Property::new(
-            "entity_id",
+            ENTITY_ID_PROPERTY,
             DataType::string(),
             true,
             false,
@@ -266,7 +276,7 @@ fn vertex_info(version: InfoVersion) -> Result<VertexInfo, GraphArWriteError> {
 
 fn edge_info(version: InfoVersion) -> Result<EdgeInfo, GraphArWriteError> {
     let names = [
-        ("fact_id", true, false),
+        (FACT_ID_PROPERTY, true, false),
         ("relation_id", false, false),
         ("predicate", false, false),
         ("generation_id", false, false),

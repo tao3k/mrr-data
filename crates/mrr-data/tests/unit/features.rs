@@ -29,6 +29,7 @@ fn graphar_surface_is_available_when_selected() {
         crate::graphar::GRAPHAR_BINARY_ENTITY_NAMESPACE,
         crate::profile::GRAPHAR_BINARY_ENTITY_NAMESPACE
     );
+    let _ = core::mem::size_of::<crate::graphar::GraphArQuerySource>();
 }
 
 #[test]

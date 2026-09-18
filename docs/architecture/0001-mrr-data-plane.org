@@ -320,6 +320,16 @@ The exact =DataEngineProfile= projection must then produce identical
 evidence for engine and physical-representation parity over the declared
 slice, not a general GQL execution claim.
 
+Native GraphAr publication and prepared import project a
+=GraphArQuerySource=.  The descriptor contains only the immutable dataset root,
+canonical GraphAr metadata entry point, admitted relation and endpoint roles,
+semantic identity property names, and bounded row counts.  It deliberately
+contains no SQL, connection, mutable catalog, or engine execution trait.  A
+downstream package can combine this crate with DuckDB/DuckGQL or another engine
+without adding that database to =mrr-data=.  Its catalog, indexes, statistics,
+and CSR caches are derived state and must be rebuildable from the GraphAr
+source plus the MRR snapshot manifest.
+
 * Content and Context materialization
 
 =mrr-data= may physically store both a canonical Content Graph and a derived
