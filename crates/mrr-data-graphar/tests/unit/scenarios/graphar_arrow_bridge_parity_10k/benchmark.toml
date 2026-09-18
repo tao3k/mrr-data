@@ -23,7 +23,6 @@ total_max = "21322611ns"
 arrow_c_stream_import = "31471ns"
 graphar_edge_adjacency_read = "566711ns"
 graphar_edge_bridge_overhead = "31500ns"
-graphar_edge_chunk_advance = "0ns"
 graphar_edge_collection_lookup = "33116ns"
 graphar_edge_column_projection = "1070ns"
 graphar_edge_concatenate = "3371ns"
@@ -55,12 +54,6 @@ p50 = "29307ns"
 p95 = "31500ns"
 p99 = "31893ns"
 max = "31893ns"
-
-[phase_distributions.graphar_edge_chunk_advance]
-p50 = "0ns"
-p95 = "0ns"
-p99 = "0ns"
-max = "0ns"
 
 [phase_distributions.graphar_edge_collection_lookup]
 p50 = "24419ns"

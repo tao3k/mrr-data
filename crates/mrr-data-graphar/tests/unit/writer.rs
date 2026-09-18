@@ -438,7 +438,7 @@ fn observe_native_edge_read(
     let bridge_overhead = storage_read
         .saturating_sub(timings.native_read())
         .saturating_sub(timings.stream_export());
-    observation
+    let observation = observation
         .with_timing(
             "graphar_edge_collection_lookup",
             timings.collection_lookup(),
@@ -451,7 +451,6 @@ fn observe_native_edge_read(
             timings.column_projection(),
         )
         .with_timing("graphar_edge_table_assembly", timings.table_assembly())
-        .with_timing("graphar_edge_chunk_advance", timings.chunk_advance())
         .with_timing("graphar_edge_concatenate", timings.concatenate())
         .with_timing(
             "graphar_edge_native_classified",
@@ -463,7 +462,12 @@ fn observe_native_edge_read(
         )
         .with_timing("graphar_edge_native_read", timings.native_read())
         .with_timing("graphar_edge_stream_export", timings.stream_export())
-        .with_timing("graphar_edge_bridge_overhead", bridge_overhead)
+        .with_timing("graphar_edge_bridge_overhead", bridge_overhead);
+    if timings.chunk_advance().is_zero() {
+        observation
+    } else {
+        observation.with_timing("graphar_edge_chunk_advance", timings.chunk_advance())
+    }
 }
 
 fn assert_graphar_performance_budgets(
