@@ -406,24 +406,32 @@ fn prepare_facts(
     })
 }
 
-fn order_prepared_facts(mut facts: Vec<PreparedFact>) -> Result<OrderedFacts, GraphArReadError> {
+fn order_prepared_facts(facts: Vec<PreparedFact>) -> Result<OrderedFacts, GraphArReadError> {
     let sort_started = Instant::now();
-    facts.sort_by_cached_key(|fact| fact.value.id());
+    let mut order = facts
+        .iter()
+        .enumerate()
+        .map(|(index, fact)| (fact.value.id(), index))
+        .collect::<Vec<_>>();
+    order.sort_unstable_by_key(|(fact_id, _index)| *fact_id);
     let sort = sort_started.elapsed();
 
     let duplicate_check_started = Instant::now();
-    if let Some(duplicate) = facts
-        .windows(2)
-        .find(|pair| pair[0].value.id() == pair[1].value.id())
-    {
-        return Err(GraphArReadError::DuplicateFact(duplicate[0].value.id()));
+    if let Some(duplicate) = order.windows(2).find(|pair| pair[0].0 == pair[1].0) {
+        return Err(GraphArReadError::DuplicateFact(duplicate[0].0));
     }
     let duplicate_check = duplicate_check_started.elapsed();
 
     let projection_split_started = Instant::now();
-    let (predicates, values) = facts
+    let mut facts = facts.into_iter().map(Some).collect::<Vec<_>>();
+    let (predicates, values) = order
         .into_iter()
-        .map(|fact| (fact.predicate, fact.value))
+        .map(|(_fact_id, index)| {
+            let fact = facts[index]
+                .take()
+                .expect("each canonical fact position is consumed once");
+            (fact.predicate, fact.value)
+        })
         .unzip();
     Ok(OrderedFacts {
         values,
