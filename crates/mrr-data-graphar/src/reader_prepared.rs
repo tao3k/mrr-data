@@ -14,8 +14,8 @@ use meta_relational_reasoning::{EntityId, Fact, RelationId, Value};
 
 use super::{
     BinaryEntityProjection, ContextKey, EdgeArrowColumns, GRAPH_INFO_FILE, GraphArDataset,
-    GraphArReadError, GraphArReadLimits, endpoint, parse_context, parse_identity,
-    read_and_admit_vertices, read_edge_batches, required_value,
+    GraphArNativeEdgeTimings, GraphArReadError, GraphArReadLimits, endpoint, parse_context,
+    parse_identity, read_and_admit_vertices, read_edge_batches, required_value,
 };
 
 /// Native `GraphAr` storage decoded into reusable semantic facts.
@@ -48,6 +48,7 @@ pub struct GraphArPrepareTimings {
     native_vertex_read: Duration,
     vertex_admission: Duration,
     edge_storage_read: Duration,
+    native_edge: GraphArNativeEdgeTimings,
     arrow_c_stream_import: Duration,
     fact_identity_access: Duration,
     fact_identity_parse: Duration,
@@ -83,6 +84,12 @@ impl GraphArPrepareTimings {
     #[must_use]
     pub const fn edge_storage_read(self) -> Duration {
         self.edge_storage_read
+    }
+
+    /// Atomic native phases within [`Self::edge_storage_read`].
+    #[must_use]
+    pub const fn native_edge(self) -> GraphArNativeEdgeTimings {
+        self.native_edge
     }
 
     /// Time spent importing exported C Stream batches into Rust Arrow arrays.
@@ -235,6 +242,7 @@ pub fn prepare_graphar_source(
             native_vertex_read: vertices.native_read,
             vertex_admission: vertices.semantic_admission,
             edge_storage_read: edges.storage_read,
+            native_edge: edges.native_timings,
             arrow_c_stream_import: edges.c_stream_import,
             fact_identity_access: facts.identity_access,
             fact_identity_parse: facts.identity_parse,

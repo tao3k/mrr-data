@@ -20,7 +20,7 @@ use arrow_array::{Array, Int64Array, LargeStringArray, RecordBatch, StringArray}
 use graphar_rs::reader::scan_edge_arrow_chunks;
 use graphar_rs::{
     info::{AdjListType, GraphInfo},
-    reader::{read_edge_arrow_batches, read_vertex_string_batch},
+    reader::{EdgeArrowReadTimings, read_edge_arrow_batches_observed, read_vertex_string_batch},
 };
 use meta_relational_reasoning::{
     DerivationId, EntityId, EvidenceCompleteness, Fact, FactId, FactProvenance, FactValidity,
@@ -70,6 +70,119 @@ pub struct GraphArDataset {
     facts: Arc<[Fact]>,
 }
 
+/// Native GraphAr and Arrow phases within one edge-storage read.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct GraphArNativeEdgeTimings {
+    collection_lookup: Duration,
+    reader_setup: Duration,
+    adjacency_read: Duration,
+    property_read: Duration,
+    column_projection: Duration,
+    table_assembly: Duration,
+    chunk_advance: Duration,
+    concatenate: Duration,
+    native_read: Duration,
+    stream_export: Duration,
+}
+
+impl From<EdgeArrowReadTimings> for GraphArNativeEdgeTimings {
+    fn from(value: EdgeArrowReadTimings) -> Self {
+        Self {
+            collection_lookup: value.collection_lookup,
+            reader_setup: value.reader_setup,
+            adjacency_read: value.adjacency_read,
+            property_read: value.property_read,
+            column_projection: value.column_projection,
+            table_assembly: value.table_assembly,
+            chunk_advance: value.chunk_advance,
+            concatenate: value.concatenate,
+            native_read: value.native_read,
+            stream_export: value.stream_export,
+        }
+    }
+}
+
+impl GraphArNativeEdgeTimings {
+    /// Time spent locating the edge collection and enforcing its row budget.
+    #[must_use]
+    pub const fn collection_lookup(self) -> Duration {
+        self.collection_lookup
+    }
+
+    /// Time spent creating adjacency and property readers.
+    #[must_use]
+    pub const fn reader_setup(self) -> Duration {
+        self.reader_setup
+    }
+
+    /// Time spent reading adjacency Arrow chunks.
+    #[must_use]
+    pub const fn adjacency_read(self) -> Duration {
+        self.adjacency_read
+    }
+
+    /// Time spent reading property Arrow chunks.
+    #[must_use]
+    pub const fn property_read(self) -> Duration {
+        self.property_read
+    }
+
+    /// Time spent selecting requested property columns.
+    #[must_use]
+    pub const fn column_projection(self) -> Duration {
+        self.column_projection
+    }
+
+    /// Time spent assembling projected per-chunk Arrow tables.
+    #[must_use]
+    pub const fn table_assembly(self) -> Duration {
+        self.table_assembly
+    }
+
+    /// Time spent advancing native readers between chunks.
+    #[must_use]
+    pub const fn chunk_advance(self) -> Duration {
+        self.chunk_advance
+    }
+
+    /// Time spent concatenating projected chunk tables.
+    #[must_use]
+    pub const fn concatenate(self) -> Duration {
+        self.concatenate
+    }
+
+    /// Complete native GraphAr read time before stream export.
+    #[must_use]
+    pub const fn native_read(self) -> Duration {
+        self.native_read
+    }
+
+    /// Time spent exporting the table through Arrow's C Stream interface.
+    #[must_use]
+    pub const fn stream_export(self) -> Duration {
+        self.stream_export
+    }
+
+    /// Sum of explicitly classified native phases.
+    #[must_use]
+    pub fn classified_native(self) -> Duration {
+        self.collection_lookup
+            + self.reader_setup
+            + self.adjacency_read
+            + self.property_read
+            + self.column_projection
+            + self.table_assembly
+            + self.chunk_advance
+            + self.concatenate
+    }
+
+    /// Native orchestration time not covered by an explicitly classified phase.
+    #[must_use]
+    pub fn unclassified_native(self) -> Duration {
+        self.native_read.saturating_sub(self.classified_native())
+    }
+}
+
 /// Measured phases of one native `GraphAr` semantic read.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct GraphArReadTimings {
@@ -77,6 +190,7 @@ pub struct GraphArReadTimings {
     native_vertex_read: Duration,
     vertex_admission: Duration,
     edge_storage_read: Duration,
+    native_edge: GraphArNativeEdgeTimings,
     arrow_c_stream_import: Duration,
     fact_identity_access: Duration,
     fact_identity_parse: Duration,
@@ -113,6 +227,12 @@ impl GraphArReadTimings {
     #[must_use]
     pub const fn edge_storage_read(self) -> Duration {
         self.edge_storage_read
+    }
+
+    /// Atomic native phases within [`Self::edge_storage_read`].
+    #[must_use]
+    pub const fn native_edge(self) -> GraphArNativeEdgeTimings {
+        self.native_edge
     }
 
     /// Time spent importing exported C Stream batches into Rust Arrow arrays.
@@ -315,6 +435,7 @@ pub fn read_graphar_dataset_observed(
             native_vertex_read: prepare_timings.native_vertex_read(),
             vertex_admission: prepare_timings.vertex_admission(),
             edge_storage_read: prepare_timings.edge_storage_read(),
+            native_edge: prepare_timings.native_edge(),
             arrow_c_stream_import: prepare_timings.arrow_c_stream_import(),
             fact_identity_access: prepare_timings.fact_identity_access(),
             fact_identity_parse: prepare_timings.fact_identity_parse(),
@@ -383,6 +504,7 @@ struct PreparedEdges {
     values: Vec<RecordBatch>,
     count: usize,
     storage_read: Duration,
+    native_timings: GraphArNativeEdgeTimings,
     c_stream_import: Duration,
 }
 
@@ -392,7 +514,7 @@ fn read_edge_batches(
 ) -> Result<PreparedEdges, GraphArReadError> {
     let edge_properties = property_names(&EDGE_PROPERTIES);
     let edge_storage_started = Instant::now();
-    let edge_stream = read_edge_arrow_batches(
+    let (edge_stream, native_timings) = read_edge_arrow_batches_observed(
         graph_info,
         ENTITY_TYPE,
         EDGE_TYPE,
@@ -412,6 +534,7 @@ fn read_edge_batches(
         values: edge_batches,
         count: edge_count,
         storage_read: edge_storage_elapsed,
+        native_timings: native_timings.into(),
         c_stream_import: c_stream_import_elapsed,
     })
 }

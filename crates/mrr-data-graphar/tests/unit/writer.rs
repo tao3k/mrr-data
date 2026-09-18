@@ -20,9 +20,9 @@ use meta_relational_reasoning::{
 use crate::reader::scan_graphar_edge_chunks;
 use crate::writer::{EDGE_CHUNK_SIZE, VERTEX_CHUNK_SIZE};
 use crate::{
-    BinaryEntityProjection, GraphArReadError, GraphArReadLimits, GraphArReadTimings,
-    GraphArWriteError, prepare_graphar_source, read_graphar_dataset, read_graphar_dataset_observed,
-    write_graphar_dataset,
+    BinaryEntityProjection, GraphArNativeEdgeTimings, GraphArReadError, GraphArReadLimits,
+    GraphArReadTimings, GraphArWriteError, prepare_graphar_source, read_graphar_dataset,
+    read_graphar_dataset_observed, write_graphar_dataset,
 };
 
 fn id<T: CanonicalId>(name: &str) -> T {
@@ -335,12 +335,16 @@ fn scenario_semantically_reads_ten_thousand_graphar_edges() {
         };
         assert_eq!(imported.facts(), expected_facts);
         let rust_graphar_edge_read = timings.edge_storage_read() + timings.arrow_c_stream_import();
-        AspRustScenarioObservation::default()
-            .with_timing("official_arrow_edge_scan", official_elapsed)
-            .with_timing("rust_graphar_edge_read", rust_graphar_edge_read)
-            .with_timing("graphar_storage_read", timings.edge_storage_read())
-            .with_timing("arrow_c_stream_import", timings.arrow_c_stream_import())
-            .with_metric("edge_count", edge_count as u64)
+        observe_native_edge_read(
+            AspRustScenarioObservation::default()
+                .with_timing("official_arrow_edge_scan", official_elapsed)
+                .with_timing("rust_graphar_edge_read", rust_graphar_edge_read)
+                .with_timing("graphar_storage_read", timings.edge_storage_read())
+                .with_timing("arrow_c_stream_import", timings.arrow_c_stream_import())
+                .with_metric("edge_count", edge_count as u64),
+            timings.native_edge(),
+            timings.edge_storage_read(),
+        )
     })
     .expect("measure official GraphAr/Rust Arrow bridge parity Scenario");
     let measurement = measure_asp_rust_scenario(&scenario, || {
@@ -401,25 +405,65 @@ fn observe_semantic_read(
         timings.fact_sort() + timings.fact_duplicate_check() + timings.fact_projection_split(),
         "fact ordering must remain the exact sum of its observable phases"
     );
-    AspRustScenarioObservation::default()
-        .with_timing("graph_info", timings.graph_info())
-        .with_timing("native_vertex_read", timings.native_vertex_read())
-        .with_timing("vertex_admission", timings.vertex_admission())
-        .with_timing("edge_storage_read", timings.edge_storage_read())
-        .with_timing("arrow_c_stream_import", timings.arrow_c_stream_import())
-        .with_timing("fact_identity_access", timings.fact_identity_access())
-        .with_timing("fact_identity_parse", timings.fact_identity_parse())
-        .with_timing("fact_identity_decode", timings.fact_identity_decode())
-        .with_timing("fact_materialization", timings.fact_materialization())
-        .with_timing("fact_sort", timings.fact_sort())
-        .with_timing("fact_duplicate_check", timings.fact_duplicate_check())
-        .with_timing("fact_projection_split", timings.fact_projection_split())
-        .with_timing("fact_ordering", timings.fact_ordering())
-        .with_timing("fact_preparation", timings.fact_preparation())
-        .with_timing("fact_admission", timings.fact_admission())
-        .with_timing("semantic_read_admission", elapsed)
-        .with_metric("vertex_count", vertex_count as u64)
-        .with_metric("fact_count", fact_count as u64)
+    observe_native_edge_read(
+        AspRustScenarioObservation::default()
+            .with_timing("graph_info", timings.graph_info())
+            .with_timing("native_vertex_read", timings.native_vertex_read())
+            .with_timing("vertex_admission", timings.vertex_admission())
+            .with_timing("edge_storage_read", timings.edge_storage_read())
+            .with_timing("arrow_c_stream_import", timings.arrow_c_stream_import())
+            .with_timing("fact_identity_access", timings.fact_identity_access())
+            .with_timing("fact_identity_parse", timings.fact_identity_parse())
+            .with_timing("fact_identity_decode", timings.fact_identity_decode())
+            .with_timing("fact_materialization", timings.fact_materialization())
+            .with_timing("fact_sort", timings.fact_sort())
+            .with_timing("fact_duplicate_check", timings.fact_duplicate_check())
+            .with_timing("fact_projection_split", timings.fact_projection_split())
+            .with_timing("fact_ordering", timings.fact_ordering())
+            .with_timing("fact_preparation", timings.fact_preparation())
+            .with_timing("fact_admission", timings.fact_admission())
+            .with_timing("semantic_read_admission", elapsed)
+            .with_metric("vertex_count", vertex_count as u64)
+            .with_metric("fact_count", fact_count as u64),
+        timings.native_edge(),
+        timings.edge_storage_read(),
+    )
+}
+
+fn observe_native_edge_read(
+    observation: AspRustScenarioObservation,
+    timings: GraphArNativeEdgeTimings,
+    storage_read: Duration,
+) -> AspRustScenarioObservation {
+    let bridge_overhead = storage_read
+        .saturating_sub(timings.native_read())
+        .saturating_sub(timings.stream_export());
+    observation
+        .with_timing(
+            "graphar_edge_collection_lookup",
+            timings.collection_lookup(),
+        )
+        .with_timing("graphar_edge_reader_setup", timings.reader_setup())
+        .with_timing("graphar_edge_adjacency_read", timings.adjacency_read())
+        .with_timing("graphar_edge_property_read", timings.property_read())
+        .with_timing(
+            "graphar_edge_column_projection",
+            timings.column_projection(),
+        )
+        .with_timing("graphar_edge_table_assembly", timings.table_assembly())
+        .with_timing("graphar_edge_chunk_advance", timings.chunk_advance())
+        .with_timing("graphar_edge_concatenate", timings.concatenate())
+        .with_timing(
+            "graphar_edge_native_classified",
+            timings.classified_native(),
+        )
+        .with_timing(
+            "graphar_edge_native_unclassified",
+            timings.unclassified_native(),
+        )
+        .with_timing("graphar_edge_native_read", timings.native_read())
+        .with_timing("graphar_edge_stream_export", timings.stream_export())
+        .with_timing("graphar_edge_bridge_overhead", bridge_overhead)
 }
 
 fn assert_graphar_performance_budgets(

@@ -977,7 +977,7 @@ dependencies = [
 [[package]]
 name = "graphar-rs"
 version = "0.1.0"
-source = "git+https://github.com/GTrunSec/incubator-graphar?rev=8bf48e58ddc7c7c4405b7bd2d59876e7f5edc9cd#8bf48e58ddc7c7c4405b7bd2d59876e7f5edc9cd"
+source = "git+https://github.com/GTrunSec/incubator-graphar?rev=d6adb1da775b99832dcd5b89b4dfa2682abce88c#d6adb1da775b99832dcd5b89b4dfa2682abce88c"
 dependencies = [
  "arrow-array",
  "cmake",
