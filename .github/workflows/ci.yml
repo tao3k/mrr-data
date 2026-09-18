@@ -48,6 +48,7 @@ jobs:
           cargo check -p mrr-data --locked
           cargo check -p mrr-data --no-default-features --locked
           cargo check -p mrr-data --no-default-features --features content,graphar --locked
+          cargo test -p mrr-data --no-default-features --features datafusion --locked
           cargo test -p mrr-data --no-default-features --locked
           cargo test -p mrr-data --no-default-features --features content,graphar --locked
       - name: Check fuzz formatting
