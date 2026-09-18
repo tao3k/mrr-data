@@ -378,10 +378,10 @@ fn prepare_facts(
                 contexts.get_or_try_insert_with(context_key, |key| parse_context(key, fact_id))?;
             facts.push(PreparedFact {
                 predicate,
-                value: Fact::new_binary(
+                value: Fact::new(
                     fact_id,
                     relation_id,
-                    [Value::Entity(source), Value::Entity(destination)],
+                    vec![Value::Entity(source), Value::Entity(destination)],
                     context,
                 ),
             });
