@@ -17,9 +17,9 @@ pub use projection::{
 };
 #[cfg(feature = "native-graphar")]
 pub use reader::{
-    GraphArDataset, GraphArPrepareTimings, GraphArReadError, GraphArReadLimits, GraphArReadTimings,
-    PreparedGraphArSource, prepare_graphar_source, read_graphar_dataset,
-    read_graphar_dataset_observed,
+    GraphArDataset, GraphArNativeEdgeTimings, GraphArPrepareTimings, GraphArReadError,
+    GraphArReadLimits, GraphArReadTimings, PreparedGraphArSource, prepare_graphar_source,
+    read_graphar_dataset, read_graphar_dataset_observed,
 };
 #[cfg(feature = "native-graphar")]
 pub use writer::{GraphArDatasetReceipt, GraphArWriteError, write_graphar_dataset};
