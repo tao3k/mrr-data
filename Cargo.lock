@@ -1193,6 +1193,7 @@ name = "mrr-data-asp-rust-build-support"
 version = "0.1.0"
 dependencies = [
  "asp-rust",
+ "asp-rust-build-support",
 ]
 
 [[package]]

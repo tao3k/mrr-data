@@ -4,6 +4,8 @@
 #[doc(hidden)]
 pub use asp_rust;
 pub use asp_rust::{AspRustConfig, AspRustWorkspacePolicy, default_asp_rust_config};
+#[doc(hidden)]
+pub use asp_rust_build_support;
 
 mod dev_gate;
 

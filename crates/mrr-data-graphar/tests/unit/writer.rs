@@ -3,10 +3,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use asp_rust_build_support::{
-    AspRustScenario, AspRustScenarioMeasurement, AspRustScenarioObservation, asp_rust_scenario,
-    measure_asp_rust_scenario, render_asp_rust_scenario_benchmark_toml,
-};
 use graphar_rs::{
     info::{AdjListType, GraphInfo},
     reader::{read_edge_strings, read_vertex_strings},
@@ -15,6 +11,10 @@ use meta_relational_reasoning::{
     DerivationId, EntityId, EvidenceCompleteness, Fact, FactId, FactProvenance, FactValidity,
     GenerationId, RelationAuthority, RelationContext, RelationField, RelationId, RelationSchema,
     RuleId, Value, ValueSchema,
+};
+use mrr_data_asp_rust_build_support::asp_rust_build_support::{
+    AspRustScenario, AspRustScenarioMeasurement, AspRustScenarioObservation, asp_rust_scenario,
+    measure_asp_rust_scenario, render_asp_rust_scenario_benchmark_toml,
 };
 
 use crate::reader::scan_graphar_edge_chunks;

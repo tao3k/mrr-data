@@ -10,6 +10,7 @@ publish = false
 
 [dependencies]
 asp-rust.workspace = true
+asp-rust-build-support.workspace = true
 
 [lints]
 workspace = true
