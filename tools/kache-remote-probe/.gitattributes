@@ -1,0 +1,2 @@
+# Unified-diff empty context lines contain the required context marker.
+*.patch whitespace=-blank-at-eol
