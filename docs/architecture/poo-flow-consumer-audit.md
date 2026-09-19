@@ -1,0 +1,77 @@
+# POO Flow static-edge consumer acceptance — 2026-09-20
+
+The first POO Flow consumer is its existing Python Runtime graph tool boundary.
+The maintained binding lives in `integrations/poo_flow`; it imports the actual
+POO Flow public API and invokes the optional `mrr-data-poo-flow` Rust process.
+It publishes static dependency edges and returns MRR-admitted endpoint results.
+It does not implement the Healthcare multi-hop/property queries, a replacement
+POO Flow runtime, complete executable plan restore, or a new cache engine.
+
+The source owner supplies a projected plan and immutable source/revision. Tool
+registration fixes the root and semantic scope before Agent invocation. Rust
+owns bounded physical transfer, Arrow decoding, DataFusion execution and the
+call to MRR's existing result admission. Publication and query receipts have
+distinct outcomes. A locally trusted worker receipt is not a signed credential
+or an authorization to execute the graph's effects.
+
+## Findings corrected
+
+- DataFusion used `EntityId::from_canonical_bytes` on an already encoded Entity
+  ID, deriving a second identity. Parsing the typed ID preserves the source ID
+  and rejects malformed/wrong-domain values. Direct source-identity tests now
+  complement parity, which could miss the same defect in both compared paths.
+- The first consumer query reused internal binding names as output names; MRR
+  correctly rejected them. Dedicated output bindings now pass admission.
+- Blocking cache/client setup happens before the dedicated worker runtime.
+  Existing `BlockingContentStore` owns later disk work.
+- Restore checks fact generation, authority, provenance, completeness, validity,
+  duplicate fact IDs/edges and actual row counts before producing query results.
+
+## Local evidence
+
+[Source-bound receipt](poo-flow-consumer-receipt.json) records the source digest,
+upstream S3 service and patch, POO Flow revision and worker binary hash.
+POO Flow revision is `7f60e82b609ed2227ce3e71d17c5a1a351902e54`, fetched from the
+public repository; the tool implementation matches the active sibling checkout
+apart from license headers. No edits were made to that dirty sibling checkout.
+
+- Full workspace with the optional consumer enabled: 131 tests passed, 3 ordinary
+  ignored entries retain their existing subprocess/external-service ownership.
+- Full workspace/all-target Clippy with `-D warnings`: passed, no warnings.
+- All 18 facade feature-isolation cases and dependency-free consumer defaults:
+  passed. Only Arrow remains a default facade feature.
+- Four Python negative contract tests and two conformance receipt freshness tests:
+  passed.
+- Independent S3 SigV4/TLS test, both existing examples and the actual POO Flow
+  tool invocation: passed, with zero warning diagnostics in the conformance log.
+- Formatting, whitespace and actionlint (without optional ShellCheck): passed.
+
+The two-edge scenario produced these logical counters:
+
+| Invocation | Remote operations | Charged bytes |
+|---|---:|---:|
+| Producer-local query | 0 | 0 |
+| Empty-cache consumer | 3 | 7,146 |
+| Warm-cache consumer | 0 | 0 |
+| Reopened worker/cache | 0 | 0 |
+
+All four results have identical rows, semantic generation and MRR admission
+digest. Every worker call is a separate process. This is a clean-restart check;
+kill-during-publication recovery remains qualified by the underlying M4 tests.
+Recorded elapsed times measure the worker data phase, excluding process startup
+and initial configuration. These are fixture observations, not P95/throughput or
+hosted-provider performance claims.
+
+Seven real negative cases reject success: stale generation, substituted source,
+Agent scope overrides, duplicate edges, unavailable transport, process timeout
+and an independently corrupted S3 root. Conditional/dangling plans and malformed
+receipts are separately rejected by the Python contracts.
+
+## Remote acceptance
+
+The existing Ubuntu/macOS S3 jobs now test and lint the consumer, fetch the
+pinned public POO Flow runtime source, run its real tool node and retain the
+consumer receipt inside the S3 artifact. `M4 acceptance` therefore includes these
+consumer checks as well. The final current-revision run will be recorded in
+[PR #1](https://github.com/tao3k/mrr-data/pull/1); an earlier M4 green revision is
+not evidence for these new source changes.

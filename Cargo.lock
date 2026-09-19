@@ -2907,6 +2907,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "mrr-data-poo-flow"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "meta-relational-reasoning",
+ "mrr-data-arrow",
+ "mrr-data-asp-rust-build-support",
+ "mrr-data-cache",
+ "mrr-data-content",
+ "mrr-data-core",
+ "mrr-data-datafusion",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tokio",
+]
+
+[[package]]
 name = "mrr-data-profile"
 version = "0.1.0"
 dependencies = [

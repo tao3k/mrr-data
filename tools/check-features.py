@@ -14,6 +14,11 @@ CASES = [None, "", "arrow", "ipfs", "content", "snapshot", "transfer", "car", "f
 
 
 def main():
+    tree = subprocess.check_output(
+        ["cargo", "tree", "-p", "mrr-data-poo-flow", "--no-default-features", "--edges", "normal",
+         "--prefix", "none", "--locked"], cwd=ROOT, text=True)
+    if {line.split()[0] for line in tree.splitlines() if line.strip()} != {"mrr-data-poo-flow"}:
+        raise SystemExit("POO Flow runtime dependencies must remain opt-in")
     for selected in CASES:
         flags = [] if selected is None else ["--no-default-features"]
         if selected:

@@ -2,6 +2,7 @@
 members = [
   "build-support/mrr-data-asp-rust-project-policy",
   "crates/mrr-data",
+  "crates/mrr-data-poo-flow",
   "crates/mrr-data-arrow",
   "crates/mrr-data-content",
   "crates/mrr-data-cache",
@@ -21,6 +22,8 @@ license = "LGPL-2.1-or-later"
 repository = "https://github.com/tao3k/mrr-data"
 
 [workspace.dependencies]
+serde_json = "1"
+sha2 = "0.10"
 mrr-data-cache = { path = "crates/mrr-data-cache", version = "0.1.0", default-features = false }
 opendal = { package = "opendal-core", version = "=0.58.2", default-features = false, features = ["executors-tokio"] }
 opendal-service-s3 = { version = "=0.58.2", default-features = false }

@@ -166,7 +166,9 @@ records local acceptance for S3/Kache snapshot publication and cold restore,
 whole-operation budgets and cancellation, Kache integration under concurrent
 consumers, and independent SigV4/TLS conformance. The reproducible
 [local S3 runner](tools/s3-conformance/README.md) needs no cloud account.
-Remote CI and hosted B2/R2 acceptance are separate from these local results.
+The [M4 audit](docs/architecture/m4-closure-audit.md#final-remote-acceptance)
+records the final nine-job remote CI acceptance and both platform fingerprints.
+Hosted B2/R2 acceptance and real POO Flow integration remain separate.
 
 ## Intended V1 scope
 
@@ -248,3 +250,11 @@ member crate.
 
 > Arrow-native by default, GraphAr when graph-scale, content-addressed only
 > when explicitly requested.
+
+## POO Flow consumer
+
+The optional [POO Flow resource](integrations/poo_flow/README.md) publishes
+static runtime-plan edges and restores them through S3/Kache before executing
+an MRR-admitted endpoint query. It plugs into the existing Python Runtime tool
+boundary; it does not execute the Healthcare GQL queries or restore a full plan.
+Build it explicitly with `cargo build -p mrr-data-poo-flow --features runtime`.

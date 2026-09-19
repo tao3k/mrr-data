@@ -36,10 +36,10 @@ The fingerprint includes tracked and untracked `.rs`, `.toml`, `.lock`, `.py` an
 `.yml`, `.patch` and `.gitattributes` files reported by Git, excluding ignored build outputs. It is a source
 identity check, not a reproducible-build attestation or a hash of documentation.
 
-No unresolved finding remains within this inspected local scope. The dedicated
-Ubuntu/macOS CI job is configured but remote results have not been observed.
-Hosted B2/R2, native server TLS/mTLS and native GraphAr cross-platform acceptance
-are not established by these results.
+No unresolved finding remains within this inspected local scope. At the time
+of this local audit, remote results had not been observed. The final remote
+acceptance below supersedes that pending status. Hosted B2/R2 and native server
+TLS/mTLS are not established by these results.
 
 
 CI follow-through: added manual dispatch, a strict `M4 acceptance` aggregate,
@@ -48,7 +48,8 @@ Actionlint 1.7.12 passed (without optional ShellCheck); a local exercise of the
 aggregate accepted success and rejected failure, cancellation and skipping.
 The exact S3 job command, both examples and receipt contracts passed again after
 the workflow change. The updated JSON receipt matches that workflow source.
-GitHub-hosted execution and branch-protection configuration remain unverified.
+GitHub-hosted execution was subsequently verified as recorded below.
+Branch-protection enforcement is separate from workflow execution.
 
 
 Warning follow-up: the independent server had one unused helper warning repeated
@@ -57,3 +58,20 @@ the pinned source, and is hashed into receipts; server compilation now denies
 warnings. Ubuntu is fixed to 24.04 to avoid the announced `ubuntu-latest` image
 migration, and CI sets Git's initial branch explicitly to avoid initialization
 hints. No warning lint is disabled for Rust or production code.
+
+## Final remote acceptance
+
+[Run 35459203514](https://github.com/tao3k/mrr-data/actions/runs/35459203514)
+passed all nine jobs for `3715d0af8ae0cc58ed5c52b6da27f3cd70ae46d8`:
+workspace Rust on Ubuntu/macOS, Rust 1.95 MSRV, S3 SigV4/TLS on Ubuntu/macOS,
+native GraphAr on Ubuntu/macOS, Arrow IPC fuzz, and M4 acceptance. The complete
+run logs contained zero warning diagnostics. Both S3 platform receipts matched
+workspace source SHA-256
+`a06eaa5ff1e21d1c891117012977df77b8bae4820ec2ee85838d360caf59d248` and service
+patch SHA-256
+`f41967b9050bd8c30b49b42a04ff0db1776695d19002071547c42d9e4f16b1c6`.
+
+[PR #1](https://github.com/tao3k/mrr-data/pull/1) is the delivery record. These
+results qualify the named revision, not subsequent source changes, hosted
+providers, or a POO Flow consumer integration. CI artifact retention is 14 days;
+the acceptance record retains the revision, run and fingerprints.

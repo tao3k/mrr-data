@@ -84,12 +84,21 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.95.0
       - name: Install compiler for the independent upstream test service
         run: rustup toolchain install 1.96.0 --profile minimal
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install POO Flow runtime dependencies
+        run: python3 -m pip install 'anyio==4.14.1' 'cffi==2.0.0' 'pyturso==0.6.1'
+      - name: Test and lint the optional POO Flow resource
+        run: |
+          cargo test -p mrr-data-poo-flow --features runtime --locked
+          cargo clippy -p mrr-data-poo-flow --features runtime --all-targets --locked -- -D warnings
       - name: Check conformance receipt freshness contracts
         run: python3 tools/s3-conformance/test_runner.py
       - name: Run local S3 authentication, TLS and snapshot conformance
         env:
           RUSTUP_TOOLCHAIN: 1.95.0
-        run: python3 tools/s3-conformance/run.py --receipt "$RUNNER_TEMP/s3-conformance-receipt.json"
+        run: python3 tools/s3-conformance/run.py --poo-flow --receipt "$RUNNER_TEMP/s3-conformance-receipt.json"
       - name: Summarize tested source and service
         env:
           RECEIPT_PATH: ${{ runner.temp }}/s3-conformance-receipt.json

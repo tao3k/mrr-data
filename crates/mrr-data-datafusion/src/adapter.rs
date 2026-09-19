@@ -272,7 +272,12 @@ fn decode_entity(
         ));
     }
     let identity = column.value(row);
-    let entity = EntityId::from_canonical_bytes(identity)
+    let entity = identity
+        .parse::<EntityId>()
         .map_err(|_| DataFusionQueryError::InvalidEntityIdentity(identity.to_owned()))?;
     Ok(QueryResultValue::node(entity, entity_type))
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/identity.rs"]
+mod identity_tests;

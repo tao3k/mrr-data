@@ -14,7 +14,10 @@ target, and a 512-extra-block content-import scenario guard the import
 boundaries.  The M4 single-block Kache/S3 protocol is implemented and locally
 validated. Snapshot publication/cold restore, whole-operation interruption and
 resource accounting, Kache integration acceptance and independent local
-SigV4/TLS conformance have local evidence recorded under M4.  The upstream
+SigV4/TLS conformance have local evidence recorded under M4. Final remote
+acceptance of revision =3715d0a= passed all nine jobs, including both platforms;
+see =m4-closure-audit.md= for the exact revision, run and receipt fingerprints.
+This does not establish a POO Flow consumer integration. The upstream
 [[https://github.com/tao3k/meta-relational-reasoning][MRR repository]] owns semantic
 identity, typed relation schemas and facts, generations, revision bindings,
 lineage, queries, transitions, and admission.  This repository owns only their
@@ -907,6 +910,79 @@ public publication/restore APIs and validate the consumer's cold/warm/restart
 behavior. Select the actual caller and owner before adding an integration API.
 Do not claim consumer integration from the standalone examples. Physical restore
 must continue to preserve semantic generation without replacing MRR admission.
+
+*** Next consumer: POO Flow — entry-point audit
+
+The user selected POO Flow's MRR consumption path on 2026-09-20. Inspection of
+the current sibling checkout found that the Healthcare ontology query owner is
+=packages/lambda-episteme/user-interface/scenarios/healthcare/reasoning.ss=.
+It declares content-bound GQL queries and checks exact source digests. It
+explicitly defers execution to a later external MRR Rust Runtime; it neither
+links MRR nor defines a subprocess transport. Its assurance owner likewise
+qualifies source bytes without claiming MRR query execution.
+
+This is an implementation prerequisite, not an S3 configuration problem:
+
+1. Identify the external MRR execution owner and the POO Flow runtime handoff
+   that invokes it. Do not substitute the MRR repository's Scheme scheduler
+   for an already integrated POO Flow consumer.
+2. Establish a source-bound query/catalog/generation input and a typed result
+   admitted through MRR's =admit_query_result_candidate=. POO Flow controls
+   invocation and receipt consumption; MRR owns query semantics and admission.
+3. Connect the same execution path to explicit snapshot-root publication and
+   restore through the existing optional MRR Data adapters. Credentials remain
+   runtime configuration, not snapshot or semantic receipt data.
+4. Prove identical admitted results for local, cold S3 restore, warm cache and
+   process restart. Measure logical remote operations/bytes and elapsed time;
+   a warm-cache run must actually avoid remote reads. Corruption, stale
+   generation, cancellation and transport failure must not yield an accepted
+   result.
+5. Exercise the real POO Flow invocation and receipt consumer in CI, retaining
+   the source revisions of both sides. Library tests and standalone snapshot
+   examples remain prerequisite evidence, not this consumer exit criterion.
+
+The existing Healthcare =case-profile-relations.gql= uses a two-edge path,
+property filtering and property projection. The current DataFusion adapter
+accepts a single outgoing binary-Entity edge with endpoint projection and no
+filter. It must reject that Healthcare query today. Any selected query expansion
+needs its own semantic equivalence and negative contracts; do not silently
+reduce the query or manufacture a result receipt to make integration pass.
+
+The sibling POO Flow checkout contains unrelated active edits. Any consumer
+implementation must preserve those changes and explicitly own its new files.
+No consumer integration or hosted-provider qualification is claimed by this
+entry-point audit.
+
+*** M5.0: POO Flow static-edge resource — implementation under acceptance
+
+The first concrete consumer uses the existing Python =RuntimeGraphPlan= and
+=RuntimeGraphToolNode= boundary. Its fixed =poo-flow.static-edges.v1= profile
+publishes only explicit static dependencies and queries their MRR Entity
+endpoints. It is a separate useful operation, not a substitute for the declared
+Healthcare queries. Conditional routes, arbitrary GQL, full plan restoration
+and effect authorization remain outside this profile.
+
+=mrr-data-poo-flow= is a workspace crate with no default dependencies; its
+=runtime= feature enables the external process worker. The Python binding in
+=integrations/poo_flow/= fixes query scope at tool registration. Rust restores
+the exact root, validates fact context and snapshot identity, executes the
+existing DataFusion slice and calls MRR result admission. The source/revision
+owner supplies immutable input; credentials stay in runtime configuration.
+
+Acceptance imports the clean pinned POO Flow public runtime source, invokes its
+real tool node, and compares admitted results across producer-local, empty-cache,
+warm-cache and reopened-process execution. Warm/reopened caches require zero
+remote operations. Scope substitution, stale generation, duplicate edges,
+transport failure, process timeout and actual S3 corruption must fail closed.
+The existing Ubuntu/macOS S3 jobs also test/lint this feature and retain consumer
+measurements and source binding in their receipts. See
+=integrations/poo_flow/README.md= for exact limits and deployment instructions.
+
+A source-identity regression discovered during this integration was corrected
+in DataFusion: an encoded Arrow Entity ID must be parsed as that typed ID,
+not fed back into =from_canonical_bytes= to derive a second identity. Direct
+source-ID and malformed/wrong-domain regression tests complement cross-engine
+parity, which alone could miss a shared decoding defect.
 
 No cloud purchase, B2/R2 smoke run, cache reimplementation, generic scheduling
 framework, S2 transport, mutable head, remote GC or graph-distribution expansion
