@@ -1,0 +1,111 @@
+{
+  "server": "s3s-fs",
+  "revision": "8ac644246b5a11664eaed6cbb3a36b3874047586",
+  "server_patch_sha256": "f41967b9050bd8c30b49b42a04ff0db1776695d19002071547c42d9e4f16b1c6",
+  "workspace_source_sha256": "12eb0adca2100ef98e2122f48bdd902f64f054d42f4013a2e64334a6e66af8c6",
+  "platform": "macOS-26.6.1-arm64-arm-64bit-Mach-O",
+  "workspace_rustc": "rustc 1.95.0 (59807616e 2026-04-14)",
+  "binary_sha256": "80bab1a24601ae544bfbef58fa7fdc9e5285877d24d6267a1c72a85d3d0ceca6",
+  "transport": "loopback TLS proxy; ephemeral CA; SigV4 verified by s3s",
+  "examples": [
+    "s3_cache",
+    "s3_snapshot",
+    "s3_cache oversized rejection"
+  ],
+  "result": "passed",
+  "poo_flow": {
+    "profile": "poo-flow.static-edges.v1",
+    "result": "passed",
+    "local": {
+      "root": "bafyreieh53r3mwjl4riyr5ojpmthtl6osyfhtl3fkahzfe3jo2krfxbj7e",
+      "generation": "mrr:generation:v1:0a28d03919d45fdfca8705d78fd149d0a11b4fd77d68bd273a9ed9161940f978",
+      "source": "poo-flow/build-plan",
+      "revision": "build-plan-1",
+      "rows": [
+        [
+          "mrr:entity:v1:c150735e27ee5dcc527274e30b6fb8567c06d895568f74cff2e5f3710a35f1d9",
+          "mrr:entity:v1:2061472de000593d9dffc7758ef031e237323c36cba10d9a58f3b3aac6a5ab1f"
+        ],
+        [
+          "mrr:entity:v1:2061472de000593d9dffc7758ef031e237323c36cba10d9a58f3b3aac6a5ab1f",
+          "mrr:entity:v1:b428f377851ad3e962cd5c907e9febe5cb8b12e3fcc47917ac1af2d8b8d2e533"
+        ]
+      ],
+      "admission_digest": "098ebcc408ff19ff5e1072e303fb532564cecca11e5ad9730d6c58bcf95fddc5",
+      "remote_operations": 0,
+      "charged_bytes": 0,
+      "elapsed_micros": 19517
+    },
+    "cold": {
+      "root": "bafyreieh53r3mwjl4riyr5ojpmthtl6osyfhtl3fkahzfe3jo2krfxbj7e",
+      "generation": "mrr:generation:v1:0a28d03919d45fdfca8705d78fd149d0a11b4fd77d68bd273a9ed9161940f978",
+      "source": "poo-flow/build-plan",
+      "revision": "build-plan-1",
+      "rows": [
+        [
+          "mrr:entity:v1:c150735e27ee5dcc527274e30b6fb8567c06d895568f74cff2e5f3710a35f1d9",
+          "mrr:entity:v1:2061472de000593d9dffc7758ef031e237323c36cba10d9a58f3b3aac6a5ab1f"
+        ],
+        [
+          "mrr:entity:v1:2061472de000593d9dffc7758ef031e237323c36cba10d9a58f3b3aac6a5ab1f",
+          "mrr:entity:v1:b428f377851ad3e962cd5c907e9febe5cb8b12e3fcc47917ac1af2d8b8d2e533"
+        ]
+      ],
+      "admission_digest": "098ebcc408ff19ff5e1072e303fb532564cecca11e5ad9730d6c58bcf95fddc5",
+      "remote_operations": 3,
+      "charged_bytes": 7146,
+      "elapsed_micros": 132968
+    },
+    "warm": {
+      "root": "bafyreieh53r3mwjl4riyr5ojpmthtl6osyfhtl3fkahzfe3jo2krfxbj7e",
+      "generation": "mrr:generation:v1:0a28d03919d45fdfca8705d78fd149d0a11b4fd77d68bd273a9ed9161940f978",
+      "source": "poo-flow/build-plan",
+      "revision": "build-plan-1",
+      "rows": [
+        [
+          "mrr:entity:v1:c150735e27ee5dcc527274e30b6fb8567c06d895568f74cff2e5f3710a35f1d9",
+          "mrr:entity:v1:2061472de000593d9dffc7758ef031e237323c36cba10d9a58f3b3aac6a5ab1f"
+        ],
+        [
+          "mrr:entity:v1:2061472de000593d9dffc7758ef031e237323c36cba10d9a58f3b3aac6a5ab1f",
+          "mrr:entity:v1:b428f377851ad3e962cd5c907e9febe5cb8b12e3fcc47917ac1af2d8b8d2e533"
+        ]
+      ],
+      "admission_digest": "098ebcc408ff19ff5e1072e303fb532564cecca11e5ad9730d6c58bcf95fddc5",
+      "remote_operations": 0,
+      "charged_bytes": 0,
+      "elapsed_micros": 4418
+    },
+    "restarted": {
+      "root": "bafyreieh53r3mwjl4riyr5ojpmthtl6osyfhtl3fkahzfe3jo2krfxbj7e",
+      "generation": "mrr:generation:v1:0a28d03919d45fdfca8705d78fd149d0a11b4fd77d68bd273a9ed9161940f978",
+      "source": "poo-flow/build-plan",
+      "revision": "build-plan-1",
+      "rows": [
+        [
+          "mrr:entity:v1:c150735e27ee5dcc527274e30b6fb8567c06d895568f74cff2e5f3710a35f1d9",
+          "mrr:entity:v1:2061472de000593d9dffc7758ef031e237323c36cba10d9a58f3b3aac6a5ab1f"
+        ],
+        [
+          "mrr:entity:v1:2061472de000593d9dffc7758ef031e237323c36cba10d9a58f3b3aac6a5ab1f",
+          "mrr:entity:v1:b428f377851ad3e962cd5c907e9febe5cb8b12e3fcc47917ac1af2d8b8d2e533"
+        ]
+      ],
+      "admission_digest": "098ebcc408ff19ff5e1072e303fb532564cecca11e5ad9730d6c58bcf95fddc5",
+      "remote_operations": 0,
+      "charged_bytes": 0,
+      "elapsed_micros": 6802
+    },
+    "negative_cases": [
+      "stale-generation",
+      "source-substitution",
+      "scope-override",
+      "duplicate-edge",
+      "transport-failure",
+      "deadline",
+      "corrupt-root"
+    ],
+    "runtime_revision": "7f60e82b609ed2227ce3e71d17c5a1a351902e54",
+    "worker_sha256": "0a64ebefa0b6d0e9e91da2224500584f62c438237b92050cc02aafbbb7e0cef6"
+  }
+}

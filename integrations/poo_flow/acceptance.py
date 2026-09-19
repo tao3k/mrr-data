@@ -1,0 +1,86 @@
+"""Exercise the installed POO Flow tool boundary against real S3 and MRR."""
+import argparse
+from dataclasses import asdict
+import json
+import os
+import subprocess
+from pathlib import Path
+import tempfile
+
+from poo_flow_runtime import (RuntimeGraphPlan, RuntimeGraphEdge, RuntimeGraphToolNode,
+                              RuntimeGraphToolCall, ai_message)
+from mrr_data_resource import MrrSnapshotResource, MrrResourceError
+
+
+def run(executable):
+    plan = RuntimeGraphPlan(nodes=("compile", "test", "package"), edges=(
+        RuntimeGraphEdge("compile", "test"), RuntimeGraphEdge("test", "package")))
+    scope = {"source": "poo-flow/build-plan", "revision": "build-plan-1"}
+    with tempfile.TemporaryDirectory(prefix="poo-mrr-") as temporary:
+        root = Path(temporary)
+        producer = MrrSnapshotResource(executable, root / "producer", os.environ)
+        published = producer.publish(plan, **scope)
+        reordered = producer.publish(RuntimeGraphPlan(nodes=plan.nodes, edges=tuple(reversed(plan.edges))), **scope)
+        assert reordered.root == published.root
+        local = producer.query(root=published.root, **scope)
+        consumer = MrrSnapshotResource(executable, root / "consumer", os.environ)
+        tool = consumer.query_tool(root=published.root, **scope)
+        node = RuntimeGraphToolNode({tool.name: tool})
+        request = {"messages": [ai_message("query dependencies", tool_calls=[
+            RuntimeGraphToolCall(tool.name, {}, "static-edges-request")])]}
+        cold = node(request)["messages"][0]
+        assert cold.tool_call_id == "static-edges-request"
+        cold = cold.content
+        warm = node(request)["messages"][0].content
+        restarted = MrrSnapshotResource(executable, root / "consumer", os.environ).query(root=published.root, **scope)
+        assert len(cold.rows) == 2 and cold.remote_operations > 0
+        assert local.remote_operations == warm.remote_operations == restarted.remote_operations == 0
+        for receipt in (cold, warm, restarted):
+            assert receipt.rows == local.rows
+            assert receipt.admission_digest == local.admission_digest
+            assert receipt.generation == published.generation
+        negatives = []
+        for name, action in (
+            ("stale-generation", lambda: consumer.query(root=published.root, **dict(scope, revision="build-plan-2"))),
+            ("source-substitution", lambda: consumer.query(root=published.root, **dict(scope, source="other-plan"))),
+            ("scope-override", lambda: tool.invoke({"root": published.root})),
+            ("duplicate-edge", lambda: producer.publish(RuntimeGraphPlan(nodes=plan.nodes, edges=plan.edges + plan.edges), **scope)),
+            ("transport-failure", lambda: MrrSnapshotResource(executable, root / "offline", dict(os.environ, S3_ENDPOINT="http://127.0.0.1:1")).query(root=published.root, **scope)),
+            ("deadline", lambda: MrrSnapshotResource(executable, root / "deadline", os.environ, timeout=0.000001).query(root=published.root, **scope)),
+        ):
+            try:
+                action()
+            except MrrResourceError:
+                negatives.append(name)
+            else:
+                raise AssertionError("negative case accepted: " + name)
+        # Corrupt the actual S3 root independently. A fresh process/cache must
+        # reject the content even though its credentials and TLS remain valid.
+        endpoint = os.environ["S3_ENDPOINT"].rstrip("/")
+        key = "/".join((os.environ["S3_BUCKET"], os.environ["S3_ROOT"].strip("/"), "blocks", published.root))
+        subprocess.run(["curl", "--fail", "--silent", "--show-error", "--max-time", "10",
+                        "--noproxy", "*", "--cacert", os.environ["S3_CA_PEM"],
+                        "--aws-sigv4", "aws:amz:us-east-1:s3", "--user",
+                        os.environ["AWS_ACCESS_KEY_ID"] + ":" + os.environ["AWS_SECRET_ACCESS_KEY"],
+                        "-X", "PUT", "--data-binary", "corrupt root", endpoint + "/" + key],
+                       check=True, capture_output=True)
+        try:
+            MrrSnapshotResource(executable, root / "corrupted", os.environ).query(root=published.root, **scope)
+        except MrrResourceError:
+            negatives.append("corrupt-root")
+        else:
+            raise AssertionError("corrupt root produced an accepted result")
+        return {"profile": "poo-flow.static-edges.v1", "result": "passed",
+                "local": asdict(local), "cold": asdict(cold), "warm": asdict(warm),
+                "restarted": asdict(restarted), "negative_cases": negatives}
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--worker", type=Path, required=True)
+    parser.add_argument("--receipt", type=Path, required=True)
+    args = parser.parse_args()
+    args.receipt.unlink(missing_ok=True)
+    result = run(args.worker)
+    args.receipt.write_text(json.dumps(result, indent=2) + "\n")
+    print(json.dumps(result))

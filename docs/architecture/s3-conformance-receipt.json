@@ -1,0 +1,16 @@
+{
+  "server": "s3s-fs",
+  "revision": "8ac644246b5a11664eaed6cbb3a36b3874047586",
+  "server_patch_sha256": "f41967b9050bd8c30b49b42a04ff0db1776695d19002071547c42d9e4f16b1c6",
+  "workspace_source_sha256": "a06eaa5ff1e21d1c891117012977df77b8bae4820ec2ee85838d360caf59d248",
+  "platform": "macOS-26.6.1-arm64-arm-64bit-Mach-O",
+  "workspace_rustc": "rustc 1.95.0 (59807616e 2026-04-14)",
+  "binary_sha256": "80bab1a24601ae544bfbef58fa7fdc9e5285877d24d6267a1c72a85d3d0ceca6",
+  "transport": "loopback TLS proxy; ephemeral CA; SigV4 verified by s3s",
+  "examples": [
+    "s3_cache",
+    "s3_snapshot",
+    "s3_cache oversized rejection"
+  ],
+  "result": "passed"
+}

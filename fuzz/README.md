@@ -1,0 +1,16 @@
+# IPC fuzzing
+
+The `ipc_import` target drives arbitrary bytes, a valid recursive seed, bounded
+mutations of that seed, and truncations through the Arrow IPC import boundary.
+This keeps malformed-header coverage while reaching the footer, budget,
+materialization, and semantic reconstruction paths. Run it with the standard
+Cargo fuzz frontend:
+
+```sh
+cargo fuzz run ipc_import fuzz/corpus/ipc_import
+```
+
+Crash and timeout artifacts are regression inputs. Pull-request CI compiles and
+lints the target on the stable toolchain, then runs a bounded 10,000-case ASan
+campaign on nightly Rust. The main crate also retains deterministic malformed
+corpus tests; none of these replaces longer continuous fuzzing.

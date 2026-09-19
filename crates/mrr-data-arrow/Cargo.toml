@@ -1,0 +1,24 @@
+[package]
+name = "mrr-data-arrow"
+description = "Lossless Arrow interchange for admitted MRR facts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+arrow-array.workspace = true
+arrow-buffer.workspace = true
+arrow-ipc.workspace = true
+arrow-schema.workspace = true
+flatbuffers.workspace = true
+meta-relational-reasoning.workspace = true
+mrr-data-profile.workspace = true
+
+[dev-dependencies]
+mrr-data-asp-rust-build-support.workspace = true
+proptest = "=1.11.0"
+
+[lints]
+workspace = true

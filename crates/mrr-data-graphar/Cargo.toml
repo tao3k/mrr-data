@@ -1,0 +1,29 @@
+[package]
+name = "mrr-data-graphar"
+description = "Fail-closed MRR binary-Entity projection contracts for Apache GraphAr"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+native-graphar = ["dep:arrow-array", "dep:graphar-rs", "dep:tempfile"]
+
+[dependencies]
+arrow-array = { workspace = true, optional = true }
+graphar-rs = { git = "https://github.com/GTrunSec/incubator-graphar", rev = "4d4b29715d9825bd3e9b78589cfb863880b9d1d8", optional = true }
+meta-relational-reasoning.workspace = true
+mrr-data-profile.workspace = true
+tempfile = { workspace = true, optional = true }
+
+[dev-dependencies]
+mrr-data-asp-rust-build-support.workspace = true
+mrr-data-arrow.workspace = true
+mrr-data-core = { workspace = true, features = ["ipfs"] }
+mrr-data-datafusion.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

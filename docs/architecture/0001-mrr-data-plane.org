@@ -1,0 +1,1024 @@
+#+title: RFC 0001: MRR Data Plane V1
+#+status: proposed
+#+options: toc:2
+#+property: header-args :eval never-export :exports code
+
+* Status and ownership
+
+This RFC is the canonical design source for =mrr-data=.  It is a proposal, not
+a claim that the complete plane is implemented.  The current M0 through M2
+executable slices prove relation-specific complete-Fact Arrow and bounded IPC
+round trips, canonical snapshot identity, and verified local CARv1 packaging.
+Property tests, typed resource-budget failures, malformed corpora, an IPC fuzz
+target, and a 512-extra-block content-import scenario guard the import
+boundaries.  The M4 single-block Kache/S3 protocol is implemented and locally
+validated. Snapshot publication/cold restore, whole-operation interruption and
+resource accounting, Kache integration acceptance and independent local
+SigV4/TLS conformance have local evidence recorded under M4. Final remote
+acceptance of revision =3715d0a= passed all nine jobs, including both platforms;
+see =m4-closure-audit.md= for the exact revision, run and receipt fingerprints.
+This does not establish a POO Flow consumer integration. The upstream
+[[https://github.com/tao3k/meta-relational-reasoning][MRR repository]] owns semantic
+identity, typed relation schemas and facts, generations, revision bindings,
+lineage, queries, transitions, and admission.  This repository owns only their
+physical representation, interchange, persistence, and distribution.
+
+The dependency direction is strict:
+
+#+begin_src mermaid
+flowchart LR
+  S[Source systems]
+  M[MRR semantic contracts]
+  D[mrr-data physical data plane]
+  A[Arrow batches and IPC - default]
+  F[DataFusion execution - opt-in]
+  G[GraphAr projection - opt-in]
+  C[CID blocks and CAR - opt-in]
+  O[filesystem or object store]
+
+  S -->|RevisionBinding + admitted facts| M
+  M -->|one-way dependency| D
+  D --> A
+  D --> F
+  D --> G
+  D --> C
+  C --> O
+  A -. no semantic authority .-> M
+  F -. no semantic authority .-> M
+  G -. no semantic authority .-> M
+  C -. no semantic authority .-> M
+#+end_src
+
+=mrr-data= is not a graph database, query language, reasoning engine, or a
+second source of truth.  It must not redefine MRR types and MRR must not import
+Arrow, GraphAr, IPLD, CAR, or storage-provider types.
+
+* Design objective
+
+The governing rule is:
+
+#+begin_quote
+One semantic relation model, multiple physical forms.
+#+end_quote
+
+The same admitted MRR generation may have several equivalent physical
+materializations:
+
+- relation-specific Arrow record batches for hot, typed interchange;
+- Parquet-backed GraphAr vertex, edge, and adjacency chunks for graph-scale
+  persistence and selective IO;
+- content-addressed blocks and CAR archives for immutable packaging;
+- local filesystem or object-store locations for controlled availability.
+
+The physical forms are caches or durable representations of the semantic
+generation.  None can admit a fact, create a generation, or turn Context into
+canonical Content.
+
+The performance north star is:
+
+#+begin_quote
+Zero-copy when hot, graph-native when large, content-addressed when durable.
+#+end_quote
+
+* Calibrated upstream roles
+
+** Apache Arrow
+
+[[https://arrow.apache.org/docs/format/Intro.html][Apache Arrow]] defines a
+language-independent columnar memory layout plus IPC protocols.  It is the
+canonical /physical interchange/ form in this proposal, not the canonical
+semantic truth.  MRR facts and schemas remain authoritative.
+
+V1 uses one relation-specific =RecordBatch= schema per MRR =RelationSchema=.
+The user fields preserve declared field order and arity.  Reserved metadata
+columns carry at least =FactId=, =GenerationId=, authority, provenance,
+completeness, and validity.  A universal
+=subject_id/predicate_id/object_id= table is only an optional binary-relation
+view; it cannot represent arbitrary typed n-ary relations without loss.
+
+MRR values require an explicit mapping table before implementation:
+
+| MRR value | V1 Arrow requirement |
+|-----------+----------------------|
+| Entity and typed IDs | canonical typed text under versioned MRR field metadata in the initial slice; a later fixed-width form requires an upstream lossless digest constructor |
+| Integer and Boolean | lossless native primitive |
+| Decimal and Float | preserve current canonical lexical value; no silent f64 coercion |
+| Date, Time, Timestamp | preserve declared units and timezone policy |
+| Duration | canonical lexical UTF-8 plus namespaced MRR metadata until MRR defines component semantics |
+| ByteString and String | binary and UTF-8 respectively |
+| List and Record | declared nested type, never opaque best-effort JSON |
+| Null | valid only where the relation schema explicitly permits it |
+
+The current MRR =ValueSchema= already carries decimal precision and scale,
+float width, temporal unit and timezone policy, recursive list element shape,
+ordered record shape, and field nullability.  The Arrow adapter consumes that
+contract directly and returns a typed unsupported-schema error for any mapping
+it cannot prove lossless.  Duration remains canonical lexical text in MRR V1;
+the adapter must not guess fixed units or calendar semantics from its spelling.
+
+** Apache GraphAr
+
+[[https://graphar.apache.org/docs/specification/format/][Apache GraphAr]] is a
+system-independent persistent Property Graph layout.  It describes graph
+metadata, chunked vertex and edge tables, property column groups, and
+source/destination ordered or unordered adjacency layouts corresponding to
+CSR-, CSC-, and COO-style access.  Its payload formats include Parquet and ORC;
+Arrow is =mrr-data='s interchange layer, not a GraphAr payload-format claim.
+
+GraphAr is a specialization, not the universal MRR relation model:
+
+- unary entity relations may become vertex labels or properties;
+- binary Entity-to-Entity relations may become edges;
+- n-ary relations, relations containing non-Entity endpoints, or facts whose
+  identity carries independent semantics require an explicit reification
+  profile or remain Arrow-only;
+- =EntityId= is stored as a stable primary-key property;
+- GraphAr internal vertex IDs, row positions, chunk IDs, and adjacency offsets
+  are disposable physical identities;
+- =FactId= and =RelationId= must survive export, compaction, repartition, and
+  import even when every physical identifier changes.
+
+An adapter must reject a relation that has no declared lossless graph
+projection.  It must never invent endpoint, label, or property semantics.
+
+** CID, IPLD, and CAR
+
+A CID identifies exact encoded bytes.  It does not establish semantic truth,
+authorization, freshness, completeness, or MRR admission.  A semantic
+=GenerationId= may have several equivalent physical snapshot roots, and a new
+physical layout need not create a new semantic generation.
+
+V1 will define one canonical root-manifest encoding before assigning CIDs.
+The normative form should be canonical DAG-CBOR with pinned CID version,
+multicodec, and multihash choices.  JSON or YAML may be rendered for humans but
+must not become an ambiguous hashing surface.
+
+Arrow IPC bytes are not automatically a semantic canonicalization.  Metadata
+ordering, dictionaries, padding, chunking, and writer versions can change the
+bytes without changing logical rows.  The V1 codec must pin and test a
+deterministic encoding profile or define the CID as physical-artifact identity
+only.  It must never claim byte identity is semantic equality.
+
+[[https://ipld.io/specs/transport/car/carv1/][CARv1]] packages a header and
+CID-addressed blocks.  CAR is transport packaging, not the snapshot identity:
+block order and archive composition may differ while retaining the same root
+manifest CID.  Every declared root and referenced child block must be verified
+on import.
+
+Content addressing also does not imply IPFS networking.  V1 includes no IPFS
+daemon, DHT, gateway, pinning-service, or public-publication dependency.
+Default providers are memory and local filesystem; object storage is optional
+and policy-controlled.  Public network publication is always an explicit
+future capability.
+
+* Four identity layers
+
+The design keeps four layers separate:
+
+| Layer | Examples | Owner |
+|-------+----------+-------|
+| Semantic identity | =EntityId=, =RelationId=, =FactId=, =GenerationId= | MRR |
+| Logical data | =RelationSchema=, typed facts, lineage, query IR | MRR |
+| Physical data | Arrow buffers, Parquet files, GraphAr chunks and offsets | mrr-data |
+| Content identity | block CID, root manifest CID, CAR roots | mrr-data |
+
+External source revisions use MRR's =ExternalRevisionIdentity= and
+=RevisionBinding=.  A Jujutsu =ChangeId= and =CommitId= can populate that typed
+provider contract, but JJ is not hard-coded into the core manifest: Git,
+databases, object stores, and web sources need the same boundary.
+
+The following equalities are forbidden:
+
+- CID = =GenerationId=;
+- GraphAr internal vertex ID = =EntityId=;
+- Arrow row position = =FactId=;
+- CAR archive bytes = semantic snapshot identity;
+- source revision = admitted semantic generation.
+
+* Content Snapshot Manifest V1
+
+The Content root block has the stable schema namespace =mrr.data.snapshot= and
+the separate schema version =1=.  A namespace never embeds a version suffix:
+namespace selects the owning contract and the numeric version selects one wire
+schema within it.  The Content root is never used for a task-scoped Context
+projection.  Its CID is computed over the canonical encoded block and is
+therefore returned alongside the manifest, not embedded as a self-referential
+=root_cid= field.
+
+The logical shape is:
+
+#+begin_src yaml
+schema:
+  namespace: mrr.data.snapshot
+  version: 1
+semantic:
+  generation_id: "..."
+  semantic_snapshot_digest: "..."
+  relation_catalog_digest: "..."
+  entity_catalog_digest: "..."
+source:
+  revision_bindings:
+    - revision_id: "..."
+      provider: "jj | git | database | object-store | web | ..."
+      logical_change: "..."
+      content_revision: "..."
+relations:
+  - relation_id: "..."
+    arrow_schema:
+      namespace: mrr.data.arrow.fact-batch
+      version: 1
+    row_count: 0
+    batches:
+      - cid: "..."
+        cid_codec: raw
+        format: arrow-ipc-file
+        row_count: 0
+        byte_length: 0
+graph_projection:
+  schema:
+    namespace: mrr.graphar.binary-entity
+    version: 1
+  graphar_version: "..."
+  manifest_cid: "..."
+lineage:
+  batch_cids: ["..."]
+coverage:
+  kind: complete | partial | unknown
+  declaration_cid: "..."
+integrity:
+  cid_version: 1
+  manifest_codec: dag-cbor
+  multihash: sha2-256
+#+end_src
+
+=graph_projection= is optional.  A relation descriptor may be Arrow-only.  The
+manifest lists each child's CID multicodec separately from its payload format,
+and never lists its own CID.  The root itself uses =dag-cbor=; Arrow, GraphAr,
+and other opaque child payloads use =raw= unless a registered, frozen codec is
+introduced by a later schema version.  Locations, gateway URLs, credentials,
+mutable tags, and authorization tokens are outside the immutable root.
+
+The manifest deliberately has no independently invented per-relation semantic
+digest or second Arrow-schema digest.  MRR's =RelationCatalogDigest= anchors
+the admitted relation semantics.  The frozen Arrow schema namespace
+=mrr.data.arrow.fact-batch= at version =1= deterministically projects that
+relation schema, and each raw child CID anchors the exact IPC bytes.  A batch
+carries its own row count so admission can prove that the relation total equals
+the checked sum without opening child payloads.
+
+* Lineage and reasoning bundles
+
+Content addressing is useful at batch and artifact granularity:
+
+- raw evidence batch CID;
+- normalized relation batch CID;
+- lineage batch CID;
+- rule or rule-pack artifact CID;
+- candidate result batch CID;
+- proof and admission receipt CID;
+- root bundle manifest CID.
+
+Semantic granularity and storage-block granularity are deliberately different.
+The system does not create one IPLD node per fact or derivation edge by
+default.  MRR owns fine-grained =FactId= and =DerivationId= links inside typed
+batches; CIDs make those batches and receipts immutable and distributable.
+
+* Query and execution boundary
+
+MRR's =MetaQueryIr= stays storage-neutral but Property-Graph-specific.
+=mrr-data-core= now admits a downstream =BoundDataQuery= that pairs it with:
+
+- exact =GenerationId=;
+- exact =RelationCatalogDigest= and =EntityCatalogDigest=;
+- admitted semantic snapshot digest;
+- physical snapshot root CID;
+- graph-projection profile and manifest CID when required;
+- a physical engine capability profile.
+
+Parsing, schema binding, execution, and semantic admission are separate
+receipts.  MRR's =CatalogBoundQuery= is the sole owner of unknown or ambiguous
+labels, properties, relation types, and expression typing.  The downstream
+binder consumes that admitted receipt and rejects only physical unavailability,
+unsupported projection/path modes, stale generations, snapshot drift, or
+engine-capability mismatch.  The binder consumes a verified =SnapshotBlock= so
+the physical root cannot drift from the manifest it checked.
+
+The physical output bridge preserves that ownership boundary without owning a
+second engine lifecycle.  Each engine executes through its native synchronous
+or asynchronous API and returns only a =PhysicalQueryOutput= of
+storage-neutral columns and rows.  =project_data_query_output= checks the
+producer's =DataEngineProfile= against the physical binding, then injects
+=QueryResultBinding::for_query= from the immutable =CatalogBoundQuery=.  The
+engine cannot supply or replace this identity.  The output remains a
+=CandidateQueryResult= until MRR source, lineage, completeness, and transition
+owners admit it through =admit_query_result_candidate=.  This protocol is
+implemented.  The first opt-in engine adapter lowers the admitted single-hop
+binary-Entity slice directly to DataFusion expressions without reparsing SQL.
+It owns no async runtime and rejects every undeclared shape before execution;
+general query execution remains a later engine-specific milestone.
+
+The native GraphAr contract suite covers the first differential engine slice.
+It sends the same admitted binary-Entity facts through an Arrow =RecordBatch=
+round trip and the maintained GraphAr write/read path, rebuilds an Arrow batch
+from each physical result, and executes both through the same DataFusion plan.
+The exact =DataEngineProfile= projection must then produce identical
+=CandidateQueryResult= and =QueryResultAdmissionReceipt= values.  This is
+evidence for engine and physical-representation parity over the declared
+slice, not a general GQL execution claim.
+
+Native GraphAr publication and prepared import project a
+=GraphArQuerySource=.  The descriptor contains only the immutable dataset root,
+canonical GraphAr metadata entry point, admitted relation and endpoint roles,
+semantic identity property names, and bounded row counts.  It deliberately
+contains no SQL, connection, mutable catalog, or engine execution trait.  A
+downstream package can combine this crate with DuckDB/DuckGQL or another engine
+without adding that database to =mrr-data=.  Its catalog, indexes, statistics,
+and CSR caches are derived state and must be rebuildable from the GraphAr
+source plus the MRR snapshot manifest.
+
+When both =ipfs= and =graphar= are selected, the facade composes these
+otherwise independent crates at =admit_graphar_query_source=.  This boundary
+requires the source relation to occur in the MRR-owned query and re-hashes the
+current GraphAr metadata against the exact raw projection-manifest CID carried
+by =BoundDataQuery=.  Successful admission returns only the original immutable
+source descriptor for downstream native registration; it creates no engine,
+connection, catalog, or executor abstraction.
+
+* Content and Context materialization
+
+=mrr-data= may physically store both a canonical Content Graph and a derived
+Context Graph, but storage co-location cannot collapse their roles.
+
+- A Content snapshot is source-bound, versioned, provenance-bearing, and
+  admitted at a specific MRR generation.
+- A Context snapshot is a bounded projection for an actor, task, capability
+  scope, selection policy, Content generation, and expiry.
+- Every Context root must name the Content =GenerationId= and snapshot root it
+  was projected from.  A new Content generation makes freshness a typed
+  decision, not a mutable-cache guess.
+- Importing, merging, pinning, or querying Context data cannot promote it into
+  Content.  It must re-enter through source and MRR admission.
+
+Context therefore has a distinct root schema namespace, =mrr.data.context=,
+rather than optional fields inside =mrr.data.snapshot=.  Its immutable
+descriptor must contain at least:
+
+#+begin_src yaml
+schema:
+  namespace: mrr.data.context
+  version: 1
+content:
+  generation_id: "..."
+  snapshot_cid: "..."
+scope:
+  actor_id: "..."
+  task_id: "..."
+  capability_scope_digest: "..."
+  selection_policy_digest: "..."
+  expires_at: "..."
+projection:
+  relations:
+    - relation_id: "..."
+      arrow_schema:
+        namespace: mrr.data.arrow.fact-batch
+        version: 1
+      cid: "..."
+      cid_codec: raw
+      format: arrow-ipc-file
+integrity:
+  cid_version: 1
+  manifest_codec: dag-cbor
+  multihash: sha2-256
+#+end_src
+
+The schema namespace and version pair makes Content and Context roots
+non-interchangeable.  Context import additionally checks the named Content
+root, actor/task/capability scope, selection policy, and expiry before exposing
+projected data.
+
+This is why Content can calibrate and anchor Context without making Arrow,
+GraphAr, or a graph database the source of truth.
+
+* Ecosystem placement
+
+The repository boundary follows the wider system ownership:
+
+| Component | Owned responsibility |
+|-----------+----------------------|
+| MRR | semantic identity, relations, inference candidates, lineage, generations, and admission |
+| mrr-data | physical interchange, persistence, immutable packaging, and controlled distribution |
+| ASP | source/software evidence and typed provider contracts |
+| POO Flow / Marlin | runtime composition, execution policy, ownership, and observability |
+| Wendao and other agents | consumers that construct task Context from admitted Content |
+
+A BYODS-style external reasoner may consume an immutable input bundle and
+return candidate result and proof bundles.  =mrr-data= can package and identify
+those artifacts; MRR decides whether their semantics are admissible, and POO
+Flow owns execution.  This repository must not grow a second scheduler,
+reasoning engine, or observability framework.
+
+* Security and trust boundary
+
+Import follows a fail-closed ladder:
+
+1. authorize the source and enforce byte, block, row, nesting, and
+   decompression budgets;
+2. validate CAR framing, roots, duplicate blocks, and referenced-block
+   closure;
+3. recompute every CID and reject mismatches;
+4. validate Arrow/Parquet/GraphAr structures before exposing native buffers;
+5. validate the exact MRR schema, IDs, types, cardinality, and generation;
+6. run MRR semantic and admission checks.
+
+Apache Arrow explicitly requires validation of untrusted serialized inputs;
+malformed offsets, sizes, UTF-8, or extension metadata can otherwise be unsafe.
+The V1 bounded importer admits footer, batch, row, recursive-value, and
+uncompressed body budgets before materializing arrays.  It rejects dictionary
+batches and compressed record bodies until their pre-allocation and
+decompression budgets have executable evidence.
+V1's trusted in-process interchange is the native =arrow-rs= =RecordBatch=
+API.  It does not expose an Arrow C Data or C Stream boundary.  A future ABI
+boundary requires a concrete non-Rust consumer, an explicit ownership contract,
+and separate executable evidence.  Network or archive input enters through
+validated serialized formats.
+
+A matching CID proves only byte integrity.  It does not prove that a payload
+is valid Arrow, valid GraphAr, authorized, non-malicious, or admissible MRR
+Content.
+
+* API surface
+
+The V1 API follows implemented owners instead of speculative common traits.
+The default =mrr-data::arrow= facade exposes relation-specific schema
+projection, native =RecordBatch= conversion, and bounded IPC import.  The
+opt-in =ipfs= feature exposes CID/DAG-CBOR manifests through =mrr-data::manifest=.
+The =content= feature exposes =ContentStore=, =MemoryContentStore= and the remote
+protocol; =filesystem= adds =FilesystemContentStore= and =car= adds CAR operations.
+The =cache= and =s3= adapters depend on =content= without enabling CAR or the
+plain filesystem provider. These member crates have empty default features;
+only the facade's =arrow= feature is enabled by default. The =ipfs= feature names
+existing content-addressed identity, not a daemon or network implementation.  The
+opt-in =mrr-data::graphar= facade exposes the admitted binary-Entity
+projection and, only with =graphar-native=, the maintained native writer plus
+bounded semantic reader.  The reader reconstructs physical endpoints through
+their persisted =EntityId= properties and re-admits complete facts through the
+owning MRR relation.
+
+There is no V1 =RelationBatchReader= or =GraphSnapshotStore= abstraction.
+Those interfaces would hide materially different Arrow, content, and GraphAr
+ownership semantics without an implemented consumer.  A future common trait
+requires an owner and a scenario proving that it removes real duplication.
+The content store constructs and verifies the CID from the caller-declared
+codec and bytes; it must never sniff a payload or silently select a codec.
+
+* Repository shape
+
+Avoid ten speculative crates before there is implementation pressure.  The V1
+workspace should begin with:
+
+#+begin_example
+mrr-data/
+  crates/
+    mrr-data/            # public facade; Arrow enabled by default
+    mrr-data-profile/    # dependency-light namespaces and numeric versions
+    mrr-data-arrow/      # lossless MRR relation <-> Arrow mapping
+    mrr-data-core/       # optional manifest admission and snapshot descriptors
+    mrr-data-content/    # CID, CAR, memory and filesystem providers
+    mrr-data-datafusion/ # opt-in exact-slice physical query execution
+    mrr-data-graphar/    # gated Property Graph projection
+#+end_example
+
+Object-store, IPLD-model, or provider crates are split only when their API and
+dependency boundaries become independently useful.  There is no =mrr-ipfs=
+crate in V1.
+
+* Delivery milestones and proof obligations
+
+Milestone numbers record implementation and proof dependencies; they are not a
+product-priority ranking.  The active priority is Arrow-first:
+
+1. keep the public facade's default dependency graph limited to Arrow and the
+   dependency-light profile crate;
+2. close trusted in-process Arrow interchange and its performance evidence;
+3. extend opt-in DataFusion execution only through typed, differential slices;
+4. close maintained GraphAr writer/read-back evidence for graph-shaped data;
+5. maintain manifest and local CID/CAR packaging as an explicit opt-in;
+6. defer remote distribution, including IPFS, until a concrete requirement and
+   scenario justify it.
+
+** M0: lossless Arrow interchange
+
+Implementation status: the recursive V1 mapping, complete-Fact round trips,
+bounded IPC import, property contracts, and fuzz target are implemented.  M0
+also provides the public facade's default feature.  Its normal dependency graph
+does not import CID, DAG-CBOR, CAR, or GraphAr.  Native projection uses borrowed
+values and capacity-sized Arrow builders; reconstruction prepares one typed
+decoder tree per batch.  A 10,000-complete-Fact Scenario guards this path
+without introducing a C Data or C Stream boundary.  M0 is accepted only after
+the current-head CI and review receipts are green; this status does not advance
+the later data-plane milestones.
+
+- define every supported MRR value mapping;
+- property-test =Fact -> RecordBatch -> Fact=;
+- preserve =FactId=, =RelationId=, =GenerationId=, context, field order, and
+  canonical values;
+- reject unsupported or ambiguous schemas rather than coercing them;
+- fuzz untrusted IPC validation.
+
+** M1: identity and manifest
+
+Implementation status: canonical manifest admission, MRR catalog/source
+binding, deterministic DAG-CBOR, frozen CID profiles, typed negative contracts,
+and a golden root vector are implemented.  This capability is retained behind
+the facade's explicit =ipfs= feature; it is not part of the default Arrow
+dependency graph.  M1 is accepted only after the current-head CI and review
+receipts are green.
+
+- freeze namespace =mrr.data.snapshot= at schema version =1= only after the
+  Arrow descriptors have executable round-trip evidence;
+- test deterministic root CID across repeated builds;
+- reject unknown schema versions, algorithms, codecs, and self-inconsistent
+  child descriptors.
+
+** M2: local content-addressed packaging
+
+Implementation status: memory and filesystem stores, upstream CARv1
+read/write, full CID/root/referenced-child verification, exact catalog checks,
+pre-allocation frame-budget admission, typed import failures,
+validation-before-commit, repacking invariance, and the 512-extra-block
+performance scenario are implemented.  This local packaging capability is
+split across the facade's explicit =content=, =car=, and =filesystem= features.
+It supplies the local verification foundation for the current M4 distribution
+work.  M2 is
+accepted only after current-head CI and review receipts are green.
+
+- implement memory and filesystem =ContentStore=;
+- write/read CAR with full root and child verification;
+- prove that repacking CAR does not change the snapshot root;
+- enforce import budgets and typed failures;
+- demonstrate identical semantic data can have distinct physical CIDs without
+  changing =GenerationId=.
+
+** M3: GraphAr specialization
+
+Implementation status: the first admission slice is implemented in
+=mrr-data-graphar=.  It admits exactly two ordered, non-null =Entity= fields,
+validates every fact through its owning MRR relation, preserves all
+semantic identities and context in a physical-ID-free edge record, and rejects
+n-ary, nullable-endpoint, scalar-endpoint, and invalid-fact inputs.  A
+repartition scenario proves that changing physical grouping does not change
+the projected records.  The implemented physical vertex index sorts and
+deduplicates that endpoint set, assigns dense GraphAr-local =i64= identifiers,
+and retains a bidirectional mapping.  Its result is invariant under edge input
+order.  Internal IDs remain disposable: the native writer must persist the
+semantic =EntityId= as a property and import must restore it from that property.
+
+The crate intentionally does not encode GraphAr YAML, Parquet, chunk IDs, or
+adjacency tables.  The maintained =graphar-rs= binding is an in-tree CXX
+binding that compiles the Apache GraphAr C++ implementation and requires Arrow
+C++ development libraries; the unrelated crates.io package named =graphar= is
+not used.  It exposes the edge writer and bounded high-level collection reader
+needed by the admitted profile, so MRR Data composes the native API instead of
+introducing a second private GraphAr wire implementation.
+
+The Apache proposal for the edge-writer binding is recorded by
+[[https://github.com/apache/incubator-graphar/issues/976][GraphAr issue #976]]
+and [[https://github.com/apache/incubator-graphar/pull/977][PR #977]].  The PR
+was closed intentionally: =GTrunSec/incubator-graphar= is the maintained source
+for this extension, and an Apache merge is not a current release gate.  Apache
+=main= remains a compatibility and synchronization baseline.  The reader is
+implemented and admitted in the same maintained fork rather than as a private
+reader in MRR Data.
+
+The =native-graphar= Cargo feature pins the immutable maintained fork commit
+=4d4b29715d9825bd3e9b78589cfb863880b9d1d8= and exercises the native Rust/C++
+writer and reader.  The adapter writes semantic =EntityId= vertex
+properties plus relation identity and full MRR context on every edge, stages a
+complete dataset, then renames it into place.  Its bounded semantic reader
+exports the upstream Arrow tables through the Arrow C Stream interface and
+borrows their buffers in Rust rather than rebuilding owned string rows.  It
+resolves physical endpoints through the vertex table, parses every identity
+and context discriminator into its MRR V1 type, reconstructs =Fact= values,
+and re-admits each result through =BinaryEntityProjection=.  Duplicate facts,
+unknown physical endpoints, ambiguous vertex identities, foreign projections,
+malformed contexts, and row-budget overflow fail closed.  Admission requires
+an immutable fork revision, owner-maintained tests, and Linux/macOS native CI;
+it does not depend on Apache review.  Native CI remains separate so ordinary
+Rust feedback does not inherit the C++ build latency.  An isolated fixed
+10,000-edge Scenario uses two warmups and 41 measured samples, alternating
+ABBA and BAAB execution order over the identical eleven-property projection.
+It rejects the maintained native Parquet path unless its median paired sample
+is at least five percent faster than the official GraphAr read, retains
+P50/P95/P99/max distributions for diagnosis, and independently rejects Arrow
+C Stream import above =min(1ms, 10% of official P95)=.  Semantic read keeps
+P50 below =300ms= and P95 below =500ms=; prepared semantic admission keeps P50
+below =25ms= and P95 below =50ms=.  The committed local reference receipt
+records official P50 =9.76ms=, native P50 =8.35ms=, Arrow C Stream import P95
+=0.18ms=, and complete parity-scenario P95 =228.05ms=.  These observations are
+evidence for this revision and host only, not universal throughput claims.
+
+- implement only the declared binary-Entity projection first;
+- preserve canonical IDs through repartition and compaction;
+- reject n-ary and unsupported value shapes unless a versioned reification
+  profile exists;
+- run differential read scenarios against the maintained GraphAr implementation.
+
+** M4: controlled distribution — active delivery plan
+
+Updated 2026-09-20 after the local S3/Kache audit and snapshot acceptance. This section owns the execution
+order and acceptance gates; the protocol document owns API behavior and the
+[[file:s3-cache-audit.md][audit record]] owns the dated validation evidence.
+
+The immediate objective is: an admitted snapshot on machine A can be published
+through S3 and restored on machine B with an empty Kache cache, preserving its
+root, declared child closure, catalog bindings, and original semantic generation.
+Repeat reads must use verified local content. No provider purchase or hosted
+bucket is needed to establish this local acceptance result.
+
+*** M4.0: single-block foundation — implemented, local evidence recorded
+
+Owners: =mrr-data-content= protocol, =mrr-data-cache= adapters, facade feature
+composition and CI. The implementations reuse Kache for local mechanisms and
+OpenDAL for S3 transport; they do not depend on the unpublished remote-pack patch.
+
+- CID-verified reads, bounded local and remote materialization, immutable
+  conditional writes, explicit cache-admission outcomes and remote receipts;
+- cold/warm/reopened cache paths, response-body deadlines, missing/denied/corrupt
+  blocks, lost acknowledgement recovery and concurrent idempotent publication;
+- default Arrow only, opt-in content/providers, and dependency-isolation checks.
+
+Recorded local baseline: 95 workspace tests passed, one subprocess helper
+ignored and exercised by its parent; Clippy and 14 feature checks passed. This is
+not a claim of remote CI, hosted S3 acceptance, or complete snapshot distribution.
+
+*** M4.1: validated snapshot publication — implemented, local acceptance
+
+Owner: =mrr-data-content= snapshot coordination above the existing store traits.
+The S3 adapter stays a block transport. Snapshot operations must work without
+=car=, =filesystem=, or a concrete S3 dependency; CAR remains optional packaging.
+
+- Derive the upload inventory from the admitted =SnapshotBlock= and
+  =SnapshotManifest::referenced_cids()=; deduplicate references deterministically.
+- Reuse the existing manifest/catalog, CID and declared-length checks. Extract
+  shared closure validation from CAR admission where necessary rather than
+  introducing another validator with different rules.
+- Validate the complete supported local closure and inventory budgets before
+  the first remote write. Start with immutable Arrow snapshot blocks, coverage
+  and lineage. Define the supported graph boundary explicitly: an opaque GraphAr
+  manifest CID alone must not certify its nested dataset files. Until an owning
+  graph inventory is available, reject graph snapshots from this complete-
+  publication operation rather than overstate their closure.
+- Await acknowledgement for every required child before publishing the root.
+  Return a snapshot-level physical publication receipt only after root acknowledgement;
+  keep local cache-fill outcomes distinct from remote publication success.
+- Reuse immutable conditional block writes for retries. A failed attempt may
+  leave unreferenced child objects; do not delete shared content during rollback.
+  A pre-existing root from an earlier attempt is not proof that its children
+  remain available, and a failed retry must not remove that root.
+
+Acceptance: a valid Arrow snapshot publishes children then root; missing or
+corrupt local children cause zero remote writes; a child PUT failure prevents
+new root publication and produces no snapshot success receipt; root PUT failure
+also produces no receipt; retry converges to the same root without overwriting
+other content. Record object-operation order in the local fixture.
+
+*** M4.2: bounded cold restore — implemented, local acceptance
+
+Owner: =mrr-data-content= restore coordination; existing core/MRR admission keeps
+ownership of manifest and catalog validation.
+
+- Take an explicit root CID and caller-supplied admitted catalogs; read the root
+  with its own small budget, verify/decode it, then enumerate the supported child
+  inventory. Do not trust object listings or a mutable latest pointer.
+- Fetch children through the existing bounded cache/remote protocol. Validate
+  the declared closure, child lengths and catalog bindings before returning a
+  restored-snapshot result. Verified cache blocks may survive a failed restore;
+  their presence is not snapshot admission or a transactional local commit.
+- Cover actual Arrow IPC bytes produced by the maintained Arrow adapter, plus
+  coverage and lineage blocks. Reuse the optional CAR path only in a separate
+  equivalence test, not as a required transport dependency.
+- Preserve root CID and semantic generation. A physical restore cannot create
+  a generation, admit query results, or assert that arbitrary bytes are valid facts.
+
+Acceptance: machine-A publish -> local S3 fixture -> empty machine-B Kache ->
+validated snapshot -> Arrow round trip. Warm and reopened reads make zero remote
+GETs. Missing/corrupt children, substituted roots, wrong catalogs and length
+mismatches return typed failure and never a restored-snapshot receipt.
+
+M4.1 and M4.2 now form one locally implemented delivery behind the independent
+=snapshot= feature. Shared closure validation is used by CAR and transfer APIs;
+=publish_snapshot= and =restore_snapshot= use existing local/remote traits.
+The production Kache/S3 scenario transfers real Arrow IPC, coverage and lineage,
+then reconstructs facts in a second cache and after reopening it. The
+=s3_snapshot= example compiles against the same shared fixture. Local acceptance on macOS/Rust 1.95.0 records 107 passing workspace tests,
+one subprocess helper ignored and exercised by its parent, workspace Clippy,
+and all 16 feature dependency/compile checks. Both S3 examples compile. Remote
+CI has not been observed for these changes; this does not close M4.3-M4.5.
+
+The delivery evidence includes the
+public API, a runnable two-cache example, positive and negative tests, feature
+isolation, and Ubuntu/macOS CI status separately from local results.
+
+*** M4.3: interruption, retries and whole-transfer resource bounds — closed, local acceptance
+
+Depends on the M4.1/M4.2 round trip. Owner: snapshot coordination and its tests.
+
+- Add limits for block count, per-block bytes, total declared/received bytes,
+  in-flight bytes and concurrent requests. Start serial if needed; parallelism
+  must never bypass an aggregate budget. Define whether retries consume the
+  received-byte budget and include them in the recorded receipt.
+- Carry one operation deadline through the complete snapshot transfer. Verify
+  cancellation during child download, child publication and root publication.
+  Never convert cancellation or an uncertain write into confirmed absence.
+- Retry the same immutable inventory after a process restart or lost response;
+  revalidate local cache hits and re-establish remote child acknowledgements.
+  Do not add a persisted job format unless the restart scenario requires it.
+
+Acceptance: interrupted transfers resume to the same root; no partial snapshot
+receipt escapes; enforced byte/request limits hold under slow and faulty peers;
+small runtime tasks remain responsive while disk I/O is assigned to an explicit
+blocking execution boundary. Keep the existing synchronous store API usable.
+
+Current local slice (2026-09-20): optional =transfer= sessions enforce one
+whole-operation deadline, shared cancellation, serial remote dispatch and
+cumulative retry budgets. Failed GET attempts retain their maximum-byte
+reservation; PUT attempts charge their full logical payload. Counters describe
+protocol calls and logical bytes, not provider-internal HTTP requests or exact
+wire usage. =AsyncContentStore= and optional =BlockingContentStore= move disk
+operations off the executor and retain the worker permit after cancellation.
+The synchronous API remains available; only Arrow is enabled by default.
+
+Local acceptance (2026-09-20, macOS/Rust 1.95.0): 119 workspace tests pass,
+2 subprocess entry points are ignored by ordinary discovery and invoked by their
+parent tests; all 18 feature isolation cases pass. Formatting, diff whitespace
+and full-feature Clippy with warnings denied also pass.
+
+Tests cover Kache/S3 timeout recovery, cancellation during root PUT, interrupted
+restore, shared-session remote serialization and bounded detached disk work.
+The process-restart contract kills a real publisher while root PUT is pending,
+then starts a new process using the same persistent Kache directory without
+reseeding. It re-acknowledges every child before root publication and restores
+identical Arrow facts through an empty second cache. The server verifies the
+same root bytes and child-before-root request order. Test subprocesses are reaped
+on error paths and bounded by a parent-side timeout.
+
+M4.3 is closed for this local acceptance scope. Remote CI and real TLS/SigV4
+server authentication are not claimed; concurrent Agent workloads and deployment
+acceptance remain M4.4 and M4.5 respectively.
+
+*** M4.4: Kache integration acceptance under concurrent consumers — closed, local acceptance
+
+Depends on a bounded correct transfer. This is adapter acceptance, not a new
+cache engine or an independent Agent cache subsystem. Kache owns key locking,
+deduplication, eviction, quota/grace behavior and maintenance mechanisms.
+
+- Exercise concurrent consumers through the maintained Kache interfaces. If
+  duplicate downloads appear, first establish whether the adapter bypasses an
+  upstream coordination API; reuse that API where applicable. Do not introduce
+  an MRR lock registry, eviction policy or background cache scheduler.
+- Verify the protocol boundary during upstream eviction and reopening: a cache
+  miss may recover from remote, corruption remains explicit, and verified remote
+  bytes remain usable when local admission fails.
+- Invoke upstream maintenance explicitly at the application boundary. Document
+  its soft quota and grace semantics; do not promise a hard disk cap.
+- Record enough request counts and workload details to detect adapter regressions.
+  Performance or coalescing work requires measured evidence of an integration
+  problem and remains upstream-owned where it concerns cache mechanisms.
+
+Acceptance: integration tests establish correct reads across concurrent callers,
+waiter cancellation and upstream maintenance/reopening, without replacing Kache
+mechanisms. This does not repeat or claim ownership of Kache's full concurrency,
+eviction or performance qualification.
+
+Local acceptance (2026-09-20, macOS/Rust 1.95.0): four adapter contracts pass
+with only =kache,blocking= selected. Eight independent handles share a cache;
+four same-CID and four distinct-CID requests produce eight forced cold GETs
+(32 KiB logical payload). The identical workload after reopening adds zero GETs
+and yields eight local hits. This is a recorded baseline, not request coalescing
+or a latency/throughput claim.
+
+The contracts also verify cancellation isolation, usable verified bytes under
+upstream key-lock admission contention, soft-quota grace, and 32 upstream
+maintenance/removal iterations alongside 32 reads followed by warm reopening.
+Explicit upstream removal exercises cache disappearance without bypassing the
+production grace policy. Existing integrity tests remain in the full suite.
+No production cache mechanism was added or replaced.
+
+Full local regression: 123 tests pass, 2 subprocess helpers ignored by ordinary
+discovery; 18 feature isolation cases and full-feature Clippy pass. M4.4 is
+closed within this adapter scope. M4.5 and remote CI remain separate acceptance.
+
+*** M4.5: local S3/TLS conformance and deployment configuration — closed, local acceptance
+
+The local conformance work can proceed after M4.2 without waiting for performance
+work. Owner: S3 adapter integration tests; credentials and certificates stay out
+of immutable manifests and diagnostic error bodies.
+
+- Add an independent local S3-compatible test service with actual SigV4 credential
+  validation. Retain the lightweight fault fixture for deterministic error injection;
+  do not mistake its authorization-header check for signature verification.
+- Test HTTPS trust with a local CA, trusted/untrusted certificates, wrong
+  credentials, namespace prefixes and conditional-write behavior. Reuse maintained
+  server/signing implementations instead of implementing S3 or SigV4 in MRR Data.
+- Document endpoint, bucket, region, credential and trust configuration for
+  deployment. Hosted B2/R2 smoke tests are optional when credentials are supplied;
+  no purchase, public upload or cloud account is a development gate.
+
+Acceptance: the same production adapter passes local credential/TLS positive and
+negative tests, while the Arrow-only and local-cache-only dependency boundaries
+remain intact. State precisely which provider configurations were actually run.
+
+Local acceptance (2026-09-20): the production adapter passes the independent
+=s3s-fs= 0.16.0 service at commit
+=8ac644246b5a11664eaed6cbb3a36b3874047586= with real SigV4 authentication,
+behind a loopback TLS byte relay and ephemeral CA. Positive and negative cases
+cover access key/secret, CA trust, hostname verification, namespace roots,
+conditional creation, idempotent publication, corrupt-object non-overwrite,
+bounded reads and genuine Arrow snapshot cold restore through Kache.
+
+The reproducible =tools/s3-conformance/run.py= isolates the server build and
+records its binary hash; see =docs/architecture/s3-conformance-receipt.json=.
+The test server uses Rust 1.96.0; MRR Data stays at Rust 1.95.0. No default
+feature or production dependency changed. A dedicated Ubuntu/macOS CI job runs
+this conformance gate, but its remote execution has not been observed.
+
+Final local regression: 123 workspace tests pass; the 3 ordinary ignored entries
+are 2 subprocess helpers invoked by parent tests and the independently executed
+S3/TLS conformance test (1 passed). All 18 feature isolation cases, full-feature
+Clippy, Rust formatting and diff whitespace checks pass. M4.0-M4.5 are closed
+within their documented local scope. This is not B2/R2 hosted acceptance, native
+server TLS/mTLS qualification, or proof of remote CI completion.
+
+*** M4 closure audit — corrections verified
+
+The 2026-09-20 audit reviewed snapshot preflight/root ordering, read verification,
+resource and retry accounting, cancellation/blocking ownership, feature isolation,
+and independent conformance evidence. Two corrections were made: the single-file
+example now uses blocking disk I/O and a 64 MiB input cap; the conformance runner
+binds success to the workspace source digest and removes stale output before a
+new attempt. Both public examples now run against the independent TLS service,
+including oversized-file rejection. See =docs/architecture/m4-closure-audit.md=.
+
+After correction: 123 workspace tests pass, independent conformance and both
+examples pass, 2 evidence-freshness tests pass, and all 18 feature slices plus
+Clippy/format checks pass. The updated receipt records the audited source digest.
+The local closure claim remains scoped; remote CI and hosted providers are not
+represented as verified.
+
+*** Repository delivery and remote CI acceptance
+
+Delivery is on [[https://github.com/tao3k/mrr-data/pull/1][PR #1]]. The PR acceptance
+record names the final tested revision, run and platform receipt fingerprints;
+its current checks are the remote authority. Historical local totals below do
+not substitute for that final-revision record. Warning remediation adds a
+reviewed dead-code-only upstream service patch with an explicit receipt hash,
+compiles that service with =-D warnings=, and fixes the Ubuntu runner to 24.04.
+
+Plan audit (2026-09-20): M4 implementation and local acceptance are complete;
+the active work is delivery of the exact tested source, not another cache or
+transport feature. Earlier per-slice test totals are historical evidence, not
+additional unfinished milestones. Execute the following as one delivery batch.
+
+1. Review the complete working tree, including staged, unstaged and untracked
+   files. Inventory the owned M4 change set; ensure the new transfer/blocking
+   modules, subprocess tests, independent server runner and workflow are all
+   included. Preserve unrelated changes and existing upstream experiments.
+   Review the final diff against HEAD, not only against the staging area.
+2. Deliver that coherent source revision through a commit and PR. Record the
+   exact revision; any subsequent source change invalidates earlier CI closure.
+   Configuring or pushing a workflow alone does not establish that the remote
+   has tested the current implementation.
+3. Run the configured workflow on that revision and resolve failures to closure.
+   Require =M4 acceptance= plus the repository's other required checks. The M4
+   aggregate covers MSRV, workspace/feature checks and independent S3/TLS on
+   Ubuntu/macOS; fuzz and native GraphAr are separate jobs and must not be
+   silently treated as covered by the M4 aggregate. Record actual outcomes.
+4. Review both platform receipts and check their source fingerprint against the
+   tested revision. Missing/failed/cancelled/skipped checks are not success.
+   Update the acceptance record with the PR, tested revision and CI run URLs.
+   Mark remote closure only after the exact final revision passes. Making the
+   aggregate a required branch-protection check is a repository-settings action,
+   separate from adding the workflow; no protection change is claimed here.
+
+Exit: a reviewable delivered revision, passing required remote checks, and
+source-matched Ubuntu/macOS conformance receipts. Do not repeatedly rerun local
+checks without a code change, failure or new unresolved concern.
+
+After delivery, the next functional batch should be driven by an identified
+Agent consumer: connect its existing admitted snapshot/catalog path to these
+public publication/restore APIs and validate the consumer's cold/warm/restart
+behavior. Select the actual caller and owner before adding an integration API.
+Do not claim consumer integration from the standalone examples. Physical restore
+must continue to preserve semantic generation without replacing MRR admission.
+
+*** Next consumer: POO Flow — entry-point audit
+
+The user selected POO Flow's MRR consumption path on 2026-09-20. Inspection of
+the current sibling checkout found that the Healthcare ontology query owner is
+=packages/lambda-episteme/user-interface/scenarios/healthcare/reasoning.ss=.
+It declares content-bound GQL queries and checks exact source digests. It
+explicitly defers execution to a later external MRR Rust Runtime; it neither
+links MRR nor defines a subprocess transport. Its assurance owner likewise
+qualifies source bytes without claiming MRR query execution.
+
+This is an implementation prerequisite, not an S3 configuration problem:
+
+1. Identify the external MRR execution owner and the POO Flow runtime handoff
+   that invokes it. Do not substitute the MRR repository's Scheme scheduler
+   for an already integrated POO Flow consumer.
+2. Establish a source-bound query/catalog/generation input and a typed result
+   admitted through MRR's =admit_query_result_candidate=. POO Flow controls
+   invocation and receipt consumption; MRR owns query semantics and admission.
+3. Connect the same execution path to explicit snapshot-root publication and
+   restore through the existing optional MRR Data adapters. Credentials remain
+   runtime configuration, not snapshot or semantic receipt data.
+4. Prove identical admitted results for local, cold S3 restore, warm cache and
+   process restart. Measure logical remote operations/bytes and elapsed time;
+   a warm-cache run must actually avoid remote reads. Corruption, stale
+   generation, cancellation and transport failure must not yield an accepted
+   result.
+5. Exercise the real POO Flow invocation and receipt consumer in CI, retaining
+   the source revisions of both sides. Library tests and standalone snapshot
+   examples remain prerequisite evidence, not this consumer exit criterion.
+
+The existing Healthcare =case-profile-relations.gql= uses a two-edge path,
+property filtering and property projection. The current DataFusion adapter
+accepts a single outgoing binary-Entity edge with endpoint projection and no
+filter. It must reject that Healthcare query today. Any selected query expansion
+needs its own semantic equivalence and negative contracts; do not silently
+reduce the query or manufacture a result receipt to make integration pass.
+
+The sibling POO Flow checkout contains unrelated active edits. Any consumer
+implementation must preserve those changes and explicitly own its new files.
+No consumer integration or hosted-provider qualification is claimed by this
+entry-point audit.
+
+*** M5.0: POO Flow static-edge resource — implementation under acceptance
+
+The first concrete consumer uses the existing Python =RuntimeGraphPlan= and
+=RuntimeGraphToolNode= boundary. Its fixed =poo-flow.static-edges.v1= profile
+publishes only explicit static dependencies and queries their MRR Entity
+endpoints. It is a separate useful operation, not a substitute for the declared
+Healthcare queries. Conditional routes, arbitrary GQL, full plan restoration
+and effect authorization remain outside this profile.
+
+=mrr-data-poo-flow= is a workspace crate with no default dependencies; its
+=runtime= feature enables the external process worker. The Python binding in
+=integrations/poo_flow/= fixes query scope at tool registration. Rust restores
+the exact root, validates fact context and snapshot identity, executes the
+existing DataFusion slice and calls MRR result admission. The source/revision
+owner supplies immutable input; credentials stay in runtime configuration.
+
+Acceptance imports the clean pinned POO Flow public runtime source, invokes its
+real tool node, and compares admitted results across producer-local, empty-cache,
+warm-cache and reopened-process execution. Warm/reopened caches require zero
+remote operations. Scope substitution, stale generation, duplicate edges,
+transport failure, process timeout and actual S3 corruption must fail closed.
+The existing Ubuntu/macOS S3 jobs also test/lint this feature and retain consumer
+measurements and source binding in their receipts. See
+=integrations/poo_flow/README.md= for exact limits and deployment instructions.
+
+A source-identity regression discovered during this integration was corrected
+in DataFusion: an encoded Arrow Entity ID must be parsed as that typed ID,
+not fed back into =from_canonical_bytes= to derive a second identity. Direct
+source-ID and malformed/wrong-domain regression tests complement cross-engine
+parity, which alone could miss a shared decoding defect.
+
+No cloud purchase, B2/R2 smoke run, cache reimplementation, generic scheduling
+framework, S2 transport, mutable head, remote GC or graph-distribution expansion
+is a prerequisite to this delivery batch. Hosted checks remain optional when a
+real deployment supplies its configuration and credentials.
+
+*** Completion boundary and work held outside this sequence
+
+The initial distribution slice is complete at M4.2, with its executable receipts;
+M4.3-M4.5 qualify bounded operation, concurrent workloads and deployment behavior.
+Do not label the entire M4 effort complete from single-block or partial evidence.
+
+Mutable discovery pointers, distributed heads, cross-object transactions, remote
+GC, IPFS network transport, S2 streams, and graph-native selective/range reads
+require separate concrete consumers and ownership decisions. They are not hidden
+prerequisites for publishing and restoring an explicitly addressed Arrow snapshot.
+
+
+Every milestone needs positive round trips, typed negative contracts,
+determinism receipts, and performance scenarios.  A passing parser, a matching
+CID, or a readable GraphAr dataset alone is not semantic closure.
+
+* Non-goals for V1
+
+- implementing a graph database or query optimizer;
+- replacing MRR identity, lineage, query, or admission types;
+- universal RDF/triple normalization of n-ary relations;
+- equating physical and semantic identity;
+- public IPFS publication, gateway fallback, or ambient network discovery;
+- silent compatibility modes for unsupported schemas;
+- claiming GraphAr or Arrow integration before round-trip gates pass.
+
+* Primary references
+
+- [[https://arrow.apache.org/docs/format/Intro.html][Apache Arrow format introduction and IPC boundary]]
+- [[https://arrow.apache.org/docs/format/Security.html][Apache Arrow security considerations]]
+- [[https://graphar.apache.org/docs/specification/format/][Apache GraphAr format specification]]
+- [[https://docs.ipfs.tech/concepts/content-addressing/][IPFS content addressing and CIDs]]
+- [[https://ipld.io/specs/transport/car/carv1/][IPLD CARv1 specification]]

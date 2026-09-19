@@ -1,0 +1,38 @@
+[package]
+name = "mrr-data"
+description = "Arrow-first physical data plane for Meta-Relational Reasoning"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = ["arrow"]
+arrow = ["dep:mrr-data-arrow"]
+cache = ["content", "dep:mrr-data-cache", "mrr-data-cache/kache"]
+s3 = ["content", "dep:mrr-data-cache", "mrr-data-cache/s3"]
+ipfs = ["dep:mrr-data-core", "mrr-data-core/ipfs"]
+content = ["ipfs", "dep:mrr-data-content"]
+transfer = ["snapshot", "mrr-data-content/transfer", "dep:mrr-data-cache", "mrr-data-cache/blocking"]
+snapshot = ["content", "mrr-data-content/snapshot"]
+car = ["content", "mrr-data-content/car"]
+filesystem = ["content", "mrr-data-content/filesystem"]
+datafusion = ["arrow", "dep:mrr-data-datafusion"]
+graphar = ["dep:mrr-data-graphar"]
+graphar-native = ["graphar", "mrr-data-graphar/native-graphar"]
+
+[dependencies]
+mrr-data-cache = { workspace = true, optional = true }
+mrr-data-arrow = { workspace = true, optional = true }
+mrr-data-content = { workspace = true, optional = true }
+mrr-data-core = { workspace = true, optional = true }
+mrr-data-datafusion = { workspace = true, optional = true }
+mrr-data-graphar = { workspace = true, optional = true }
+mrr-data-profile.workspace = true
+
+[dev-dependencies]
+mrr-data-asp-rust-build-support.workspace = true
+
+[lints]
+workspace = true

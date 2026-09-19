@@ -1,0 +1,31 @@
+[package]
+name = "mrr-data-content"
+description = "Verified local content stores and CARv1 packaging for MRR Data"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+transfer = ["snapshot", "dep:tokio"]
+snapshot = ["dep:meta-relational-reasoning"]
+car = ["dep:fvm_ipld_car", "dep:meta-relational-reasoning", "dep:unsigned-varint"]
+filesystem = ["dep:tempfile"]
+
+[dependencies]
+tokio = { workspace = true, optional = true, features = ["time", "sync"] }
+cid.workspace = true
+fvm_ipld_car = { workspace = true, optional = true }
+meta-relational-reasoning = { workspace = true, optional = true }
+mrr-data-core = { workspace = true, features = ["ipfs"] }
+tempfile = { workspace = true, optional = true }
+unsigned-varint = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt", "test-util"] }
+mrr-data-asp-rust-build-support.workspace = true
+
+[lints]
+workspace = true
