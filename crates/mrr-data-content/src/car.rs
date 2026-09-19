@@ -8,9 +8,9 @@ use meta_relational_reasoning::{EntityCatalog, RelationCatalog};
 use mrr_data_core::{SnapshotBlock, SnapshotManifest};
 use unsigned_varint::decode;
 
+use crate::closure::verify_closure;
 use crate::{
-    ContentBlock, ContentCodec, ContentError, ContentStore, ImportResource,
-    store::{cid_for, codec_for},
+    ContentBlock, ContentCodec, ContentError, ContentStore, ImportResource, store::codec_for,
 };
 
 /// Explicit limits applied before an imported CAR is committed to a store.
@@ -263,42 +263,6 @@ fn preflight_frames(mut archive: &[u8], limits: CarImportLimits) -> Result<(), C
             total_block_bytes,
         )?;
         archive = &remaining[frame_bytes..];
-    }
-    Ok(())
-}
-
-fn verify_closure(
-    manifest: &SnapshotManifest,
-    blocks: &BTreeMap<Cid, &[u8]>,
-) -> Result<(), ContentError> {
-    for cid in manifest.referenced_cids() {
-        if !blocks.contains_key(&cid) {
-            return Err(ContentError::MissingReferencedBlock(Box::new(cid)));
-        }
-    }
-    for relation in manifest.relations() {
-        for batch in relation.batches() {
-            let bytes = blocks
-                .get(batch.cid())
-                .ok_or_else(|| ContentError::MissingReferencedBlock(Box::new(*batch.cid())))?;
-            let actual = bytes.len() as u64;
-            if actual != batch.byte_length() {
-                return Err(ContentError::ChildLengthMismatch {
-                    cid: Box::new(*batch.cid()),
-                    declared: batch.byte_length(),
-                    actual,
-                });
-            }
-        }
-    }
-    for (cid, bytes) in blocks {
-        let actual = cid_for(codec_for(cid)?, bytes);
-        if actual != *cid {
-            return Err(ContentError::CidMismatch {
-                expected: Box::new(*cid),
-                actual: Box::new(actual),
-            });
-        }
     }
     Ok(())
 }

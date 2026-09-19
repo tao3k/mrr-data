@@ -1,7 +1,4 @@
-use std::{
-    fs,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 use fvm_ipld_car::{Block, CarHeader, CarWriter};
 use meta_relational_reasoning::{
@@ -12,13 +9,11 @@ use mrr_data_core::{
     BatchDescriptor, CoverageDescriptor, CoverageKind, RelationDescriptor, SnapshotBlock,
     SnapshotManifest, SnapshotManifestRequest, raw_cid,
 };
-use tempfile::tempdir;
 use unsigned_varint::encode;
 
 use crate::{
-    CarImportLimits, ContentBlock, ContentCodec, ContentError, ContentStore,
-    FilesystemContentStore, ImportResource, MemoryContentStore, encode_snapshot_car,
-    import_snapshot_car,
+    CarImportLimits, ContentBlock, ContentCodec, ContentError, ContentStore, ImportResource,
+    MemoryContentStore, encode_snapshot_car, import_snapshot_car,
 };
 
 const ALPHA: &[u8] = b"alpha-arrow-ipc";
@@ -112,27 +107,6 @@ fn fixture() -> (
 
 fn generous_limits(archive_len: usize) -> CarImportLimits {
     CarImportLimits::new(archive_len as u64, 16, 4_096, 8_192)
-}
-
-#[test]
-fn memory_and_filesystem_stores_round_trip_and_verify_blocks() {
-    let raw = ContentBlock::new(ContentCodec::Raw, b"payload");
-    let memory = MemoryContentStore::default();
-    let cid = memory.put(raw).unwrap();
-    assert_eq!(memory.get(&cid).unwrap(), b"payload");
-    assert_eq!(memory.put(raw).unwrap(), cid);
-
-    let directory = tempdir().unwrap();
-    let filesystem = FilesystemContentStore::open(directory.path()).unwrap();
-    assert_eq!(filesystem.put(raw).unwrap(), cid);
-    assert_eq!(filesystem.get(&cid).unwrap(), b"payload");
-    assert_eq!(filesystem.put(raw).unwrap(), cid);
-
-    fs::write(filesystem.root().join(cid.to_string()), b"tampered").unwrap();
-    assert!(matches!(
-        filesystem.get(&cid),
-        Err(ContentError::CidMismatch { .. })
-    ));
 }
 
 #[test]

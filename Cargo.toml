@@ -4,10 +4,12 @@ members = [
   "crates/mrr-data",
   "crates/mrr-data-arrow",
   "crates/mrr-data-content",
+  "crates/mrr-data-cache",
   "crates/mrr-data-core",
   "crates/mrr-data-datafusion",
   "crates/mrr-data-graphar",
   "crates/mrr-data-profile",
+  "crates/mrr-data-kache-probe",
 ]
 resolver = "2"
 
@@ -19,6 +21,17 @@ license = "LGPL-2.1-or-later"
 repository = "https://github.com/tao3k/mrr-data"
 
 [workspace.dependencies]
+mrr-data-cache = { path = "crates/mrr-data-cache", version = "0.1.0", default-features = false }
+opendal = { package = "opendal-core", version = "=0.58.2", default-features = false, features = ["executors-tokio"] }
+opendal-service-s3 = { version = "=0.58.2", default-features = false }
+opendal-http-transport-reqwest = { version = "=0.58.2", default-features = false, features = ["rustls-no-provider"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+futures = "0.3"
+axum = "0.8"
+anyhow = "1"
+blake3 = "1"
+kache-store = { git = "https://github.com/kunobi-ninja/kache", rev = "7461ca763506c081d6ceb95ea225c04ce2d24df6" }
 asp-rust = { git = "https://github.com/tao3k/asp-rust", rev = "2419414ee5379bad89506496e3eaab928df68daf", default-features = false }
 asp-rust-build-support = { git = "https://github.com/tao3k/asp-rust", rev = "2419414ee5379bad89506496e3eaab928df68daf" }
 arrow-array = "58.4.0"
@@ -30,8 +43,8 @@ flatbuffers = "25.2.10"
 meta-relational-reasoning = { git = "https://github.com/tao3k/meta-relational-reasoning.git", rev = "fcff395d803aff5279522de63ef4e53755c6965f", version = "0.1.0" }
 mrr-data-asp-rust-build-support = { path = "build-support/mrr-data-asp-rust-project-policy", version = "0.1.0" }
 mrr-data-arrow = { path = "crates/mrr-data-arrow", version = "0.1.0" }
-mrr-data-content = { path = "crates/mrr-data-content", version = "0.1.0" }
-mrr-data-core = { path = "crates/mrr-data-core", version = "0.1.0" }
+mrr-data-content = { path = "crates/mrr-data-content", version = "0.1.0", default-features = false }
+mrr-data-core = { path = "crates/mrr-data-core", version = "0.1.0", default-features = false }
 mrr-data-datafusion = { path = "crates/mrr-data-datafusion", version = "0.1.0" }
 mrr-data-graphar = { path = "crates/mrr-data-graphar", version = "0.1.0" }
 mrr-data-profile = { path = "crates/mrr-data-profile", version = "0.1.0" }
@@ -43,7 +56,7 @@ serde = { version = "=1.0.229", features = ["derive"] }
 serde_bytes = "=0.11.19"
 serde_ipld_dagcbor = "=0.7.0"
 tempfile = "=3.23.0"
-tokio = { version = "=1.48.0", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "=1.53.1", features = ["macros", "rt-multi-thread"] }
 unsigned-varint = "=0.8.0"
 
 [workspace.lints.rust]

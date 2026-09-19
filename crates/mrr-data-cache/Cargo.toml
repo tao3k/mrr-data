@@ -1,0 +1,49 @@
+[package]
+name = "mrr-data-cache"
+description = "Kache and S3 adapters for the MRR content protocol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+blocking = ["dep:tokio"]
+kache = ["dep:anyhow", "dep:blake3", "dep:kache-store", "dep:tempfile"]
+s3 = ["dep:futures", "dep:opendal", "dep:opendal-service-s3", "dep:opendal-http-transport-reqwest", "dep:reqwest", "dep:rustls", "dep:tokio"]
+
+[[example]]
+name = "s3_snapshot"
+required-features = ["kache", "s3", "blocking"]
+
+[[example]]
+name = "s3_cache"
+required-features = ["kache", "s3", "blocking"]
+
+[dependencies]
+anyhow = { workspace = true, optional = true }
+blake3 = { workspace = true, optional = true }
+cid.workspace = true
+futures = { workspace = true, optional = true }
+kache-store = { workspace = true, optional = true }
+mrr-data-content.workspace = true
+opendal = { workspace = true, optional = true }
+opendal-service-s3 = { workspace = true, optional = true }
+opendal-http-transport-reqwest = { workspace = true, optional = true }
+reqwest = { workspace = true, optional = true }
+rustls = { workspace = true, optional = true }
+tempfile = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true, features = ["time", "sync"] }
+
+[dev-dependencies]
+mrr-data-content = { workspace = true, features = ["transfer"] }
+mrr-data-core = { workspace = true, features = ["ipfs"] }
+mrr-data-arrow.workspace = true
+meta-relational-reasoning.workspace = true
+axum.workspace = true
+mrr-data-asp-rust-build-support.workspace = true
+tokio = { workspace = true, features = ["net", "sync"] }
+
+[lints]
+workspace = true

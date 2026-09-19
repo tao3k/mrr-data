@@ -1,0 +1,22 @@
+[package]
+name = "mrr-data-kache-probe"
+description = "Executable evidence for reuse of Kache in MRR Data"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dev-dependencies]
+anyhow.workspace = true
+blake3.workspace = true
+cid.workspace = true
+kache-store.workspace = true
+mrr-data-content.workspace = true
+mrr-data-core.workspace = true
+mrr-data-asp-rust-build-support.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

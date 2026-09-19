@@ -33,7 +33,7 @@ fn graphar_surface_is_available_when_selected() {
 }
 
 #[test]
-#[cfg(all(feature = "content", feature = "graphar"))]
+#[cfg(all(feature = "ipfs", feature = "graphar"))]
 fn graphar_query_source_admission_is_available_from_the_composed_facade() {
     let _ = core::mem::size_of::<crate::GraphArQuerySourceBindingError>();
     let _ = crate::admit_graphar_query_source;
@@ -48,4 +48,37 @@ fn datafusion_surface_is_available_when_selected() {
             .name(),
         "datafusion-arrow"
     );
+}
+
+#[test]
+#[cfg(feature = "ipfs")]
+fn ipfs_manifest_surface_is_available_without_storage() {
+    let _ = crate::manifest::raw_cid(b"ipfs identity");
+}
+
+#[test]
+#[cfg(feature = "car")]
+fn car_surface_requires_its_feature() {
+    let _ = crate::content::CarImportLimits::new(100, 1, 100, 100);
+}
+
+#[test]
+#[cfg(feature = "filesystem")]
+fn filesystem_surface_requires_its_feature() {
+    let _ = core::mem::size_of::<crate::content::FilesystemContentStore>();
+}
+
+#[test]
+#[cfg(feature = "snapshot")]
+fn snapshot_transfer_surface_is_available_without_car() {
+    let _ = crate::content::SnapshotTransferLimits::new(100, 10, 100, 1000);
+}
+
+#[test]
+#[cfg(feature = "transfer")]
+fn runtime_transfer_surface_is_opt_in() {
+    let _ = core::mem::size_of::<crate::content::TransferStats>();
+    let _ = core::mem::size_of::<
+        crate::cache::BlockingContentStore<crate::content::MemoryContentStore>,
+    >();
 }

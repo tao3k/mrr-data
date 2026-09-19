@@ -1,20 +1,24 @@
 [package]
 name = "mrr-data-core"
-description = "Canonical content identity and snapshot manifests for MRR Data"
+description = "Physical engine contracts and optional content identity for MRR Data"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+default = []
+ipfs = ["dep:cid", "dep:multihash-codetable", "dep:serde", "dep:serde_bytes", "dep:serde_ipld_dagcbor"]
+
 [dependencies]
-cid.workspace = true
+cid = { workspace = true, optional = true }
 meta-relational-reasoning.workspace = true
-multihash-codetable.workspace = true
+multihash-codetable = { workspace = true, optional = true }
 mrr-data-profile.workspace = true
-serde.workspace = true
-serde_bytes.workspace = true
-serde_ipld_dagcbor.workspace = true
+serde = { workspace = true, optional = true }
+serde_bytes = { workspace = true, optional = true }
+serde_ipld_dagcbor = { workspace = true, optional = true }
 
 [dev-dependencies]
 ipld-core.workspace = true

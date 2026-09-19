@@ -11,7 +11,10 @@ executable slices prove relation-specific complete-Fact Arrow and bounded IPC
 round trips, canonical snapshot identity, and verified local CARv1 packaging.
 Property tests, typed resource-budget failures, malformed corpora, an IPC fuzz
 target, and a 512-extra-block content-import scenario guard the import
-boundaries.  The upstream
+boundaries.  The M4 single-block Kache/S3 protocol is implemented and locally
+validated. Snapshot publication/cold restore, whole-operation interruption and
+resource accounting, Kache integration acceptance and independent local
+SigV4/TLS conformance have local evidence recorded under M4.  The upstream
 [[https://github.com/tao3k/meta-relational-reasoning][MRR repository]] owns semantic
 identity, typed relation schemas and facts, generations, revision bindings,
 lineage, queries, transitions, and admission.  This repository owns only their
@@ -330,7 +333,7 @@ without adding that database to =mrr-data=.  Its catalog, indexes, statistics,
 and CSR caches are derived state and must be rebuildable from the GraphAr
 source plus the MRR snapshot manifest.
 
-When both =content= and =graphar= are selected, the facade composes these
+When both =ipfs= and =graphar= are selected, the facade composes these
 otherwise independent crates at =admit_graphar_query_source=.  This boundary
 requires the source relation to occur in the MRR-owned query and re-hashes the
 current GraphAr metadata against the exact raw projection-manifest CID carried
@@ -445,8 +448,13 @@ Content.
 The V1 API follows implemented owners instead of speculative common traits.
 The default =mrr-data::arrow= facade exposes relation-specific schema
 projection, native =RecordBatch= conversion, and bounded IPC import.  The
-opt-in =mrr-data::content= facade exposes the implemented =ContentStore=,
-=MemoryContentStore=, =FilesystemContentStore=, and CAR operations.  The
+opt-in =ipfs= feature exposes CID/DAG-CBOR manifests through =mrr-data::manifest=.
+The =content= feature exposes =ContentStore=, =MemoryContentStore= and the remote
+protocol; =filesystem= adds =FilesystemContentStore= and =car= adds CAR operations.
+The =cache= and =s3= adapters depend on =content= without enabling CAR or the
+plain filesystem provider. These member crates have empty default features;
+only the facade's =arrow= feature is enabled by default. The =ipfs= feature names
+existing content-addressed identity, not a daemon or network implementation.  The
 opt-in =mrr-data::graphar= facade exposes the admitted binary-Entity
 projection and, only with =graphar-native=, the maintained native writer plus
 bounded semantic reader.  The reader reconstructs physical endpoints through
@@ -519,7 +527,7 @@ the later data-plane milestones.
 Implementation status: canonical manifest admission, MRR catalog/source
 binding, deterministic DAG-CBOR, frozen CID profiles, typed negative contracts,
 and a golden root vector are implemented.  This capability is retained behind
-the facade's explicit =content= feature; it is not part of the default Arrow
+the facade's explicit =ipfs= feature; it is not part of the default Arrow
 dependency graph.  M1 is accepted only after the current-head CI and review
 receipts are green.
 
@@ -536,8 +544,9 @@ read/write, full CID/root/referenced-child verification, exact catalog checks,
 pre-allocation frame-budget admission, typed import failures,
 validation-before-commit, repacking invariance, and the 512-extra-block
 performance scenario are implemented.  This local packaging capability is
-retained behind the facade's explicit =content= feature; its implementation
-status does not make content addressing a current product priority.  M2 is
+split across the facade's explicit =content=, =car=, and =filesystem= features.
+It supplies the local verification foundation for the current M4 distribution
+work.  M2 is
 accepted only after current-head CI and review receipts are green.
 
 - implement memory and filesystem =ContentStore=;
@@ -611,13 +620,303 @@ evidence for this revision and host only, not universal throughput claims.
   profile exists;
 - run differential read scenarios against the maintained GraphAr implementation.
 
-** M4: controlled distribution
+** M4: controlled distribution — active delivery plan
 
-- add an object-store provider behind the same =ContentStore= contract;
-- keep locations and credentials outside immutable manifests;
-- measure selective column and adjacency reads without shrinking the corpus;
-- consider private IPFS transport only after evidence shows a requirement not
-  met by CAR plus object storage.
+Updated 2026-09-20 after the local S3/Kache audit and snapshot acceptance. This section owns the execution
+order and acceptance gates; the protocol document owns API behavior and the
+[[file:s3-cache-audit.md][audit record]] owns the dated validation evidence.
+
+The immediate objective is: an admitted snapshot on machine A can be published
+through S3 and restored on machine B with an empty Kache cache, preserving its
+root, declared child closure, catalog bindings, and original semantic generation.
+Repeat reads must use verified local content. No provider purchase or hosted
+bucket is needed to establish this local acceptance result.
+
+*** M4.0: single-block foundation — implemented, local evidence recorded
+
+Owners: =mrr-data-content= protocol, =mrr-data-cache= adapters, facade feature
+composition and CI. The implementations reuse Kache for local mechanisms and
+OpenDAL for S3 transport; they do not depend on the unpublished remote-pack patch.
+
+- CID-verified reads, bounded local and remote materialization, immutable
+  conditional writes, explicit cache-admission outcomes and remote receipts;
+- cold/warm/reopened cache paths, response-body deadlines, missing/denied/corrupt
+  blocks, lost acknowledgement recovery and concurrent idempotent publication;
+- default Arrow only, opt-in content/providers, and dependency-isolation checks.
+
+Recorded local baseline: 95 workspace tests passed, one subprocess helper
+ignored and exercised by its parent; Clippy and 14 feature checks passed. This is
+not a claim of remote CI, hosted S3 acceptance, or complete snapshot distribution.
+
+*** M4.1: validated snapshot publication — implemented, local acceptance
+
+Owner: =mrr-data-content= snapshot coordination above the existing store traits.
+The S3 adapter stays a block transport. Snapshot operations must work without
+=car=, =filesystem=, or a concrete S3 dependency; CAR remains optional packaging.
+
+- Derive the upload inventory from the admitted =SnapshotBlock= and
+  =SnapshotManifest::referenced_cids()=; deduplicate references deterministically.
+- Reuse the existing manifest/catalog, CID and declared-length checks. Extract
+  shared closure validation from CAR admission where necessary rather than
+  introducing another validator with different rules.
+- Validate the complete supported local closure and inventory budgets before
+  the first remote write. Start with immutable Arrow snapshot blocks, coverage
+  and lineage. Define the supported graph boundary explicitly: an opaque GraphAr
+  manifest CID alone must not certify its nested dataset files. Until an owning
+  graph inventory is available, reject graph snapshots from this complete-
+  publication operation rather than overstate their closure.
+- Await acknowledgement for every required child before publishing the root.
+  Return a snapshot-level physical publication receipt only after root acknowledgement;
+  keep local cache-fill outcomes distinct from remote publication success.
+- Reuse immutable conditional block writes for retries. A failed attempt may
+  leave unreferenced child objects; do not delete shared content during rollback.
+  A pre-existing root from an earlier attempt is not proof that its children
+  remain available, and a failed retry must not remove that root.
+
+Acceptance: a valid Arrow snapshot publishes children then root; missing or
+corrupt local children cause zero remote writes; a child PUT failure prevents
+new root publication and produces no snapshot success receipt; root PUT failure
+also produces no receipt; retry converges to the same root without overwriting
+other content. Record object-operation order in the local fixture.
+
+*** M4.2: bounded cold restore — implemented, local acceptance
+
+Owner: =mrr-data-content= restore coordination; existing core/MRR admission keeps
+ownership of manifest and catalog validation.
+
+- Take an explicit root CID and caller-supplied admitted catalogs; read the root
+  with its own small budget, verify/decode it, then enumerate the supported child
+  inventory. Do not trust object listings or a mutable latest pointer.
+- Fetch children through the existing bounded cache/remote protocol. Validate
+  the declared closure, child lengths and catalog bindings before returning a
+  restored-snapshot result. Verified cache blocks may survive a failed restore;
+  their presence is not snapshot admission or a transactional local commit.
+- Cover actual Arrow IPC bytes produced by the maintained Arrow adapter, plus
+  coverage and lineage blocks. Reuse the optional CAR path only in a separate
+  equivalence test, not as a required transport dependency.
+- Preserve root CID and semantic generation. A physical restore cannot create
+  a generation, admit query results, or assert that arbitrary bytes are valid facts.
+
+Acceptance: machine-A publish -> local S3 fixture -> empty machine-B Kache ->
+validated snapshot -> Arrow round trip. Warm and reopened reads make zero remote
+GETs. Missing/corrupt children, substituted roots, wrong catalogs and length
+mismatches return typed failure and never a restored-snapshot receipt.
+
+M4.1 and M4.2 now form one locally implemented delivery behind the independent
+=snapshot= feature. Shared closure validation is used by CAR and transfer APIs;
+=publish_snapshot= and =restore_snapshot= use existing local/remote traits.
+The production Kache/S3 scenario transfers real Arrow IPC, coverage and lineage,
+then reconstructs facts in a second cache and after reopening it. The
+=s3_snapshot= example compiles against the same shared fixture. Local acceptance on macOS/Rust 1.95.0 records 107 passing workspace tests,
+one subprocess helper ignored and exercised by its parent, workspace Clippy,
+and all 16 feature dependency/compile checks. Both S3 examples compile. Remote
+CI has not been observed for these changes; this does not close M4.3-M4.5.
+
+The delivery evidence includes the
+public API, a runnable two-cache example, positive and negative tests, feature
+isolation, and Ubuntu/macOS CI status separately from local results.
+
+*** M4.3: interruption, retries and whole-transfer resource bounds — closed, local acceptance
+
+Depends on the M4.1/M4.2 round trip. Owner: snapshot coordination and its tests.
+
+- Add limits for block count, per-block bytes, total declared/received bytes,
+  in-flight bytes and concurrent requests. Start serial if needed; parallelism
+  must never bypass an aggregate budget. Define whether retries consume the
+  received-byte budget and include them in the recorded receipt.
+- Carry one operation deadline through the complete snapshot transfer. Verify
+  cancellation during child download, child publication and root publication.
+  Never convert cancellation or an uncertain write into confirmed absence.
+- Retry the same immutable inventory after a process restart or lost response;
+  revalidate local cache hits and re-establish remote child acknowledgements.
+  Do not add a persisted job format unless the restart scenario requires it.
+
+Acceptance: interrupted transfers resume to the same root; no partial snapshot
+receipt escapes; enforced byte/request limits hold under slow and faulty peers;
+small runtime tasks remain responsive while disk I/O is assigned to an explicit
+blocking execution boundary. Keep the existing synchronous store API usable.
+
+Current local slice (2026-09-20): optional =transfer= sessions enforce one
+whole-operation deadline, shared cancellation, serial remote dispatch and
+cumulative retry budgets. Failed GET attempts retain their maximum-byte
+reservation; PUT attempts charge their full logical payload. Counters describe
+protocol calls and logical bytes, not provider-internal HTTP requests or exact
+wire usage. =AsyncContentStore= and optional =BlockingContentStore= move disk
+operations off the executor and retain the worker permit after cancellation.
+The synchronous API remains available; only Arrow is enabled by default.
+
+Local acceptance (2026-09-20, macOS/Rust 1.95.0): 119 workspace tests pass,
+2 subprocess entry points are ignored by ordinary discovery and invoked by their
+parent tests; all 18 feature isolation cases pass. Formatting, diff whitespace
+and full-feature Clippy with warnings denied also pass.
+
+Tests cover Kache/S3 timeout recovery, cancellation during root PUT, interrupted
+restore, shared-session remote serialization and bounded detached disk work.
+The process-restart contract kills a real publisher while root PUT is pending,
+then starts a new process using the same persistent Kache directory without
+reseeding. It re-acknowledges every child before root publication and restores
+identical Arrow facts through an empty second cache. The server verifies the
+same root bytes and child-before-root request order. Test subprocesses are reaped
+on error paths and bounded by a parent-side timeout.
+
+M4.3 is closed for this local acceptance scope. Remote CI and real TLS/SigV4
+server authentication are not claimed; concurrent Agent workloads and deployment
+acceptance remain M4.4 and M4.5 respectively.
+
+*** M4.4: Kache integration acceptance under concurrent consumers — closed, local acceptance
+
+Depends on a bounded correct transfer. This is adapter acceptance, not a new
+cache engine or an independent Agent cache subsystem. Kache owns key locking,
+deduplication, eviction, quota/grace behavior and maintenance mechanisms.
+
+- Exercise concurrent consumers through the maintained Kache interfaces. If
+  duplicate downloads appear, first establish whether the adapter bypasses an
+  upstream coordination API; reuse that API where applicable. Do not introduce
+  an MRR lock registry, eviction policy or background cache scheduler.
+- Verify the protocol boundary during upstream eviction and reopening: a cache
+  miss may recover from remote, corruption remains explicit, and verified remote
+  bytes remain usable when local admission fails.
+- Invoke upstream maintenance explicitly at the application boundary. Document
+  its soft quota and grace semantics; do not promise a hard disk cap.
+- Record enough request counts and workload details to detect adapter regressions.
+  Performance or coalescing work requires measured evidence of an integration
+  problem and remains upstream-owned where it concerns cache mechanisms.
+
+Acceptance: integration tests establish correct reads across concurrent callers,
+waiter cancellation and upstream maintenance/reopening, without replacing Kache
+mechanisms. This does not repeat or claim ownership of Kache's full concurrency,
+eviction or performance qualification.
+
+Local acceptance (2026-09-20, macOS/Rust 1.95.0): four adapter contracts pass
+with only =kache,blocking= selected. Eight independent handles share a cache;
+four same-CID and four distinct-CID requests produce eight forced cold GETs
+(32 KiB logical payload). The identical workload after reopening adds zero GETs
+and yields eight local hits. This is a recorded baseline, not request coalescing
+or a latency/throughput claim.
+
+The contracts also verify cancellation isolation, usable verified bytes under
+upstream key-lock admission contention, soft-quota grace, and 32 upstream
+maintenance/removal iterations alongside 32 reads followed by warm reopening.
+Explicit upstream removal exercises cache disappearance without bypassing the
+production grace policy. Existing integrity tests remain in the full suite.
+No production cache mechanism was added or replaced.
+
+Full local regression: 123 tests pass, 2 subprocess helpers ignored by ordinary
+discovery; 18 feature isolation cases and full-feature Clippy pass. M4.4 is
+closed within this adapter scope. M4.5 and remote CI remain separate acceptance.
+
+*** M4.5: local S3/TLS conformance and deployment configuration — closed, local acceptance
+
+The local conformance work can proceed after M4.2 without waiting for performance
+work. Owner: S3 adapter integration tests; credentials and certificates stay out
+of immutable manifests and diagnostic error bodies.
+
+- Add an independent local S3-compatible test service with actual SigV4 credential
+  validation. Retain the lightweight fault fixture for deterministic error injection;
+  do not mistake its authorization-header check for signature verification.
+- Test HTTPS trust with a local CA, trusted/untrusted certificates, wrong
+  credentials, namespace prefixes and conditional-write behavior. Reuse maintained
+  server/signing implementations instead of implementing S3 or SigV4 in MRR Data.
+- Document endpoint, bucket, region, credential and trust configuration for
+  deployment. Hosted B2/R2 smoke tests are optional when credentials are supplied;
+  no purchase, public upload or cloud account is a development gate.
+
+Acceptance: the same production adapter passes local credential/TLS positive and
+negative tests, while the Arrow-only and local-cache-only dependency boundaries
+remain intact. State precisely which provider configurations were actually run.
+
+Local acceptance (2026-09-20): the production adapter passes the independent
+=s3s-fs= 0.16.0 service at commit
+=8ac644246b5a11664eaed6cbb3a36b3874047586= with real SigV4 authentication,
+behind a loopback TLS byte relay and ephemeral CA. Positive and negative cases
+cover access key/secret, CA trust, hostname verification, namespace roots,
+conditional creation, idempotent publication, corrupt-object non-overwrite,
+bounded reads and genuine Arrow snapshot cold restore through Kache.
+
+The reproducible =tools/s3-conformance/run.py= isolates the server build and
+records its binary hash; see =docs/architecture/s3-conformance-receipt.json=.
+The test server uses Rust 1.96.0; MRR Data stays at Rust 1.95.0. No default
+feature or production dependency changed. A dedicated Ubuntu/macOS CI job runs
+this conformance gate, but its remote execution has not been observed.
+
+Final local regression: 123 workspace tests pass; the 3 ordinary ignored entries
+are 2 subprocess helpers invoked by parent tests and the independently executed
+S3/TLS conformance test (1 passed). All 18 feature isolation cases, full-feature
+Clippy, Rust formatting and diff whitespace checks pass. M4.0-M4.5 are closed
+within their documented local scope. This is not B2/R2 hosted acceptance, native
+server TLS/mTLS qualification, or proof of remote CI completion.
+
+*** M4 closure audit — corrections verified
+
+The 2026-09-20 audit reviewed snapshot preflight/root ordering, read verification,
+resource and retry accounting, cancellation/blocking ownership, feature isolation,
+and independent conformance evidence. Two corrections were made: the single-file
+example now uses blocking disk I/O and a 64 MiB input cap; the conformance runner
+binds success to the workspace source digest and removes stale output before a
+new attempt. Both public examples now run against the independent TLS service,
+including oversized-file rejection. See =docs/architecture/m4-closure-audit.md=.
+
+After correction: 123 workspace tests pass, independent conformance and both
+examples pass, 2 evidence-freshness tests pass, and all 18 feature slices plus
+Clippy/format checks pass. The updated receipt records the audited source digest.
+The local closure claim remains scoped; remote CI and hosted providers are not
+represented as verified.
+
+*** Next delivery batch — repository and remote CI closure
+
+Plan audit (2026-09-20): M4 implementation and local acceptance are complete;
+the active work is delivery of the exact tested source, not another cache or
+transport feature. Earlier per-slice test totals are historical evidence, not
+additional unfinished milestones. Execute the following as one delivery batch.
+
+1. Review the complete working tree, including staged, unstaged and untracked
+   files. Inventory the owned M4 change set; ensure the new transfer/blocking
+   modules, subprocess tests, independent server runner and workflow are all
+   included. Preserve unrelated changes and existing upstream experiments.
+   Review the final diff against HEAD, not only against the staging area.
+2. Deliver that coherent source revision through a commit and PR. Record the
+   exact revision; any subsequent source change invalidates earlier CI closure.
+   Repository delivery is still pending, so configuring a workflow alone does
+   not establish that the remote has tested the current implementation.
+3. Run the configured workflow on that revision and resolve failures to closure.
+   Require =M4 acceptance= plus the repository's other required checks. The M4
+   aggregate covers MSRV, workspace/feature checks and independent S3/TLS on
+   Ubuntu/macOS; fuzz and native GraphAr are separate jobs and must not be
+   silently treated as covered by the M4 aggregate. Record actual outcomes.
+4. Review both platform receipts and check their source fingerprint against the
+   tested revision. Missing/failed/cancelled/skipped checks are not success.
+   Update the acceptance record with the PR, tested revision and CI run URLs.
+   Mark remote closure only after the exact final revision passes. Making the
+   aggregate a required branch-protection check is a repository-settings action,
+   separate from adding the workflow; no protection change is claimed here.
+
+Exit: a reviewable delivered revision, passing required remote checks, and
+source-matched Ubuntu/macOS conformance receipts. Do not repeatedly rerun local
+checks without a code change, failure or new unresolved concern.
+
+After delivery, the next functional batch should be driven by an identified
+Agent consumer: connect its existing admitted snapshot/catalog path to these
+public publication/restore APIs and validate the consumer's cold/warm/restart
+behavior. Select the actual caller and owner before adding an integration API.
+Do not claim consumer integration from the standalone examples. Physical restore
+must continue to preserve semantic generation without replacing MRR admission.
+
+No cloud purchase, B2/R2 smoke run, cache reimplementation, generic scheduling
+framework, S2 transport, mutable head, remote GC or graph-distribution expansion
+is a prerequisite to this delivery batch. Hosted checks remain optional when a
+real deployment supplies its configuration and credentials.
+
+*** Completion boundary and work held outside this sequence
+
+The initial distribution slice is complete at M4.2, with its executable receipts;
+M4.3-M4.5 qualify bounded operation, concurrent workloads and deployment behavior.
+Do not label the entire M4 effort complete from single-block or partial evidence.
+
+Mutable discovery pointers, distributed heads, cross-object transactions, remote
+GC, IPFS network transport, S2 streams, and graph-native selective/range reads
+require separate concrete consumers and ownership decisions. They are not hidden
+prerequisites for publishing and restoring an explicitly addressed Arrow snapshot.
+
 
 Every milestone needs positive round trips, typed negative contracts,
 determinism receipts, and performance scenarios.  A passing parser, a matching

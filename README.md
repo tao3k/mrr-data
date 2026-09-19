@@ -18,7 +18,13 @@ forms are explicitly selected:
 - optional `datafusion`: execution of the admitted single-hop binary-Entity slice;
 - optional `graphar`: persistent Property Graph projection contracts;
 - optional `graphar-native`: the admitted maintained GraphAr C++ data path;
-- optional `content`: CID/DAG-CBOR manifests, CAR, and local content stores.
+- optional `ipfs`: CID/DAG-CBOR content identity and snapshot manifests;
+- optional `content`: verified blocks, memory store and cache/remote protocol;
+- optional `snapshot`: validated snapshot publication and cold restore;
+- optional `car`: CARv1 packaging and bounded import;
+- optional `filesystem`: local filesystem content store;
+- optional `cache`: Kache local cache.
+- optional `s3`: S3-compatible remote content adapter.
 
 The dependency direction is one way:
 
@@ -93,14 +99,21 @@ indexes, statistics, CSR caches, and connections remain rebuildable downstream
 state; GraphAr remains the durable physical graph projection and MRR remains
 the semantic authority.
 
-With the explicit `content,graphar` feature composition, downstream code can
+With the explicit `ipfs,graphar` feature composition, downstream code can
 call `admit_graphar_query_source` before registering that descriptor. The
 boundary rejects a source relation outside the MRR-owned query and re-hashes
 the current GraphAr metadata against the exact projection manifest CID already
 carried by `BoundDataQuery`. It still creates no database connection or engine
 lifecycle.
 
-The optional `mrr-data-content` crate implements local packaging. Its memory and
+The optional `mrr-data-content` crate also exposes a provider-neutral
+[cache and remote content protocol](docs/architecture/content-cache-protocol.md):
+verified read-through, explicit cache admission, and remote-acknowledged publication.
+Enable `cache` for Kache and `s3` for the remote adapter (`cache,s3` for both). S3 credentials and TLS policy
+belong to adapters; local integration tests require no cloud account.
+
+The optional `mrr-data-content` crate provides packaging under `car` and disk
+storage under `filesystem`. Its memory and
 filesystem stores derive and verify every CID from an explicit `raw` or
 `dag-cbor` codec. Snapshot archives use the upstream `fvm_ipld_car` CARv1
 reader/writer, while MRR Data adds single-root admission, duplicate rejection,
@@ -148,7 +161,12 @@ The repository does not yet claim:
 - a built-in DuckDB/DuckGQL dependency or database-owned source of truth.
 
 The canonical proposal, invariants, V1 manifest boundary, and delivery gates
-are in [RFC 0001](docs/architecture/0001-mrr-data-plane.org).
+are in [RFC 0001](docs/architecture/0001-mrr-data-plane.org). Its M4 delivery plan
+records local acceptance for S3/Kache snapshot publication and cold restore,
+whole-operation budgets and cancellation, Kache integration under concurrent
+consumers, and independent SigV4/TLS conformance. The reproducible
+[local S3 runner](tools/s3-conformance/README.md) needs no cloud account.
+Remote CI and hosted B2/R2 acceptance are separate from these local results.
 
 ## Intended V1 scope
 
@@ -185,10 +203,10 @@ cargo check --manifest-path fuzz/Cargo.toml --locked
 cargo clippy --manifest-path fuzz/Cargo.toml --all-targets --locked -- -D warnings
 cargo check -p mrr-data --locked
 cargo check -p mrr-data --no-default-features --locked
-cargo check -p mrr-data --no-default-features --features content,graphar --locked
+cargo check -p mrr-data --no-default-features --features ipfs,graphar --locked
 cargo check -p mrr-data --no-default-features --features datafusion --locked
 cargo test -p mrr-data --no-default-features --locked
-cargo test -p mrr-data --no-default-features --features content,graphar --locked
+cargo test -p mrr-data --no-default-features --features ipfs,graphar --locked
 ```
 
 Facade features:
@@ -199,7 +217,26 @@ Facade features:
 | `datafusion` | no | single-hop binary-Entity physical query execution |
 | `graphar` | no | semantic Property Graph projection |
 | `graphar-native` | no | maintained GraphAr C++ writer/readback path |
-| `content` | no | manifest, CID/DAG-CBOR, CAR, local stores |
+| `ipfs` | no | CID/DAG-CBOR identity and immutable manifests; no IPFS node transport |
+| `content` | no | verified blocks, memory store and protocol; implies `ipfs` |
+| `snapshot` | no | complete Arrow snapshot publication/restore; implies `content`, not CAR |
+| `transfer` | no | Tokio snapshot sessions: deadline, cancellation, retry budgets and blocking local adapter |
+| `car` | no | CARv1 packaging/import; implies `content` |
+| `filesystem` | no | local filesystem store; implies `content` |
+| `cache` | no | content protocol and Kache local cache |
+| `s3` | no | content protocol and S3 remote adapter |
+
+`default = ["arrow"]` is the only default. `cache` and `s3` imply `content`
+because their protocol addresses blocks by CID; neither enables CAR or the plain
+filesystem store. `datafusion` implies Arrow but does not enable CID/DAG-CBOR.
+Member crates also default to no optional providers: `mrr-data-core/ipfs`,
+`mrr-data-content/snapshot`, `mrr-data-content/transfer`, `mrr-data-content/car`, `mrr-data-content/filesystem`, and
+`mrr-data-cache/kache,s3,blocking` are selected explicitly. Plain `snapshot` does
+not require Tokio; `transfer` enables the runtime boundary, with Kache and S3
+still selected independently. The `content` feature now means
+the base protocol; consumers of CAR/filesystem APIs must select those features.
+Run `python3 tools/check-features.py` to compile each slice and check dependency
+absence as well as presence.
 
 CI runs this contract on both Ubuntu and macOS, verifies the declared Rust 1.95
 MSRV on Ubuntu, then exercises the IPC import

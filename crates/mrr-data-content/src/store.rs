@@ -1,15 +1,16 @@
 //! Local content-addressed storage providers.
 
-use std::{
-    collections::BTreeMap,
-    fs,
-    io::Write,
-    path::{Path, PathBuf},
-    sync::RwLock,
-};
+use std::{collections::BTreeMap, sync::RwLock};
 
 use cid::{Cid, Version};
 use mrr_data_core::{DAG_CBOR_CODEC, RAW_CODEC, SHA2_256_CODE, dag_cbor_cid, raw_cid};
+#[cfg(feature = "filesystem")]
+use std::{
+    fs,
+    io::{Read, Write},
+    path::{Path, PathBuf},
+};
+#[cfg(feature = "filesystem")]
 use tempfile::NamedTempFile;
 
 use crate::ContentError;
@@ -19,6 +20,16 @@ use crate::ContentError;
 pub enum ContentCodec {
     Raw,
     DagCbor,
+}
+
+impl ContentCodec {
+    /// Resolves the codec after validating the complete supported CID profile.
+    /// # Errors
+    /// Returns [`ContentError::InvalidCidProfile`] for unsupported versions,
+    /// codecs, hash algorithms or digest lengths.
+    pub fn from_cid(cid: &Cid) -> Result<Self, ContentError> {
+        codec_for(cid)
+    }
 }
 
 /// Borrowed bytes with a caller-declared content codec.
@@ -64,7 +75,16 @@ pub trait ContentStore {
     /// # Errors
     ///
     /// Returns [`ContentError`] when the block is absent, corrupt, or unreadable.
-    fn get(&self, cid: &Cid) -> Result<Vec<u8>, ContentError>;
+    fn get(&self, cid: &Cid) -> Result<Vec<u8>, ContentError> {
+        self.get_bounded(cid, usize::MAX)
+    }
+
+    /// Reads and verifies a block within the caller's logical byte budget.
+    /// Implementations must check sizes before cloning or buffering an entire
+    /// block and bound streaming reads even if the source grows after inspection.
+    /// # Errors
+    /// Returns storage/integrity errors or [`ContentError::BlockTooLarge`].
+    fn get_bounded(&self, cid: &Cid, max_bytes: usize) -> Result<Vec<u8>, ContentError>;
 }
 
 /// In-process, verified content store.
@@ -84,26 +104,32 @@ impl ContentStore for MemoryContentStore {
         Ok(cid)
     }
 
-    fn get(&self, cid: &Cid) -> Result<Vec<u8>, ContentError> {
+    fn get_bounded(&self, cid: &Cid, max_bytes: usize) -> Result<Vec<u8>, ContentError> {
         validate_profile(cid)?;
-        let bytes = self
-            .blocks
-            .read()
-            .map_err(|_| ContentError::LockPoisoned)?
+        let blocks = self.blocks.read().map_err(|_| ContentError::LockPoisoned)?;
+        let stored = blocks
             .get(cid)
-            .cloned()
             .ok_or_else(|| ContentError::NotFound(Box::new(*cid)))?;
+        if stored.len() > max_bytes {
+            return Err(ContentError::BlockTooLarge {
+                limit: max_bytes as u64,
+                actual: stored.len() as u64,
+            });
+        }
+        let bytes = stored.clone();
         verify_bytes(cid, &bytes)?;
         Ok(bytes)
     }
 }
 
 /// Filesystem store with one verified block per CID-named file.
+#[cfg(feature = "filesystem")]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FilesystemContentStore {
     root: PathBuf,
 }
 
+#[cfg(feature = "filesystem")]
 impl FilesystemContentStore {
     /// Creates or opens a local content directory.
     ///
@@ -126,12 +152,13 @@ impl FilesystemContentStore {
     }
 }
 
+#[cfg(feature = "filesystem")]
 impl ContentStore for FilesystemContentStore {
     fn put(&self, block: ContentBlock<'_>) -> Result<Cid, ContentError> {
         let cid = block.cid();
         let path = self.path(&cid);
         if path.exists() {
-            let existing = self.get(&cid)?;
+            let existing = self.get_bounded(&cid, block.bytes().len())?;
             if existing != block.bytes() {
                 return Err(ContentError::CidMismatch {
                     expected: Box::new(cid),
@@ -153,7 +180,7 @@ impl ContentStore for FilesystemContentStore {
         match temporary.persist_noclobber(&path) {
             Ok(_) => Ok(cid),
             Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {
-                let existing = self.get(&cid)?;
+                let existing = self.get_bounded(&cid, block.bytes().len())?;
                 if existing == block.bytes() {
                     Ok(cid)
                 } else {
@@ -167,15 +194,35 @@ impl ContentStore for FilesystemContentStore {
         }
     }
 
-    fn get(&self, cid: &Cid) -> Result<Vec<u8>, ContentError> {
+    fn get_bounded(&self, cid: &Cid, max_bytes: usize) -> Result<Vec<u8>, ContentError> {
         validate_profile(cid)?;
-        let bytes = match fs::read(self.path(cid)) {
-            Ok(bytes) => bytes,
+        let file = match fs::File::open(self.path(cid)) {
+            Ok(file) => file,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 return Err(ContentError::NotFound(Box::new(*cid)));
             }
             Err(error) => return Err(ContentError::io("read block", &error)),
         };
+        let length = file
+            .metadata()
+            .map_err(|e| ContentError::io("inspect block", &e))?
+            .len();
+        if length > max_bytes as u64 {
+            return Err(ContentError::BlockTooLarge {
+                limit: max_bytes as u64,
+                actual: length,
+            });
+        }
+        let mut bytes = Vec::new();
+        file.take((max_bytes as u64).saturating_add(1))
+            .read_to_end(&mut bytes)
+            .map_err(|e| ContentError::io("read block", &e))?;
+        if bytes.len() > max_bytes {
+            return Err(ContentError::BlockTooLarge {
+                limit: max_bytes as u64,
+                actual: bytes.len() as u64,
+            });
+        }
         verify_bytes(cid, &bytes)?;
         Ok(bytes)
     }

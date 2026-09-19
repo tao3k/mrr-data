@@ -1,10 +1,10 @@
 //! Arrow-first physical data plane for Meta-Relational Reasoning.
 #![forbid(unsafe_code)]
 
-#[cfg(all(feature = "content", feature = "graphar"))]
+#[cfg(all(feature = "ipfs", feature = "graphar"))]
 mod graphar_binding;
 
-#[cfg(all(feature = "content", feature = "graphar"))]
+#[cfg(all(feature = "ipfs", feature = "graphar"))]
 pub use graphar_binding::{GraphArQuerySourceBindingError, admit_graphar_query_source};
 
 /// Stable schema and physical profile identifiers.
@@ -18,11 +18,15 @@ pub use mrr_data_arrow as arrow;
 #[cfg(feature = "datafusion")]
 pub use mrr_data_datafusion as datafusion;
 
-/// Snapshot manifests and content identity contracts.
-#[cfg(feature = "content")]
+/// CID/DAG-CBOR snapshot manifests and content identity contracts.
+#[cfg(feature = "ipfs")]
 pub use mrr_data_core as manifest;
 
-/// Local content stores and CAR packaging.
+/// Kache local cache and S3 remote content adapters.
+#[cfg(any(feature = "cache", feature = "s3", feature = "transfer"))]
+pub use mrr_data_cache as cache;
+
+/// Content protocol; CAR and filesystem support require their own features.
 #[cfg(feature = "content")]
 pub use mrr_data_content as content;
 

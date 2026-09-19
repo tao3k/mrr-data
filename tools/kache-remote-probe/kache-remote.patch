@@ -1,0 +1,1189 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 2e46542ff9c53beec73783d1eee744c82a1d1baf..5da2cd5f0ac1f0b31a8034906a0f84e886cf13f8 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -2084,6 +2084,7 @@ dependencies = [
+  "kache-core",
+  "kache-format",
+  "kache-fs",
++ "kache-remote",
+  "kache-store",
+  "kunobi-auth",
+  "libc",
+@@ -2164,6 +2165,37 @@ dependencies = [
+ name = "kache-proofs"
+ version = "0.25.0"
+ 
++[[package]]
++name = "kache-remote"
++version = "0.25.0"
++dependencies = [
++ "anyhow",
++ "async-trait",
++ "blake3",
++ "bytes",
++ "chrono",
++ "futures",
++ "kache-format",
++ "kache-store",
++ "opendal-core",
++ "opendal-http-transport-reqwest",
++ "opendal-layer-retry",
++ "opendal-service-fs",
++ "opendal-service-s3",
++ "proptest",
++ "reqsign-aws-v4",
++ "reqsign-core",
++ "reqwest 0.13.5",
++ "rustls",
++ "serde",
++ "serde_json",
++ "tar",
++ "tempfile",
++ "tokio",
++ "tracing",
++ "zstd",
++]
++
+ [[package]]
+ name = "kache-service"
+ version = "0.25.0"
+diff --git a/Cargo.toml b/Cargo.toml
+index 4124892a0667aa1d9a7e0056a10c2e36d53a7754..9196eb30716ee912143c4434199a1391d7c102e7 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -16,6 +16,7 @@ members = [
+     "crates/kache-format",
+     "crates/kache-fs",
+     "crates/kache-store",
++    "crates/kache-remote",
+     "crates/kache-e2e",
+     "crates/kache-proofs",
+     "crates/kache-service",
+@@ -35,6 +36,7 @@ exclude = ["tmp"]
+ resolver = "3"
+ 
+ [dependencies]
++kache-remote = { version = "0.25.0", path = "crates/kache-remote" }
+ kache-format = { version = "0.25.0", path = "crates/kache-format" }
+ kache-store = { version = "0.25.0", path = "crates/kache-store" }
+ blake3 = "1"
+@@ -115,6 +117,7 @@ windows-sys = { version = "0.61", features = [
+ ] }
+ 
+ [dev-dependencies]
++kache-remote = { version = "0.25.0", path = "crates/kache-remote", features = ["test-support"] }
+ kache-store = { version = "0.25.0", path = "crates/kache-store", features = ["test-support"] }
+ kache-fs = { version = "0.25.0", path = "crates/kache-fs", features = ["testing"] }
+ assert_cmd = "2"
+diff --git a/crates/kache-remote/Cargo.toml b/crates/kache-remote/Cargo.toml
+new file mode 100644
+index 0000000000000000000000000000000000000000..1b056c1df088483d207504f135cfe91849df5f8f
+--- /dev/null
++++ b/crates/kache-remote/Cargo.toml
+@@ -0,0 +1,43 @@
++[package]
++name = "kache-remote"
++version = "0.25.0"
++edition = "2024"
++rust-version = "1.95"
++license = "Apache-2.0"
++description = "Reusable Kache entry transport over S3 and filesystem backends"
++repository = "https://github.com/kunobi-ninja/kache"
++
++[features]
++test-support = []
++
++[dependencies]
++kache-format = { version = "0.25.0", path = "../kache-format" }
++kache-store = { version = "0.25.0", path = "../kache-store" }
++blake3 = "1"
++bytes = "1"
++opendal = { package = "opendal-core", version = "=0.58.2", default-features = false, features = ["executors-tokio"] }
++opendal-http-transport-reqwest = { version = "=0.58.2", default-features = false, features = ["rustls-no-provider"] }
++opendal-layer-retry = { version = "=0.58.2", default-features = false }
++opendal-service-fs = { version = "=0.58.2", default-features = false }
++opendal-service-s3 = { version = "=0.58.2", default-features = false }
++reqsign-aws-v4 = { version = "=3.3.0", default-features = false }
++reqsign-core = { version = "=3.3.1", default-features = false }
++rustls = { version = "0.23", default-features = false, features = ["ring"] }
++async-trait = "0.1"
++tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "process", "fs", "io-util", "net", "time", "signal", "sync"] }
++serde = { version = "1", features = ["derive"] }
++serde_json = "1"
++anyhow = "1"
++tracing = "0.1"
++zstd = "0.14"
++chrono = { version = "0.4", features = ["serde"] }
++tar = "0.4"
++futures = "0.3"
++tempfile = "3"
++reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider"] }
++
++[dev-dependencies]
++proptest = { version = "1.11.0", default-features = false, features = ["std", "handle-panics"] }
++
++[lints.rust]
++warnings = "deny"
+diff --git a/crates/kache-remote/src/config.rs b/crates/kache-remote/src/config.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..1085b18ba98021dd90b907e24a0ec07924a236ec
+--- /dev/null
++++ b/crates/kache-remote/src/config.rs
+@@ -0,0 +1,78 @@
++use std::path::PathBuf;
++
++#[derive(Debug, Clone, PartialEq, Eq)]
++pub struct RemoteConfig {
++    /// Key prefix for all remote artifacts (default: "artifacts").
++    pub prefix: String,
++    pub backend: RemoteBackendConfig,
++}
++
++#[derive(Debug, Clone, PartialEq, Eq)]
++pub enum RemoteBackendConfig {
++    S3(S3RemoteConfig),
++    Filesystem(FilesystemRemoteConfig),
++}
++
++#[derive(Debug, Clone, PartialEq, Eq)]
++pub struct S3RemoteConfig {
++    pub bucket: String,
++    pub endpoint: Option<String>,
++    pub region: String,
++    /// AWS profile name for credential lookup (e.g. "ceph").
++    pub profile: Option<String>,
++    /// Custom User-Agent header for S3 HTTP requests.
++    pub user_agent: Option<String>,
++}
++
++#[derive(Debug, Clone, PartialEq, Eq)]
++pub struct FilesystemRemoteConfig {
++    pub root: PathBuf,
++    /// Staging directory used for atomic write-then-rename completion.
++    pub atomic_write_dir: PathBuf,
++}
++
++impl RemoteConfig {
++    /// Stable machine-readable backend name for the JSON report.
++    pub fn backend_kind(&self) -> &'static str {
++        match &self.backend {
++            RemoteBackendConfig::S3(_) => "s3",
++            RemoteBackendConfig::Filesystem(_) => "filesystem",
++        }
++    }
++
++    /// Human-readable root used by status, doctor, and logs.
++    pub fn describe(&self) -> String {
++        let base = match &self.backend {
++            RemoteBackendConfig::S3(s3) => format!("s3://{}", s3.bucket),
++            RemoteBackendConfig::Filesystem(fs) => format!("file://{}", fs.root.display()),
++        };
++        if self.prefix.is_empty() {
++            base
++        } else {
++            format!("{base}/{}", self.prefix)
++        }
++    }
++
++    #[cfg(any(test, feature = "test-support"))]
++    pub fn test_s3(bucket: &str, prefix: &str) -> Self {
++        Self {
++            prefix: prefix.to_string(),
++            backend: RemoteBackendConfig::S3(S3RemoteConfig {
++                bucket: bucket.to_string(),
++                endpoint: None,
++                region: "us-east-1".to_string(),
++                profile: None,
++                user_agent: None,
++            }),
++        }
++    }
++}
++
++/// Join a canonical remote prefix and key.
++pub fn join_remote_key(prefix: &str, rest: &str) -> String {
++    if prefix.is_empty() {
++        rest.to_string()
++    } else {
++        format!("{prefix}/{rest}")
++    }
++}
+diff --git a/crates/kache-remote/src/deadline.rs b/crates/kache-remote/src/deadline.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..16197d3ad449f39c4074d75730fc147ba272e7c2
+--- /dev/null
++++ b/crates/kache-remote/src/deadline.rs
+@@ -0,0 +1,92 @@
++use std::{
++    future::Future,
++    num::NonZeroU64,
++    time::{Duration, Instant},
++};
++/// Typed end-to-end deadline error. Keeping this distinct from transport
++/// errors lets every remote path classify the timeout without message parsing.
++#[derive(Debug)]
++pub struct RemoteDeadlineElapsed {
++    stage: &'static str,
++}
++
++impl std::fmt::Display for RemoteDeadlineElapsed {
++    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        write!(f, "remote deadline elapsed during {}", self.stage)
++    }
++}
++
++impl std::error::Error for RemoteDeadlineElapsed {}
++impl RemoteDeadlineElapsed {
++    pub fn new(stage: &'static str) -> Self {
++        Self { stage }
++    }
++}
++
++/// One monotonic deadline shared by queueing, metadata probes, transfers, and
++/// extraction. `None` preserves the documented `0 = disabled` behavior.
++#[derive(Debug, Clone, Copy)]
++pub struct RemoteDeadline {
++    at: Option<Instant>,
++}
++
++impl RemoteDeadline {
++    pub fn from_secs(seconds: u64) -> Self {
++        Self::from_secs_at(Instant::now(), seconds)
++    }
++
++    pub fn from_secs_at(started_at: Instant, seconds: u64) -> Self {
++        let at = NonZeroU64::new(seconds)
++            .and_then(|seconds| started_at.checked_add(Duration::from_secs(seconds.get())));
++        Self { at }
++    }
++
++    #[cfg(any(test, feature = "test-support"))]
++    pub fn from_millis(milliseconds: u64) -> Self {
++        Self::from_millis_at(Instant::now(), milliseconds)
++    }
++
++    pub fn from_millis_at(started_at: Instant, milliseconds: u64) -> Self {
++        let at = NonZeroU64::new(milliseconds).and_then(|milliseconds| {
++            started_at.checked_add(Duration::from_millis(milliseconds.get()))
++        });
++        Self { at }
++    }
++
++    pub fn at(self) -> Option<Instant> {
++        self.at
++    }
++
++    pub fn from_instant(at: Option<Instant>) -> Self {
++        Self { at }
++    }
++
++    pub fn min(self, other: Self) -> Self {
++        Self {
++            at: match (self.at, other.at) {
++                (Some(a), Some(b)) => Some(a.min(b)),
++                (Some(a), None) | (None, Some(a)) => Some(a),
++                (None, None) => None,
++            },
++        }
++    }
++
++    pub fn check(self, stage: &'static str) -> anyhow::Result<()> {
++        if self.at.is_some_and(|deadline| Instant::now() >= deadline) {
++            return Err(anyhow::Error::new(RemoteDeadlineElapsed { stage }));
++        }
++        Ok(())
++    }
++
++    pub async fn run<T, F>(self, stage: &'static str, future: F) -> anyhow::Result<T>
++    where
++        F: Future<Output = anyhow::Result<T>>,
++    {
++        let Some(deadline) = self.at else {
++            return future.await;
++        };
++        tokio::time::timeout_at(tokio::time::Instant::from_std(deadline), future)
++            .await
++            .map_err(|_| anyhow::Error::new(RemoteDeadlineElapsed { stage }))?
++    }
++}
+diff --git a/crates/kache-remote/src/lib.rs b/crates/kache-remote/src/lib.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..eecd53376b17e6973a760d3b9debe5f4db99a83c
+--- /dev/null
++++ b/crates/kache-remote/src/lib.rs
+@@ -0,0 +1,9 @@
++//! Existing Kache entry transport over S3-compatible and filesystem stores.
++
++pub mod config;
++pub mod deadline;
++pub mod remote;
++pub mod remote_backend;
++pub mod remote_layout;
++#[cfg(any(test, feature = "test-support"))]
++pub mod test_support;
+diff --git a/src/remote.rs b/crates/kache-remote/src/remote.rs
+similarity index 100%
+rename from src/remote.rs
+rename to crates/kache-remote/src/remote.rs
+diff --git a/src/remote_backend.rs b/crates/kache-remote/src/remote_backend.rs
+similarity index 97%
+rename from src/remote_backend.rs
+rename to crates/kache-remote/src/remote_backend.rs
+index eb38e4eb48b06b5ef62c90d9405355bff7fd1cdb..a86d4dd249357f6cb8bb9ce094b8df128bb6ed79 100644
+--- a/src/remote_backend.rs
++++ b/crates/kache-remote/src/remote_backend.rs
+@@ -17,7 +17,7 @@ use anyhow::{Context, Result};
+ use async_trait::async_trait;
+ use bytes::Bytes;
+ use futures::TryStreamExt;
+-#[cfg(test)]
++#[cfg(any(test, feature = "test-support"))]
+ use opendal::services::Memory;
+ use opendal::{ErrorKind, HttpTransporter, OperationContext, Operator};
+ use opendal_http_transport_reqwest::ReqwestTransport;
+@@ -247,28 +247,21 @@ impl OpenDalBackend {
+             key
+         };
+         let valid_empty = list_prefix && original.is_empty();
+-        let canonical = valid_empty
+-            || (!key.is_empty()
+-                && !original.starts_with('/')
+-                && !key.contains('\\')
+-                // Control characters have no legitimate place in a cache key and
+-                // enable log injection in the messages built from it.
+-                && !key.chars().any(char::is_control)
+-                // On Windows a colon can introduce a drive prefix or alternate
+-                // data stream. Reject it for filesystem keys on every platform
+-                // so a shared config stays portable and contained by its root.
+-                && !(self.is_filesystem() && key.contains(':'))
+-                // Windows silently strips trailing dots and spaces from path
+-                // components, so `a.` and `a` would collide on a filesystem
+-                // remote written from Windows. Reject on every platform to keep
+-                // one shared cache addressable from all of them.
+-                && !(self.is_filesystem()
+-                    && key
+-                        .split('/')
+-                        .any(|segment| segment.ends_with('.') || segment.ends_with(' ')))
+-                && key
++        // Reject control characters, rooted paths, and ambiguous path segments.
++        let invalid_path = key.is_empty()
++            || original.starts_with('/')
++            || key.contains('\\')
++            || key.chars().any(char::is_control)
++            || key
++                .split('/')
++                .any(|part| part.is_empty() || part == "." || part == "..");
++        // Keep filesystem addresses portable across Windows and Unix.
++        let invalid_filesystem_path = self.is_filesystem()
++            && (key.contains(':')
++                || key
+                     .split('/')
+-                    .all(|segment| !segment.is_empty() && segment != "." && segment != ".."));
++                    .any(|part| part.ends_with('.') || part.ends_with(' ')));
++        let canonical = valid_empty || !(invalid_path || invalid_filesystem_path);
+         if !canonical {
+             anyhow::bail!(
+                 "{operation} rejected non-canonical remote key {original:?} under {}",
+@@ -279,15 +272,15 @@ impl OpenDalBackend {
+     }
+ }
+ 
+-#[cfg(test)]
+-pub(crate) fn memory_backend() -> OpenDalBackend {
++#[cfg(any(test, feature = "test-support"))]
++pub fn memory_backend() -> OpenDalBackend {
+     ensure_rustls_provider();
+     let operator = Operator::new(Memory::default()).expect("memory operator");
+     OpenDalBackend::new(operator, "memory://test".to_string())
+ }
+ 
+-#[cfg(test)]
+-pub(crate) fn memory_backend_with_download_budget(kib: u32) -> OpenDalBackend {
++#[cfg(any(test, feature = "test-support"))]
++pub fn memory_backend_with_download_budget(kib: u32) -> OpenDalBackend {
+     let mut backend = memory_backend();
+     backend.download_memory = Arc::new(DownloadMemory::new(kib));
+     backend
+@@ -1115,14 +1108,14 @@ mod tests {
+         let body = first.get("key", Some(5 << 10)).await.unwrap().unwrap().body;
+         let clone = body.clone();
+         drop(body);
+-        let deadline = crate::remote_resilience::RemoteDeadline::from_millis(10);
++        let deadline = crate::deadline::RemoteDeadline::from_millis(10);
+         let error = deadline
+             .run("download memory", second.get("key", Some(5 << 10)))
+             .await
+             .unwrap_err();
+         assert!(
+             error
+-                .downcast_ref::<crate::remote_resilience::RemoteDeadlineElapsed>()
++                .downcast_ref::<crate::deadline::RemoteDeadlineElapsed>()
+                 .is_some()
+         );
+         drop(clone);
+diff --git a/src/remote_backend/download_memory.rs b/crates/kache-remote/src/remote_backend/download_memory.rs
+similarity index 100%
+rename from src/remote_backend/download_memory.rs
+rename to crates/kache-remote/src/remote_backend/download_memory.rs
+diff --git a/src/remote_layout.rs b/crates/kache-remote/src/remote_layout.rs
+similarity index 82%
+rename from src/remote_layout.rs
+rename to crates/kache-remote/src/remote_layout.rs
+index 3286a45f7ef27c7185c52ab116280990485f3332..384f999e86569e17c95ff2d8d50ccc9036caef6b 100644
+--- a/src/remote_layout.rs
++++ b/crates/kache-remote/src/remote_layout.rs
+@@ -9,7 +9,7 @@ use std::time::Instant;
+ use crate::config::RemoteConfig;
+ use crate::remote::{DownloadResult, UploadResult};
+ use crate::remote_backend::RemoteBackend;
+-use crate::store::{EntryMeta, VerifiedRestoredEntry};
++use kache_store::{EntryMeta, VerifiedRestoredEntry};
+ 
+ const V3_ROOT: &str = "v3";
+ const V3_MANIFESTS: &str = "manifests";
+@@ -61,7 +61,7 @@ pub struct RemoteUploadResult {
+ /// A packed-prefetch entry validated while its artifact bytes were streamed
+ /// to disk. The store can batch-register this without hashing the artifacts a
+ /// second time.
+-pub(crate) struct VerifiedPackEntry {
++pub struct VerifiedPackEntry {
+     pub restored: VerifiedRestoredEntry,
+     pub original_bytes: u64,
+     pub extract_ms: u64,
+@@ -112,7 +112,7 @@ impl<'a> RemoteLayout<'a> {
+         // downcast to `EntryNotFound` to take the miss path (#485 Phase 0):
+         // likely-present keys go straight to GET, and a stale key-cache
+         // positive degrades to a miss, not an error.
+-        let fetched = crate::remote_resilience::RemoteDeadline::from_instant(deadline)
++        let fetched = crate::deadline::RemoteDeadline::from_instant(deadline)
+             .run(
+                 "remote object GET",
+                 self.backend
+@@ -248,8 +248,8 @@ impl<'a> RemoteLayout<'a> {
+                 let stripped = key.strip_prefix(&manifest_prefix)?;
+                 let without_ext = stripped.strip_suffix(".json")?;
+                 let (crate_name, cache_key) = without_ext.rsplit_once('/')?;
+-                (crate::cache_key::is_valid_cache_key(cache_key)
+-                    && crate::cache_key::is_valid_crate_name(crate_name))
++                (kache_format::is_valid_cache_key(cache_key)
++                    && kache_format::is_valid_crate_name(crate_name))
+                 .then(|| (cache_key.to_string(), crate_name.to_string()))
+             })
+             .collect();
+@@ -277,7 +277,7 @@ impl<'a> RemoteLayout<'a> {
+             keys.extend(objects.iter().filter_map(|key| {
+                 let stripped = key.strip_prefix(&manifest_prefix)?;
+                 let cache_key = stripped.strip_suffix(".json")?;
+-                crate::cache_key::is_valid_cache_key(cache_key)
++                kache_format::is_valid_cache_key(cache_key)
+                     .then(|| (cache_key.to_string(), crate_name.clone()))
+             }));
+         }
+@@ -290,7 +290,7 @@ impl<'a> RemoteLayout<'a> {
+ /// The outer pack binds cache key, crate and exact `meta.json` digest; this
+ /// function verifies those bindings plus every artifact hash before publishing
+ /// the entry directory.
+-pub(crate) fn extract_verified_prefetch_entry(
++pub fn extract_verified_prefetch_entry(
+     cache_key: &str,
+     crate_name: &str,
+     meta_digest: &str,
+@@ -298,9 +298,9 @@ pub(crate) fn extract_verified_prefetch_entry(
+     entry_dir: &Path,
+     deadline: Option<Instant>,
+ ) -> Result<VerifiedPackEntry> {
+-    if !crate::cache_key::is_valid_cache_key(cache_key)
+-        || !crate::cache_key::is_valid_crate_name(crate_name)
+-        || !crate::cache_key::is_valid_cache_key(meta_digest)
++    if !kache_format::is_valid_cache_key(cache_key)
++        || !kache_format::is_valid_crate_name(crate_name)
++        || !kache_format::is_valid_cache_key(meta_digest)
+     {
+         bail!("invalid packed-prefetch entry binding");
+     }
+@@ -365,8 +365,8 @@ impl std::error::Error for EntryNotFound {}
+ // pub(crate) so other modules' tests can build a valid entry pack fixture to
+ // drive the remote download-success paths against the mock (sync pull, daemon
+ // remote-check HIT, prefetch). Production callers are all within this module.
+-#[cfg(test)]
+-pub(crate) fn create_entry_pack_zstd(
++#[cfg(any(test, feature = "test-support"))]
++pub fn create_entry_pack_zstd(
+     entry_dir: &Path,
+     blobs_dir: &Path,
+     meta: &EntryMeta,
+@@ -593,7 +593,7 @@ fn extract_entry_pack_until<R: std::io::Read>(
+         std::fs::read_to_string(&meta_path).context("reading downloaded meta.json")?;
+     let meta: EntryMeta =
+         serde_json::from_str(&meta_content).context("parsing downloaded meta.json")?;
+-    if meta.key_schema != crate::cache_key::CACHE_KEY_VERSION {
++    if meta.key_schema != kache_format::CACHE_KEY_VERSION {
+         bail!(
+             "downloaded entry uses incompatible key schema {}",
+             meta.key_schema
+@@ -697,12 +697,11 @@ pub(crate) mod tests {
+         copy_dir_all, create_entry_pack_zstd, extract_entry_pack, extract_verified_prefetch_entry,
+         is_rooted_path, v3_manifest_key, v3_pack_key,
+     };
+-    use crate::config::{
+-        Config, DEFAULT_DAEMON_IDLE_TIMEOUT_SECS, DEFAULT_REMOTE_NEGATIVE_TTL_SECS,
+-        DEFAULT_REMOTE_RESTORE_TIMEOUT_SECS, DEFAULT_S3_POOL_IDLE_SECS, RemoteConfig,
+-    };
++    use crate::config::RemoteConfig;
+     use crate::remote_backend::{GetObject, RemoteBackend, memory_backend};
+-    use crate::store::{CachedFile, EntryMeta, Store};
++    use crate::test_support::{Store, populated_entry};
++    use kache_store::config::Config;
++    use kache_store::{CachedFile, EntryMeta};
+     use proptest::prelude::*;
+     use std::collections::{BTreeMap, BTreeSet};
+     use std::path::Path;
+@@ -830,7 +829,7 @@ pub(crate) mod tests {
+ 
+             let meta = EntryMeta {
+                 cache_key: blake3::hash(b"property-v3-entry").to_hex().to_string(),
+-                key_schema: crate::cache_key::CACHE_KEY_VERSION,
++                key_schema: kache_format::CACHE_KEY_VERSION,
+                 crate_name: "property_crate".to_string(),
+                 crate_types: vec!["lib".to_string()],
+                 files,
+@@ -884,59 +883,11 @@ pub(crate) mod tests {
+     fn v3_pack_roundtrip_restores_meta_and_files() {
+         let tmp = tempfile::tempdir().unwrap();
+         let config = Config {
+-            fallback: None,
+-            key_salt: None,
+-            cc_extra_allowlist_flags: Vec::new(),
+-            local_only: false,
+-            remote_readonly: false,
+-            modified_input_guard: false,
+-            input_predictions: false,
+-            record_sessions: false,
+-            volume_stores: Vec::new(),
+-            local_hit_daemon: false,
+-            windows_hardlink: false,
+-            shared_hardlink_restores: false,
+-            deferred_discovery: true,
+-            deferred_durability: false,
+-            auto_gc: true,
+-            index_auto_compact: true,
+-            gc_evict_shared: false,
+-            storage_layout_advice: true,
+-            heartbeat_secs: 30,
+-            explain_miss: false,
+-            scheduler: true,
+-            path_only_env_vars: Vec::new(),
+-            incremental_crates: Vec::new(),
+-            key_env_vars: Vec::new(),
+-            base_dirs: Vec::new(),
+             cache_dir: tmp.path().join("cache"),
+-            runtime_dir: tmp.path().join("cache"),
+             max_size: 1024 * 1024,
+-            remote: None,
+-            remote_error: None,
+-            socket_path_override: None,
+-            disabled: false,
+-            cache_executables: false,
+-            cache_cc_links: false,
+-            trust_codegen_backends: false,
+-            clean_incremental: true,
+-            preserve_incremental: false,
+-            adaptive_incremental: true,
+-            event_log_max_size: 1024 * 1024,
+-            event_log_keep_lines: 1000,
+-            compression_level: 3,
+-            s3_concurrency: 16,
+-            prefetch_enabled: crate::config::DEFAULT_PREFETCH_ENABLED,
+-            remote_key_cache_refresh_secs: crate::config::DEFAULT_REMOTE_KEY_CACHE_REFRESH_SECS,
+-            prefetch_max_keys: crate::config::DEFAULT_PREFETCH_MAX_KEYS,
+-            prefetch_max_bytes: crate::config::DEFAULT_PREFETCH_MAX_BYTES,
+-            prefetch_deadline_secs: crate::config::DEFAULT_PREFETCH_DEADLINE_SECS,
+-            min_store_compile_ms: crate::config::DEFAULT_MIN_STORE_COMPILE_MS,
+-            gc_max_age_hours: crate::config::DEFAULT_GC_MAX_AGE_HOURS,
+-            daemon_idle_timeout_secs: DEFAULT_DAEMON_IDLE_TIMEOUT_SECS,
+-            s3_pool_idle_secs: DEFAULT_S3_POOL_IDLE_SECS,
+-            remote_restore_timeout_secs: DEFAULT_REMOTE_RESTORE_TIMEOUT_SECS,
+-            remote_negative_ttl_secs: DEFAULT_REMOTE_NEGATIVE_TTL_SECS,
++            gc_evict_shared: false,
++            upload_spool_max_jobs: 16,
++            deferred_durability: false,
+         };
+         let store = Store::open(&config).unwrap();
+ 
+@@ -960,7 +911,7 @@ pub(crate) mod tests {
+             .unwrap();
+ 
+         let entry_dir = store.entry_dir("key123");
+-        let meta: crate::store::EntryMeta =
++        let meta: kache_store::EntryMeta =
+             serde_json::from_slice(&std::fs::read(entry_dir.join("meta.json")).unwrap()).unwrap();
+ 
+         let packed = create_entry_pack_zstd(&entry_dir, &store.blobs_dir(), &meta, 3).unwrap();
+@@ -981,59 +932,11 @@ pub(crate) mod tests {
+ 
+         let restore_cache_dir = tmp.path().join("restore-cache");
+         let restore_config = Config {
+-            fallback: None,
+-            key_salt: None,
+-            cc_extra_allowlist_flags: Vec::new(),
+-            local_only: false,
+-            remote_readonly: false,
+-            modified_input_guard: false,
+-            input_predictions: false,
+-            record_sessions: false,
+-            volume_stores: Vec::new(),
+-            local_hit_daemon: false,
+-            windows_hardlink: false,
+-            shared_hardlink_restores: false,
+-            deferred_discovery: true,
+-            deferred_durability: false,
+-            auto_gc: true,
+-            index_auto_compact: true,
+-            gc_evict_shared: false,
+-            storage_layout_advice: true,
+-            heartbeat_secs: 30,
+-            explain_miss: false,
+-            scheduler: true,
+-            path_only_env_vars: Vec::new(),
+-            incremental_crates: Vec::new(),
+-            key_env_vars: Vec::new(),
+-            base_dirs: Vec::new(),
+-            runtime_dir: restore_cache_dir.clone(),
+             cache_dir: restore_cache_dir,
+             max_size: 1024 * 1024,
+-            remote: None,
+-            remote_error: None,
+-            socket_path_override: None,
+-            disabled: false,
+-            cache_executables: false,
+-            cache_cc_links: false,
+-            trust_codegen_backends: false,
+-            clean_incremental: true,
+-            preserve_incremental: false,
+-            adaptive_incremental: true,
+-            event_log_max_size: 1024 * 1024,
+-            event_log_keep_lines: 1000,
+-            compression_level: 3,
+-            s3_concurrency: 16,
+-            prefetch_enabled: crate::config::DEFAULT_PREFETCH_ENABLED,
+-            remote_key_cache_refresh_secs: crate::config::DEFAULT_REMOTE_KEY_CACHE_REFRESH_SECS,
+-            prefetch_max_keys: crate::config::DEFAULT_PREFETCH_MAX_KEYS,
+-            prefetch_max_bytes: crate::config::DEFAULT_PREFETCH_MAX_BYTES,
+-            prefetch_deadline_secs: crate::config::DEFAULT_PREFETCH_DEADLINE_SECS,
+-            min_store_compile_ms: crate::config::DEFAULT_MIN_STORE_COMPILE_MS,
+-            gc_max_age_hours: crate::config::DEFAULT_GC_MAX_AGE_HOURS,
+-            daemon_idle_timeout_secs: DEFAULT_DAEMON_IDLE_TIMEOUT_SECS,
+-            s3_pool_idle_secs: DEFAULT_S3_POOL_IDLE_SECS,
+-            remote_restore_timeout_secs: DEFAULT_REMOTE_RESTORE_TIMEOUT_SECS,
+-            remote_negative_ttl_secs: DEFAULT_REMOTE_NEGATIVE_TTL_SECS,
++            gc_evict_shared: false,
++            upload_spool_max_jobs: 16,
++            deferred_durability: false,
+         };
+         let restore_store = Store::open(&restore_config).unwrap();
+         let restore_entry_dir = restore_store.entry_dir("key123");
+@@ -1140,59 +1043,11 @@ pub(crate) mod tests {
+     fn v3_extract_rejects_content_hash_mismatch() {
+         let tmp = tempfile::tempdir().unwrap();
+         let config = Config {
+-            fallback: None,
+-            key_salt: None,
+-            cc_extra_allowlist_flags: Vec::new(),
+-            local_only: false,
+-            remote_readonly: false,
+-            modified_input_guard: false,
+-            input_predictions: false,
+-            record_sessions: false,
+-            volume_stores: Vec::new(),
+-            local_hit_daemon: false,
+-            windows_hardlink: false,
+-            shared_hardlink_restores: false,
+-            deferred_discovery: true,
+-            deferred_durability: false,
+-            auto_gc: true,
+-            index_auto_compact: true,
+-            gc_evict_shared: false,
+-            storage_layout_advice: true,
+-            heartbeat_secs: 30,
+-            explain_miss: false,
+-            scheduler: true,
+-            path_only_env_vars: Vec::new(),
+-            incremental_crates: Vec::new(),
+-            key_env_vars: Vec::new(),
+-            base_dirs: Vec::new(),
+             cache_dir: tmp.path().join("cache"),
+-            runtime_dir: tmp.path().join("cache"),
+             max_size: 1024 * 1024,
+-            remote: None,
+-            remote_error: None,
+-            socket_path_override: None,
+-            disabled: false,
+-            cache_executables: false,
+-            cache_cc_links: false,
+-            trust_codegen_backends: false,
+-            clean_incremental: true,
+-            preserve_incremental: false,
+-            adaptive_incremental: true,
+-            event_log_max_size: 1024 * 1024,
+-            event_log_keep_lines: 1000,
+-            compression_level: 3,
+-            s3_concurrency: 16,
+-            prefetch_enabled: crate::config::DEFAULT_PREFETCH_ENABLED,
+-            remote_key_cache_refresh_secs: crate::config::DEFAULT_REMOTE_KEY_CACHE_REFRESH_SECS,
+-            prefetch_max_keys: crate::config::DEFAULT_PREFETCH_MAX_KEYS,
+-            prefetch_max_bytes: crate::config::DEFAULT_PREFETCH_MAX_BYTES,
+-            prefetch_deadline_secs: crate::config::DEFAULT_PREFETCH_DEADLINE_SECS,
+-            min_store_compile_ms: crate::config::DEFAULT_MIN_STORE_COMPILE_MS,
+-            gc_max_age_hours: crate::config::DEFAULT_GC_MAX_AGE_HOURS,
+-            daemon_idle_timeout_secs: DEFAULT_DAEMON_IDLE_TIMEOUT_SECS,
+-            s3_pool_idle_secs: DEFAULT_S3_POOL_IDLE_SECS,
+-            remote_restore_timeout_secs: DEFAULT_REMOTE_RESTORE_TIMEOUT_SECS,
+-            remote_negative_ttl_secs: DEFAULT_REMOTE_NEGATIVE_TTL_SECS,
++            gc_evict_shared: false,
++            upload_spool_max_jobs: 16,
++            deferred_durability: false,
+         };
+         let store = Store::open(&config).unwrap();
+ 
+@@ -1294,59 +1149,11 @@ pub(crate) mod tests {
+ 
+     fn min_config(cache_dir: std::path::PathBuf) -> Config {
+         Config {
+-            fallback: None,
+-            key_salt: None,
+-            cc_extra_allowlist_flags: Vec::new(),
+-            local_only: false,
+-            remote_readonly: false,
+-            modified_input_guard: false,
+-            input_predictions: false,
+-            record_sessions: false,
+-            volume_stores: Vec::new(),
+-            local_hit_daemon: false,
+-            windows_hardlink: false,
+-            shared_hardlink_restores: false,
+-            deferred_discovery: true,
+-            deferred_durability: false,
+-            auto_gc: true,
+-            index_auto_compact: true,
+-            gc_evict_shared: false,
+-            storage_layout_advice: true,
+-            heartbeat_secs: 30,
+-            explain_miss: false,
+-            scheduler: true,
+-            path_only_env_vars: Vec::new(),
+-            incremental_crates: Vec::new(),
+-            key_env_vars: Vec::new(),
+-            base_dirs: Vec::new(),
+-            runtime_dir: cache_dir.clone(),
+             cache_dir,
+             max_size: 1024 * 1024,
+-            remote: None,
+-            remote_error: None,
+-            socket_path_override: None,
+-            disabled: false,
+-            cache_executables: false,
+-            cache_cc_links: false,
+-            trust_codegen_backends: false,
+-            clean_incremental: true,
+-            preserve_incremental: false,
+-            adaptive_incremental: true,
+-            event_log_max_size: 1024 * 1024,
+-            event_log_keep_lines: 1000,
+-            compression_level: 3,
+-            s3_concurrency: 16,
+-            prefetch_enabled: crate::config::DEFAULT_PREFETCH_ENABLED,
+-            remote_key_cache_refresh_secs: crate::config::DEFAULT_REMOTE_KEY_CACHE_REFRESH_SECS,
+-            prefetch_max_keys: crate::config::DEFAULT_PREFETCH_MAX_KEYS,
+-            prefetch_max_bytes: crate::config::DEFAULT_PREFETCH_MAX_BYTES,
+-            prefetch_deadline_secs: crate::config::DEFAULT_PREFETCH_DEADLINE_SECS,
+-            min_store_compile_ms: crate::config::DEFAULT_MIN_STORE_COMPILE_MS,
+-            gc_max_age_hours: crate::config::DEFAULT_GC_MAX_AGE_HOURS,
+-            daemon_idle_timeout_secs: DEFAULT_DAEMON_IDLE_TIMEOUT_SECS,
+-            s3_pool_idle_secs: DEFAULT_S3_POOL_IDLE_SECS,
+-            remote_restore_timeout_secs: DEFAULT_REMOTE_RESTORE_TIMEOUT_SECS,
+-            remote_negative_ttl_secs: DEFAULT_REMOTE_NEGATIVE_TTL_SECS,
++            gc_evict_shared: false,
++            upload_spool_max_jobs: 16,
++            deferred_durability: false,
+         }
+     }
+ 
+@@ -1388,37 +1195,12 @@ pub(crate) mod tests {
+         }
+     }
+ 
+-    /// Build a one-file store entry and return (tmpdir, store, entry_dir).
+-    pub(crate) fn populated_entry() -> (tempfile::TempDir, Store, std::path::PathBuf) {
+-        let tmp = tempfile::tempdir().unwrap();
+-        let store = Store::open(&min_config(tmp.path().join("cache"))).unwrap();
+-        let source_dir = tmp.path().join("source");
+-        std::fs::create_dir_all(&source_dir).unwrap();
+-        let source_file = source_dir.join("libfoo.rlib");
+-        std::fs::write(&source_file, b"hello world").unwrap();
+-        store
+-            .put(
+-                "key123",
+-                "foo",
+-                &["lib".to_string()],
+-                &[],
+-                "x86_64-unknown-linux-gnu",
+-                "debug",
+-                &[(source_file, "libfoo.rlib".to_string())],
+-                "",
+-                "",
+-            )
+-            .unwrap();
+-        let entry_dir = store.entry_dir("key123");
+-        (tmp, store, entry_dir)
+-    }
+-
+     fn populated_cc_entry(
+         cache_key: &str,
+         crate_name: &str,
+     ) -> (tempfile::TempDir, Store, std::path::PathBuf) {
+         let tmp = tempfile::tempdir().unwrap();
+-        let store = Store::open(&min_config(tmp.path().join("cache"))).unwrap();
++        let store = Store::open(min_config(tmp.path().join("cache"))).unwrap();
+         let source_dir = tmp.path().join("source");
+         std::fs::create_dir_all(&source_dir).unwrap();
+         let source_file = source_dir.join("foo.o");
+diff --git a/crates/kache-remote/src/test_support.rs b/crates/kache-remote/src/test_support.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..0818d20054adf4233bc5ab0023be2b5cbfa22a06
+--- /dev/null
++++ b/crates/kache-remote/src/test_support.rs
+@@ -0,0 +1,53 @@
++use kache_store::{ArtifactPolicy, ArtifactStore, config::Config};
++pub struct TestPolicy;
++impl ArtifactPolicy for TestPolicy {
++    fn allow_hardlink(_: &str) -> bool {
++        false
++    }
++    fn allow_empty(_: &str, _: &[String]) -> bool {
++        true
++    }
++    fn emit_kind(_: &str) -> Option<&'static str> {
++        None
++    }
++    fn stable_after_store(_: &str) -> bool {
++        true
++    }
++}
++pub type Store = ArtifactStore<TestPolicy>;
++/// Build a one-file store entry and return (tmpdir, store, entry_dir).
++pub fn populated_entry() -> (tempfile::TempDir, Store, std::path::PathBuf) {
++    let tmp = tempfile::tempdir().unwrap();
++    let store = Store::open(Config {
++        cache_dir: tmp.path().join("cache"),
++        max_size: 1024 * 1024,
++        gc_evict_shared: false,
++        upload_spool_max_jobs: 16,
++        deferred_durability: false,
++    })
++    .unwrap();
++    let source_dir = tmp.path().join("source");
++    std::fs::create_dir_all(&source_dir).unwrap();
++    let source_file = source_dir.join("libfoo.rlib");
++    std::fs::write(&source_file, b"hello world").unwrap();
++    store
++        .put(
++            "key123",
++            "foo",
++            &["lib".to_string()],
++            &[],
++            "x86_64-unknown-linux-gnu",
++            "debug",
++            &[(source_file, "libfoo.rlib".to_string())],
++            "",
++            "",
++        )
++        .unwrap();
++    let entry_dir = store.entry_dir("key123");
++    (tmp, store, entry_dir)
++}
++
++pub fn process_state_test_lock() -> std::sync::MutexGuard<'static, ()> {
++    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
++    LOCK.lock().unwrap_or_else(|e| e.into_inner())
++}
+diff --git a/src/cache_remote.rs b/src/cache_remote.rs
+index cc71d7c6d4409a323eef7ddd92da84c43cb37c39..688135d3abdd237cf34fafebf0cb05ff703086c6 100644
+--- a/src/cache_remote.rs
++++ b/src/cache_remote.rs
+@@ -333,7 +333,7 @@ mod tests {
+ 
+     #[tokio::test]
+     async fn upload_then_download_entry_round_trips_through_v3() {
+-        let (_tmp, store, entry_dir) = crate::remote_layout::tests::populated_entry();
++        let (_tmp, store, entry_dir) = kache_remote::test_support::populated_entry();
+         let (backend, remote) = v3();
+ 
+         let uploaded = remote
+diff --git a/src/config.rs b/src/config.rs
+index 0af75975d91badbdf9de134e7f14638d36e397bb..1ee3a0e26d7e6ba2a7655d74b13728a92e62a71f 100644
+--- a/src/config.rs
++++ b/src/config.rs
+@@ -460,36 +460,9 @@ pub struct PlannerConfig {
+     pub token: Option<String>,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Eq)]
+-pub struct RemoteConfig {
+-    /// Key prefix for all remote artifacts (default: "artifacts").
+-    pub prefix: String,
+-    pub backend: RemoteBackendConfig,
+-}
+-
+-#[derive(Debug, Clone, PartialEq, Eq)]
+-pub enum RemoteBackendConfig {
+-    S3(S3RemoteConfig),
+-    Filesystem(FilesystemRemoteConfig),
+-}
+-
+-#[derive(Debug, Clone, PartialEq, Eq)]
+-pub struct S3RemoteConfig {
+-    pub bucket: String,
+-    pub endpoint: Option<String>,
+-    pub region: String,
+-    /// AWS profile name for credential lookup (e.g. "ceph").
+-    pub profile: Option<String>,
+-    /// Custom User-Agent header for S3 HTTP requests.
+-    pub user_agent: Option<String>,
+-}
+-
+-#[derive(Debug, Clone, PartialEq, Eq)]
+-pub struct FilesystemRemoteConfig {
+-    pub root: PathBuf,
+-    /// Staging directory used for atomic write-then-rename completion.
+-    pub atomic_write_dir: PathBuf,
+-}
++pub use kache_remote::config::{
++    FilesystemRemoteConfig, RemoteBackendConfig, RemoteConfig, S3RemoteConfig, join_remote_key,
++};
+ 
+ impl Config {
+     /// The configured remote, or an actionable error.
+@@ -518,43 +491,6 @@ impl Config {
+     }
+ }
+ 
+-impl RemoteConfig {
+-    /// Stable machine-readable backend name for the JSON report.
+-    pub fn backend_kind(&self) -> &'static str {
+-        match &self.backend {
+-            RemoteBackendConfig::S3(_) => "s3",
+-            RemoteBackendConfig::Filesystem(_) => "filesystem",
+-        }
+-    }
+-
+-    /// Human-readable root used by status, doctor, and logs.
+-    pub fn describe(&self) -> String {
+-        let base = match &self.backend {
+-            RemoteBackendConfig::S3(s3) => format!("s3://{}", s3.bucket),
+-            RemoteBackendConfig::Filesystem(fs) => format!("file://{}", fs.root.display()),
+-        };
+-        if self.prefix.is_empty() {
+-            base
+-        } else {
+-            format!("{base}/{}", self.prefix)
+-        }
+-    }
+-
+-    #[cfg(test)]
+-    pub(crate) fn test_s3(bucket: &str, prefix: &str) -> Self {
+-        Self {
+-            prefix: prefix.to_string(),
+-            backend: RemoteBackendConfig::S3(S3RemoteConfig {
+-                bucket: bucket.to_string(),
+-                endpoint: None,
+-                region: "us-east-1".to_string(),
+-                profile: None,
+-                user_agent: None,
+-            }),
+-        }
+-    }
+-}
+-
+ /// Top-level directory the remote layout writes objects under. Kept here so the
+ /// staging-directory check cannot drift from `remote_layout`'s actual layout.
+ pub(crate) const V3_OBJECT_ROOT: &str = "v3";
+@@ -624,21 +560,6 @@ fn filesystem_staging_problem(
+     None
+ }
+ 
+-/// Join a configured remote prefix with the rest of an object key.
+-///
+-/// The counterpart to [`normalize_remote_prefix`]: an empty prefix means "store at
+-/// the root", so it must not contribute a leading `/`. Keys are validated as
+-/// canonical relative paths at the transport boundary, which rejects both a
+-/// leading slash and the empty segment that naive `{prefix}/{rest}` formatting
+-/// produces.
+-pub(crate) fn join_remote_key(prefix: &str, rest: &str) -> String {
+-    if prefix.is_empty() {
+-        rest.to_string()
+-    } else {
+-        format!("{prefix}/{rest}")
+-    }
+-}
+-
+ /// [`normalize_remote_prefix`] plus a one-line warning when normalization
+ /// actually changed the prefix, because that moves where objects live.
+ fn resolve_remote_prefix(configured: &str) -> Result<String> {
+diff --git a/src/main.rs b/src/main.rs
+index 10de8f1b7c16df8044711f0848b1852bb5f5e835..3db8fd42a8e97d9dada6cbb8aa02a055390f8309 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -43,9 +43,9 @@ mod platform;
+ mod policy;
+ mod probe;
+ mod probe_memo;
+-mod remote;
+-mod remote_backend;
+-mod remote_layout;
++use kache_remote::remote;
++use kache_remote::remote_backend;
++use kache_remote::remote_layout;
+ mod remote_pack;
+ mod remote_plan;
+ mod remote_resilience;
+diff --git a/src/remote_resilience.rs b/src/remote_resilience.rs
+index d7a5a20baeee1abdbe83c36bbb606d65b71ad1ca..e21298a327d4fc35c583398bf3b79414d44ccee9 100644
+--- a/src/remote_resilience.rs
++++ b/src/remote_resilience.rs
+@@ -19,8 +19,8 @@
+ //!   undoing newer upload or observation knowledge.
+ 
+ use std::collections::HashMap;
++#[cfg(test)]
+ use std::future::Future;
+-use std::num::NonZeroU64;
+ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+ use std::sync::{Arc, Mutex};
+ use std::time::{Duration, Instant};
+@@ -66,88 +66,7 @@ impl RemoteErrorClass {
+     }
+ }
+ 
+-/// Typed end-to-end deadline error. Keeping this distinct from transport
+-/// errors lets every remote path classify the timeout without message parsing.
+-#[derive(Debug)]
+-pub(crate) struct RemoteDeadlineElapsed {
+-    stage: &'static str,
+-}
+-
+-impl std::fmt::Display for RemoteDeadlineElapsed {
+-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+-        write!(f, "remote deadline elapsed during {}", self.stage)
+-    }
+-}
+-
+-impl std::error::Error for RemoteDeadlineElapsed {}
+-
+-/// One monotonic deadline shared by queueing, metadata probes, transfers, and
+-/// extraction. `None` preserves the documented `0 = disabled` behavior.
+-#[derive(Debug, Clone, Copy)]
+-pub(crate) struct RemoteDeadline {
+-    at: Option<Instant>,
+-}
+-
+-impl RemoteDeadline {
+-    pub(crate) fn from_secs(seconds: u64) -> Self {
+-        Self::from_secs_at(Instant::now(), seconds)
+-    }
+-
+-    pub(crate) fn from_secs_at(started_at: Instant, seconds: u64) -> Self {
+-        let at = NonZeroU64::new(seconds)
+-            .and_then(|seconds| started_at.checked_add(Duration::from_secs(seconds.get())));
+-        Self { at }
+-    }
+-
+-    #[cfg(test)]
+-    pub(crate) fn from_millis(milliseconds: u64) -> Self {
+-        Self::from_millis_at(Instant::now(), milliseconds)
+-    }
+-
+-    pub(crate) fn from_millis_at(started_at: Instant, milliseconds: u64) -> Self {
+-        let at = NonZeroU64::new(milliseconds).and_then(|milliseconds| {
+-            started_at.checked_add(Duration::from_millis(milliseconds.get()))
+-        });
+-        Self { at }
+-    }
+-
+-    pub(crate) fn at(self) -> Option<Instant> {
+-        self.at
+-    }
+-
+-    pub(crate) fn from_instant(at: Option<Instant>) -> Self {
+-        Self { at }
+-    }
+-
+-    pub(crate) fn min(self, other: Self) -> Self {
+-        Self {
+-            at: match (self.at, other.at) {
+-                (Some(a), Some(b)) => Some(a.min(b)),
+-                (Some(a), None) | (None, Some(a)) => Some(a),
+-                (None, None) => None,
+-            },
+-        }
+-    }
+-
+-    pub(crate) fn check(self, stage: &'static str) -> anyhow::Result<()> {
+-        if self.at.is_some_and(|deadline| Instant::now() >= deadline) {
+-            return Err(anyhow::Error::new(RemoteDeadlineElapsed { stage }));
+-        }
+-        Ok(())
+-    }
+-
+-    pub(crate) async fn run<T, F>(self, stage: &'static str, future: F) -> anyhow::Result<T>
+-    where
+-        F: Future<Output = anyhow::Result<T>>,
+-    {
+-        let Some(deadline) = self.at else {
+-            return future.await;
+-        };
+-        tokio::time::timeout_at(tokio::time::Instant::from_std(deadline), future)
+-            .await
+-            .map_err(|_| anyhow::Error::new(RemoteDeadlineElapsed { stage }))?
+-    }
+-}
++pub use kache_remote::deadline::{RemoteDeadline, RemoteDeadlineElapsed};
+ 
+ fn classify_opendal_error(error: &opendal::Error) -> RemoteErrorClass {
+     use opendal::ErrorKind;
+@@ -1136,10 +1055,7 @@ mod tests {
+     #[test]
+     fn deadline_error_display_names_the_failed_stage() {
+         assert_eq!(
+-            RemoteDeadlineElapsed {
+-                stage: "request queue",
+-            }
+-            .to_string(),
++            RemoteDeadlineElapsed::new("request queue").to_string(),
+             "remote deadline elapsed during request queue"
+         );
+     }
+@@ -1817,8 +1733,8 @@ mod tests {
+         let client = RemoteDeadline::from_millis(25);
+         let daemon = RemoteDeadline::from_secs(30);
+         let effective = client.min(daemon);
+-        assert_eq!(effective.at, client.at);
+-        assert_ne!(effective.at, daemon.at);
++        assert_eq!(effective.at(), client.at());
++        assert_ne!(effective.at(), daemon.at());
+     }
+ 
+     #[test]
+diff --git a/src/wrapper.rs b/src/wrapper.rs
+index 5381d97b81caef7657d6d0a0556e17ea64be56f4..861372e7392c92d4319cd0231aa3982eacb72c21 100644
+--- a/src/wrapper.rs
++++ b/src/wrapper.rs
+@@ -5470,7 +5470,7 @@ fn restore_from_cache(
+         // is absolute or contains `..` would escape `--out-dir` on join
+         // (`dir.join("/abs") == "/abs"`), overwriting files outside `target/`.
+         // Refuse to restore such an entry — the caller recompiles.
+-        if !crate::remote_layout::is_safe_artifact_name(&cached_file.name) {
++        if !kache_format::is_safe_artifact_name(&cached_file.name) {
+             anyhow::bail!(
+                 "refusing to restore cache entry with unsafe artifact name {:?}",
+                 cached_file.name
