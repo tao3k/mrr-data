@@ -862,7 +862,14 @@ Clippy/format checks pass. The updated receipt records the audited source digest
 The local closure claim remains scoped; remote CI and hosted providers are not
 represented as verified.
 
-*** Next delivery batch — repository and remote CI closure
+*** Repository delivery and remote CI acceptance
+
+Delivery is on [[https://github.com/tao3k/mrr-data/pull/1][PR #1]]. The PR acceptance
+record names the final tested revision, run and platform receipt fingerprints;
+its current checks are the remote authority. Historical local totals below do
+not substitute for that final-revision record. Warning remediation adds a
+reviewed dead-code-only upstream service patch with an explicit receipt hash,
+compiles that service with =-D warnings=, and fixes the Ubuntu runner to 24.04.
 
 Plan audit (2026-09-20): M4 implementation and local acceptance are complete;
 the active work is delivery of the exact tested source, not another cache or
@@ -876,8 +883,8 @@ additional unfinished milestones. Execute the following as one delivery batch.
    Review the final diff against HEAD, not only against the staging area.
 2. Deliver that coherent source revision through a commit and PR. Record the
    exact revision; any subsequent source change invalidates earlier CI closure.
-   Repository delivery is still pending, so configuring a workflow alone does
-   not establish that the remote has tested the current implementation.
+   Configuring or pushing a workflow alone does not establish that the remote
+   has tested the current implementation.
 3. Run the configured workflow on that revision and resolve failures to closure.
    Require =M4 acceptance= plus the repository's other required checks. The M4
    aggregate covers MSRV, workspace/feature checks and independent S3/TLS on

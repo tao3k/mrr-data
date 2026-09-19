@@ -10,14 +10,19 @@ on:
 permissions:
   contents: read
 
+env:
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
   msrv:
-    name: Rust 1.95 MSRV (ubuntu-latest)
-    runs-on: ubuntu-latest
+    name: Rust 1.95 MSRV (ubuntu-24.04)
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -33,7 +38,7 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - ubuntu-latest
+          - ubuntu-24.04
           - macos-latest
     steps:
       - uses: actions/checkout@v7
@@ -73,7 +78,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-24.04, macos-latest]
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.95.0
@@ -110,7 +115,7 @@ jobs:
     name: M4 acceptance
     if: ${{ always() }}
     needs: [msrv, test, s3-conformance]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Require every M4 prerequisite to succeed
@@ -129,8 +134,8 @@ jobs:
           PYTHON
 
   fuzz:
-    name: Arrow IPC fuzz (ubuntu-latest)
-    runs-on: ubuntu-latest
+    name: Arrow IPC fuzz (ubuntu-24.04)
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -148,7 +153,7 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - ubuntu-latest
+          - ubuntu-24.04
           - macos-latest
     steps:
       - uses: actions/checkout@v7

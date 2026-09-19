@@ -35,8 +35,18 @@ def build(cache):
     actual = subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"], text=True).strip()
     if actual != REVISION:
         raise RuntimeError("conformance server revision mismatch")
-    run(["git", "-C", source, "diff", "--exit-code", "HEAD"], capture_output=True)
-    run(["cargo", "+1.96.0", "build", "--locked", "-p", "s3s-fs", "--features", "binary", "--bin", "s3s-fs", "--target-dir", source / "target"], cwd=source)
+    patch = Path(__file__).with_name("server-warning-fix.patch")
+    actual_diff = subprocess.check_output(["git", "-C", str(source), "diff", "--binary", "--unified=4", "HEAD"])
+    if not actual_diff:
+        run(["git", "-C", source, "apply", "--check", patch.resolve()])
+        run(["git", "-C", source, "apply", patch.resolve()])
+        actual_diff = subprocess.check_output(["git", "-C", str(source), "diff", "--binary", "--unified=4", "HEAD"])
+    if actual_diff != patch.read_bytes():
+        raise RuntimeError("unexpected changes in the upstream server checkout")
+    build_env = dict(os.environ)
+    build_env.pop("CARGO_ENCODED_RUSTFLAGS", None)
+    build_env["RUSTFLAGS"] = "-D warnings"
+    run(["cargo", "+1.96.0", "build", "--locked", "-p", "s3s-fs", "--features", "binary", "--bin", "s3s-fs", "--target-dir", source / "target"], cwd=source, env=build_env)
     return source / "target/debug/s3s-fs"
 
 
@@ -47,7 +57,8 @@ def workspace_digest():
     digest = hashlib.sha256()
     for name in sorted(set(names)):
         path = ROOT / name
-        if not path.is_file() or path.suffix not in {".rs", ".toml", ".lock", ".py", ".yml"}:
+        accepted = path.suffix in {".rs", ".toml", ".lock", ".py", ".yml", ".patch"} or path.name == ".gitattributes"
+        if not path.is_file() or not accepted:
             continue
         digest.update(name.encode() + b"\0" + path.read_bytes() + b"\0")
     return digest.hexdigest()
@@ -193,6 +204,7 @@ def main():
     if workspace_digest() != source_digest:
         raise RuntimeError("workspace source changed during acceptance; rerun before recording success")
     receipt = {"server": "s3s-fs", "revision": REVISION,
+               "server_patch_sha256": hashlib.sha256(Path(__file__).with_name("server-warning-fix.patch").read_bytes()).hexdigest(),
                "workspace_source_sha256": source_digest,
                "platform": platform.platform(),
                "workspace_rustc": subprocess.check_output(["rustc", "--version"], text=True).strip(),

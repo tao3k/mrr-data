@@ -13,9 +13,14 @@ at commit `8ac644246b5a11664eaed6cbb3a36b3874047586` with its locked dependencie
 That test service requires Rust 1.96; the production workspace remains Rust 1.95.
 No service dependency is added to the workspace Cargo graph. The optional
 `--cache-dir` retains the upstream checkout/build between runs. The runner checks
-its revision and tracked-file cleanliness before building. The receipt records
+its revision and the exact reviewed patch diff before building. The receipt records
 the commit, built binary SHA-256, workspace compiler/platform and a workspace
-source fingerprint (tracked and untracked Rust/Python/configuration files).
+source fingerprint (tracked and untracked Rust/Python/configuration files, patch artifacts and Git attributes).
+A minimal recorded patch removes an unused upstream helper; the test service
+build uses `-D warnings` rather than suppressing that diagnostic. The patch does
+not change HTTP/S3/signing behavior, and its SHA-256 is included in the receipt.
+Unexpected upstream checkout changes are rejected.
+
 Source changes during the run invalidate the receipt, and a failed rerun removes
 the previous output receipt instead of leaving stale success evidence.
 

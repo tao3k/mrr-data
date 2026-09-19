@@ -24,6 +24,12 @@ class ReceiptContracts(unittest.TestCase):
                 self.assertEqual(first, runner.workspace_digest())
                 (root / "lib.rs").write_text("fn changed() {}")
                 self.assertNotEqual(first, runner.workspace_digest())
+                before_patch = runner.workspace_digest()
+                (root / "server.patch").write_text("reviewed upstream fix")
+                self.assertNotEqual(before_patch, runner.workspace_digest())
+                before_attributes = runner.workspace_digest()
+                (root / ".gitattributes").write_text("*.patch whitespace=-blank-at-eol")
+                self.assertNotEqual(before_attributes, runner.workspace_digest())
 
     def test_failed_build_cannot_leave_old_success_receipt(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -33,7 +33,7 @@ Final local evidence (macOS ARM64, workspace Rust 1.95.0):
 [Source-bound conformance receipt](s3-conformance-receipt.json) records the
 workspace code fingerprint and exact upstream test server revision/build hash.
 The fingerprint includes tracked and untracked `.rs`, `.toml`, `.lock`, `.py` and
-`.yml` files reported by Git, excluding ignored build outputs. It is a source
+`.yml`, `.patch` and `.gitattributes` files reported by Git, excluding ignored build outputs. It is a source
 identity check, not a reproducible-build attestation or a hash of documentation.
 
 No unresolved finding remains within this inspected local scope. The dedicated
@@ -49,3 +49,11 @@ aggregate accepted success and rejected failure, cancellation and skipping.
 The exact S3 job command, both examples and receipt contracts passed again after
 the workflow change. The updated JSON receipt matches that workflow source.
 GitHub-hosted execution and branch-protection configuration remain unverified.
+
+
+Warning follow-up: the independent server had one unused helper warning repeated
+on both platforms. A minimal source patch removes it, is checked exactly against
+the pinned source, and is hashed into receipts; server compilation now denies
+warnings. Ubuntu is fixed to 24.04 to avoid the announced `ubuntu-latest` image
+migration, and CI sets Git's initial branch explicitly to avoid initialization
+hints. No warning lint is disabled for Rust or production code.
