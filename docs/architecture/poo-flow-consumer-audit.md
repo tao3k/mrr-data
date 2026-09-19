@@ -75,3 +75,8 @@ consumer receipt inside the S3 artifact. `M4 acceptance` therefore includes thes
 consumer checks as well. The final current-revision run will be recorded in
 [PR #1](https://github.com/tao3k/mrr-data/pull/1); an earlier M4 green revision is
 not evidence for these new source changes.
+
+CI environment follow-up: the first Ubuntu run passed all six consumer Rust
+tests, then correctly failed because its Rust 1.95 toolchain lacked Clippy. The
+S3 jobs now explicitly install that component. Local independent conformance
+was rerun successfully and its source-bound receipt refreshed for this workflow.

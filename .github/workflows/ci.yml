@@ -82,6 +82,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.95.0
+        with:
+          components: clippy
       - name: Install compiler for the independent upstream test service
         run: rustup toolchain install 1.96.0 --profile minimal
       - uses: actions/setup-python@v6
