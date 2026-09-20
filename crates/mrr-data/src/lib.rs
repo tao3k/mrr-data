@@ -14,7 +14,7 @@ pub use mrr_data_profile as profile;
 #[cfg(feature = "arrow")]
 pub use mrr_data_arrow as arrow;
 
-/// `DataFusion` execution for the admitted single-hop binary Entity slice.
+/// `DataFusion` execution for bounded Entity and string-property path queries.
 #[cfg(feature = "datafusion")]
 pub use mrr_data_datafusion as datafusion;
 

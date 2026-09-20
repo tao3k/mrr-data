@@ -14,6 +14,7 @@ meta-relational-reasoning.workspace = true
 mrr-data-core.workspace = true
 
 [dev-dependencies]
+arrow-schema.workspace = true
 mrr-data-arrow.workspace = true
 mrr-data-asp-rust-build-support.workspace = true
 tokio.workspace = true

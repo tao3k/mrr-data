@@ -15,7 +15,7 @@ materializes those contracts as typed Apache Arrow batches. Additional physical
 forms are explicitly selected:
 
 - default `arrow`: typed in-memory and IPC interchange;
-- optional `datafusion`: execution of the admitted single-hop binary-Entity slice;
+- optional `datafusion`: bounded binary-Entity and string-property path execution;
 - optional `graphar`: persistent Property Graph projection contracts;
 - optional `graphar-native`: the admitted maintained GraphAr C++ data path;
 - optional `ipfs`: CID/DAG-CBOR content identity and snapshot manifests;
@@ -86,6 +86,17 @@ round trip and the maintained GraphAr reader to this same DataFusion plan, then
 requires identical candidates and identical MRR admission receipts. This is
 real engine parity for the declared slice, not a claim of a general GQL query
 engine.
+
+The separate `execute_property_path_query` entry point accepts catalog-bound MRR
+IR and typed entity/relation Arrow tables for one or two outgoing edges. It
+supports string-property equality filters and nullable string-property outputs,
+preserves `RETURN ALL` multiplicity, and orders physical output deterministically.
+It validates exact catalog digests, canonical unique entity IDs, property columns
+and non-dangling endpoints before execution. Explicit row/byte, conservative join,
+output-cell and DataFusion memory budgets fail closed; the caller owns the worker
+deadline. This is a physical execution API: its tests construct MRR IR directly.
+It does not yet qualify original Healthcare GQL parsing, the Scheme caller or
+property-bearing S3 snapshots. See the [M5.1 implementation audit](docs/architecture/healthcare-query-audit.md).
 
 Native GraphAr publication also returns a `GraphArQuerySource`. This immutable,
 database-neutral value pins the dataset root, canonical GraphAr metadata entry
@@ -216,7 +227,7 @@ Facade features:
 | Feature | Default | Boundary |
 |---|---:|---|
 | `arrow` | yes | RecordBatch and bounded Arrow IPC |
-| `datafusion` | no | single-hop binary-Entity physical query execution |
+| `datafusion` | no | binary-Entity and bounded string-property path execution |
 | `graphar` | no | semantic Property Graph projection |
 | `graphar-native` | no | maintained GraphAr C++ writer/readback path |
 | `ipfs` | no | CID/DAG-CBOR identity and immutable manifests; no IPFS node transport |

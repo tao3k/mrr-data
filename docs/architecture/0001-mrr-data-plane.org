@@ -904,14 +904,12 @@ Exit: a reviewable delivered revision, passing required remote checks, and
 source-matched Ubuntu/macOS conformance receipts. Do not repeatedly rerun local
 checks without a code change, failure or new unresolved concern.
 
-After delivery, the next functional batch should be driven by an identified
-Agent consumer: connect its existing admitted snapshot/catalog path to these
-public publication/restore APIs and validate the consumer's cold/warm/restart
-behavior. Select the actual caller and owner before adding an integration API.
-Do not claim consumer integration from the standalone examples. Physical restore
-must continue to preserve semantic generation without replacing MRR admission.
+The identified consumer is now POO Flow. M5.0 below closes its bounded static-edge
+resource path; M5.1 is the next functional batch for the existing Healthcare
+query consumer. Physical restore must preserve semantic generation without
+replacing MRR admission. Standalone examples are not consumer acceptance.
 
-*** Next consumer: POO Flow — entry-point audit
+*** POO Flow — pre-M5.0 entry-point audit (2026-09-20)
 
 The user selected POO Flow's MRR consumption path on 2026-09-20. Inspection of
 the current sibling checkout found that the Healthcare ontology query owner is
@@ -950,10 +948,11 @@ reduce the query or manufacture a result receipt to make integration pass.
 
 The sibling POO Flow checkout contains unrelated active edits. Any consumer
 implementation must preserve those changes and explicitly own its new files.
-No consumer integration or hosted-provider qualification is claimed by this
-entry-point audit.
+This historical entry-point audit did not establish consumer integration. The
+subsequent M5.0 acceptance below closes the static-edge profile only; Healthcare
+execution and hosted-provider qualification remain outside that result.
 
-*** M5.0: POO Flow static-edge resource — implementation under acceptance
+*** M5.0: POO Flow static-edge resource — accepted
 
 The first concrete consumer uses the existing Python =RuntimeGraphPlan= and
 =RuntimeGraphToolNode= boundary. Its fixed =poo-flow.static-edges.v1= profile
@@ -983,6 +982,105 @@ in DataFusion: an encoded Arrow Entity ID must be parsed as that typed ID,
 not fed back into =from_canonical_bytes= to derive a second identity. Direct
 source-ID and malformed/wrong-domain regression tests complement cross-engine
 parity, which alone could miss a shared decoding defect.
+
+Remote closure is recorded at =c18f7d373e07d927e3c2f66d2d85b4706c714a54=:
+[[https://github.com/tao3k/mrr-data/actions/runs/35463412334][CI run 35463412334]]
+passed all nine checks, including both platform consumer jobs, with zero warning
+diagnostics in the reviewed logs. Both platform receipts match the tested source.
+See =poo-flow-consumer-audit.md= for the fingerprint and observed counters.
+[[https://github.com/tao3k/mrr-data/pull/1][PR #1]] remains open; acceptance is not
+merge or release publication. This source revision is the baseline for M5.1.
+
+*** M5.1: existing Healthcare query — next complete implementation batch
+
+Deliver the original =case-profile-relations.gql= through the actual POO Flow
+reasoning consumer, from its authoritative projection to an MRR-admitted result:
+
+#+begin_src gql
+MATCH (s:Scenario)-[:HAS_CASE]->(c:Case)-[:HAS_EFFECTIVE_PROFILE]->(p:Profile)
+WHERE s.identity = 'healthcare'
+RETURN s.identity, c.id, p.identity
+#+end_src
+
+The current static-edge snapshot contains neither the required entity properties
+nor a complete Healthcare catalog. Merely extending the hop count cannot satisfy
+this query. The following are ordered dependencies within one delivery batch,
+not independent completion claims.
+
+Implementation status (2026-09-20): the bounded DataFusion property-path layer
+is implemented and locally verified. It accepts an already catalog-bound MRR
+query, not raw GQL, and does not yet publish property-bearing snapshots. The
+original query's producer exists in the active sibling POO Flow checkout, but
+that checkout revision is not obtainable from its public remote. Therefore this
+is an intermediate implementation receipt, not M5.1 closure. See
+=healthcare-query-audit.md= for exact evidence and remaining gates.
+
+1. *Fix source and contract ownership.* Locate the maintained Healthcare producer
+   for Scenario, Case, Profile, their properties and relations. Bind its immutable
+   source revision, original query bytes/digest, catalog and semantic generation.
+   Define typed property, missing-value, relation multiplicity and output ordering
+   semantics using existing MRR contracts. A fixture supplements the real producer;
+   it cannot replace it. Audit the exact published MRR/parser pins and APIs before
+   changing dependencies. An unavailable upstream capability is an explicit
+   upstream work item, not permission to invent a local parser or guessed pin.
+2. *Project and execute the bounded query.* POO Flow owns its domain projection;
+   MRR owns existing parser/frontend lowering, query semantics and result admission;
+   MRR Data owns Arrow representation, physical planning/execution and transport.
+   Reuse the existing parser-owned frontend and shared query IR. Add only the
+   catalog-backed property representation, two-edge join, equality predicate and
+   scalar projection required by the original query. Preserve entity IDs and
+   typed values through Arrow. Unsupported shapes must fail explicitly. Do not
+   add a second grammar, arbitrary SQL entry point or compatibility fallback.
+3. *Wire the real reasoning invocation.* Extend the existing external worker and
+   maintained POO Flow resource boundary so the declared query reaches that
+   execution path and its admitted receipt returns to the reasoning caller.
+   Keep static-edge semantics unchanged. Bind receipts to query, source, catalog,
+   generation and snapshot root; reject substituted scope before acceptance.
+   Keep credentials in runtime configuration and scheduling in POO Flow. Preserve
+   unrelated sibling-checkout edits and name the owned cross-repository files.
+4. *Close local/cache/S3 behavior and delivery together.* Publish and restore the
+   property-bearing snapshot through existing optional adapters. Test the actual
+   POO Flow caller on Ubuntu/macOS with a clean, obtainable pinned producer source.
+   Record all participating source revisions and source-matched receipts. Review
+   the exact delivered revision and resolve its CI failures and warnings before
+   calling the batch complete.
+
+Exit gates for this batch:
+
+- The unmodified original query runs from the real producer/caller, with an
+  independently specified expected result and MRR admission. Test distractor
+  scenarios, missing properties, shared profiles, duplicate/multiple matches and
+  no matches according to the declared semantics. Comparing two executions of
+  the same physical implementation alone is insufficient.
+- Producer-local, cold S3, warm Kache and reopened-process execution preserve
+  typed rows, semantic generation and admission identity. Warm/reopened runs
+  avoid remote reads when the working set fits the configured cache. Eviction
+  exercises a correct bounded refetch, not an unconditional zero-read promise.
+- Bad query/source/catalog/generation bindings, malformed property data,
+  corruption, timeout/cancellation and transport failure cannot produce an
+  accepted result. Existing static-edge negative contracts remain green.
+- Enforce input, join/intermediate-row, output, memory and deadline budgets;
+  reject over-budget work explicitly. Report process startup separately from
+  execution, with remote operations/bytes and dataset cardinalities. Choose and
+  record representative sizes from the actual producer before measuring; do not
+  infer scalability from the two-edge M5.0 fixture.
+- Keep Arrow as the only facade default. Cache, S3, IPFS, GraphAr and the consumer
+  runtime remain optional; feature-isolation checks, workspace tests, Clippy
+  =-D warnings= and the existing nine CI checks pass at the delivered revision.
+
+*** M5.2: reuse the admitted path and qualify the real workload
+
+After M5.1, run the existing =profile-impact.gql= through the same two-hop/property
+capabilities, then =prescription-causal-trajectory.gql= through its actual event
+projection. Audit each catalog and source owner before claiming reuse; an event
+relation query does not by itself qualify causal inference. Retain original query
+bytes and expected results. Do not create per-query transport or parser stacks.
+
+Use these actual workloads to select cache capacity, concurrency and bounded
+execution settings and record cold/warm/restart/eviction measurements. Kache
+continues to own cache coordination and maintenance; MRR Data qualifies adapter
+behavior and its resource limits. Add upstream fixes only for demonstrated defects.
+Any additional query semantics get explicit contracts and acceptance evidence.
 
 No cloud purchase, B2/R2 smoke run, cache reimplementation, generic scheduling
 framework, S2 transport, mutable head, remote GC or graph-distribution expansion

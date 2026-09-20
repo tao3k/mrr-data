@@ -72,9 +72,25 @@ receipts are separately rejected by the Python contracts.
 The existing Ubuntu/macOS S3 jobs now test and lint the consumer, fetch the
 pinned public POO Flow runtime source, run its real tool node and retain the
 consumer receipt inside the S3 artifact. `M4 acceptance` therefore includes these
-consumer checks as well. The final current-revision run will be recorded in
-[PR #1](https://github.com/tao3k/mrr-data/pull/1); an earlier M4 green revision is
-not evidence for these new source changes.
+consumer checks as well.
+
+Final tested revision: `c18f7d373e07d927e3c2f66d2d85b4706c714a54`.
+[CI run 35463412334](https://github.com/tao3k/mrr-data/actions/runs/35463412334)
+passed all nine checks, including Ubuntu/macOS Rust, native GraphAr and S3/consumer
+jobs, Rust 1.95 MSRV, Arrow IPC fuzz and the M4 aggregate. Reviewed final-run logs
+contain zero warning diagnostics.
+
+Both platform conformance receipts match source SHA256
+`12eb0adca2100ef98e2122f48bdd902f64f054d42f4013a2e64334a6e66af8c6`
+and service patch SHA256
+`f41967b9050bd8c30b49b42a04ff0db1776695d19002071547c42d9e4f16b1c6`.
+Both verify equivalent admitted rows/root/generation/admission digest and all seven
+negative cases. This closes the named static-edge profile at that revision.
+[PR #1](https://github.com/tao3k/mrr-data/pull/1) remains open; no merge, release or
+Healthcare query acceptance is implied.
+
+The [canonical roadmap](0001-mrr-data-plane.org) now identifies M5.1 as the complete
+original Healthcare query batch and M5.2 as reuse and real-workload qualification.
 
 CI environment follow-up: the first Ubuntu run passed all six consumer Rust
 tests, then correctly failed because its Rust 1.95 toolchain lacked Clippy. The

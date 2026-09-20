@@ -2868,6 +2868,7 @@ name = "mrr-data-datafusion"
 version = "0.1.0"
 dependencies = [
  "arrow-array",
+ "arrow-schema",
  "datafusion",
  "meta-relational-reasoning",
  "mrr-data-arrow",

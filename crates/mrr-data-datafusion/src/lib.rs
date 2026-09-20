@@ -1,7 +1,11 @@
-//! `DataFusion` execution for the admitted single-hop binary Entity query slice.
+//! `DataFusion` execution for bounded, catalog-admitted Entity and property queries.
 #![forbid(unsafe_code)]
 
 mod adapter;
+mod property;
+pub use property::{
+    BinaryRelationTable, EntityPropertyTable, PropertyQueryLimits, execute_property_path_query,
+};
 
 pub use adapter::{DataFusionQueryError, datafusion_engine_profile, execute_binary_entity_query};
 

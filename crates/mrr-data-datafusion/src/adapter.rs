@@ -17,6 +17,8 @@ use mrr_data_core::{DataEngineProfile, PhysicalQueryOutput};
 #[derive(Debug)]
 pub enum DataFusionQueryError {
     InvalidEngineProfile,
+    CatalogMismatch,
+    ResourceLimit(&'static str),
     UnsupportedShape(&'static str),
     RelationMismatch,
     InvalidRelationSchema,
@@ -28,6 +30,12 @@ pub enum DataFusionQueryError {
 impl fmt::Display for DataFusionQueryError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::CatalogMismatch => {
+                formatter.write_str("physical catalog does not match bound query")
+            }
+            Self::ResourceLimit(reason) => {
+                write!(formatter, "property query resource limit: {reason}")
+            }
             Self::InvalidEngineProfile => formatter.write_str("invalid DataFusion engine profile"),
             Self::UnsupportedShape(reason) => {
                 write!(formatter, "unsupported DataFusion query shape: {reason}")
