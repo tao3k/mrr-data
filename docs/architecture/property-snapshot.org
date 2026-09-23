@@ -1,0 +1,22 @@
+#+title: Property-bearing content snapshots
+
+* Contract
+
+The relation-only =mrr.data.snapshot= version 1 encoding and roots remain
+unchanged. A manifest with one descriptor for every entity catalog schema uses
+version 2. Each descriptor carries the complete MRR =EntitySchema=, row count,
+and ordered Arrow IPC child CIDs, row counts, and byte lengths. The declared
+schema must equal the caller's admitted entity catalog, not merely share an ID.
+
+All entity children participate in the same CID closure, transfer preflight,
+publication, and verified cold or warm restore as relation children. A child
+cannot be shared between relation and entity descriptors. The manifest still
+owns no GQL parser, domain projection, or semantic result admission.
+
+* Acceptance and next boundary
+
+The core contract tests cover canonical round-trip, V1 independence, schema
+substitution and duplicate-child rejection. The content tests cover version 2
+publication and cold/warm restore. The next owner must decode the restored
+Arrow batches against these schemas and pass them to the existing bounded
+property executor; this storage change alone is not a Healthcare query receipt.
