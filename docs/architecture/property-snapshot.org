@@ -56,5 +56,6 @@ The core contract tests cover canonical round-trip, V1 independence, schema
 substitution and duplicate-child rejection. The content tests cover version 2
 publication and cold/warm restore. The DataFusion tests cover the restored
 physical adapter. The POO Flow worker test covers original GQL to cold/warm
-MRR-admitted result. Actual Lambda/Marlin invocation, release transport, and
-cross-platform CI remain separate acceptance gates.
+MRR-admitted result. Ubuntu and macOS worker plus S3/Kache acceptance passed in
+[[https://github.com/tao3k/mrr-data/actions/runs/35851110524][CI run 35851110524]]. Actual Lambda/Marlin invocation and release-qualified
+host transport remain separate acceptance gates.

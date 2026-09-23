@@ -54,11 +54,14 @@ path. Existing
 DataFusion tests cover malformed IPC, row-count and catalog substitution,
 resource limits, dangling endpoints, null properties and multiplicity.
 
-This is library-level acceptance. It does not yet prove that the actual
-Lambda/Marlin process exports its projected POO rows through a typed native
-boundary and calls the property producer/worker, that the deployment's
-S3/Kache provider serves the same root, or that Ubuntu and macOS CI pass this
-new path.
-Those are separate gates; a local focused result must not be reported as full
-Healthcare deployment closure. The caller owns a wall-clock deadline and
-cancellation across restoration and query execution.
+The original-GQL property worker and S3/Kache transport passed Ubuntu and
+macOS in [[https://github.com/tao3k/mrr-data/actions/runs/35851110524][CI run 35851110524]], which also passed the snapshot distribution
+acceptance gate. The change was [[https://github.com/tao3k/mrr-data/pull/2][squash-merged in PR #2]]. This is cross-platform
+library and transport acceptance, not application invocation evidence.
+
+The actual Lambda/Marlin process has not yet exported its projected POO rows
+through a typed native boundary or called the property producer/worker. A
+deployed S3/Kache provider serving the same root and a release-qualified host
+invocation also remain separate gates. The caller owns a wall-clock deadline
+and cancellation across restoration and query execution; neither is supplied
+by this library test.

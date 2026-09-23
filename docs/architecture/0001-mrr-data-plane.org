@@ -982,7 +982,7 @@ remote operations. Scope substitution, stale generation, duplicate edges,
 transport failure, process timeout and actual S3 corruption must fail closed.
 The existing Ubuntu/macOS S3 jobs also test/lint this feature and retain consumer
 measurements and source binding in their receipts. See
-=integrations/poo_flow/README.md= for exact limits and deployment instructions.
+=integrations/poo_flow/README.org= for exact limits and deployment instructions.
 
 A source-identity regression discovered during this integration was corrected
 in DataFusion: an encoded Arrow Entity ID must be parsed as that typed ID,
