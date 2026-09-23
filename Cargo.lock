@@ -2868,11 +2868,14 @@ name = "mrr-data-datafusion"
 version = "0.1.0"
 dependencies = [
  "arrow-array",
+ "arrow-ipc",
  "arrow-schema",
+ "cid",
  "datafusion",
  "meta-relational-reasoning",
  "mrr-data-arrow",
  "mrr-data-asp-rust-build-support",
+ "mrr-data-content",
  "mrr-data-core",
  "tokio",
 ]
