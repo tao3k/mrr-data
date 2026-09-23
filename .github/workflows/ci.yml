@@ -45,6 +45,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy,rustfmt
+      - name: Check Org documentation and links
+        run: python3 tools/check-docs.py
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Test workspace
