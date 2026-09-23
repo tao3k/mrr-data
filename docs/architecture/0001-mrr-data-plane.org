@@ -988,8 +988,10 @@ Remote closure is recorded at =c18f7d373e07d927e3c2f66d2d85b4706c714a54=:
 passed all nine checks, including both platform consumer jobs, with zero warning
 diagnostics in the reviewed logs. Both platform receipts match the tested source.
 See =poo-flow-consumer-audit.md= for the fingerprint and observed counters.
-[[https://github.com/tao3k/mrr-data/pull/1][PR #1]] remains open; acceptance is not
-merge or release publication. This source revision is the baseline for M5.1.
+[[https://github.com/tao3k/mrr-data/pull/1][PR #1]] was squash-merged as
+=f53909884efcb9b345837c1fd2746d2cdcdd0c5b= after all nine checks passed
+again in [[https://github.com/tao3k/mrr-data/actions/runs/35804588191][CI run 35804588191]].
+That merged source is the baseline for M5.1, not its Healthcare acceptance.
 
 *** M5.1: existing Healthcare query — next complete implementation batch
 
@@ -1007,13 +1009,14 @@ nor a complete Healthcare catalog. Merely extending the hop count cannot satisfy
 this query. The following are ordered dependencies within one delivery batch,
 not independent completion claims.
 
-Implementation status (2026-09-20): the bounded DataFusion property-path layer
-is implemented and locally verified. It accepts an already catalog-bound MRR
-query, not raw GQL, and does not yet publish property-bearing snapshots. The
-original query's producer exists in the active sibling POO Flow checkout, but
-that checkout revision is not obtainable from its public remote. Therefore this
-is an intermediate implementation receipt, not M5.1 closure. See
-=healthcare-query-audit.md= for exact evidence and remaining gates.
+Implementation status (2026-09-23): the bounded DataFusion property-path layer
+accepts an already catalog-bound MRR query, not raw GQL. The producer and exact
+query are now obtainable from public =lambda-episteme= at
+=d758ad0dfa5c4b7c567b4c5f1562fba4ffc4ae3c=. The original bytes have not
+yet been compiled and bound, and the V1 snapshot does not inventory entity
+property tables. The existing worker still implements only static edges.
+Therefore M5.1 remains open. See =healthcare-query-audit.md= for the current
+source matrix and delivery order.
 
 1. *Fix source and contract ownership.* Locate the maintained Healthcare producer
    for Scenario, Case, Profile, their properties and relations. Bind its immutable

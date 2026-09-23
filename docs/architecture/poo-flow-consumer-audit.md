@@ -86,8 +86,11 @@ and service patch SHA256
 `f41967b9050bd8c30b49b42a04ff0db1776695d19002071547c42d9e4f16b1c6`.
 Both verify equivalent admitted rows/root/generation/admission digest and all seven
 negative cases. This closes the named static-edge profile at that revision.
-[PR #1](https://github.com/tao3k/mrr-data/pull/1) remains open; no merge, release or
-Healthcare query acceptance is implied.
+[PR #1](https://github.com/tao3k/mrr-data/pull/1) was subsequently squash-merged
+as `f53909884efcb9b345837c1fd2746d2cdcdd0c5b`; its final
+[CI run 35804588191](https://github.com/tao3k/mrr-data/actions/runs/35804588191)
+passed all nine jobs. Healthcare query acceptance is tracked separately in
+[the M5.1 audit](healthcare-query-audit.md).
 
 The [canonical roadmap](0001-mrr-data-plane.org) now identifies M5.1 as the complete
 original Healthcare query batch and M5.2 as reuse and real-workload qualification.
