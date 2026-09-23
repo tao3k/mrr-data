@@ -57,7 +57,7 @@ and non-dangling endpoints before execution. Explicit row/byte, conservative joi
 output-cell and DataFusion memory budgets fail closed; the caller owns the worker
 deadline. This is a physical execution API: its tests construct MRR IR directly.
 It does not yet qualify original Healthcare GQL parsing, the Scheme caller or
-property-bearing S3 snapshots. See the [[file:healthcare-query-audit.org][M5.1 implementation audit]].
+property-bearing S3 snapshots. See the [[file:healthcare-property-path-audit.org][Healthcare property-path query implementation audit]].
 
 Native GraphAr publication also returns a ~GraphArQuerySource~. This immutable,
 database-neutral value pins the dataset root, canonical GraphAr metadata entry
@@ -133,12 +133,12 @@ The repository does not yet claim:
 - a built-in DuckDB/DuckGQL dependency or database-owned source of truth.
 
 The canonical proposal, invariants, V1 manifest boundary, and delivery gates
-are in [[file:0001-mrr-data-plane.org][RFC 0001]]. Its M4 delivery plan
+are in [[file:0001-mrr-data-plane.org][RFC 0001]]. Its snapshot distribution delivery plan
 records local acceptance for S3/Kache snapshot publication and cold restore,
 whole-operation budgets and cancellation, Kache integration under concurrent
 consumers, and independent SigV4/TLS conformance. The reproducible
 [[file:../../tools/s3-conformance/README.md][local S3 runner]] needs no cloud account.
-The [[file:m4-closure-audit.org::*Final remote acceptance][M4 audit]]
+The [[file:snapshot-distribution-audit.org::*Final remote acceptance][snapshot distribution audit]]
 records the final nine-job remote CI acceptance and both platform fingerprints.
 Hosted B2/R2 acceptance and the Healthcare reasoning caller remain separate.
 

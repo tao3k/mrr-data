@@ -13,11 +13,11 @@ Kache and S3 are selected explicitly for the workload that needs them.
 
 | Topic | Document |
 |---|---|
-| Architecture, ownership and milestones | [RFC 0001](docs/architecture/0001-mrr-data-plane.org) |
+| Architecture, ownership and feature status | [RFC 0001](docs/architecture/0001-mrr-data-plane.org) |
 | Implemented APIs, feature contract and development commands | [Current implementation](docs/architecture/current-implementation.org) |
 | CID, local cache, snapshot and S3 behavior | [Content cache protocol](docs/architecture/content-cache-protocol.org) |
-| Distribution acceptance | [M4 audit](docs/architecture/m4-closure-audit.org) |
-| Healthcare query status and next chain | [M5.1 audit](docs/architecture/healthcare-query-audit.org) |
+| Distribution acceptance | [Snapshot distribution audit](docs/architecture/snapshot-distribution-audit.org) |
+| Healthcare query status and next chain | [Healthcare property-path audit](docs/architecture/healthcare-property-path-audit.org) |
 | Existing POO Flow static-edge consumer | [Integration guide](integrations/poo_flow/README.md) |
 
 ## Build and test
@@ -39,4 +39,4 @@ MRR remains the semantic authority. `mrr-data` owns physical representation,
 verified transport and execution under MRR's admitted contracts. POO Flow
 declares domain queries and consumes admitted receipts. The current
 Healthcare two-hop executor is a physical slice; the original Healthcare GQL
-and reasoning caller are tracked by the [M5.1 audit](docs/architecture/healthcare-query-audit.org).
+and reasoning caller are tracked by the [Healthcare property-path audit](docs/architecture/healthcare-property-path-audit.org).

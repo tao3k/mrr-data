@@ -1,4 +1,4 @@
-* M4 closure audit — 2026-09-20
+* Snapshot distribution audit — 2026-09-20
 
 Scope: the local S3/Kache distribution slice, including snapshot preflight and
 root-last acknowledgement, per-block integrity, resource/retry ledgers,
@@ -42,7 +42,7 @@ acceptance below supersedes that pending status. Hosted B2/R2 and native server
 TLS/mTLS are not established by these results.
 
 
-CI follow-through: added manual dispatch, a strict ~M4 acceptance~ aggregate,
+CI follow-through: added manual dispatch, a strict ~snapshot distribution acceptance~ aggregate,
 and per-platform source-bound receipt summaries/artifacts (14-day retention).
 Actionlint 1.7.12 passed (without optional ShellCheck); a local exercise of the
 aggregate accepted success and rejected failure, cancellation and skipping.
@@ -64,7 +64,7 @@ hints. No warning lint is disabled for Rust or production code.
 [[https://github.com/tao3k/mrr-data/actions/runs/35459203514][Run 35459203514]]
 passed all nine jobs for ~3715d0af8ae0cc58ed5c52b6da27f3cd70ae46d8~:
 workspace Rust on Ubuntu/macOS, Rust 1.95 MSRV, S3 SigV4/TLS on Ubuntu/macOS,
-native GraphAr on Ubuntu/macOS, Arrow IPC fuzz, and M4 acceptance. The complete
+native GraphAr on Ubuntu/macOS, Arrow IPC fuzz, and snapshot distribution acceptance. The complete
 run logs contained zero warning diagnostics. Both S3 platform receipts matched
 workspace source SHA-256
 ~a06eaa5ff1e21d1c891117012977df77b8bae4820ec2ee85838d360caf59d248~ and service

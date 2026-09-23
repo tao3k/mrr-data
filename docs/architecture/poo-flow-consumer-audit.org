@@ -57,7 +57,7 @@ The two-edge scenario produced these logical counters:
 
 All four results have identical rows, semantic generation and MRR admission
 digest. Every worker call is a separate process. This is a clean-restart check;
-kill-during-publication recovery remains qualified by the underlying M4 tests.
+kill-during-publication recovery remains qualified by the underlying snapshot distribution tests.
 Recorded elapsed times measure the worker data phase, excluding process startup
 and initial configuration. These are fixture observations, not P95/throughput or
 hosted-provider performance claims.
@@ -71,13 +71,13 @@ receipts are separately rejected by the Python contracts.
 
 The existing Ubuntu/macOS S3 jobs now test and lint the consumer, fetch the
 pinned public POO Flow runtime source, run its real tool node and retain the
-consumer receipt inside the S3 artifact. ~M4 acceptance~ therefore includes these
+consumer receipt inside the S3 artifact. ~snapshot distribution acceptance~ therefore includes these
 consumer checks as well.
 
 Final tested revision: ~c18f7d373e07d927e3c2f66d2d85b4706c714a54~.
 [[https://github.com/tao3k/mrr-data/actions/runs/35463412334][CI run 35463412334]]
 passed all nine checks, including Ubuntu/macOS Rust, native GraphAr and S3/consumer
-jobs, Rust 1.95 MSRV, Arrow IPC fuzz and the M4 aggregate. Reviewed final-run logs
+jobs, Rust 1.95 MSRV, Arrow IPC fuzz and the snapshot distribution aggregate. Reviewed final-run logs
 contain zero warning diagnostics.
 
 Both platform conformance receipts match source SHA256
@@ -90,10 +90,11 @@ negative cases. This closes the named static-edge profile at that revision.
 as ~f53909884efcb9b345837c1fd2746d2cdcdd0c5b~; its final
 [[https://github.com/tao3k/mrr-data/actions/runs/35804588191][CI run 35804588191]]
 passed all nine jobs. Healthcare query acceptance is tracked separately in
-[[file:healthcare-query-audit.org][the M5.1 audit]].
+[[file:healthcare-property-path-audit.org][the Healthcare property-path query audit]].
 
-The [[file:0001-mrr-data-plane.org][canonical roadmap]] now identifies M5.1 as the complete
-original Healthcare query batch and M5.2 as reuse and real-workload qualification.
+The [[file:0001-mrr-data-plane.org][canonical roadmap]] names the original
+Healthcare case-profile query as the next complete execution batch, followed
+by profile-impact and causal-event reuse with real-workload qualification.
 
 CI environment follow-up: the first Ubuntu run passed all six consumer Rust
 tests, then correctly failed because its Rust 1.95 toolchain lacked Clippy. The

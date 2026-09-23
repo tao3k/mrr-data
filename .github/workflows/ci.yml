@@ -124,14 +124,14 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  m4-acceptance:
-    name: M4 acceptance
+  snapshot-distribution-acceptance:
+    name: Snapshot distribution acceptance
     if: ${{ always() }}
     needs: [msrv, test, s3-conformance]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Require every M4 prerequisite to succeed
+      - name: Require every distribution prerequisite to succeed
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
@@ -139,11 +139,11 @@ jobs:
           import json, os
           results = json.loads(os.environ["NEEDS_JSON"])
           expected = {"msrv", "test", "s3-conformance"}
-          assert set(results) == expected, "missing M4 prerequisite"
+          assert set(results) == expected, "missing snapshot distribution prerequisite"
           failures = {name: job["result"] for name, job in results.items() if job["result"] != "success"}
-          assert not failures, f"M4 acceptance incomplete: {failures}"
+          assert not failures, f"Snapshot distribution acceptance incomplete: {failures}"
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
-              summary.write("M4 acceptance passed: MSRV, workspace/feature checks and independent S3/TLS on Ubuntu and macOS.\n")
+              summary.write("Snapshot distribution acceptance passed: MSRV, workspace/feature checks and independent S3/TLS on Ubuntu and macOS.\n")
           PYTHON
 
   fuzz:
