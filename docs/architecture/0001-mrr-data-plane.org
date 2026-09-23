@@ -16,7 +16,7 @@ validated. Snapshot publication/cold restore, whole-operation interruption and
 resource accounting, Kache integration acceptance and independent local
 SigV4/TLS conformance have local evidence recorded under M4. Final remote
 acceptance of revision =3715d0a= passed all nine jobs, including both platforms;
-see =m4-closure-audit.md= for the exact revision, run and receipt fingerprints.
+see =m4-closure-audit.org= for the exact revision, run and receipt fingerprints.
 This does not establish a POO Flow consumer integration. The upstream
 [[https://github.com/tao3k/meta-relational-reasoning][MRR repository]] owns semantic
 identity, typed relation schemas and facts, generations, revision bindings,
@@ -627,7 +627,7 @@ evidence for this revision and host only, not universal throughput claims.
 
 Updated 2026-09-20 after the local S3/Kache audit and snapshot acceptance. This section owns the execution
 order and acceptance gates; the protocol document owns API behavior and the
-[[file:s3-cache-audit.md][audit record]] owns the dated validation evidence.
+[[file:s3-cache-audit.org][audit record]] owns the dated validation evidence.
 
 The immediate objective is: an admitted snapshot on machine A can be published
 through S3 and restored on machine B with an empty Kache cache, preserving its
@@ -837,7 +837,7 @@ conditional creation, idempotent publication, corrupt-object non-overwrite,
 bounded reads and genuine Arrow snapshot cold restore through Kache.
 
 The reproducible =tools/s3-conformance/run.py= isolates the server build and
-records its binary hash; see =docs/architecture/s3-conformance-receipt.json=.
+records its binary hash; see [[file:../../evidence/s3-conformance-receipt.json][the conformance receipt]].
 The test server uses Rust 1.96.0; MRR Data stays at Rust 1.95.0. No default
 feature or production dependency changed. A dedicated Ubuntu/macOS CI job runs
 this conformance gate, but its remote execution has not been observed.
@@ -857,7 +857,7 @@ and independent conformance evidence. Two corrections were made: the single-file
 example now uses blocking disk I/O and a 64 MiB input cap; the conformance runner
 binds success to the workspace source digest and removes stale output before a
 new attempt. Both public examples now run against the independent TLS service,
-including oversized-file rejection. See =docs/architecture/m4-closure-audit.md=.
+including oversized-file rejection. See =docs/architecture/m4-closure-audit.org=.
 
 After correction: 123 workspace tests pass, independent conformance and both
 examples pass, 2 evidence-freshness tests pass, and all 18 feature slices plus
@@ -987,7 +987,7 @@ Remote closure is recorded at =c18f7d373e07d927e3c2f66d2d85b4706c714a54=:
 [[https://github.com/tao3k/mrr-data/actions/runs/35463412334][CI run 35463412334]]
 passed all nine checks, including both platform consumer jobs, with zero warning
 diagnostics in the reviewed logs. Both platform receipts match the tested source.
-See =poo-flow-consumer-audit.md= for the fingerprint and observed counters.
+See =poo-flow-consumer-audit.org= for the fingerprint and observed counters.
 [[https://github.com/tao3k/mrr-data/pull/1][PR #1]] was squash-merged as
 =f53909884efcb9b345837c1fd2746d2cdcdd0c5b= after all nine checks passed
 again in [[https://github.com/tao3k/mrr-data/actions/runs/35804588191][CI run 35804588191]].
@@ -1015,7 +1015,7 @@ query are now obtainable from public =lambda-episteme= at
 =d758ad0dfa5c4b7c567b4c5f1562fba4ffc4ae3c=. The original bytes have not
 yet been compiled and bound, and the V1 snapshot does not inventory entity
 property tables. The existing worker still implements only static edges.
-Therefore M5.1 remains open. See =healthcare-query-audit.md= for the current
+Therefore M5.1 remains open. See =healthcare-query-audit.org= for the current
 source matrix and delivery order.
 
 1. *Fix source and contract ownership.* Locate the maintained Healthcare producer
