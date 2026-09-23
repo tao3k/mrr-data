@@ -1,0 +1,23 @@
+[package]
+name = "mrr-data-datafusion"
+description = "DataFusion execution adapter for admitted MRR physical queries"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+arrow-array.workspace = true
+datafusion.workspace = true
+meta-relational-reasoning.workspace = true
+mrr-data-core.workspace = true
+
+[dev-dependencies]
+arrow-schema.workspace = true
+mrr-data-arrow.workspace = true
+mrr-data-asp-rust-build-support.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

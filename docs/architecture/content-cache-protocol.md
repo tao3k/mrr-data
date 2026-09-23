@@ -1,0 +1,269 @@
+# Content cache protocol
+
+`mrr-data-content` exposes the physical content boundary through two interfaces:
+
+- `ContentStore`: synchronous, verified local blocks. A Kache adapter implements
+  this interface; eviction, locking and deduplication remain owned by Kache.
+- `RemoteContentStore`: asynchronous immutable block retrieval and publication.
+  An S3 or Kache remote adapter implements this interface. No runtime or provider
+  SDK is required by the production content crate.
+
+`read_through` and `publish_content` define the shared coordination semantics.
+The complete CID is the logical identity, including codec and hash algorithm.
+Object keys, compression, pack manifests, credentials, TLS configuration and
+provider endpoints remain adapter concerns. This is a Rust interface contract,
+not another network protocol or cache storage format.
+
+## Reads
+
+1. Validate the requested CID profile before accessing a store.
+2. Return a verified local hit without contacting the remote provider.
+3. Only an exact `NotFound` permits remote fallback. Local corruption and I/O
+   failure remain explicit so callers can choose repair policy.
+4. A remote `None` means confirmed absence. Authentication errors, timeouts,
+   corruption and transport failures are errors, never misses.
+5. Check logical byte length and recompute the requested CID before cache fill.
+6. If local cache admission fails, return the verified bytes with
+   `ContentSource::Remote(CacheAdmission::Failed(...))`.
+
+`read_through` passes the size limit to local `ContentStore::get_bounded` and
+remote reads, then independently checks returned bytes. Memory stores check before
+cloning; filesystem and Kache stores inspect the open file's length and cap reads
+at the limit plus one sentinel byte to detect growth. Remote adapters enforce the
+limit while receiving/decompressing. These are per-block logical bounds, not a
+process-wide RSS budget; transport chunks and allocator capacity add overhead.
+Direct `ContentStore::get` remains an explicitly unbounded convenience operation.
+CAR import retains its separate archive and closure budgets.
+
+## Publication
+
+`publish_content` first awaits remote `put`, then fills the local cache. A receipt
+therefore means the remote provider acknowledged the complete readable object.
+For Kache's pack format this includes both pack and manifest. Cache admission is
+reported separately; a full disk cannot turn remote acknowledgement into failure.
+
+Repeated publication of the same CID is idempotent. Different bytes at an existing
+address must be rejected. Cancellation or transport failure can leave remote
+persistence uncertain; no receipt is produced, and callers can retry the same CID.
+An acknowledgement is not a new consistency or durability guarantee beyond the
+provider's contract. Publication of a block is not publication of an entire
+snapshot: children must be uploaded before its root or discovery pointer becomes
+visible. There is no multi-object transaction in this interface.
+
+## Adapter responsibilities and status
+
+The protocol does not implement eviction, cross-process locks, retry scheduling,
+negative caching, or concurrent-miss coalescing. It does not admit MRR query results
+or establish generation authority. Deployment supplies credentials and TLS policy
+to adapters; errors exposed here deliberately omit provider bodies and secrets.
+
+The production adapters are in `mrr-data-cache`, exposed through independent optional
+`mrr-data/cache` (Kache) and `mrr-data/s3` (remote) features. The adapter crate
+itself defaults to no adapters and offers `kache` and `s3` features. Local-only
+builds exclude the S3/HTTP/TLS dependency stack; remote-only builds exclude Kache. `KacheContentStore` implements `ContentStore` using the
+pinned upstream Kache store. It verifies every returned CID, uses upstream key
+locks and independent blob staging, and exposes `maintain()` for upstream soft
+quota eviction. Applications schedule maintenance; it is not a hard disk limit.
+Concurrent writes to a busy key report a cache admission failure and can be retried.
+
+`S3ContentStore` implements `RemoteContentStore` using OpenDAL's S3 transport.
+It stores original logical bytes at `blocks/<complete CID>` beneath the configured
+bucket/root. Streaming reads enforce the logical size cap and verify the CID.
+Conditional create prevents overwriting existing content; a precondition failure
+is successful only after reading and verifying the identical existing object.
+Operation deadlines cover both headers and body transfer. Credential resolution
+and signing are OpenDAL's; provider errors are reduced to sanitized protocol errors.
+
+`S3Config` exposes endpoint, bucket, region, root and credential configuration.
+`http_client_builder()` supplies TLS with certificate validation enabled and
+allows custom trust certificates and client identity. It installs ring only when
+the process has not selected a rustls provider. A caller may instead supply its
+own configured `HttpClient`. No CA, credential, or endpoint enters a manifest.
+
+Use `cargo test -p mrr-data-cache --features kache,s3 --locked` for the local acceptance tests. They
+start an ephemeral localhost S3 wire fixture and drive the production adapters:
+cold/warm/reopened Kache reads, raw/DAG-CBOR/empty objects, conditional publication,
+missing/denied/corrupt/oversized objects, failed-write retry, lost-acknowledgement recovery, concurrent publication,
+and deadlines covering response-body stalls. The
+fixture checks that requests are signed but does not validate SigV4 signatures.
+No purchased cloud account or service is required. Hosted-provider authentication
+is a deployment check, not a prerequisite to using these adapters.
+
+The runnable `crates/mrr-data-cache/examples/s3_cache.rs` example publishes a file
+and restores it into a second empty Kache cache. It caps input at 64 MiB and
+performs file/cache I/O on the blocking executor. Set `S3_BUCKET`, `S3_ENDPOINT`,
+`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and optionally `S3_REGION`, `S3_ROOT` and
+`S3_CA_PEM`, then run:
+
+```sh
+cargo run -p mrr-data-cache --features kache,s3,blocking --example s3_cache -- path/to/file
+```
+
+The earlier Kache remote-pack extraction remains an independent experiment.
+Production uses Kache for local cache mechanisms and OpenDAL for S3 transport;
+it does not depend on an unpublished extraction or claim Kache pack compatibility.
+All internal crate dependencies are managed by the root Cargo workspace.
+
+## Feature boundaries
+
+Only `arrow` is enabled by default on the facade. `ipfs` selects the existing
+CID/DAG-CBOR manifests, not an IPFS daemon client. `content` adds the verified
+block protocol and memory store. `car` and `filesystem` independently add archive
+packaging and the plain filesystem store. `cache` and `s3` imply `content` because
+they address blocks by CID, but neither pulls in CAR or the plain filesystem
+provider. DataFusion's engine/output types remain usable without `ipfs`.
+
+Direct member-crate users explicitly select `mrr-data-core/ipfs`,
+`mrr-data-content/car`, `mrr-data-content/filesystem`, or
+`mrr-data-cache/kache,s3`. These member crates have empty defaults.
+
+## Snapshot publication and restoration
+
+Enable facade `snapshot,cache,s3` for `publish_snapshot` and `restore_snapshot`
+with Kache and S3; Arrow is still the sole default feature. Direct content-crate
+users select `snapshot`. CAR, the filesystem provider and Arrow are not dependencies
+of the coordinator. Arrow encoding/admission remain with the Arrow adapter.
+
+`SnapshotTransferLimits::new(root_bytes, blocks, block_bytes, total_bytes)` caps
+the root, unique block count including root, each child, and aggregate logical
+payload bytes including root. The first implementation is serial and captures the
+complete validated publication inventory before sending any remote write. It
+checks catalog bindings and shares its closure/CID/declared-length validator with
+CAR. Graph snapshots are rejected because their nested file inventory is not yet
+owned by this complete-publication path.
+
+All required children must be remotely acknowledged before root publication.
+`SnapshotPublication` exists only after root acknowledgement; it reports the root,
+logical bytes and per-block cache-admission outcomes. Failure does not roll back
+shared remote objects or an existing root. Retrying uses the existing immutable
+conditional block writes, including verification of already present blocks.
+
+`restore_snapshot` takes an explicit root CID and admitted catalogs. It reads and
+verifies the root and every declared child, then returns `RestoredSnapshot` with
+the canonical snapshot, owned child bytes and per-block provenance. Cache admission
+failure does not discard valid bytes. Failed restoration can leave verified blocks
+in cache, including the root; cached root presence never certifies snapshot closure.
+No mutable discovery pointer or new semantic generation is created.
+
+The runnable example uses real Arrow facts, coverage and lineage blocks and two
+independent Kache directories, with the same S3 configuration as `s3_cache`:
+
+```sh
+cargo run -p mrr-data-cache --features kache,s3,blocking --example s3_snapshot
+```
+
+Local S3 tests share that real-Arrow fixture and verify children-before-root order,
+failed child/root publication, missing-child recovery, exact fact/identity round
+trip, and zero remote GETs after reopening a warm cache. Unit tests additionally
+cover catalog/length/CID substitution, resource limits, graph rejection, failed
+cache admission and equivalence with CAR admission. The example is compiled by
+local checks; hosted-provider execution is not part of these test claims.
+
+### Controlled transfers
+
+Enable facade `transfer,cache,s3` to combine `TransferSession`, Kache and S3.
+Prefer the session's `publish_snapshot` and `restore_snapshot` methods: they
+apply both the whole-operation deadline/cancellation scope and the remote retry
+ledger. The clock starts when the session is created, including local staging,
+remote waits and backoff. Clones share counters, cancellation and deadline.
+`stats()` reports cumulative logical operations, charged bytes and automatic
+retries, including failed work; a cancelled session cannot be reused.
+
+One remote operation runs at a time per session. Every PUT attempt charges its
+full logical payload. GET attempts reserve their requested maximum; successful
+GETs refund unused bytes, while failed or cancelled GETs retain the reservation.
+A reservation can therefore reject a request even if the unknown object would
+have fit the remaining budget. Only unavailable/provider-timeout errors receive
+bounded automatic retries; permissions, integrity and conflict errors do not.
+This ledger counts protocol calls, not exact HTTP requests or wire traffic:
+provider-internal conditional verification requests and framing are excluded.
+Snapshot limits separately bound retained logical payload, not process RSS.
+
+`AsyncContentStore` keeps the synchronous store API usable through an inline
+adapter suitable for memory or an existing blocking context. Wrap disk stores in
+`BlockingContentStore` (`mrr-data-cache/blocking`) before using them on a Tokio
+executor. Its single worker permit is shared by clones and remains held inside
+the blocking task even if the awaiting future is cancelled. Disk effects may
+finish after cancellation, but additional disk jobs cannot accumulate behind a
+detached job. Synchronous CPU work cannot be forcibly preempted.
+
+Cancellation drops remote futures and returns no snapshot success receipt.
+An already dispatched write may still reach S3; cancellation does not establish
+absence. A fresh session revalidates the immutable inventory and acknowledges
+children again before publishing the same root. Local tests cover a fresh-session
+retry after a stalled S3 publication, cancellation during restore, cumulative
+retry budgets, cancellation during root publication and executor responsiveness
+with blocked disk I/O. A subprocess contract kills the publisher while root PUT
+is pending, reopens the persisted Kache directory in a new process without
+reseeding, re-acknowledges children and publishes the same root. Recovery then
+restores the same Arrow facts through an empty second cache. The parent bounds
+and reaps both processes, including failure paths. These are local wire tests;
+they do not claim hosted-provider or TLS/SigV4 authentication acceptance.
+
+
+### Concurrent consumer integration acceptance
+
+The adapter tests use upstream Kache locking, maintenance and entry removal;
+MRR Data adds no lock registry, eviction algorithm or background cache scheduler.
+Applications invoke `KacheContentStore::maintain` on their blocking execution
+boundary. The quota remains soft: upstream's recent-entry grace can retain a
+4 KiB block even with a one-byte quota.
+
+The reproducible cold/warm workload opens eight independent Kache handles on one
+directory: four requests for one CID and four for distinct CIDs (five objects,
+4 KiB each). A test-only remote barrier forces all eight cold misses to overlap.
+The baseline is eight GETs / 32 KiB of logical response payload. Reopening the
+handles and repeating the identical workload adds zero GETs, with eight local
+hits. This proves persistence and correctness, not cold-download coalescing or
+S3 wire-byte/performance results. Remote traffic remains observable and duplicate
+cold downloads are allowed by the base protocol.
+
+Additional contracts cancel a stalled reader before successfully reading the
+same and another CID; hold an upstream key lock to force a typed admission
+failure while preserving verified remote bytes; and run 32 upstream maintenance/
+removal iterations alongside 32 reads. Explicit upstream removal exercises
+missing entries without waiting out the 120-second grace period; it does not
+claim to accelerate or retest Kache's age-based eviction policy. A final warm
+reopen makes no remote request. Existing corruption tests continue to require
+explicit integrity errors.
+
+Run the cache integration slice without S3 dependencies:
+
+```sh
+cargo test -p mrr-data-cache --features kache,blocking local::acceptance --locked
+```
+
+
+### Independent SigV4 and TLS acceptance
+
+Run `python3 tools/s3-conformance/run.py` as described in the
+[conformance runner guide](../../tools/s3-conformance/README.md). It builds pinned
+upstream s3s-fs outside the workspace dependency graph and supplies a temporary
+loopback TLS terminator. Upstream s3s validates real signatures; the terminator
+only relays bytes. The ordinary fault fixture remains useful for deterministic
+failures and is not used as authentication evidence.
+
+Local acceptance on macOS ARM64 / Rust 1.95.0 passed on 2026-09-20: valid
+credentials, invalid access key/secret (GET and PUT), unknown CA, wrong hostname,
+namespace separation, conditional creation, repeated identical publication,
+corrupt-object non-overwrite, bounded reads and genuine Arrow snapshot cold
+restore. The server is s3s-fs 0.16.0 at the runner's pinned commit, built separately
+with Rust 1.96.0. The [receipt](s3-conformance-receipt.json) identifies that build.
+A dedicated Ubuntu/macOS CI job now invokes the same runner; remote CI results
+have not been observed.
+
+Deployment configuration stays outside immutable manifests:
+
+| Setting | Adapter / example configuration |
+|---|---|
+| Endpoint | `S3Config::endpoint` / `S3_ENDPOINT`; use the provider's HTTPS endpoint |
+| Bucket | `S3Config::bucket` / `S3_BUCKET`; provision it before running the adapter |
+| Region | `S3Config::region` / `S3_REGION`; use the signing region the provider requires |
+| Namespace | `S3Config::root` / optional `S3_ROOT`; objects are below `blocks/<CID>` |
+| Credentials | OpenDAL credential configuration or `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` |
+| Trust | Verified system trust by default; optional `S3_CA_PEM` adds a deployment CA |
+| Transfer controls | `TransferSession` limits, plus the adapter's per-operation deadline |
+
+No insecure TLS bypass is used. B2/R2-specific endpoints, credentials, mTLS and
+native server TLS were not exercised by this local test. Hosted smoke tests
+remain optional and require explicitly supplied deployment credentials.

@@ -1,0 +1,101 @@
+# POO Flow static-edge snapshot resource
+
+This is an opt-in consumer binding for POO Flow's existing Python
+`RuntimeGraphPlan`, `RuntimeGraphTool` and `RuntimeGraphToolNode` interfaces.
+The external Rust worker owns physical snapshot IO and invokes MRR for catalog,
+query and result admission. It does not schedule POO Flow work, authorize effects,
+or execute arbitrary GQL. No changes to a POO Flow shared checkout are needed.
+
+## Supported operation
+
+A runtime owner supplies an already projected plan and its source/revision.
+`publish(plan, source=..., revision=...)` projects its explicit static edges to a
+binary Entity relation, stores complete Arrow facts, and publishes the validated
+closure with the root acknowledged last. Conditional routes and duplicate or
+dangling edges are rejected rather than omitted. Isolated nodes are not edges;
+this profile is not a serialization of the entire executable plan.
+
+`query(root=..., source=..., revision=...)` restores that exact snapshot and runs
+the fixed all-static-edge-endpoints query. Generation, catalogs, semantic
+snapshot, coverage declaration, fact authority/validity and declared row counts
+must agree before the result goes through `admit_query_result_candidate`.
+Returned nodes retain their original MRR Entity IDs. The source owner supplies
+immutable revisions; the adapter does not discover a mutable latest version.
+
+The worker's JSON envelope carries data and operation selection, not a query
+language. It rejects unknown fields and profiles. A receipt binds the exact
+request bytes, root, source, revision, generation and producer. A publication
+receipt is physical; only a query receipt includes an MRR admission digest.
+These are trusted local-executable receipts, not signatures or an authorization
+for subsequent effects.
+
+## Runtime use
+
+Build explicitly (the crate has no default runtime dependencies):
+
+```sh
+cargo build -p mrr-data-poo-flow --features runtime --locked
+```
+
+Add this directory to the consumer's Python import path, alongside its existing
+POO Flow runtime installation. Supply runtime-owned S3 configuration through the
+worker environment: `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_ROOT`, AWS
+credentials, and optionally `S3_CA_PEM`. Keep credentials out of requests and
+receipts. The resource adds `MRR_CACHE_DIR` itself.
+
+```python
+from pathlib import Path
+from mrr_data_resource import MrrSnapshotResource
+
+# plan is an existing RuntimeGraphPlan projection; worker_env is runtime config.
+resource = MrrSnapshotResource(Path("target/debug/mrr-data-poo-flow"),
+                               Path(".cache/mrr"), worker_env)
+published = resource.publish(plan, source="my-workflow", revision=source_revision)
+tool = resource.query_tool(root=published.root, source="my-workflow",
+                           revision=source_revision)
+# Register tool in the existing POO Flow RuntimeGraphToolNode.
+```
+
+The query tool accepts no arguments: an Agent cannot replace its root, revision,
+credentials, cache path or executable. The runtime owner selects that scope.
+Every invocation starts a new Rust process. Persistence belongs to Kache, so
+worker exit/restart does not require a second journal or a reconstructed cache.
+The Python timeout terminates a late worker and never accepts a result from it;
+a completed remote immutable write may remain and can be retried normally.
+
+Limits: 1 MiB request/receipt, 1,024 static edges, 256 UTF-8 bytes per input label,
+32 MiB Kache capacity, 8 MiB per child and 16 MiB snapshot payload. Remote sessions
+allow 32 logical calls, 32 MiB charged bytes, two attempts per call and 30 seconds;
+the default outer process deadline is 40 seconds. Counters are logical operations
+and bytes, not S3 billing, exact wire traffic or process RSS.
+
+## Acceptance
+
+Install the test runtime dependencies in an isolated Python environment:
+
+```sh
+python3 -m pip install 'anyio==4.14.1' 'cffi==2.0.0' 'pyturso==0.6.1'
+python3 tools/s3-conformance/run.py --poo-flow --receipt /tmp/poo-mrr-receipt.json
+```
+
+The runner fetches clean POO Flow revision
+`7f60e82b609ed2227ce3e71d17c5a1a351902e54` and imports its real public tool API.
+It invokes the worker through `RuntimeGraphToolNode`, not a replacement test
+implementation. It compares local, cold, warm and reopened-cache results and
+MRR admission digests. Cold restore must issue remote reads; warm and reopened
+caches must issue zero remote operations. Each operation is already a separate
+process. This proves clean process restart; killed-during-publication recovery
+remains covered by the underlying cache/snapshot tests.
+
+Negative cases include stale generation, substituted source, tool scope
+replacement, duplicate edges, unavailable transport, process deadline and an
+independently corrupted S3 root. Unit tests additionally reject malformed
+receipts, unknown fields/profiles and mismatched fact contexts. CI runs this
+consumer on Ubuntu and macOS inside the existing S3 acceptance jobs, retaining
+its measurements in their source-bound artifacts.
+
+The initial measured scenario contains two static dependencies. Its latency
+samples are qualification observations, not throughput/P95 performance claims.
+Healthcare multi-hop/property GQL, conditional runtime routes, full executable
+plan restoration, native POO C ABI effects and hosted B2/R2 remain outside this
+consumer profile. They are not silently mapped onto the fixed static-edge query.

@@ -1,0 +1,2 @@
+# Preserve the required empty-context marker in unified diff artifacts.
+*.patch whitespace=-blank-at-eol

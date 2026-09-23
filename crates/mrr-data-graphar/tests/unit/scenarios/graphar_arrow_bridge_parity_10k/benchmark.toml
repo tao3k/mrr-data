@@ -1,0 +1,161 @@
+harness = "libtest"
+test = "scenario_semantically_reads_ten_thousand_graphar_edges"
+snapshot = "graphar_arrow_bridge_parity_10k"
+target_total = "300ms"
+max_total = "500ms"
+observed_total = "228051709ns"
+regression_budget = "100ms"
+memory_budget_bytes = 268435456
+observed_memory_bytes = 0
+target_rationale = "The reference phase uses alternating ABBA/BAAB execution on the same 10,000-edge fixture, requires the median paired sample to show at least five percent native Parquet offset savings, retains P95/P99 phase distributions, and separately bounds zero-copy Arrow C Stream import."
+
+[measurement]
+clock = "std::time::Instant"
+statistic = "p95"
+warmup_iterations = 2
+measure_iterations = 41
+total_p50 = "76788167ns"
+total_p95 = "228051709ns"
+total_p99 = "315112583ns"
+total_max = "315112583ns"
+
+[observed_timings]
+arrow_c_stream_import = "181041ns"
+graphar_edge_adjacency_read = "18321458ns"
+graphar_edge_bridge_overhead = "426626ns"
+graphar_edge_collection_lookup = "263167ns"
+graphar_edge_column_projection = "1166ns"
+graphar_edge_concatenate = "5125ns"
+graphar_edge_native_classified = "60601500ns"
+graphar_edge_native_read = "60602833ns"
+graphar_edge_native_unclassified = "1540ns"
+graphar_edge_property_read = "37435500ns"
+graphar_edge_reader_setup = "111625ns"
+graphar_edge_stream_export = "625ns"
+graphar_edge_table_assembly = "7208ns"
+graphar_storage_read = "60644834ns"
+official_arrow_edge_scan = "51581812ns"
+paired_native_budget_overrun = "26837167ns"
+paired_native_edge_read = "55504499ns"
+paired_native_time_saved = "36884437ns"
+rust_graphar_edge_read = "55562416ns"
+
+[phase_distributions.arrow_c_stream_import]
+p50 = "27750ns"
+p95 = "181041ns"
+p99 = "250500ns"
+max = "250500ns"
+
+[phase_distributions.graphar_edge_adjacency_read]
+p50 = "1533458ns"
+p95 = "18321458ns"
+p99 = "80391500ns"
+max = "80391500ns"
+
+[phase_distributions.graphar_edge_bridge_overhead]
+p50 = "27458ns"
+p95 = "426626ns"
+p99 = "14628333ns"
+max = "14628333ns"
+
+[phase_distributions.graphar_edge_collection_lookup]
+p50 = "68584ns"
+p95 = "263167ns"
+p99 = "1717459ns"
+max = "1717459ns"
+
+[phase_distributions.graphar_edge_column_projection]
+p50 = "583ns"
+p95 = "1166ns"
+p99 = "158125ns"
+max = "158125ns"
+
+[phase_distributions.graphar_edge_concatenate]
+p50 = "2125ns"
+p95 = "5125ns"
+p99 = "5542ns"
+max = "5542ns"
+
+[phase_distributions.graphar_edge_native_classified]
+p50 = "8327544ns"
+p95 = "60601500ns"
+p99 = "106537084ns"
+max = "106537084ns"
+
+[phase_distributions.graphar_edge_native_read]
+p50 = "8328750ns"
+p95 = "60602833ns"
+p99 = "106538333ns"
+max = "106538333ns"
+
+[phase_distributions.graphar_edge_native_unclassified]
+p50 = "1041ns"
+p95 = "1540ns"
+p99 = "1583ns"
+max = "1583ns"
+
+[phase_distributions.graphar_edge_property_read]
+p50 = "5901334ns"
+p95 = "37435500ns"
+p99 = "53635334ns"
+max = "53635334ns"
+
+[phase_distributions.graphar_edge_reader_setup]
+p50 = "47625ns"
+p95 = "111625ns"
+p99 = "208083ns"
+max = "208083ns"
+
+[phase_distributions.graphar_edge_stream_export]
+p50 = "209ns"
+p95 = "625ns"
+p99 = "708ns"
+max = "708ns"
+
+[phase_distributions.graphar_edge_table_assembly]
+p50 = "2583ns"
+p95 = "7208ns"
+p99 = "57625ns"
+max = "57625ns"
+
+[phase_distributions.graphar_storage_read]
+p50 = "8567250ns"
+p95 = "60644834ns"
+p99 = "106579583ns"
+max = "106579583ns"
+
+[phase_distributions.official_arrow_edge_scan]
+p50 = "9763625ns"
+p95 = "51581812ns"
+p99 = "59993979ns"
+max = "59993979ns"
+
+[phase_distributions.paired_native_budget_overrun]
+p50 = "0ns"
+p95 = "26837167ns"
+p99 = "50521967ns"
+max = "50521967ns"
+
+[phase_distributions.paired_native_edge_read]
+p50 = "8352250ns"
+p95 = "55504499ns"
+p99 = "90625708ns"
+max = "90625708ns"
+
+[phase_distributions.paired_native_time_saved]
+p50 = "650646ns"
+p95 = "36884437ns"
+p99 = "54433813ns"
+max = "54433813ns"
+
+[phase_distributions.rust_graphar_edge_read]
+p50 = "8394771ns"
+p95 = "55562416ns"
+p99 = "90783916ns"
+max = "90783916ns"
+
+[metrics.edge_count]
+unit = "count"
+kind = "exact"
+target = 10000
+observed = 10000

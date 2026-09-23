@@ -1,0 +1,202 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  msrv:
+    name: Rust 1.95 MSRV (ubuntu-24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.95.0
+      - name: Test workspace at the declared MSRV
+        run: cargo test --workspace --features mrr-data/transfer,mrr-data/car,mrr-data/filesystem,mrr-data/cache,mrr-data/s3 --locked
+
+  test:
+    name: Rust (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Test workspace
+        run: cargo test --workspace --features mrr-data/transfer,mrr-data/car,mrr-data/filesystem,mrr-data/cache,mrr-data/s3 --locked
+      - name: Check optional feature dependency isolation
+        run: python3 tools/check-features.py
+      - name: Check facade feature contract
+        run: |
+          cargo check -p mrr-data --locked
+          cargo check -p mrr-data --no-default-features --locked
+          cargo check -p mrr-data --no-default-features --features cache --locked
+          cargo check -p mrr-data --no-default-features --features s3 --locked
+          cargo check -p mrr-data --no-default-features --features cache,s3 --locked
+          cargo check -p mrr-data --no-default-features --features ipfs,graphar --locked
+          cargo test -p mrr-data --no-default-features --features datafusion --locked
+          cargo test -p mrr-data --no-default-features --locked
+          cargo test -p mrr-data --no-default-features --features ipfs,graphar --locked
+      - name: Check fuzz formatting
+        run: cargo fmt --manifest-path fuzz/Cargo.toml --all -- --check
+      - name: Compile IPC fuzz target
+        run: cargo check --manifest-path fuzz/Cargo.toml --locked
+      - name: Lint IPC fuzz target
+        run: cargo clippy --manifest-path fuzz/Cargo.toml --all-targets --locked -- -D warnings
+      - name: Lint workspace
+        run: cargo clippy --workspace --features mrr-data/transfer,mrr-data/car,mrr-data/filesystem,mrr-data/cache,mrr-data/s3 --all-targets --locked -- -D warnings
+
+  s3-conformance:
+    name: S3 SigV4 and TLS (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.95.0
+        with:
+          components: clippy
+      - name: Install compiler for the independent upstream test service
+        run: rustup toolchain install 1.96.0 --profile minimal
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install POO Flow runtime dependencies
+        run: python3 -m pip install 'anyio==4.14.1' 'cffi==2.0.0' 'pyturso==0.6.1'
+      - name: Test and lint the optional POO Flow resource
+        run: |
+          cargo test -p mrr-data-poo-flow --features runtime --locked
+          cargo clippy -p mrr-data-poo-flow --features runtime --all-targets --locked -- -D warnings
+      - name: Check conformance receipt freshness contracts
+        run: python3 tools/s3-conformance/test_runner.py
+      - name: Run local S3 authentication, TLS and snapshot conformance
+        env:
+          RUSTUP_TOOLCHAIN: 1.95.0
+        run: python3 tools/s3-conformance/run.py --poo-flow --receipt "$RUNNER_TEMP/s3-conformance-receipt.json"
+      - name: Summarize tested source and service
+        env:
+          RECEIPT_PATH: ${{ runner.temp }}/s3-conformance-receipt.json
+        run: |
+          python3 - <<'PYTHON'
+          import json, os
+          from pathlib import Path
+          receipt = json.loads(Path(os.environ["RECEIPT_PATH"]).read_text())
+          assert receipt["result"] == "passed"
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write("### Local S3 conformance passed\n\n```json\n")
+              summary.write(json.dumps(receipt, indent=2) + "\n```\n")
+          PYTHON
+      - name: Retain source-bound acceptance receipt
+        uses: actions/upload-artifact@v7
+        with:
+          name: s3-conformance-${{ matrix.os }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/s3-conformance-receipt.json
+          if-no-files-found: error
+          retention-days: 14
+
+  m4-acceptance:
+    name: M4 acceptance
+    if: ${{ always() }}
+    needs: [msrv, test, s3-conformance]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every M4 prerequisite to succeed
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PYTHON'
+          import json, os
+          results = json.loads(os.environ["NEEDS_JSON"])
+          expected = {"msrv", "test", "s3-conformance"}
+          assert set(results) == expected, "missing M4 prerequisite"
+          failures = {name: job["result"] for name, job in results.items() if job["result"] != "success"}
+          assert not failures, f"M4 acceptance incomplete: {failures}"
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write("M4 acceptance passed: MSRV, workspace/feature checks and independent S3/TLS on Ubuntu and macOS.\n")
+          PYTHON
+
+  fuzz:
+    name: Arrow IPC fuzz (ubuntu-24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@nightly
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --version 0.13.2 --locked
+      - name: Run bounded ASan IPC campaign
+        run: cargo fuzz run ipc_import fuzz/corpus/ipc_import -- -runs=10000 -max_len=65536
+
+  graphar:
+    name: Maintained GraphAr (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
+      - name: Install Arrow C++
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            wget -c "https://apache.jfrog.io/artifactory/arrow/$(lsb_release --id --short | tr 'A-Z' 'a-z')/apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb" -P /tmp/
+            sudo apt-get install -y "/tmp/apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb"
+            sudo apt-get update -y
+            sudo apt-get install -y libarrow-dev libarrow-dataset-dev libarrow-acero-dev libarrow-compute-dev libparquet-dev
+          else
+            brew install apache-arrow
+            arrow_prefix="$(brew --prefix apache-arrow)"
+            echo "PKG_CONFIG_PATH=$arrow_prefix/lib/pkgconfig" >> "$GITHUB_ENV"
+            echo "CMAKE_PREFIX_PATH=$arrow_prefix" >> "$GITHUB_ENV"
+            echo "DYLD_FALLBACK_LIBRARY_PATH=$arrow_prefix/lib" >> "$GITHUB_ENV"
+            echo "CXXFLAGS=-I$arrow_prefix/include -Wno-error=deprecated-declarations -Wno-error=macro-redefined" >> "$GITHUB_ENV"
+          fi
+      - name: Test maintained GraphAr round-trip
+        run: cargo test -p mrr-data-graphar --features native-graphar --locked
+      - name: Verify GraphAr Arrow performance parity
+        run: >-
+          cargo test -p mrr-data-graphar --features native-graphar --locked
+          scenario_semantically_reads_ten_thousand_graphar_edges --
+          --ignored --nocapture
+      - name: Check facade GraphAr native feature
+        run: |
+          cargo check -p mrr-data --no-default-features --features graphar-native --locked
+          cargo check -p mrr-data --no-default-features --features ipfs,graphar-native --locked
+      - name: Lint maintained GraphAr adapter
+        run: cargo clippy -p mrr-data-graphar --all-targets --features native-graphar --locked -- -D warnings
