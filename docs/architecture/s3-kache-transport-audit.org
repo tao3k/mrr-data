@@ -30,7 +30,7 @@ Final local evidence (macOS ARM64, workspace Rust 1.95.0):
 - Full-feature/all-target Clippy with warnings denied, Rust formatting and diff
   whitespace checks: passed.
 
-[[file:s3-conformance-receipt.json][Source-bound conformance receipt]] records the
+[[file:../../evidence/s3-conformance-receipt.json][Source-bound conformance receipt]] records the
 workspace code fingerprint and exact upstream test server revision/build hash.
 The fingerprint includes tracked and untracked =.rs=, =.toml=, =.lock=, =.py= and
 =.yml=, =.patch= and =.gitattributes= files reported by Git, excluding ignored build outputs. It is a source

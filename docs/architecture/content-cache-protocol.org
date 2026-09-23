@@ -248,7 +248,7 @@ credentials, invalid access key/secret (GET and PUT), unknown CA, wrong hostname
 namespace separation, conditional creation, repeated identical publication,
 corrupt-object non-overwrite, bounded reads and genuine Arrow snapshot cold
 restore. The server is s3s-fs 0.16.0 at the runner's pinned commit, built separately
-with Rust 1.96.0. The [[file:s3-conformance-receipt.json][receipt]] identifies that build.
+with Rust 1.96.0. The [[file:../../evidence/s3-conformance-receipt.json][receipt]] identifies that build.
 A dedicated Ubuntu/macOS CI job now invokes the same runner; remote CI results
 have not been observed.
 

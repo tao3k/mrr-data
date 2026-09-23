@@ -29,7 +29,7 @@ or an authorization to execute the graph's effects.
 
 * Local evidence
 
-[[file:poo-flow-consumer-receipt.json][Source-bound receipt]] records the source digest,
+[[file:../../evidence/poo-flow-consumer-receipt.json][Source-bound receipt]] records the source digest,
 upstream S3 service and patch, POO Flow revision and worker binary hash.
 POO Flow revision is =7f60e82b609ed2227ce3e71d17c5a1a351902e54=, fetched from the
 public repository; the tool implementation matches the active sibling checkout

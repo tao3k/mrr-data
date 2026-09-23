@@ -69,9 +69,9 @@ source-bound receipt to the job summary and retains the JSON as an Actions
 artifact for 14 days; a missing receipt fails the upload step. Only the receipt
 is retained, not temporary credentials, CA keys or object data.
 
-`M4 acceptance` aggregates the MSRV, workspace/feature and independent S3 jobs.
+`Snapshot distribution acceptance` aggregates the MSRV, workspace/feature and independent S3 jobs.
 It runs even when a prerequisite fails and rejects failed, cancelled or skipped
 prerequisites. This is the stable check name to select if branch protection
-requires the M4 gate; this change does not modify repository protection rules.
+requires the snapshot distribution gate; this change does not modify repository protection rules.
 Existing fuzz and native GraphAr jobs remain separate required work for their
 respective scopes. A local pass does not establish that a GitHub run passed.

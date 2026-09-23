@@ -5,16 +5,16 @@
 
 * Status and ownership
 
-This RFC is the canonical design source for =mrr-data=.  It is a proposal, not
-a claim that the complete plane is implemented.  The current M0 through M2
-executable slices prove relation-specific complete-Fact Arrow and bounded IPC
+This RFC is the canonical design source for =mrr-data=. It does not claim that
+the complete plane is implemented. The Arrow interchange, snapshot identity,
+and local CID/CAR packaging slices prove complete-Fact Arrow and bounded IPC
 round trips, canonical snapshot identity, and verified local CARv1 packaging.
 Property tests, typed resource-budget failures, malformed corpora, an IPC fuzz
 target, and a 512-extra-block content-import scenario guard the import
-boundaries.  The M4 single-block Kache/S3 protocol is implemented and locally
-validated. Snapshot publication/cold restore, whole-operation interruption and
+boundaries. The single-block Kache/S3 content protocol is implemented and locally
+validated. Snapshot publication and cold restore, whole-operation interruption and
 resource accounting, Kache integration acceptance and independent local
-SigV4/TLS conformance have local evidence recorded under M4. Final remote
+SigV4/TLS conformance have local evidence for snapshot distribution. Final remote
 acceptance of revision =3715d0a= passed all nine jobs, including both platforms;
 see =s3-kache-transport-audit.org= for the exact revision, run and receipt fingerprints.
 This does not establish a POO Flow consumer integration. The upstream
@@ -315,7 +315,7 @@ owners admit it through =admit_query_result_candidate=.  This protocol is
 implemented.  The first opt-in engine adapter lowers the admitted single-hop
 binary-Entity slice directly to DataFusion expressions without reparsing SQL.
 It owns no async runtime and rejects every undeclared shape before execution;
-general query execution remains a later engine-specific milestone.
+general query execution remains a later engine-specific feature.
 
 The native GraphAr contract suite covers the first differential engine slice.
 It sends the same admitted binary-Entity facts through an Arrow =RecordBatch=
@@ -492,10 +492,10 @@ Object-store, IPLD-model, or provider crates are split only when their API and
 dependency boundaries become independently useful.  There is no =mrr-ipfs=
 crate in V1.
 
-* Delivery milestones and proof obligations
+* Implemented features and proof obligations
 
-Milestone numbers record implementation and proof dependencies; they are not a
-product-priority ranking.  The active priority is Arrow-first:
+The feature records below retain implementation and proof dependencies. The
+active priority is Arrow-first:
 
 1. keep the public facade's default dependency graph limited to Arrow and the
    dependency-light profile crate;
@@ -506,17 +506,17 @@ product-priority ranking.  The active priority is Arrow-first:
 6. defer remote distribution, including IPFS, until a concrete requirement and
    scenario justify it.
 
-** M0: lossless Arrow interchange
+** Lossless Arrow interchange
 
 Implementation status: the recursive V1 mapping, complete-Fact round trips,
-bounded IPC import, property contracts, and fuzz target are implemented.  M0
-also provides the public facade's default feature.  Its normal dependency graph
+bounded IPC import, property contracts, and fuzz target are implemented. Arrow
+interchange also provides the public facade's default feature. Its normal dependency graph
 does not import CID, DAG-CBOR, CAR, or GraphAr.  Native projection uses borrowed
 values and capacity-sized Arrow builders; reconstruction prepares one typed
 decoder tree per batch.  A 10,000-complete-Fact Scenario guards this path
-without introducing a C Data or C Stream boundary.  M0 is accepted only after
-the current-head CI and review receipts are green; this status does not advance
-the later data-plane milestones.
+without introducing a C Data or C Stream boundary. Arrow interchange is accepted
+only after the current-head CI and review receipts are green; this status does not advance
+the later data-plane capabilities.
 
 - define every supported MRR value mapping;
 - property-test =Fact -> RecordBatch -> Fact=;
@@ -525,13 +525,13 @@ the later data-plane milestones.
 - reject unsupported or ambiguous schemas rather than coercing them;
 - fuzz untrusted IPC validation.
 
-** M1: identity and manifest
+** Snapshot identity and manifest
 
 Implementation status: canonical manifest admission, MRR catalog/source
 binding, deterministic DAG-CBOR, frozen CID profiles, typed negative contracts,
 and a golden root vector are implemented.  This capability is retained behind
 the facade's explicit =ipfs= feature; it is not part of the default Arrow
-dependency graph.  M1 is accepted only after the current-head CI and review
+dependency graph. Snapshot identity is accepted only after the current-head CI and review
 receipts are green.
 
 - freeze namespace =mrr.data.snapshot= at schema version =1= only after the
@@ -540,7 +540,7 @@ receipts are green.
 - reject unknown schema versions, algorithms, codecs, and self-inconsistent
   child descriptors.
 
-** M2: local content-addressed packaging
+** Local CID/CAR packaging
 
 Implementation status: memory and filesystem stores, upstream CARv1
 read/write, full CID/root/referenced-child verification, exact catalog checks,
@@ -548,9 +548,9 @@ pre-allocation frame-budget admission, typed import failures,
 validation-before-commit, repacking invariance, and the 512-extra-block
 performance scenario are implemented.  This local packaging capability is
 split across the facade's explicit =content=, =car=, and =filesystem= features.
-It supplies the local verification foundation for the current M4 distribution
-work.  M2 is
-accepted only after current-head CI and review receipts are green.
+It supplies the local verification foundation for snapshot distribution.
+Local CID/CAR packaging is accepted only after current-head CI and review
+receipts are green.
 
 - implement memory and filesystem =ContentStore=;
 - write/read CAR with full root and child verification;
@@ -559,7 +559,7 @@ accepted only after current-head CI and review receipts are green.
 - demonstrate identical semantic data can have distinct physical CIDs without
   changing =GenerationId=.
 
-** M3: GraphAr specialization
+** GraphAr projection
 
 Implementation status: the first admission slice is implemented in
 =mrr-data-graphar=.  It admits exactly two ordered, non-null =Entity= fields,
@@ -623,7 +623,7 @@ evidence for this revision and host only, not universal throughput claims.
   profile exists;
 - run differential read scenarios against the maintained GraphAr implementation.
 
-** M4: controlled distribution — active delivery plan
+** Controlled snapshot distribution
 
 Updated 2026-09-20 after the local S3/Kache audit and snapshot acceptance. This section owns the execution
 order and acceptance gates; the protocol document owns API behavior and the
@@ -635,7 +635,7 @@ root, declared child closure, catalog bindings, and original semantic generation
 Repeat reads must use verified local content. No provider purchase or hosted
 bucket is needed to establish this local acceptance result.
 
-*** M4.0: single-block foundation — implemented, local evidence recorded
+*** Single-block content protocol — implemented, local evidence recorded
 
 Owners: =mrr-data-content= protocol, =mrr-data-cache= adapters, facade feature
 composition and CI. The implementations reuse Kache for local mechanisms and
@@ -651,7 +651,7 @@ Recorded local baseline: 95 workspace tests passed, one subprocess helper
 ignored and exercised by its parent; Clippy and 14 feature checks passed. This is
 not a claim of remote CI, hosted S3 acceptance, or complete snapshot distribution.
 
-*** M4.1: validated snapshot publication — implemented, local acceptance
+*** Validated snapshot publication — implemented, local acceptance
 
 Owner: =mrr-data-content= snapshot coordination above the existing store traits.
 The S3 adapter stays a block transport. Snapshot operations must work without
@@ -682,7 +682,7 @@ new root publication and produces no snapshot success receipt; root PUT failure
 also produces no receipt; retry converges to the same root without overwriting
 other content. Record object-operation order in the local fixture.
 
-*** M4.2: bounded cold restore — implemented, local acceptance
+*** Bounded cold snapshot restore — implemented, local acceptance
 
 Owner: =mrr-data-content= restore coordination; existing core/MRR admission keeps
 ownership of manifest and catalog validation.
@@ -705,7 +705,8 @@ validated snapshot -> Arrow round trip. Warm and reopened reads make zero remote
 GETs. Missing/corrupt children, substituted roots, wrong catalogs and length
 mismatches return typed failure and never a restored-snapshot receipt.
 
-M4.1 and M4.2 now form one locally implemented delivery behind the independent
+Snapshot publication and cold snapshot restore now form one locally implemented
+delivery behind the independent
 =snapshot= feature. Shared closure validation is used by CAR and transfer APIs;
 =publish_snapshot= and =restore_snapshot= use existing local/remote traits.
 The production Kache/S3 scenario transfers real Arrow IPC, coverage and lineage,
@@ -713,15 +714,17 @@ then reconstructs facts in a second cache and after reopening it. The
 =s3_snapshot= example compiles against the same shared fixture. Local acceptance on macOS/Rust 1.95.0 records 107 passing workspace tests,
 one subprocess helper ignored and exercised by its parent, workspace Clippy,
 and all 16 feature dependency/compile checks. Both S3 examples compile. Remote
-CI has not been observed for these changes; this does not close M4.3-M4.5.
+At that local checkpoint, CI had not been observed; bounded transfer, Kache
+integration and S3/TLS conformance had separate acceptance gates.
 
 The delivery evidence includes the
 public API, a runnable two-cache example, positive and negative tests, feature
 isolation, and Ubuntu/macOS CI status separately from local results.
 
-*** M4.3: interruption, retries and whole-transfer resource bounds — closed, local acceptance
+*** Bounded transfer and cancellation — closed, local acceptance
 
-Depends on the M4.1/M4.2 round trip. Owner: snapshot coordination and its tests.
+Depends on the snapshot publication/cold restore round trip. Owner: snapshot
+coordination and its tests.
 
 - Add limits for block count, per-block bytes, total declared/received bytes,
   in-flight bytes and concurrent requests. Start serial if needed; parallelism
@@ -762,11 +765,11 @@ identical Arrow facts through an empty second cache. The server verifies the
 same root bytes and child-before-root request order. Test subprocesses are reaped
 on error paths and bounded by a parent-side timeout.
 
-M4.3 is closed for this local acceptance scope. Remote CI and real TLS/SigV4
+Bounded transfer is closed for this local acceptance scope. Remote CI and real TLS/SigV4
 server authentication are not claimed; concurrent Agent workloads and deployment
-acceptance remain M4.4 and M4.5 respectively.
+acceptance remain Kache concurrent integration and S3/TLS conformance respectively.
 
-*** M4.4: Kache integration acceptance under concurrent consumers — closed, local acceptance
+*** Kache integration under concurrent consumers — closed, local acceptance
 
 Depends on a bounded correct transfer. This is adapter acceptance, not a new
 cache engine or an independent Agent cache subsystem. Kache owns key locking,
@@ -805,12 +808,13 @@ production grace policy. Existing integrity tests remain in the full suite.
 No production cache mechanism was added or replaced.
 
 Full local regression: 123 tests pass, 2 subprocess helpers ignored by ordinary
-discovery; 18 feature isolation cases and full-feature Clippy pass. M4.4 is
-closed within this adapter scope. M4.5 and remote CI remain separate acceptance.
+discovery; 18 feature isolation cases and full-feature Clippy pass. Kache
+integration is closed within this adapter scope. S3/TLS conformance and remote
+CI remain separate acceptance.
 
-*** M4.5: local S3/TLS conformance and deployment configuration — closed, local acceptance
+*** S3/TLS conformance and deployment configuration — closed, local acceptance
 
-The local conformance work can proceed after M4.2 without waiting for performance
+The local conformance work can proceed after cold snapshot restore without waiting for performance
 work. Owner: S3 adapter integration tests; credentials and certificates stay out
 of immutable manifests and diagnostic error bodies.
 
@@ -837,7 +841,7 @@ conditional creation, idempotent publication, corrupt-object non-overwrite,
 bounded reads and genuine Arrow snapshot cold restore through Kache.
 
 The reproducible =tools/s3-conformance/run.py= isolates the server build and
-records its binary hash; see =docs/architecture/s3-conformance-receipt.json=.
+records its binary hash; see [[file:../../evidence/s3-conformance-receipt.json][the conformance receipt]].
 The test server uses Rust 1.96.0; MRR Data stays at Rust 1.95.0. No default
 feature or production dependency changed. A dedicated Ubuntu/macOS CI job runs
 this conformance gate, but its remote execution has not been observed.
@@ -845,11 +849,12 @@ this conformance gate, but its remote execution has not been observed.
 Final local regression: 123 workspace tests pass; the 3 ordinary ignored entries
 are 2 subprocess helpers invoked by parent tests and the independently executed
 S3/TLS conformance test (1 passed). All 18 feature isolation cases, full-feature
-Clippy, Rust formatting and diff whitespace checks pass. M4.0-M4.5 are closed
-within their documented local scope. This is not B2/R2 hosted acceptance, native
+Clippy, Rust formatting and diff whitespace checks pass. The content protocol,
+snapshot publication and restore, bounded transfer, Kache integration and
+S3/TLS conformance are closed within their documented local scope. This is not B2/R2 hosted acceptance, native
 server TLS/mTLS qualification, or proof of remote CI completion.
 
-*** M4 closure audit — corrections verified
+*** Snapshot distribution audit — corrections verified
 
 The 2026-09-20 audit reviewed snapshot preflight/root ordering, read verification,
 resource and retry accounting, cancellation/blocking ownership, feature isolation,
@@ -874,13 +879,15 @@ not substitute for that final-revision record. Warning remediation adds a
 reviewed dead-code-only upstream service patch with an explicit receipt hash,
 compiles that service with =-D warnings=, and fixes the Ubuntu runner to 24.04.
 
-Plan audit (2026-09-20): M4 implementation and local acceptance are complete;
+Plan audit (2026-09-20): snapshot distribution implementation and local
+acceptance are complete;
 the active work is delivery of the exact tested source, not another cache or
 transport feature. Earlier per-slice test totals are historical evidence, not
-additional unfinished milestones. Execute the following as one delivery batch.
+additional unfinished features. Execute the following as one delivery batch.
 
 1. Review the complete working tree, including staged, unstaged and untracked
-   files. Inventory the owned M4 change set; ensure the new transfer/blocking
+   files. Inventory the owned snapshot distribution change set; ensure the new
+   transfer/blocking
    modules, subprocess tests, independent server runner and workflow are all
    included. Preserve unrelated changes and existing upstream experiments.
    Review the final diff against HEAD, not only against the staging area.
@@ -889,10 +896,10 @@ additional unfinished milestones. Execute the following as one delivery batch.
    Configuring or pushing a workflow alone does not establish that the remote
    has tested the current implementation.
 3. Run the configured workflow on that revision and resolve failures to closure.
-   Require =M4 acceptance= plus the repository's other required checks. The M4
-   aggregate covers MSRV, workspace/feature checks and independent S3/TLS on
+   Require =Snapshot distribution acceptance= plus the repository's other
+   required checks. The aggregate covers MSRV, workspace/feature checks and independent S3/TLS on
    Ubuntu/macOS; fuzz and native GraphAr are separate jobs and must not be
-   silently treated as covered by the M4 aggregate. Record actual outcomes.
+   silently treated as covered by the snapshot distribution aggregate. Record actual outcomes.
 4. Review both platform receipts and check their source fingerprint against the
    tested revision. Missing/failed/cancelled/skipped checks are not success.
    Update the acceptance record with the PR, tested revision and CI run URLs.
@@ -904,12 +911,12 @@ Exit: a reviewable delivered revision, passing required remote checks, and
 source-matched Ubuntu/macOS conformance receipts. Do not repeatedly rerun local
 checks without a code change, failure or new unresolved concern.
 
-The identified consumer is now POO Flow. M5.0 below closes its bounded static-edge
-resource path; M5.1 is the next functional batch for the existing Healthcare
-query consumer. Physical restore must preserve semantic generation without
+The identified consumer is now POO Flow. Its static-edge resource closes a
+bounded runtime path; the Healthcare property-path query is the next batch for
+the existing reasoning consumer. Physical restore must preserve semantic generation without
 replacing MRR admission. Standalone examples are not consumer acceptance.
 
-*** POO Flow — pre-M5.0 entry-point audit (2026-09-20)
+*** POO Flow entry-point audit (2026-09-20)
 
 The user selected POO Flow's MRR consumption path on 2026-09-20. Inspection of
 the current sibling checkout found that the Healthcare ontology query owner is
@@ -949,10 +956,10 @@ reduce the query or manufacture a result receipt to make integration pass.
 The sibling POO Flow checkout contains unrelated active edits. Any consumer
 implementation must preserve those changes and explicitly own its new files.
 This historical entry-point audit did not establish consumer integration. The
-subsequent M5.0 acceptance below closes the static-edge profile only; Healthcare
+subsequent static-edge resource acceptance below closes that profile only; Healthcare
 execution and hosted-provider qualification remain outside that result.
 
-*** M5.0: POO Flow static-edge resource — accepted
+*** POO Flow static-edge resource — accepted
 
 The first concrete consumer uses the existing Python =RuntimeGraphPlan= and
 =RuntimeGraphToolNode= boundary. Its fixed =poo-flow.static-edges.v1= profile
@@ -991,7 +998,7 @@ See =poo-flow-consumer-audit.org= for the fingerprint and observed counters.
 [[https://github.com/tao3k/mrr-data/pull/1][PR #1]] remains open; acceptance is not
 merge or release publication. This source revision is the baseline for M5.1.
 
-*** M5.1: existing Healthcare query — next complete implementation batch
+*** Healthcare case-profile property-path query
 
 Deliver the original =case-profile-relations.gql= through the actual POO Flow
 reasoning consumer, from its authoritative projection to an MRR-admitted result:
@@ -1062,14 +1069,15 @@ Exit gates for this batch:
   reject over-budget work explicitly. Report process startup separately from
   execution, with remote operations/bytes and dataset cardinalities. Choose and
   record representative sizes from the actual producer before measuring; do not
-  infer scalability from the two-edge M5.0 fixture.
+  infer scalability from the two-edge POO Flow static-edge resource fixture.
 - Keep Arrow as the only facade default. Cache, S3, IPFS, GraphAr and the consumer
   runtime remain optional; feature-isolation checks, workspace tests, Clippy
   =-D warnings= and the existing nine CI checks pass at the delivered revision.
 
-*** M5.2: reuse the admitted path and qualify the real workload
+*** Reuse of the admitted Healthcare query path
 
-After M5.1, run the existing =profile-impact.gql= through the same two-hop/property
+After the case-profile query, run =profile-impact.gql= through the same
+two-hop/property
 capabilities, then =prescription-causal-trajectory.gql= through its actual event
 projection. Audit each catalog and source owner before claiming reuse; an event
 relation query does not by itself qualify causal inference. Retain original query
@@ -1088,9 +1096,11 @@ real deployment supplies its configuration and credentials.
 
 *** Completion boundary and work held outside this sequence
 
-The initial distribution slice is complete at M4.2, with its executable receipts;
-M4.3-M4.5 qualify bounded operation, concurrent workloads and deployment behavior.
-Do not label the entire M4 effort complete from single-block or partial evidence.
+The initial distribution slice includes cold snapshot restore with executable
+receipts. Bounded transfer, Kache integration and S3/TLS conformance qualify
+bounded operation, concurrent workloads and deployment behavior.
+Do not label the entire snapshot distribution effort complete from single-block
+or partial evidence.
 
 Mutable discovery pointers, distributed heads, cross-object transactions, remote
 GC, IPFS network transport, S2 streams, and graph-native selective/range reads
@@ -1098,7 +1108,7 @@ require separate concrete consumers and ownership decisions. They are not hidden
 prerequisites for publishing and restoring an explicitly addressed Arrow snapshot.
 
 
-Every milestone needs positive round trips, typed negative contracts,
+Every feature needs positive round trips, typed negative contracts,
 determinism receipts, and performance scenarios.  A passing parser, a matching
 CID, or a readable GraphAr dataset alone is not semantic closure.
 
