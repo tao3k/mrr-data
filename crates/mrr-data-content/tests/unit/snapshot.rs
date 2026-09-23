@@ -103,6 +103,81 @@ async fn snapshot_roundtrip_preserves_identity_and_publishes_root_last() {
 }
 
 #[tokio::test]
+async fn property_snapshot_publishes_and_restores_entity_child_with_cold_warm_parity() {
+    let (snapshot, children, relations, entities) = fixture_with(FixtureMode::Property);
+    let property_cid = mrr_data_core::raw_cid(b"entity-property-batch");
+    assert!(
+        snapshot
+            .manifest()
+            .referenced_cids()
+            .contains(&property_cid)
+    );
+    let remote = Remote::default();
+    let publication = publish_snapshot(
+        &local(&children),
+        &remote,
+        &snapshot,
+        &relations,
+        &entities,
+        limits(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(publication.root(), snapshot.cid());
+    let target = MemoryContentStore::default();
+    let cold = restore_snapshot(
+        &target,
+        &remote,
+        snapshot.cid(),
+        &relations,
+        &entities,
+        limits(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(cold.children()[&property_cid], b"entity-property-batch");
+    let warm = restore_snapshot(
+        &target,
+        &remote,
+        snapshot.cid(),
+        &relations,
+        &entities,
+        limits(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(warm.snapshot(), cold.snapshot());
+    assert_eq!(
+        warm.children()[&property_cid],
+        cold.children()[&property_cid]
+    );
+    assert!(
+        warm.sources()
+            .values()
+            .all(|source| *source == ContentSource::Local)
+    );
+}
+
+#[tokio::test]
+async fn property_snapshot_rejects_wrong_entity_child_length_before_remote_write() {
+    let (snapshot, children, relations, entities) = fixture_with(FixtureMode::WrongPropertyLength);
+    let remote = Remote::default();
+    assert!(
+        publish_snapshot(
+            &local(&children),
+            &remote,
+            &snapshot,
+            &relations,
+            &entities,
+            limits(),
+        )
+        .await
+        .is_err()
+    );
+    assert!(remote.writes.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn incomplete_local_closure_and_budgets_cause_zero_remote_writes() {
     let (snapshot, children, relations, entities) = snapshot_fixture();
     let remote = Remote::default();
@@ -322,9 +397,18 @@ type SnapshotFixture = (
     meta_relational_reasoning::EntityCatalog,
 );
 pub(super) fn snapshot_fixture() -> SnapshotFixture {
-    fixture_with(false, false)
+    fixture_with(FixtureMode::Default)
 }
-fn fixture_with(wrong_length: bool, graph: bool) -> SnapshotFixture {
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FixtureMode {
+    Default,
+    WrongRelationLength,
+    Graph,
+    Property,
+    WrongPropertyLength,
+}
+
+fn fixture_with(mode: FixtureMode) -> SnapshotFixture {
     use meta_relational_reasoning::{
         EntityCatalog, EntityId, EntitySchema, ExternalRevisionIdentity, GenerationId,
         RelationCatalog, RelationField, RelationId, RelationSchema, RevisionBinding,
@@ -380,7 +464,7 @@ fn fixture_with(wrong_length: bool, graph: bool) -> SnapshotFixture {
                     BatchDescriptor::new(
                         raw_cid(data),
                         1,
-                        data.len() as u64 + u64::from(wrong_length),
+                        data.len() as u64 + u64::from(mode == FixtureMode::WrongRelationLength),
                     )
                     .unwrap(),
                 ],
@@ -389,27 +473,65 @@ fn fixture_with(wrong_length: bool, graph: bool) -> SnapshotFixture {
         ],
         CoverageDescriptor::new(CoverageKind::Complete, raw_cid(coverage)).unwrap(),
     );
-    if graph {
+    if mode == FixtureMode::Graph {
         request = request.with_graph_projection(
             mrr_data_core::GraphProjectionDescriptor::new("1", raw_cid(b"graph manifest")).unwrap(),
         );
     }
+    let property_data = b"entity-property-batch";
+    if matches!(
+        mode,
+        FixtureMode::Property | FixtureMode::WrongPropertyLength
+    ) {
+        request = request.with_entities(vec![property_descriptor(
+            entities.entities()[0].clone(),
+            mode == FixtureMode::WrongPropertyLength,
+        )]);
+    }
     let manifest = SnapshotManifest::admit(request).unwrap();
+    let mut children = vec![
+        ContentBlock::new(ContentCodec::Raw, data),
+        ContentBlock::new(ContentCodec::Raw, coverage),
+    ];
+    if matches!(
+        mode,
+        FixtureMode::Property | FixtureMode::WrongPropertyLength
+    ) {
+        children.push(ContentBlock::new(ContentCodec::Raw, property_data));
+    }
     (
         SnapshotBlock::encode(manifest).unwrap(),
-        vec![
-            ContentBlock::new(ContentCodec::Raw, data),
-            ContentBlock::new(ContentCodec::Raw, coverage),
-        ],
+        children,
         relations,
         entities,
     )
 }
 
+fn property_descriptor(
+    schema: meta_relational_reasoning::EntitySchema,
+    wrong_length: bool,
+) -> mrr_data_core::EntityDescriptor {
+    use mrr_data_core::{BatchDescriptor, EntityDescriptor, raw_cid};
+    let property_data = b"entity-property-batch";
+    EntityDescriptor::new(
+        schema,
+        1,
+        vec![
+            BatchDescriptor::new(
+                raw_cid(property_data),
+                1,
+                property_data.len() as u64 + u64::from(wrong_length),
+            )
+            .unwrap(),
+        ],
+    )
+    .unwrap()
+}
+
 #[tokio::test]
 async fn unsupported_graphs_and_wrong_declared_lengths_fail_closed() {
-    for (wrong_length, graph) in [(true, false), (false, true)] {
-        let (snapshot, children, relations, entities) = fixture_with(wrong_length, graph);
+    for mode in [FixtureMode::WrongRelationLength, FixtureMode::Graph] {
+        let (snapshot, children, relations, entities) = fixture_with(mode);
         let remote = Remote::default();
         let result = publish_snapshot(
             &local(&children),
@@ -420,7 +542,7 @@ async fn unsupported_graphs_and_wrong_declared_lengths_fail_closed() {
             limits(),
         )
         .await;
-        if graph {
+        if mode == FixtureMode::Graph {
             assert_eq!(
                 result.unwrap_err(),
                 SnapshotTransferError::UnsupportedGraphProjection

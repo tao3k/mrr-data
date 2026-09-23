@@ -4,6 +4,8 @@
 pub const SNAPSHOT_SCHEMA_NAMESPACE: &str = "mrr.data.snapshot";
 /// First admitted version of the content snapshot schema.
 pub const SNAPSHOT_SCHEMA_VERSION: u64 = 1;
+/// Property-bearing snapshot version; V1 relation-only roots remain readable.
+pub const PROPERTY_SNAPSHOT_SCHEMA_VERSION: u64 = 2;
 /// Stable namespace for Arrow fact-batch schemas.
 pub const ARROW_FACT_SCHEMA_NAMESPACE: &str = "mrr.data.arrow.fact-batch";
 /// First admitted Arrow fact-batch schema version.

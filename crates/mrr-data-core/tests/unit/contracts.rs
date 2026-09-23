@@ -16,9 +16,10 @@ use multihash_codetable::{Code, MultihashDigest};
 use crate::{
     BatchDescriptor, CoverageDescriptor, CoverageKind, DAG_CBOR_CODEC, DataEngineProfile,
     DataError, DataGraphSourceBindingError, DataQueryBindingError, DataQueryFeature,
-    DataQueryOutputError, GraphProjectionDescriptor, PhysicalQueryOutput, RAW_CODEC,
-    RelationDescriptor, SnapshotBlock, SnapshotManifest, SnapshotManifestRequest,
-    admit_graph_projection_source, bind_data_query, project_data_query_output, raw_cid,
+    DataQueryOutputError, EntityDescriptor, GraphProjectionDescriptor,
+    PROPERTY_SNAPSHOT_SCHEMA_VERSION, PhysicalQueryOutput, RAW_CODEC, RelationDescriptor,
+    SnapshotBlock, SnapshotManifest, SnapshotManifestRequest, admit_graph_projection_source,
+    bind_data_query, project_data_query_output, raw_cid,
 };
 
 fn relation_id(name: &str) -> RelationId {
@@ -82,6 +83,95 @@ fn descriptor(name: &str, payload: &[u8], rows: u64) -> RelationDescriptor {
 
 fn manifest(reverse: bool) -> SnapshotManifest {
     manifest_with_graph(reverse, false)
+}
+
+#[test]
+fn property_snapshot_round_trip_binds_complete_entity_schema_and_child() {
+    let (relations, entities) = catalogs();
+    let child = BatchDescriptor::new(raw_cid(b"entity-arrow-ipc"), 2, 16).unwrap();
+    let entity = EntityDescriptor::new(entities.entities()[0].clone(), 2, vec![child]).unwrap();
+    let relation_only = manifest(false);
+    let request = SnapshotManifestRequest::new(
+        semantic_snapshot(false),
+        &relations,
+        &entities,
+        vec![
+            descriptor("alpha", b"alpha-arrow-ipc", 2),
+            descriptor("beta", b"beta-arrow-ipc", 3),
+        ],
+        CoverageDescriptor::new(CoverageKind::Complete, raw_cid(b"coverage")).unwrap(),
+    )
+    .with_entities(vec![entity]);
+    let property = SnapshotManifest::admit(request).unwrap();
+    assert_eq!(property.schema_version(), PROPERTY_SNAPSHOT_SCHEMA_VERSION);
+    assert_eq!(relation_only.schema_version(), 1);
+    assert!(
+        property
+            .referenced_cids()
+            .contains(&raw_cid(b"entity-arrow-ipc"))
+    );
+    property.verify_catalogs(&relations, &entities).unwrap();
+    let restored =
+        SnapshotManifest::decode_canonical(&property.canonical_bytes().unwrap()).unwrap();
+    assert_eq!(restored, property);
+    assert_ne!(
+        restored.canonical_bytes().unwrap(),
+        relation_only.canonical_bytes().unwrap()
+    );
+    let wrong_entities = EntityCatalog::admit(vec![
+        EntitySchema::new(
+            EntityId::from_canonical_bytes("entity:other").unwrap(),
+            "Other",
+            vec![],
+        )
+        .unwrap(),
+    ])
+    .unwrap();
+    assert_eq!(
+        restored.verify_catalogs(&relations, &wrong_entities),
+        Err(DataError::EntityCatalogMismatch)
+    );
+}
+
+#[test]
+fn property_snapshot_rejects_schema_substitution_and_shared_child_identity() {
+    let (relations, entities) = catalogs();
+    let wrong_schema =
+        EntitySchema::new(entities.entities()[0].id(), "Substituted", vec![]).unwrap();
+    let substituted = EntityDescriptor::new(
+        wrong_schema,
+        1,
+        vec![BatchDescriptor::new(raw_cid(b"entity"), 1, 6).unwrap()],
+    )
+    .unwrap();
+    let request = || {
+        SnapshotManifestRequest::new(
+            semantic_snapshot(false),
+            &relations,
+            &entities,
+            vec![
+                descriptor("alpha", b"alpha-arrow-ipc", 2),
+                descriptor("beta", b"beta-arrow-ipc", 3),
+            ],
+            CoverageDescriptor::new(CoverageKind::Complete, raw_cid(b"coverage")).unwrap(),
+        )
+    };
+    assert_eq!(
+        SnapshotManifest::admit(request().with_entities(vec![substituted])),
+        Err(DataError::EntitySetMismatch)
+    );
+    let shared = EntityDescriptor::new(
+        entities.entities()[0].clone(),
+        2,
+        vec![BatchDescriptor::new(raw_cid(b"alpha-arrow-ipc"), 2, 15).unwrap()],
+    )
+    .unwrap();
+    assert_eq!(
+        SnapshotManifest::admit(request().with_entities(vec![shared])),
+        Err(DataError::DuplicateChild(Box::new(raw_cid(
+            b"alpha-arrow-ipc"
+        ))))
+    );
 }
 
 fn manifest_with_graph(reverse: bool, with_graph: bool) -> SnapshotManifest {
@@ -531,8 +621,8 @@ fn decode_rejects_unknown_root_contract_fields() {
         Ipld::String("other.data.snapshot".into()),
         |error| matches!(error, DataError::UnknownSchemaNamespace(_)),
     );
-    assert_mutation_error(&["schema", "version"], Ipld::Integer(2), |error| {
-        matches!(error, DataError::UnknownSchemaVersion(2))
+    assert_mutation_error(&["schema", "version"], Ipld::Integer(3), |error| {
+        matches!(error, DataError::UnknownSchemaVersion(3))
     });
     assert_mutation_error(&["integrity", "cid_version"], Ipld::Integer(2), |error| {
         matches!(error, DataError::UnknownCidVersion(2))
