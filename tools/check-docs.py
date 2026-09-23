@@ -6,7 +6,6 @@ import re
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
 ORG_LINK = re.compile(r"\[\[file:([^\]]+)")
-README_LINK = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 
 
 def check_link(source: Path, target: str) -> None:
@@ -25,8 +24,10 @@ def main() -> None:
     for source in files:
         for target in ORG_LINK.findall(source.read_text()):
             check_link(source, target)
-    readme = ROOT / "README.md"
-    for target in README_LINK.findall(readme.read_text()):
+    readme = ROOT / "README.org"
+    if (ROOT / "README.md").exists():
+        raise SystemExit("root README must be Org: remove README.md")
+    for target in ORG_LINK.findall(readme.read_text()):
         check_link(readme, target)
     print(f"checked {len(files)} Org documents and README links")
 

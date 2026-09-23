@@ -16,19 +16,27 @@ pub(crate) fn verify_closure(
             return Err(ContentError::MissingReferencedBlock(Box::new(cid)));
         }
     }
-    for relation in manifest.relations() {
-        for batch in relation.batches() {
-            let bytes = blocks
-                .get(batch.cid())
-                .ok_or_else(|| ContentError::MissingReferencedBlock(Box::new(*batch.cid())))?;
-            let actual = bytes.len() as u64;
-            if actual != batch.byte_length() {
-                return Err(ContentError::ChildLengthMismatch {
-                    cid: Box::new(*batch.cid()),
-                    declared: batch.byte_length(),
-                    actual,
-                });
-            }
+    for batch in manifest
+        .relations()
+        .iter()
+        .flat_map(mrr_data_core::RelationDescriptor::batches)
+        .chain(
+            manifest
+                .entities()
+                .iter()
+                .flat_map(mrr_data_core::EntityDescriptor::batches),
+        )
+    {
+        let bytes = blocks
+            .get(batch.cid())
+            .ok_or_else(|| ContentError::MissingReferencedBlock(Box::new(*batch.cid())))?;
+        let actual = bytes.len() as u64;
+        if actual != batch.byte_length() {
+            return Err(ContentError::ChildLengthMismatch {
+                cid: Box::new(*batch.cid()),
+                declared: batch.byte_length(),
+                actual,
+            });
         }
     }
     for (cid, bytes) in blocks {

@@ -55,9 +55,14 @@ preserves ~RETURN ALL~ multiplicity, and orders physical output deterministicall
 It validates exact catalog digests, canonical unique entity IDs, property columns
 and non-dangling endpoints before execution. Explicit row/byte, conservative join,
 output-cell and DataFusion memory budgets fail closed; the caller owns the worker
-deadline. This is a physical execution API: its tests construct MRR IR directly.
-It does not yet qualify original Healthcare GQL parsing, the Scheme caller or
-property-bearing S3 snapshots. See the [[file:healthcare-property-path-audit.org][Healthcare property-path query implementation audit]].
+deadline. The original Healthcare GQL worker compiles through MRR's frontend,
+restores the catalog-bound property snapshot, executes this physical path, and
+submits the candidate to MRR admission. The property-row producer materializes
+deterministic Arrow/CID blocks with source and encoded-byte budgets; its test
+publishes and restores those blocks before executing the original source. This
+library path passed Ubuntu and macOS CI in [[file:healthcare-query-audit.org][the Healthcare query audit]].
+The actual Lambda/Marlin process has not yet transferred its POO rows through
+a typed native boundary or invoked this worker; that remains a separate gate.
 
 Native GraphAr publication also returns a ~GraphArQuerySource~. This immutable,
 database-neutral value pins the dataset root, canonical GraphAr metadata entry
@@ -138,7 +143,7 @@ records local acceptance for S3/Kache snapshot publication and cold restore,
 whole-operation budgets and cancellation, Kache integration under concurrent
 consumers, and independent SigV4/TLS conformance. The reproducible
 [[file:../../tools/s3-conformance/README.md][local S3 runner]] needs no cloud account.
-The [[file:snapshot-distribution-audit.org::*Final remote acceptance][snapshot distribution audit]]
+The [[file:s3-kache-transport-audit.org::*Final remote acceptance][transport acceptance audit]]
 records the final nine-job remote CI acceptance and both platform fingerprints.
 Hosted B2/R2 acceptance and the Healthcare reasoning caller remain separate.
 

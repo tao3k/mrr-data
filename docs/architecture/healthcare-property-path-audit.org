@@ -1,4 +1,9 @@
-* Healthcare property-path chain audit — 2026-09-23
+#+title: Healthcare property-path chain audit — initial baseline
+
+This is the initial pre-implementation audit. The original GQL worker and
+Arrow/CID property snapshot producer have since been delivered and accepted on
+Ubuntu and macOS; [[file:healthcare-query-audit.org][the current Healthcare query audit]] records that evidence.
+The real Lambda/Marlin typed native handoff remains open.
 
 The acceptance target is the unchanged, declared POO Flow query:
 
@@ -39,7 +44,7 @@ be specified against the accepted Case receipt's ~case-id~ before projection.
 The physical fixture's duplicate-edge and null-property cases are valuable
 negative/semantic tests; they are not evidence that this producer emits them.
 
-** Next delivery sequence
+** Original delivery sequence (historical)
 
 These are dependencies of one Healthcare query acceptance claim, with one owner
 per contract.

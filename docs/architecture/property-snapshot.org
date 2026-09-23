@@ -1,0 +1,60 @@
+#+title: Property-bearing content snapshots
+
+* Contract
+
+The relation-only =mrr.data.snapshot= version 1 encoding and roots remain
+unchanged. A manifest with one descriptor for every entity catalog schema uses
+version 2. Each descriptor carries the complete MRR =EntitySchema=, row count,
+and ordered Arrow IPC child CIDs, row counts, and byte lengths. The declared
+schema must equal the caller's admitted entity catalog, not merely share an ID.
+
+All entity children participate in the same CID closure, transfer preflight,
+publication, and verified cold or warm restore as relation children. A child
+cannot be shared between relation and entity descriptors. The manifest still
+owns no GQL parser, domain projection, or semantic result admission.
+
+* Restored property query boundary
+
+=mrr-data-datafusion= accepts a verified =RestoredSnapshot= together with the
+original MRR-bound query and admitted catalogs. Its adapter checks the exact
+catalog, generation, snapshot digest, and complete coverage; preflights declared
+input rows and bytes; then decodes Arrow IPC children against the catalog shape,
+checking actual byte lengths and row counts. It passes these tables to the
+existing bounded property executor. Cold and warm restoration produce the same
+physical result in the focused Healthcare fixture, which then passes the
+existing MRR result-admission API. Malformed IPC, false row counts, and declared
+budget overruns are rejected. Before constructing an Arrow reader, the adapter
+preflights IPC frame body sizes against the input and worker memory budgets and
+rejects compressed IPC, whose decoded allocation is not bounded by serialized
+length. It also rejects Arrow field-nullability drift from the admitted catalog.
+
+This is a physical adapter, not a second GQL parser or result authority.
+
+* Original source worker composition
+
+=mrr-data-poo-flow::execute_property_source_worker_query= is the domain-neutral
+library entry in the opt-in =property-query= Feature. It accepts a caller-owned
+original GQL source, its
+expected SHA-256 digest, admitted catalogs, immutable root, bounded transfer
+session, and physical/result limits. It restores a complete CID closure before
+calling =mrr-frontends= to compile the exact GQL bytes. MRR admits the query
+against the restored semantic snapshot; MRR Data binds the immutable physical
+root and executes the property path; the candidate then returns to MRR for
+result admission. No label-to-type identity algorithm is duplicated in this
+worker: the catalogs must carry the identities selected by the MRR frontend.
+
+The focused worker test publishes one three-entity/two-relation Healthcare
+fixture, restores it cold and warm, and checks that both original-source
+executions have the same admitted result digest. A separate negative test
+rejects source digest drift. This is a library-level proof, not evidence that
+the POO Flow/Marlin process invokes the worker in production. The caller still
+owns the process deadline and cancellation across restore and query execution.
+
+* Acceptance and next boundary
+
+The core contract tests cover canonical round-trip, V1 independence, schema
+substitution and duplicate-child rejection. The content tests cover version 2
+publication and cold/warm restore. The DataFusion tests cover the restored
+physical adapter. The POO Flow worker test covers original GQL to cold/warm
+MRR-admitted result. Actual Lambda/Marlin invocation, release transport, and
+cross-platform CI remain separate acceptance gates.

@@ -202,3 +202,55 @@ jobs:
           cargo check -p mrr-data --no-default-features --features ipfs,graphar-native --locked
       - name: Lint maintained GraphAr adapter
         run: cargo clippy -p mrr-data-graphar --all-targets --features native-graphar --locked -- -D warnings
+
+  property-source:
+    name: Original GQL property worker (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
+    env:
+      GERBIL_PREFIX: ${{ github.workspace }}/.ci/gerbil
+      GERBIL_PATH: ${{ github.workspace }}/.ci/mrr-source/.gerbil
+      GERBIL_LOADPATH: ${{ github.workspace }}/.ci/mrr-source
+      GERBIL_BUILD_VERBOSE: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: tao3k/meta-relational-reasoning
+          ref: 74cc7ae694fe1825af362f41fbe24f4bcd07e760
+          path: .ci/mrr-source
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Install native Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libsqlite3-dev libssl-dev pkg-config zlib1g-dev jq
+      - name: Install native macOS dependencies
+        if: runner.os == 'macOS'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
+          HOMEBREW_NO_INSTALL_CLEANUP: 1
+        run: |
+          brew install gcc jq openssl pkg-config sqlite zlib
+          openssl_prefix="$(brew --prefix openssl@3 2>/dev/null || brew --prefix openssl)"
+          echo "PKG_CONFIG_PATH=$openssl_prefix/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" >> "$GITHUB_ENV"
+          echo "MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion | cut -d. -f1).0" >> "$GITHUB_ENV"
+      - name: Install MRR-pinned immutable Gerbil release
+        run: bash .ci/mrr-source/tools/ci/install-gerbil-release.sh "$GERBIL_PREFIX"
+      - name: Build MRR's declared Gerbil dependency closure
+        working-directory: .ci/mrr-source
+        run: |
+          echo "GERBIL_GSC=$GERBIL_PREFIX/bin/gsc" >> "$GITHUB_ENV"
+          echo "GERBIL_GXPKG=$GERBIL_PREFIX/bin/gxpkg" >> "$GITHUB_ENV"
+          gerbil deps --install
+          gerbil build
+      - name: Test exact-source property worker
+        run: cargo test -p mrr-data-poo-flow --features property-query --locked
+      - name: Lint exact-source property worker
+        run: cargo clippy -p mrr-data-poo-flow --features property-query --all-targets --locked -- -D warnings

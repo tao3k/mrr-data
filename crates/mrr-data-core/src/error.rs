@@ -3,7 +3,7 @@
 use std::fmt;
 
 use cid::Cid;
-use meta_relational_reasoning::{RelationId, RevisionId};
+use meta_relational_reasoning::{EntityId, RelationId, RevisionId};
 
 /// Typed failures for canonical MRR Data snapshot admission.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -32,10 +32,13 @@ pub enum DataError {
     },
     EmptyRelations,
     DuplicateRelation(RelationId),
+    DuplicateEntity(EntityId),
     RelationCatalogMismatch,
     EntityCatalogMismatch,
     RelationSetMismatch,
+    EntitySetMismatch,
     NonCanonicalRelationOrder,
+    NonCanonicalEntityOrder,
     DuplicateChild(Box<Cid>),
     NonCanonicalLineageOrder,
     EmptyPayload(Box<Cid>),
@@ -45,6 +48,13 @@ pub enum DataError {
         actual: u64,
     },
     RowCountOverflow(RelationId),
+    EntityBatchRowsMismatch {
+        entity: EntityId,
+        declared: u64,
+        actual: u64,
+    },
+    EntityRowCountOverflow(EntityId),
+    InvalidEntitySchema(String),
     InvalidDigestLength {
         field: &'static str,
         actual: usize,

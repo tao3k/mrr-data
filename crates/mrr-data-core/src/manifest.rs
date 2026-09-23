@@ -4,17 +4,20 @@ use std::collections::BTreeSet;
 
 use cid::Cid;
 use meta_relational_reasoning::{
-    EntityCatalog, ExternalRevisionIdentity, GenerationId, RelationCatalog, RelationId,
-    RevisionBinding, RevisionId, SemanticSnapshot,
+    EntityCatalog, EntitySchema, ExternalRevisionIdentity, GenerationId, RelationCatalog,
+    RelationId, RevisionBinding, RevisionId, SemanticSnapshot,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::profile::{cid_for, validate_cid};
+use crate::snapshot_descriptors::{
+    CoverageDescriptor, CoverageKind, EntityDescriptor, GraphProjectionDescriptor,
+};
 use crate::{
     ARROW_FACT_SCHEMA_NAMESPACE, ARROW_FACT_SCHEMA_VERSION, ARROW_IPC_FILE_FORMAT, CID_VERSION_V1,
     DAG_CBOR_CODEC, DAG_CBOR_CODEC_NAME, DataError, GRAPHAR_BINARY_ENTITY_NAMESPACE,
-    GRAPHAR_BINARY_ENTITY_VERSION, RAW_CODEC, RAW_CODEC_NAME, SHA2_256_NAME,
-    SNAPSHOT_SCHEMA_NAMESPACE, SNAPSHOT_SCHEMA_VERSION,
+    GRAPHAR_BINARY_ENTITY_VERSION, PROPERTY_SNAPSHOT_SCHEMA_VERSION, RAW_CODEC, RAW_CODEC_NAME,
+    SHA2_256_NAME, SNAPSHOT_SCHEMA_NAMESPACE, SNAPSHOT_SCHEMA_VERSION,
 };
 
 /// One immutable Arrow IPC child block and its declared extent.
@@ -119,84 +122,6 @@ impl RelationDescriptor {
     }
 }
 
-/// Declared evidence coverage of one physical snapshot.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CoverageKind {
-    Complete,
-    Partial,
-    Unknown,
-}
-
-/// Coverage declaration bound to its immutable evidence block.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CoverageDescriptor {
-    kind: CoverageKind,
-    declaration_cid: Cid,
-}
-
-impl CoverageDescriptor {
-    /// Admits a coverage kind bound to one raw/SHA-256 declaration block.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`DataError`] when the declaration CID does not use the child
-    /// content identity profile.
-    pub fn new(kind: CoverageKind, declaration_cid: Cid) -> Result<Self, DataError> {
-        validate_cid(&declaration_cid, RAW_CODEC)?;
-        Ok(Self {
-            kind,
-            declaration_cid,
-        })
-    }
-
-    #[must_use]
-    pub const fn kind(&self) -> CoverageKind {
-        self.kind
-    }
-
-    #[must_use]
-    pub const fn declaration_cid(&self) -> &Cid {
-        &self.declaration_cid
-    }
-}
-
-/// Optional `GraphAr` projection attached to the same semantic snapshot.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GraphProjectionDescriptor {
-    graphar_version: String,
-    manifest_cid: Cid,
-}
-
-impl GraphProjectionDescriptor {
-    /// Admits an explicitly versioned `GraphAr` projection manifest.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`DataError`] for an empty or padded version and for a manifest
-    /// CID outside the raw/SHA-256 child profile.
-    pub fn new(graphar_version: impl Into<String>, manifest_cid: Cid) -> Result<Self, DataError> {
-        let graphar_version = graphar_version.into();
-        if graphar_version.is_empty() || graphar_version.trim() != graphar_version {
-            return Err(DataError::InvalidGraphArVersion);
-        }
-        validate_cid(&manifest_cid, RAW_CODEC)?;
-        Ok(Self {
-            graphar_version,
-            manifest_cid,
-        })
-    }
-
-    #[must_use]
-    pub fn graphar_version(&self) -> &str {
-        &self.graphar_version
-    }
-
-    #[must_use]
-    pub const fn manifest_cid(&self) -> &Cid {
-        &self.manifest_cid
-    }
-}
-
 /// Named inputs admitted into a canonical content snapshot manifest.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SnapshotManifestRequest {
@@ -204,7 +129,9 @@ pub struct SnapshotManifestRequest {
     relation_catalog_digest: [u8; 32],
     entity_catalog_digest: [u8; 32],
     catalog_relation_ids: Vec<RelationId>,
+    catalog_entities: Vec<EntitySchema>,
     relations: Vec<RelationDescriptor>,
+    entities: Vec<EntityDescriptor>,
     graph_projection: Option<GraphProjectionDescriptor>,
     lineage_batch_cids: Vec<Cid>,
     coverage: CoverageDescriptor,
@@ -229,7 +156,9 @@ impl SnapshotManifestRequest {
                 .iter()
                 .map(meta_relational_reasoning::RelationSchema::id)
                 .collect(),
+            catalog_entities: entity_catalog.entities().to_vec(),
             relations,
+            entities: Vec::new(),
             graph_projection: None,
             lineage_batch_cids: Vec::new(),
             coverage,
@@ -249,15 +178,25 @@ impl SnapshotManifestRequest {
         self.lineage_batch_cids = lineage_batch_cids;
         self
     }
+
+    /// Selects the property-bearing snapshot profile. Every entity schema in
+    /// the catalog must have one descriptor, including empty tables.
+    #[must_use]
+    pub fn with_entities(mut self, entities: Vec<EntityDescriptor>) -> Self {
+        self.entities = entities;
+        self
+    }
 }
 
-/// Validated semantic and physical bindings encoded by `mrr.data.snapshot` V1.
+/// Validated semantic and physical bindings encoded by `mrr.data.snapshot`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SnapshotManifest {
+    schema_version: u64,
     semantic_snapshot: SemanticSnapshot,
     relation_catalog_digest: [u8; 32],
     entity_catalog_digest: [u8; 32],
     relations: Vec<RelationDescriptor>,
+    entities: Vec<EntityDescriptor>,
     graph_projection: Option<GraphProjectionDescriptor>,
     lineage_batch_cids: Vec<Cid>,
     coverage: CoverageDescriptor,
@@ -268,8 +207,8 @@ impl SnapshotManifest {
     ///
     /// # Errors
     ///
-    /// Returns [`DataError`] when relations or lineage children are empty,
-    /// duplicated, inconsistent, or outside the frozen V1 profiles.
+    /// Returns [`DataError`] when declared relations, entities or children are
+    /// duplicated, inconsistent, or outside their versioned profiles.
     pub fn admit(mut request: SnapshotManifestRequest) -> Result<Self, DataError> {
         validate_relations(&mut request.relations)?;
         if request
@@ -280,12 +219,29 @@ impl SnapshotManifest {
         {
             return Err(DataError::RelationSetMismatch);
         }
+        let schema_version = if request.entities.is_empty() {
+            SNAPSHOT_SCHEMA_VERSION
+        } else {
+            validate_entities(&mut request.entities)?;
+            if request
+                .entities
+                .iter()
+                .map(EntityDescriptor::schema)
+                .ne(request.catalog_entities.iter())
+            {
+                return Err(DataError::EntitySetMismatch);
+            }
+            PROPERTY_SNAPSHOT_SCHEMA_VERSION
+        };
+        validate_unique_batch_cids(&request.relations, &request.entities)?;
         validate_and_sort_lineage(&mut request.lineage_batch_cids)?;
         Ok(Self {
+            schema_version,
             semantic_snapshot: request.semantic_snapshot,
             relation_catalog_digest: request.relation_catalog_digest,
             entity_catalog_digest: request.entity_catalog_digest,
             relations: request.relations,
+            entities: request.entities,
             graph_projection: request.graph_projection,
             lineage_batch_cids: request.lineage_batch_cids,
             coverage: request.coverage,
@@ -295,6 +251,11 @@ impl SnapshotManifest {
     #[must_use]
     pub const fn semantic_snapshot(&self) -> &SemanticSnapshot {
         &self.semantic_snapshot
+    }
+
+    #[must_use]
+    pub const fn schema_version(&self) -> u64 {
+        self.schema_version
     }
 
     #[must_use]
@@ -310,6 +271,11 @@ impl SnapshotManifest {
     #[must_use]
     pub fn relations(&self) -> &[RelationDescriptor] {
         &self.relations
+    }
+
+    #[must_use]
+    pub fn entities(&self) -> &[EntityDescriptor] {
+        &self.entities
     }
 
     #[must_use]
@@ -338,6 +304,12 @@ impl SnapshotManifest {
             self.relations
                 .iter()
                 .flat_map(RelationDescriptor::batches)
+                .map(|batch| *batch.cid()),
+        );
+        cids.extend(
+            self.entities
+                .iter()
+                .flat_map(EntityDescriptor::batches)
                 .map(|batch| *batch.cid()),
         );
         cids.extend(self.lineage_batch_cids.iter().copied());
@@ -376,6 +348,15 @@ impl SnapshotManifest {
         {
             return Err(DataError::RelationSetMismatch);
         }
+        if self.schema_version == PROPERTY_SNAPSHOT_SCHEMA_VERSION
+            && self
+                .entities
+                .iter()
+                .map(EntityDescriptor::schema)
+                .ne(entity_catalog.entities().iter())
+        {
+            return Err(DataError::EntitySetMismatch);
+        }
         Ok(())
     }
 
@@ -389,7 +370,7 @@ impl SnapshotManifest {
             .map_err(|error| DataError::Encode(error.to_string()))
     }
 
-    /// Decodes a canonical V1 DAG-CBOR manifest and revalidates every binding.
+    /// Decodes a canonical V1 or property-bearing V2 DAG-CBOR manifest.
     ///
     /// # Errors
     ///
@@ -489,6 +470,33 @@ fn validate_relations(relations: &mut [RelationDescriptor]) -> Result<(), DataEr
     Ok(())
 }
 
+fn validate_entities(entities: &mut [EntityDescriptor]) -> Result<(), DataError> {
+    entities.sort_by_key(|entity| entity.schema.id());
+    for pair in entities.windows(2) {
+        if pair[0].schema.id() == pair[1].schema.id() {
+            return Err(DataError::DuplicateEntity(pair[0].schema.id()));
+        }
+    }
+    Ok(())
+}
+
+fn validate_unique_batch_cids(
+    relations: &[RelationDescriptor],
+    entities: &[EntityDescriptor],
+) -> Result<(), DataError> {
+    let mut child_cids = BTreeSet::new();
+    for batch in relations
+        .iter()
+        .flat_map(RelationDescriptor::batches)
+        .chain(entities.iter().flat_map(EntityDescriptor::batches))
+    {
+        if !child_cids.insert(batch.cid()) {
+            return Err(DataError::DuplicateChild(Box::new(*batch.cid())));
+        }
+    }
+    Ok(())
+}
+
 fn validate_and_sort_lineage(cids: &mut [Cid]) -> Result<(), DataError> {
     for cid in cids.iter() {
         validate_cid(cid, RAW_CODEC)?;
@@ -509,6 +517,8 @@ struct ManifestWire {
     semantic: SemanticWire,
     source: SourceWire,
     relations: Vec<RelationWire>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    entities: Vec<EntityWire>,
     graph_projection: Option<GraphProjectionWire>,
     lineage: LineageWire,
     coverage: CoverageWire,
@@ -518,7 +528,7 @@ struct ManifestWire {
 impl ManifestWire {
     fn from_manifest(manifest: &SnapshotManifest) -> Self {
         Self {
-            schema: SchemaWire::snapshot_v1(),
+            schema: SchemaWire::snapshot(manifest.schema_version),
             semantic: SemanticWire {
                 generation_id: manifest.semantic_snapshot.generation(),
                 semantic_snapshot_digest: manifest.semantic_snapshot.digest().to_vec(),
@@ -534,6 +544,7 @@ impl ManifestWire {
                     .collect(),
             },
             relations: manifest.relations.iter().map(RelationWire::from).collect(),
+            entities: manifest.entities.iter().map(EntityWire::from).collect(),
             graph_projection: manifest
                 .graph_projection
                 .as_ref()
@@ -547,7 +558,7 @@ impl ManifestWire {
     }
 
     fn into_manifest(self) -> Result<SnapshotManifest, DataError> {
-        self.schema.validate_snapshot()?;
+        let schema_version = self.schema.validate_snapshot()?;
         self.integrity.validate()?;
         let semantic_snapshot = self.source.into_snapshot(self.semantic.generation_id)?;
         if semantic_snapshot.digest()
@@ -578,6 +589,22 @@ impl ManifestWire {
             return Err(DataError::NonCanonicalRelationOrder);
         }
         validate_relations(&mut relations)?;
+        let mut entities = self
+            .entities
+            .into_iter()
+            .map(EntityWire::into_descriptor)
+            .collect::<Result<Vec<_>, _>>()?;
+        if entities
+            .windows(2)
+            .any(|pair| pair[0].schema.id() >= pair[1].schema.id())
+        {
+            return Err(DataError::NonCanonicalEntityOrder);
+        }
+        if (schema_version == SNAPSHOT_SCHEMA_VERSION) != entities.is_empty() {
+            return Err(DataError::EntitySetMismatch);
+        }
+        validate_entities(&mut entities)?;
+        validate_unique_batch_cids(&relations, &entities)?;
         let mut lineage_batch_cids = self.lineage.batch_cids;
         if lineage_batch_cids.windows(2).any(|pair| pair[0] >= pair[1]) {
             return Err(DataError::NonCanonicalLineageOrder);
@@ -586,10 +613,12 @@ impl ManifestWire {
             validate_cid(cid, RAW_CODEC)?;
         }
         Ok(SnapshotManifest {
+            schema_version,
             semantic_snapshot,
             relation_catalog_digest,
             entity_catalog_digest,
             relations,
+            entities,
             graph_projection: self
                 .graph_projection
                 .map(GraphProjectionWire::into_descriptor)
@@ -608,21 +637,23 @@ struct SchemaWire {
 }
 
 impl SchemaWire {
-    fn snapshot_v1() -> Self {
+    fn snapshot(version: u64) -> Self {
         Self {
             namespace: SNAPSHOT_SCHEMA_NAMESPACE.to_owned(),
-            version: SNAPSHOT_SCHEMA_VERSION,
+            version,
         }
     }
 
-    fn validate_snapshot(self) -> Result<(), DataError> {
+    fn validate_snapshot(self) -> Result<u64, DataError> {
         if self.namespace != SNAPSHOT_SCHEMA_NAMESPACE {
             return Err(DataError::UnknownSchemaNamespace(self.namespace));
         }
-        if self.version != SNAPSHOT_SCHEMA_VERSION {
+        if self.version != SNAPSHOT_SCHEMA_VERSION
+            && self.version != PROPERTY_SNAPSHOT_SCHEMA_VERSION
+        {
             return Err(DataError::UnknownSchemaVersion(self.version));
         }
-        Ok(())
+        Ok(self.version)
     }
 
     fn arrow_fact_v1() -> Self {
@@ -754,6 +785,37 @@ impl RelationWire {
         self.arrow_schema.validate_arrow_fact()?;
         RelationDescriptor::new(
             self.relation_id,
+            self.row_count,
+            self.batches
+                .into_iter()
+                .map(BatchWire::into_descriptor)
+                .collect::<Result<Vec<_>, _>>()?,
+        )
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct EntityWire {
+    schema: EntitySchema,
+    row_count: u64,
+    batches: Vec<BatchWire>,
+}
+
+impl From<&EntityDescriptor> for EntityWire {
+    fn from(descriptor: &EntityDescriptor) -> Self {
+        Self {
+            schema: descriptor.schema.clone(),
+            row_count: descriptor.row_count,
+            batches: descriptor.batches.iter().map(BatchWire::from).collect(),
+        }
+    }
+}
+
+impl EntityWire {
+    fn into_descriptor(self) -> Result<EntityDescriptor, DataError> {
+        EntityDescriptor::new(
+            self.schema,
             self.row_count,
             self.batches
                 .into_iter()

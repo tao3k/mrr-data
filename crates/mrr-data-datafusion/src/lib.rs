@@ -4,7 +4,8 @@
 mod adapter;
 mod property;
 pub use property::{
-    BinaryRelationTable, EntityPropertyTable, PropertyQueryLimits, execute_property_path_query,
+    BinaryRelationTable, EntityPropertyTable, PropertyQueryLimits, RestoredPropertyQuery,
+    execute_property_path_query, execute_restored_property_path_query,
 };
 
 pub use adapter::{DataFusionQueryError, datafusion_engine_profile, execute_binary_entity_query};

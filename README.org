@@ -1,0 +1,20 @@
+#+title: MRR Data
+
+* Purpose
+
+=mrr-data= is the physical data plane for [[https://github.com/tao3k/meta-relational-reasoning][Meta Relational Reasoning]]. MRR owns semantic identities, generations, queries, and result admission; this repository owns Arrow interchange, bounded physical execution, snapshots, and optional storage providers. Arrow is the only default feature.
+
+* Start here
+
+- Architecture and ownership: [[file:docs/architecture/0001-mrr-data-plane.org][Data-plane RFC]]
+- Implemented APIs, feature contract, and development commands: [[file:docs/architecture/current-implementation.org][Current implementation]]
+- Content identity, local cache, snapshot, and S3: [[file:docs/architecture/content-cache-protocol.org][Content cache protocol]]
+- Snapshot transport acceptance: [[file:docs/architecture/s3-kache-transport-audit.org][S3 and Kache transport audit]]
+- Property snapshot and worker: [[file:docs/architecture/property-snapshot.org][Property snapshot]] and [[file:docs/architecture/healthcare-query-audit.org][Healthcare query audit]]
+- Existing POO Flow static-edge consumer: [[file:integrations/poo_flow/README.md][Integration guide]]
+
+* Verify
+
+Run =just test-property-query= for the original Healthcare GQL worker path, and =just clippy-property-query= for its strict lint gate. The [[file:docs/architecture/current-implementation.org][current implementation]] lists broader workspace and optional-provider checks. CI validates Ubuntu and macOS independently.
+
+The Lambda/Marlin typed native handoff is a separate acceptance gate; the property-row producer and worker tests alone do not prove an application invocation.

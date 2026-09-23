@@ -10,6 +10,7 @@ use std::{num::NonZeroUsize, sync::Arc};
 
 struct Fixture {
     query: mrr::CatalogBoundQuery,
+    semantic: mrr::SemanticSnapshot,
     entities: Vec<EntityPropertyTable>,
     relations: Vec<BinaryRelationTable>,
 }
@@ -105,6 +106,7 @@ fn fixture() -> Fixture {
     .unwrap();
     Fixture {
         query: mrr::bind_query_to_catalog(&bundle, query_id, &semantic).unwrap(),
+        semantic,
         entities: vec![
             EntityPropertyTable {
                 schema: schemas[0].clone(),
@@ -152,6 +154,8 @@ fn fixture() -> Fixture {
         ],
     }
 }
+
+mod restored;
 fn query_ir(schemas: &[mrr::EntitySchema], relations: &[mrr::RelationSchema]) -> mrr::MetaQueryIr {
     mrr::MetaQueryIr::new(
         mrr::QueryId::from_canonical_bytes("property-test").unwrap(),
