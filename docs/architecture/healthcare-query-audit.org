@@ -21,6 +21,16 @@ profile remains unchanged.
 
 * Implemented library path
 
+=mrr-data-poo-flow::materialize_property_snapshot= accepts MRR-admitted
+catalogs and semantic generation, typed source rows, caller-owned coverage
+evidence, and physical budgets. It verifies the complete catalog table set,
+property shapes, unique entity identities, relation endpoints, coverage CID,
+source string budgets before encoding, and encoded block sizes before storing
+deterministic Arrow IPC children and the immutable CID root. It does not infer
+labels, claim source completeness,
+or define a second GQL parser. Remote publication remains the existing
+=mrr_data_content::publish_snapshot= path.
+
 =mrr-data-poo-flow::execute_property_source_worker_query= accepts the original
 source and digest, admitted entity/relation catalogs, a CID root, transfer
 session and independent transfer, execution and result limits. It restores a
@@ -35,15 +45,20 @@ cannot silently make the fixture a parallel authority.
 
 * Evidence and remaining gate
 
-On 2026-09-23, the focused macOS runtime suite passed 8/8 tests. It includes
-the exact-source digest rejection and a cold/warm restored-snapshot test that
-produces the same admitted one-row result digest on both executions. Existing
+On 2026-09-23, the focused macOS =just test-property-query= suite passed 12/12
+tests. It includes exact-source digest rejection, deterministic producer
+materialization, failed catalog/endpoint/coverage admission, a cold/warm
+restored-snapshot test with the same admitted result digest, and the full
+typed-row producer to remote publication to original Healthcare GQL worker
+path. Existing
 DataFusion tests cover malformed IPC, row-count and catalog substitution,
 resource limits, dangling endpoints, null properties and multiplicity.
 
 This is library-level acceptance. It does not yet prove that the actual
-Lambda/Marlin process calls the property worker, that the deployment's S3/Kache
-provider serves the same root, or that Ubuntu and macOS CI pass this new path.
+Lambda/Marlin process exports its projected POO rows through a typed native
+boundary and calls the property producer/worker, that the deployment's
+S3/Kache provider serves the same root, or that Ubuntu and macOS CI pass this
+new path.
 Those are separate gates; a local focused result must not be reported as full
 Healthcare deployment closure. The caller owns a wall-clock deadline and
 cancellation across restoration and query execution.

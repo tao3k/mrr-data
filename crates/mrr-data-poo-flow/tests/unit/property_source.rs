@@ -1,5 +1,9 @@
 use super::compile_original_source;
-use crate::{PropertySourceWorkerQuery, execute_property_source_worker_query};
+use crate::{
+    PropertyEntityRow, PropertyRelationRow, PropertySnapshotInput, PropertySnapshotLimits,
+    PropertySnapshotRows, PropertySourceWorkerQuery, execute_property_source_worker_query,
+    materialize_property_snapshot,
+};
 use arrow_array::{ArrayRef, RecordBatch, StringArray};
 use arrow_ipc::writer::StreamWriter;
 use arrow_schema::{DataType, Field, Schema};
@@ -293,4 +297,124 @@ async fn worker_restores_cold_and_warm_then_admits_original_gql() {
         }
         digest = Some(current);
     }
+}
+
+fn healthcare_property_rows() -> PropertySnapshotRows {
+    let (entity_ids, relation_ids) = source_type_ids();
+    let mut rows = PropertySnapshotRows::default();
+    for (type_id, identity, property, value) in [
+        (entity_ids[0], "s1", "identity", "healthcare"),
+        (entity_ids[1], "c1", "id", "case-1"),
+        (entity_ids[2], "p1", "identity", "au-fhir"),
+    ] {
+        rows.entities.insert(
+            type_id,
+            vec![PropertyEntityRow {
+                entity_id: entity(identity),
+                properties: BTreeMap::from([(property.to_owned(), Some(value.to_owned()))]),
+            }],
+        );
+    }
+    for (type_id, source, target) in [(relation_ids[0], "s1", "c1"), (relation_ids[1], "c1", "p1")]
+    {
+        rows.relations.insert(
+            type_id,
+            vec![PropertyRelationRow {
+                source: entity(source),
+                target: entity(target),
+            }],
+        );
+    }
+    rows
+}
+
+#[tokio::test]
+async fn produced_property_rows_publish_and_admit_original_healthcare_gql() {
+    let (reference, _, relations, entities) = fixture();
+    let rows = healthcare_property_rows();
+    let evidence = b"complete healthcare fixture";
+    let source_store = MemoryContentStore::default();
+    let produced = materialize_property_snapshot(
+        PropertySnapshotInput {
+            semantic_snapshot: reference.manifest().semantic_snapshot().clone(),
+            relation_catalog: &relations,
+            entity_catalog: &entities,
+            rows: &rows,
+            coverage: CoverageDescriptor::new(CoverageKind::Complete, raw_cid(evidence)).unwrap(),
+            coverage_bytes: evidence,
+            limits: PropertySnapshotLimits {
+                max_rows: 10,
+                max_blocks: 10,
+                max_block_bytes: 100_000,
+                max_total_bytes: 1_000_000,
+            },
+        },
+        &source_store,
+    )
+    .await
+    .unwrap();
+    assert_eq!(produced.row_count, 5);
+    let remote = Remote::default();
+    let transfer_limits = SnapshotTransferLimits::new(100_000, 10, 100_000, 1_000_000);
+    publish_snapshot(
+        &source_store,
+        &remote,
+        &produced.snapshot,
+        &relations,
+        &entities,
+        transfer_limits,
+    )
+    .await
+    .unwrap();
+    let digest = format!("sha256:{}", crate::protocol::digest(SOURCE.as_bytes()));
+    let session = TransferSession::new(
+        Duration::from_secs(20),
+        RemoteTransferLimits {
+            operations: 20,
+            bytes: 2_000_000,
+            attempts_per_operation: 1,
+            retry_delay: Duration::ZERO,
+        },
+    )
+    .unwrap();
+    let result = execute_property_source_worker_query(
+        PropertySourceWorkerQuery {
+            root: produced.snapshot.cid(),
+            source_name: "healthcare-case-profile",
+            source_text: SOURCE,
+            expected_source_digest: &digest,
+            relation_catalog: &relations,
+            entity_catalog: &entities,
+            transfer_limits,
+            physical_limits: PropertyQueryLimits {
+                max_input_rows: 10,
+                max_input_bytes: 1_000_000,
+                max_join_rows: 10,
+                max_output_cells: 30,
+                execution_memory_bytes: 16 * 1024 * 1024,
+            },
+            result_limits: mrr::QueryResultLimits::new(
+                NonZeroUsize::new(10).unwrap(),
+                NonZeroUsize::new(30).unwrap(),
+            ),
+        },
+        &MemoryContentStore::default(),
+        &remote,
+        &session,
+    )
+    .await
+    .unwrap();
+    assert_eq!(result.admission.row_count(), 1);
+    let scalar = |text: &str| mrr::QueryResultValue::Scalar {
+        schema: mrr::ValueSchema::String,
+        value: mrr::Value::String(text.into()),
+    };
+    assert_eq!(
+        result.candidate.rows(),
+        &[vec![
+            scalar("healthcare"),
+            scalar("case-1"),
+            scalar("au-fhir")
+        ]]
+    );
 }
