@@ -24,7 +24,7 @@ def main():
         if selected:
             flags += ["--features", selected]
         enabled = {"arrow"} if selected is None else set(selected.split(","))
-        content = bool(enabled & {"content", "snapshot", "transfer", "car", "filesystem", "cache", "s3"})
+        content = bool(enabled & {"content", "snapshot", "transfer", "car", "filesystem", "cache", "s3", "datafusion"})
         identity = content or "ipfs" in enabled
         expected = {
             "mrr-data-arrow": bool(enabled & {"arrow", "datafusion"}),

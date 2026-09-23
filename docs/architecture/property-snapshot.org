@@ -13,10 +13,29 @@ publication, and verified cold or warm restore as relation children. A child
 cannot be shared between relation and entity descriptors. The manifest still
 owns no GQL parser, domain projection, or semantic result admission.
 
+* Restored property query boundary
+
+=mrr-data-datafusion= accepts a verified =RestoredSnapshot= together with the
+original MRR-bound query and admitted catalogs. Its adapter checks the exact
+catalog, generation, snapshot digest, and complete coverage; preflights declared
+input rows and bytes; then decodes Arrow IPC children against the catalog shape,
+checking actual byte lengths and row counts. It passes these tables to the
+existing bounded property executor. Cold and warm restoration produce the same
+physical result in the focused Healthcare fixture, which then passes the
+existing MRR result-admission API. Malformed IPC, false row counts, and declared
+budget overruns are rejected. Before constructing an Arrow reader, the adapter
+preflights IPC frame body sizes against the input and worker memory budgets and
+rejects compressed IPC, whose decoded allocation is not bounded by serialized
+length. It also rejects Arrow field-nullability drift from the admitted catalog.
+
+This is a physical adapter, not a second GQL parser or result authority. The
+original GQL-to-bound-query integration and actual Lambda/POO Flow invocation
+still require an end-to-end acceptance receipt.
+
 * Acceptance and next boundary
 
 The core contract tests cover canonical round-trip, V1 independence, schema
 substitution and duplicate-child rejection. The content tests cover version 2
-publication and cold/warm restore. The next owner must decode the restored
-Arrow batches against these schemas and pass them to the existing bounded
-property executor; this storage change alone is not a Healthcare query receipt.
+publication and cold/warm restore. The DataFusion tests cover the restored
+physical adapter. These focused tests do not independently close the full
+Healthcare query receipt.

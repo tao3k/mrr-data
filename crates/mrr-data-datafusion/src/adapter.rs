@@ -23,6 +23,8 @@ pub enum DataFusionQueryError {
     RelationMismatch,
     InvalidRelationSchema,
     InvalidArrowBatch(&'static str),
+    RestoredSnapshot(&'static str),
+    ArrowIpc(String),
     InvalidEntityIdentity(String),
     Engine(DataFusionError),
 }
@@ -47,6 +49,10 @@ impl fmt::Display for DataFusionQueryError {
                 "DataFusion adapter requires exactly two non-null Entity relation fields",
             ),
             Self::InvalidArrowBatch(reason) => write!(formatter, "invalid Arrow batch: {reason}"),
+            Self::RestoredSnapshot(reason) => {
+                write!(formatter, "restored property snapshot rejected: {reason}")
+            }
+            Self::ArrowIpc(reason) => write!(formatter, "restored Arrow IPC rejected: {reason}"),
             Self::InvalidEntityIdentity(value) => {
                 write!(formatter, "invalid canonical Entity identity `{value}`")
             }

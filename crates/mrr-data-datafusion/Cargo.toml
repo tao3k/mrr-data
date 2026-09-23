@@ -9,12 +9,15 @@ repository.workspace = true
 
 [dependencies]
 arrow-array.workspace = true
+arrow-ipc.workspace = true
+arrow-schema.workspace = true
 datafusion.workspace = true
 meta-relational-reasoning.workspace = true
+mrr-data-content = { workspace = true, features = ["snapshot"] }
 mrr-data-core.workspace = true
 
 [dev-dependencies]
-arrow-schema.workspace = true
+cid.workspace = true
 mrr-data-arrow.workspace = true
 mrr-data-asp-rust-build-support.workspace = true
 tokio.workspace = true
