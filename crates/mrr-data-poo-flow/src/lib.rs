@@ -1,6 +1,8 @@
 //! Opt-in external snapshot resources. POO Flow retains execution policy.
 #![forbid(unsafe_code)]
 #[cfg(feature = "property-query")]
+mod property_snapshot;
+#[cfg(feature = "property-query")]
 mod property_source;
 #[cfg(feature = "runtime")]
 mod protocol;
@@ -10,6 +12,11 @@ mod runtime;
 mod semantic;
 #[cfg(feature = "runtime")]
 mod worker;
+#[cfg(feature = "property-query")]
+pub use property_snapshot::{
+    MaterializedPropertySnapshot, PropertyEntityRow, PropertyRelationRow, PropertySnapshotInput,
+    PropertySnapshotLimits, PropertySnapshotRows, materialize_property_snapshot,
+};
 #[cfg(feature = "property-query")]
 pub use property_source::{
     AdmittedPropertySourceResult, PropertySourceWorkerQuery, RestoredPropertySourceQuery,

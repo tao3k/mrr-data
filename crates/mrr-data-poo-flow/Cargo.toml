@@ -10,7 +10,7 @@ repository.workspace = true
 [features]
 default = []
 runtime = ["dep:anyhow", "dep:serde", "dep:serde_json", "dep:sha2", "dep:tokio", "dep:reqwest", "dep:meta-relational-reasoning", "dep:mrr-data-arrow", "dep:mrr-data-core", "dep:mrr-data-content", "dep:mrr-data-cache", "dep:mrr-data-datafusion"]
-property-query = ["runtime", "dep:cid", "dep:mrr-frontends"]
+property-query = ["runtime", "dep:cid", "dep:mrr-frontends", "dep:arrow-array", "dep:arrow-ipc", "dep:arrow-schema"]
 
 [[bin]]
 name = "mrr-data-poo-flow"
@@ -32,11 +32,11 @@ mrr-data-core = { workspace = true, optional = true, features = ["ipfs"] }
 mrr-data-content = { workspace = true, optional = true, features = ["transfer"] }
 mrr-data-cache = { workspace = true, optional = true, features = ["kache", "s3", "blocking"] }
 mrr-data-datafusion = { workspace = true, optional = true }
+arrow-array = { workspace = true, optional = true }
+arrow-ipc = { workspace = true, optional = true }
+arrow-schema = { workspace = true, optional = true }
 
 [dev-dependencies]
-arrow-array.workspace = true
-arrow-ipc.workspace = true
-arrow-schema.workspace = true
 mrr-data-asp-rust-build-support.workspace = true
 
 [lints]
