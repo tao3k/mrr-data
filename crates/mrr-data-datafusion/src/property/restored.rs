@@ -2,7 +2,7 @@
 use std::{io::Cursor, sync::Arc};
 
 use arrow_array::RecordBatch;
-use arrow_ipc::reader::StreamReader;
+use arrow_ipc::{MessageHeader, reader::StreamReader, root_as_message};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use datafusion::arrow::compute::concat_batches;
 use meta_relational_reasoning::{
@@ -42,6 +42,7 @@ pub async fn execute_restored_property_path_query(
     let manifest = input.restored.snapshot().manifest();
     validate_restored_binding(&input, manifest)?;
     check_declared_limits(manifest, input.limits)?;
+    check_ipc_decode_budget(input.restored, manifest, input.limits)?;
     let entities = decode_entity_tables(input.restored, manifest)?;
     let relations = decode_relation_tables(input.restored, manifest, input.relation_catalog)?;
     execute_property_path_query(input.query, &entities, &relations, input.limits).await
@@ -101,6 +102,108 @@ fn check_declared_limits(manifest: &SnapshotManifest, limits: PropertyQueryLimit
         Ok((next_rows, next_bytes))
     })?;
     Ok(())
+}
+
+// Arrow's StreamReader allocates decompressed buffers before returning a batch.
+// Preflight every frame in the verified closure before constructing any reader.
+// This bounded executor accepts only uncompressed IPC; compression cannot use
+// serialized byte length as an allocation bound.
+fn check_ipc_decode_budget(
+    restored: &RestoredSnapshot,
+    manifest: &SnapshotManifest,
+    limits: PropertyQueryLimits,
+) -> Result<()> {
+    let budget = limits
+        .max_input_bytes
+        .min(limits.execution_memory_bytes / 4);
+    let mut decoded_bytes = 0_usize;
+    for descriptor in manifest
+        .entities()
+        .iter()
+        .flat_map(EntityDescriptor::batches)
+        .chain(
+            manifest
+                .relations()
+                .iter()
+                .flat_map(RelationDescriptor::batches),
+        )
+    {
+        let bytes = restored
+            .children()
+            .get(descriptor.cid())
+            .ok_or(DataFusionQueryError::RestoredSnapshot("missing child"))?;
+        if u64::try_from(bytes.len()).ok() != Some(descriptor.byte_length()) {
+            return Err(DataFusionQueryError::RestoredSnapshot(
+                "child byte length mismatch",
+            ));
+        }
+        inspect_ipc_frames(bytes, &mut decoded_bytes, budget)?;
+    }
+    Ok(())
+}
+
+fn inspect_ipc_frames(bytes: &[u8], decoded_bytes: &mut usize, budget: usize) -> Result<()> {
+    let mut position = 0_usize;
+    while position < bytes.len() {
+        let prefix = read_ipc_u32(bytes, &mut position)?;
+        let metadata_len = if prefix == u32::MAX {
+            read_ipc_u32(bytes, &mut position)?
+        } else {
+            prefix
+        };
+        if metadata_len == 0 {
+            if position != bytes.len() {
+                return Err(DataFusionQueryError::RestoredSnapshot("trailing IPC bytes"));
+            }
+            return Ok(());
+        }
+        let metadata_end = position
+            .checked_add(metadata_len as usize)
+            .filter(|end| *end <= bytes.len())
+            .ok_or(DataFusionQueryError::RestoredSnapshot(
+                "truncated IPC metadata",
+            ))?;
+        let message = root_as_message(&bytes[position..metadata_end])
+            .map_err(|error| DataFusionQueryError::ArrowIpc(error.to_string()))?;
+        if matches!(message.header_type(), MessageHeader::RecordBatch)
+            && message
+                .header_as_record_batch()
+                .is_some_and(|batch| batch.compression().is_some())
+            || matches!(message.header_type(), MessageHeader::DictionaryBatch)
+                && message
+                    .header_as_dictionary_batch()
+                    .and_then(|dictionary| dictionary.data())
+                    .is_some_and(|batch| batch.compression().is_some())
+        {
+            return Err(DataFusionQueryError::RestoredSnapshot(
+                "compressed IPC is not supported by bounded decode",
+            ));
+        }
+        position = metadata_end;
+        let body_len = usize::try_from(message.bodyLength())
+            .map_err(|_| DataFusionQueryError::RestoredSnapshot("invalid IPC body length"))?;
+        *decoded_bytes = decoded_bytes
+            .checked_add(body_len)
+            .filter(|total| *total <= budget)
+            .ok_or(DataFusionQueryError::ResourceLimit("IPC decoded bytes"))?;
+        position = position
+            .checked_add(body_len)
+            .filter(|end| *end <= bytes.len())
+            .ok_or(DataFusionQueryError::RestoredSnapshot("truncated IPC body"))?;
+    }
+    Ok(())
+}
+
+fn read_ipc_u32(bytes: &[u8], position: &mut usize) -> Result<u32> {
+    let end = position
+        .checked_add(4)
+        .filter(|end| *end <= bytes.len())
+        .ok_or(DataFusionQueryError::RestoredSnapshot(
+            "truncated IPC frame",
+        ))?;
+    let value = u32::from_le_bytes(bytes[*position..end].try_into().unwrap());
+    *position = end;
+    Ok(value)
 }
 
 fn decode_entity_tables(
@@ -184,7 +287,9 @@ fn decode_batches(
                 .iter()
                 .zip(expected_schema.fields())
                 .any(|(actual, expected)| {
-                    actual.name() != expected.name() || actual.data_type() != expected.data_type()
+                    actual.name() != expected.name()
+                        || actual.data_type() != expected.data_type()
+                        || actual.is_nullable() != expected.is_nullable()
                 })
     }) {
         return Err(DataFusionQueryError::InvalidArrowBatch(

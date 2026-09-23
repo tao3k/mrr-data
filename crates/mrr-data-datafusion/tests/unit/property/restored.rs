@@ -1,7 +1,11 @@
 use super::{DataFusionQueryError, Fixture, execute_property_path_query, fixture, limits, mrr};
 use crate::{RestoredPropertyQuery, execute_restored_property_path_query};
 use arrow_array::RecordBatch;
-use arrow_ipc::writer::StreamWriter;
+use arrow_ipc::{
+    CompressionType,
+    writer::{IpcWriteOptions, StreamWriter},
+};
+use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use mrr_data_content::{
     ContentBlock, ContentCodec, ContentSource, ContentStore, MemoryContentStore,
     RemoteContentStore, RemoteError, RemoteFuture, RestoredSnapshot, SnapshotTransferLimits,
@@ -11,7 +15,11 @@ use mrr_data_core::{
     BatchDescriptor, CoverageDescriptor, CoverageKind, EntityDescriptor, RelationDescriptor,
     SnapshotBlock, SnapshotManifest, SnapshotManifestRequest, raw_cid,
 };
-use std::{collections::BTreeMap, num::NonZeroUsize, sync::Mutex};
+use std::{
+    collections::BTreeMap,
+    num::NonZeroUsize,
+    sync::{Arc, Mutex},
+};
 
 #[derive(Default)]
 struct Remote(Mutex<BTreeMap<String, Vec<u8>>>);
@@ -36,10 +44,14 @@ impl RemoteContentStore for Remote {
     }
 }
 
-fn ipc(batch: &RecordBatch) -> Vec<u8> {
+fn ipc(batch: &RecordBatch, schema: &SchemaRef, compressed: bool) -> Vec<u8> {
     let mut bytes = Vec::new();
-    let mut writer = StreamWriter::try_new(&mut bytes, &batch.schema()).unwrap();
-    writer.write(batch).unwrap();
+    let batch = RecordBatch::try_new(schema.clone(), batch.columns().to_vec()).unwrap();
+    let options = IpcWriteOptions::default()
+        .try_with_compression(compressed.then_some(CompressionType::LZ4_FRAME))
+        .unwrap();
+    let mut writer = StreamWriter::try_new_with_options(&mut bytes, schema, options).unwrap();
+    writer.write(&batch).unwrap();
     writer.finish().unwrap();
     drop(writer);
     bytes
@@ -50,6 +62,8 @@ enum EntityChildMode {
     Valid,
     InvalidIpc,
     WrongRows,
+    NullableDrift,
+    Compressed,
 }
 
 fn snapshot(
@@ -84,7 +98,19 @@ fn snapshot(
             let bytes = if matches!(mode, EntityChildMode::InvalidIpc) && index == 0 {
                 b"not Arrow IPC".to_vec()
             } else {
-                ipc(&table.batch)
+                let mut fields = vec![Field::new(
+                    "entity_id",
+                    DataType::Utf8,
+                    matches!(mode, EntityChildMode::NullableDrift) && index == 0,
+                )];
+                fields.extend(table.schema.properties().iter().map(|property| {
+                    Field::new(property.name(), DataType::Utf8, property.nullable())
+                }));
+                ipc(
+                    &table.batch,
+                    &Arc::new(Schema::new(fields)),
+                    matches!(mode, EntityChildMode::Compressed) && index == 0,
+                )
             };
             let declared_rows = if matches!(mode, EntityChildMode::WrongRows) && index == 0 {
                 table.batch.num_rows() as u64 - 1
@@ -101,7 +127,15 @@ fn snapshot(
         .relations
         .iter()
         .map(|table| {
-            let bytes = ipc(&table.batch);
+            let schema = Arc::new(Schema::new(
+                table
+                    .schema
+                    .fields()
+                    .iter()
+                    .map(|field| Field::new(field.name(), DataType::Utf8, field.nullable()))
+                    .collect::<Vec<_>>(),
+            ));
+            let bytes = ipc(&table.batch, &schema, false);
             let child = BatchDescriptor::new(
                 raw_cid(&bytes),
                 table.batch.num_rows() as u64,
@@ -245,7 +279,50 @@ async fn verified_content_with_non_ipc_entity_child_is_not_query_evidence() {
     .await
     .err()
     .unwrap();
-    assert!(matches!(error, DataFusionQueryError::ArrowIpc(_)));
+    assert!(matches!(
+        error,
+        DataFusionQueryError::RestoredSnapshot("truncated IPC metadata")
+    ));
+}
+
+#[tokio::test]
+async fn verified_ipc_with_nullable_schema_drift_is_not_query_evidence() {
+    let f = fixture();
+    let (cold, _, relations, entities) = restored(&f, EntityChildMode::NullableDrift).await;
+    let error = execute_restored_property_path_query(RestoredPropertyQuery {
+        query: &f.query,
+        restored: &cold,
+        relation_catalog: &relations,
+        entity_catalog: &entities,
+        limits: limits(),
+    })
+    .await
+    .err()
+    .unwrap();
+    assert!(matches!(
+        error,
+        DataFusionQueryError::InvalidArrowBatch("catalog column shape")
+    ));
+}
+
+#[tokio::test]
+async fn compressed_ipc_is_rejected_before_reader_allocation() {
+    let f = fixture();
+    let (cold, _, relations, entities) = restored(&f, EntityChildMode::Compressed).await;
+    let error = execute_restored_property_path_query(RestoredPropertyQuery {
+        query: &f.query,
+        restored: &cold,
+        relation_catalog: &relations,
+        entity_catalog: &entities,
+        limits: limits(),
+    })
+    .await
+    .err()
+    .unwrap();
+    assert!(matches!(
+        error,
+        DataFusionQueryError::RestoredSnapshot("compressed IPC is not supported by bounded decode")
+    ));
 }
 
 #[tokio::test]

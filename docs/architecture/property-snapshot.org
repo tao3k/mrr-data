@@ -23,7 +23,10 @@ checking actual byte lengths and row counts. It passes these tables to the
 existing bounded property executor. Cold and warm restoration produce the same
 physical result in the focused Healthcare fixture, which then passes the
 existing MRR result-admission API. Malformed IPC, false row counts, and declared
-budget overruns are rejected.
+budget overruns are rejected. Before constructing an Arrow reader, the adapter
+preflights IPC frame body sizes against the input and worker memory budgets and
+rejects compressed IPC, whose decoded allocation is not bounded by serialized
+length. It also rejects Arrow field-nullability drift from the admitted catalog.
 
 This is a physical adapter, not a second GQL parser or result authority. The
 original GQL-to-bound-query integration and actual Lambda/POO Flow invocation
