@@ -193,3 +193,35 @@ async fn rejects_missing_tables_dangling_edges_and_coverage_drift() {
             .contains("coverage evidence CID mismatch")
     );
 }
+
+#[tokio::test]
+async fn rejects_oversize_source_value_before_arrow_encoding() {
+    let (semantic, entities, relations, mut rows) = fixture();
+    rows.entities.values_mut().next().unwrap()[0]
+        .properties
+        .insert("identity".to_owned(), Some("oversize".to_owned()));
+    let evidence = b"complete admitted source rows";
+    let coverage = CoverageDescriptor::new(CoverageKind::Complete, raw_cid(evidence)).unwrap();
+    let result = materialize_property_snapshot(
+        PropertySnapshotInput {
+            semantic_snapshot: semantic,
+            relation_catalog: &relations,
+            entity_catalog: &entities,
+            rows: &rows,
+            coverage,
+            coverage_bytes: evidence,
+            limits: PropertySnapshotLimits {
+                max_block_bytes: 4,
+                ..limits()
+            },
+        },
+        &MemoryContentStore::default(),
+    )
+    .await;
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("source value block budget")
+    );
+}

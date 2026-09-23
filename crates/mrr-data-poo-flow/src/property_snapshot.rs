@@ -202,6 +202,7 @@ fn encode_entities(
 ) -> Result<(Vec<EntityDescriptor>, BTreeSet<EntityId>)> {
     let mut ids = BTreeSet::new();
     let mut descriptors = Vec::new();
+    let mut source_value_bytes = 0usize;
     for schema in input.entity_catalog.entities() {
         let rows = &input.rows.entities[&schema.id()];
         add_rows(row_count, rows.len(), input.limits.max_rows)?;
@@ -215,6 +216,10 @@ fn encode_entities(
             );
             for property in schema.properties() {
                 ensure!(
+                    property.name() != "entity_id",
+                    "reserved entity property name"
+                );
+                ensure!(
                     property.schema() == &ValueSchema::String,
                     "only string entity properties are supported"
                 );
@@ -226,6 +231,19 @@ fn encode_entities(
                     value.is_some() || property.nullable(),
                     "null required property"
                 );
+                if let Some(value) = value {
+                    ensure!(
+                        value.len() <= input.limits.max_block_bytes,
+                        "source value block budget"
+                    );
+                    source_value_bytes = source_value_bytes
+                        .checked_add(value.len())
+                        .context("source value byte count overflow")?;
+                    ensure!(
+                        source_value_bytes <= input.limits.max_total_bytes,
+                        "source value total budget"
+                    );
+                }
             }
         }
         let bytes = entity_ipc(schema, &ordered)?;

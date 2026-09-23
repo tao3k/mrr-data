@@ -25,8 +25,9 @@ profile remains unchanged.
 catalogs and semantic generation, typed source rows, caller-owned coverage
 evidence, and physical budgets. It verifies the complete catalog table set,
 property shapes, unique entity identities, relation endpoints, coverage CID,
-and encoded block sizes before storing deterministic Arrow IPC children and
-the immutable CID root. It does not infer labels, claim source completeness,
+source string budgets before encoding, and encoded block sizes before storing
+deterministic Arrow IPC children and the immutable CID root. It does not infer
+labels, claim source completeness,
 or define a second GQL parser. Remote publication remains the existing
 =mrr_data_content::publish_snapshot= path.
 
@@ -44,7 +45,7 @@ cannot silently make the fixture a parallel authority.
 
 * Evidence and remaining gate
 
-On 2026-09-23, the focused macOS =just test-property-query= suite passed 11/11
+On 2026-09-23, the focused macOS =just test-property-query= suite passed 12/12
 tests. It includes exact-source digest rejection, deterministic producer
 materialization, failed catalog/endpoint/coverage admission, a cold/warm
 restored-snapshot test with the same admitted result digest, and the full
