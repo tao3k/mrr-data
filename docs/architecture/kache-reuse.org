@@ -1,25 +1,25 @@
-# Kache reuse evidence
+#+title: Kache reuse evidence
 
 This investigation tests reuse of Kache's existing storage implementation.
 It does not add a production cache, an S3 provider, or a second implementation
 of Kache's transport. The probe is a root-workspace member with test-only
-dependencies; every `mrr-*` dependency inherits the workspace definition.
+dependencies; every =mrr-*= dependency inherits the workspace definition.
 
-## Source and reproducibility
+* Source and reproducibility
 
-- MRR Data starting revision: `d0df2fd`.
-- Kache revision: `7461ca763506c081d6ceb95ea225c04ce2d24df6` (package version
-  `0.25.0`), pinned in the root workspace dependency and lockfile.
-- Host: macOS ARM64, Rust `1.95.0`.
+- MRR Data starting revision: =d0df2fd=.
+- Kache revision: =7461ca763506c081d6ceb95ea225c04ce2d24df6= (package version
+  =0.25.0=), pinned in the root workspace dependency and lockfile.
+- Host: macOS ARM64, Rust =1.95.0=.
 
 Run from the repository root:
 
-```sh
+#+begin_src sh
 cargo test -p mrr-data-kache-probe --locked
 cargo clippy -p mrr-data-kache-probe --all-targets --locked -- -D warnings
-```
+#+end_src
 
-The ignored `lock_child` test is a subprocess helper invoked twice by the
+The ignored =lock_child= test is a subprocess helper invoked twice by the
 cross-process lock test. It is not an omitted acceptance test.
 
 Verified on this host:
@@ -27,26 +27,26 @@ Verified on this host:
 - Probe: 7 passed (six reuse contracts plus the ASP package gate), one ignored
   subprocess helper; reported test time 0.17 s, excluding compilation.
 - Probe Clippy, all targets with warnings denied: passed.
-- Facade `--no-default-features` tests, including workspace policy: 2 passed.
-- Workspace formatting and `git diff --check`: passed.
-- `cargo tree -p mrr-data --edges normal,build --locked --offline`: no Kache or
+- Facade =--no-default-features= tests, including workspace policy: 2 passed.
+- Workspace formatting and =git diff --check=: passed.
+- =cargo tree -p mrr-data --edges normal,build --locked --offline=: no Kache or
   rusqlite dependency in the default product graph.
 
 The initial investigation did not run the full workspace suite. The follow-up
 below adds the default workspace run; Linux and hosted-provider acceptance
 remain unverified.
 
-## Local reuse boundary
+* Local reuse boundary
 
-`kache-store::ArtifactStore<P>` accepts a caller-owned `ArtifactPolicy`.
+=kache-store::ArtifactStore<P>= accepts a caller-owned =ArtifactPolicy=.
 The probe supplies a data policy that permits empty blocks, emits no compiler
 output kind, and disallows source hardlinks. It calls the existing independent
 ingest method, allowing Kache to use copy-on-write clones or copies while
 preventing subsequent source mutation from changing stored data.
 
-The adapter supplies the namespace `mrr-data` in the upstream `crate_name`
+The adapter supplies the namespace =mrr-data= in the upstream =crate_name=
 field, leaves compiler-specific metadata empty, and stores one file named
-`block` per entry. This is sufficient for local public-API reuse; it is not
+=block= per entry. This is sufficient for local public-API reuse; it is not
 yet a compiler-neutral upstream entry format.
 
 Kache requires 64-character lowercase hexadecimal remote keys. The probe
@@ -71,7 +71,7 @@ Two important constraints were found:
 1. Durable Kache hits default to metadata-only verification. MRR must continue
    to verify its expected CID after reading the bytes. Kache's configurable
    restore verification is not a replacement for this boundary.
-2. `max_size` is a soft eviction target. The initial test expecting immediate
+2. =max_size= is a soft eviction target. The initial test expecting immediate
    reclamation failed: Kache protects recently accessed entries for 120 seconds.
    The corrected contract explicitly records this behavior, rather than claiming
    a strict Agent disk-budget guarantee. Age-based reclamation has not been
@@ -83,17 +83,17 @@ coalescing is implemented. The lock test proves a usable upstream primitive,
 not a completed single-flight read path. The payloads are raw and canonical
 DAG-CBOR blocks, not an Arrow/GraphAr query or a complete snapshot round trip.
 
-## Remote reuse boundary
+* Remote reuse boundary
 
 At the pinned upstream revision:
 
 | Owner | Existing capability | Current exposure |
-| --- | --- | --- |
-| `crates/kache-store` | CAS, index, file isolation, locks, eviction | Public library |
-| `src/cache_remote.rs` | `CacheRemote`, `V3Remote`, upload/download entries | Binary-internal module |
-| `src/remote_backend.rs` | `RemoteBackend`, OpenDAL S3/filesystem transports, conditional creation | Binary-internal module |
-| `src/remote_layout.rs` | Existing v3 tar.zst pack and manifest validation | Binary-internal module |
-| `src/remote_resilience.rs` | Deadlines and error classification, plus daemon policy | Mixed transport and application concerns |
+|---+---+---|
+| =crates/kache-store= | CAS, index, file isolation, locks, eviction | Public library |
+| =src/cache_remote.rs= | =CacheRemote=, =V3Remote=, upload/download entries | Binary-internal module |
+| =src/remote_backend.rs= | =RemoteBackend=, OpenDAL S3/filesystem transports, conditional creation | Binary-internal module |
+| =src/remote_layout.rs= | Existing v3 tar.zst pack and manifest validation | Binary-internal module |
+| =src/remote_resilience.rs= | Deadlines and error classification, plus daemon policy | Mixed transport and application concerns |
 
 The existing remote format uploads a pack and its manifest, rather than one
 object per local blob. Local deduplication must not be advertised as remote
@@ -102,8 +102,8 @@ excess object/request overhead; snapshot-sized or bounded batch entries need
 measurement before selecting the production unit.
 
 The smallest useful upstream library boundary should expose the existing
-`CacheRemote` entry operations and S3/filesystem backend construction. Merely
-exporting raw `RemoteBackend` would leave MRR Data to reimplement the pack
+=CacheRemote= entry operations and S3/filesystem backend construction. Merely
+exporting raw =RemoteBackend= would leave MRR Data to reimplement the pack
 format and entry validation, defeating the intended reuse.
 
 Concrete extraction work:
@@ -111,10 +111,10 @@ Concrete extraction work:
 1. Move the remote configuration structs and key-prefix helper out of the
    application-wide configuration owner.
 2. Expose the existing backend, download-memory budget, entry layout and entry
-   operations in an upstream library. Reuse `kache-format` validators and
-   `kache-store` metadata types directly.
+   operations in an upstream library. Reuse =kache-format= validators and
+   =kache-store= metadata types directly.
 3. Separate transport deadlines/error types from service discovery and daemon
-   fallback policy in `remote_resilience`.
+   fallback policy in =remote_resilience=.
 4. Keep compiler planning, build-manifest prefetch and daemon scheduling in
    the application unless a concrete consumer needs them. Do not copy those
    subsystems into MRR Data or introduce another cache wire format.
@@ -122,20 +122,20 @@ Concrete extraction work:
    cache B, entry registration, corruption, missing objects, interrupted upload,
    and remote acknowledgment. Exercise both filesystem and an S3 endpoint.
 
-## Decision
+* Decision
 
-Prefer reuse of `kache-store` plus extraction of the existing upstream remote
+Prefer reuse of =kache-store= plus extraction of the existing upstream remote
 entry API over a new MRR cache engine. Keep MRR-specific CID and snapshot
 admission checks in MRR Data. A successful cache upload is not, on its own,
 evidence that every child of an MRR snapshot has been published.
 
-## Follow-up: implemented remote extraction
+* Follow-up: implemented remote extraction
 
 The proposed extraction now exists as an unpublished
-[upstream patch](../../tools/kache-remote-probe/kache-remote.patch), with a
-[reproducible consumer workflow](../../tools/kache-remote-probe/README.md).
-It exposes the existing `RemoteLayout` entry operations and backend
-construction; the binary retains `CacheRemote` orchestration and prefetch
+[[file:../../tools/kache-remote-probe/kache-remote.patch][upstream patch]], with a
+[[file:../../tools/kache-remote-probe/README.md][reproducible consumer workflow]].
+It exposes the existing =RemoteLayout= entry operations and backend
+construction; the binary retains =CacheRemote= orchestration and prefetch
 planning. A clean pinned checkout plus that patch passed the MRR consumer
 tests for local-cache/remote recovery, CAR admission, warm-cache reads,
 publication failure and CID substitution rejection.
@@ -151,13 +151,13 @@ The new library has not been published, and the actual MRR Data product graph
 does not yet depend on it. See the workflow's evidence and limitations before
 claiming production integration or upstream CI closure.
 
-## MRR content interface
+* MRR content interface
 
-The [content cache protocol](content-cache-protocol.md) now defines the production
-interface boundary independently of the upstream extraction: `ContentStore` for
-local adapters, `RemoteContentStore` for remote adapters, and shared verified
+The [[file:content-cache-protocol.org][content cache protocol]] now defines the production
+interface boundary independently of the upstream extraction: =ContentStore= for
+local adapters, =RemoteContentStore= for remote adapters, and shared verified
 read-through/publication operations. Kache continues to own cache mechanisms.
-Production adapters now live in `mrr-data-cache`: the pinned Kache store backs
-`ContentStore`, and OpenDAL S3 backs `RemoteContentStore`. Local wire tests invoke
+Production adapters now live in =mrr-data-cache=: the pinned Kache store backs
+=ContentStore=, and OpenDAL S3 backs =RemoteContentStore=. Local wire tests invoke
 these adapters through the shared protocol. The unpublished remote-pack extraction
 above remains an independent experiment; it is not required for production use.

@@ -28,14 +28,33 @@ preflights IPC frame body sizes against the input and worker memory budgets and
 rejects compressed IPC, whose decoded allocation is not bounded by serialized
 length. It also rejects Arrow field-nullability drift from the admitted catalog.
 
-This is a physical adapter, not a second GQL parser or result authority. The
-original GQL-to-bound-query integration and actual Lambda/POO Flow invocation
-still require an end-to-end acceptance receipt.
+This is a physical adapter, not a second GQL parser or result authority.
+
+* Original source worker composition
+
+=mrr-data-poo-flow::execute_property_source_worker_query= is the domain-neutral
+library entry in the opt-in =property-query= Feature. It accepts a caller-owned
+original GQL source, its
+expected SHA-256 digest, admitted catalogs, immutable root, bounded transfer
+session, and physical/result limits. It restores a complete CID closure before
+calling =mrr-frontends= to compile the exact GQL bytes. MRR admits the query
+against the restored semantic snapshot; MRR Data binds the immutable physical
+root and executes the property path; the candidate then returns to MRR for
+result admission. No label-to-type identity algorithm is duplicated in this
+worker: the catalogs must carry the identities selected by the MRR frontend.
+
+The focused worker test publishes one three-entity/two-relation Healthcare
+fixture, restores it cold and warm, and checks that both original-source
+executions have the same admitted result digest. A separate negative test
+rejects source digest drift. This is a library-level proof, not evidence that
+the POO Flow/Marlin process invokes the worker in production. The caller still
+owns the process deadline and cancellation across restore and query execution.
 
 * Acceptance and next boundary
 
 The core contract tests cover canonical round-trip, V1 independence, schema
 substitution and duplicate-child rejection. The content tests cover version 2
 publication and cold/warm restore. The DataFusion tests cover the restored
-physical adapter. These focused tests do not independently close the full
-Healthcare query receipt.
+physical adapter. The POO Flow worker test covers original GQL to cold/warm
+MRR-admitted result. Actual Lambda/Marlin invocation, release transport, and
+cross-platform CI remain separate acceptance gates.

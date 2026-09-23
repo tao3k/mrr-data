@@ -16,7 +16,7 @@ validated. Snapshot publication/cold restore, whole-operation interruption and
 resource accounting, Kache integration acceptance and independent local
 SigV4/TLS conformance have local evidence recorded under M4. Final remote
 acceptance of revision =3715d0a= passed all nine jobs, including both platforms;
-see =m4-closure-audit.md= for the exact revision, run and receipt fingerprints.
+see =s3-kache-transport-audit.org= for the exact revision, run and receipt fingerprints.
 This does not establish a POO Flow consumer integration. The upstream
 [[https://github.com/tao3k/meta-relational-reasoning][MRR repository]] owns semantic
 identity, typed relation schemas and facts, generations, revision bindings,
@@ -627,7 +627,7 @@ evidence for this revision and host only, not universal throughput claims.
 
 Updated 2026-09-20 after the local S3/Kache audit and snapshot acceptance. This section owns the execution
 order and acceptance gates; the protocol document owns API behavior and the
-[[file:s3-cache-audit.md][audit record]] owns the dated validation evidence.
+[[file:s3-cache-audit.org][audit record]] owns the dated validation evidence.
 
 The immediate objective is: an admitted snapshot on machine A can be published
 through S3 and restored on machine B with an empty Kache cache, preserving its
@@ -857,7 +857,7 @@ and independent conformance evidence. Two corrections were made: the single-file
 example now uses blocking disk I/O and a 64 MiB input cap; the conformance runner
 binds success to the workspace source digest and removes stale output before a
 new attempt. Both public examples now run against the independent TLS service,
-including oversized-file rejection. See =docs/architecture/m4-closure-audit.md=.
+including oversized-file rejection. See =docs/architecture/s3-kache-transport-audit.org=.
 
 After correction: 123 workspace tests pass, independent conformance and both
 examples pass, 2 evidence-freshness tests pass, and all 18 feature slices plus
@@ -987,7 +987,7 @@ Remote closure is recorded at =c18f7d373e07d927e3c2f66d2d85b4706c714a54=:
 [[https://github.com/tao3k/mrr-data/actions/runs/35463412334][CI run 35463412334]]
 passed all nine checks, including both platform consumer jobs, with zero warning
 diagnostics in the reviewed logs. Both platform receipts match the tested source.
-See =poo-flow-consumer-audit.md= for the fingerprint and observed counters.
+See =poo-flow-consumer-audit.org= for the fingerprint and observed counters.
 [[https://github.com/tao3k/mrr-data/pull/1][PR #1]] remains open; acceptance is not
 merge or release publication. This source revision is the baseline for M5.1.
 
@@ -1007,13 +1007,12 @@ nor a complete Healthcare catalog. Merely extending the hop count cannot satisfy
 this query. The following are ordered dependencies within one delivery batch,
 not independent completion claims.
 
-Implementation status (2026-09-20): the bounded DataFusion property-path layer
-is implemented and locally verified. It accepts an already catalog-bound MRR
-query, not raw GQL, and does not yet publish property-bearing snapshots. The
-original query's producer exists in the active sibling POO Flow checkout, but
-that checkout revision is not obtainable from its public remote. Therefore this
-is an intermediate implementation receipt, not M5.1 closure. See
-=healthcare-query-audit.md= for exact evidence and remaining gates.
+Implementation status (2026-09-23): the bounded DataFusion property-path layer,
+property-bearing content snapshots, and parser-owned original-GQL worker
+composition are locally verified, including cold/warm MRR result admission.
+POO Flow's Healthcare producer revision is publicly obtainable. Actual
+Lambda/Marlin invocation and deployed cross-platform acceptance remain open;
+see =healthcare-query-audit.org= for the exact evidence and remaining gates.
 
 1. *Fix source and contract ownership.* Locate the maintained Healthcare producer
    for Scenario, Case, Profile, their properties and relations. Bind its immutable
