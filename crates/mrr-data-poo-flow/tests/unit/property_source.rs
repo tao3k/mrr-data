@@ -117,7 +117,8 @@ async fn worker_rejects_source_drift_without_remote_restore() {
         &session,
     )
     .await
-    .expect_err("source drift must be rejected before restoration");
+    .err()
+    .expect("source drift must be rejected before restoration");
     assert!(error.to_string().contains("source digest mismatch"));
     assert_eq!(remote.get_calls.load(Ordering::Relaxed), 0);
 }
