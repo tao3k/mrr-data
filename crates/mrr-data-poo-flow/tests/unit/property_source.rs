@@ -20,7 +20,10 @@ use mrr_data_datafusion::PropertyQueryLimits;
 use std::{
     collections::BTreeMap,
     num::NonZeroUsize,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
     time::Duration,
 };
 
@@ -45,12 +48,16 @@ fn parser_owned_source_receipt_rejects_source_drift() {
 }
 
 #[derive(Default)]
-struct Remote(Mutex<BTreeMap<String, Vec<u8>>>);
+struct Remote {
+    blocks: Mutex<BTreeMap<String, Vec<u8>>>,
+    get_calls: AtomicUsize,
+}
 
 impl RemoteContentStore for Remote {
     fn get<'a>(&'a self, cid: &'a cid::Cid, limit: usize) -> RemoteFuture<'a, Option<Vec<u8>>> {
         Box::pin(async move {
-            let value = self.0.lock().unwrap().get(&cid.to_string()).cloned();
+            self.get_calls.fetch_add(1, Ordering::Relaxed);
+            let value = self.blocks.lock().unwrap().get(&cid.to_string()).cloned();
             if value.as_ref().is_some_and(|bytes| bytes.len() > limit) {
                 return Err(RemoteError::TooLarge);
             }
@@ -60,13 +67,59 @@ impl RemoteContentStore for Remote {
 
     fn put<'a>(&'a self, block: ContentBlock<'a>) -> RemoteFuture<'a, ()> {
         Box::pin(async move {
-            self.0
+            self.blocks
                 .lock()
                 .unwrap()
                 .insert(block.cid().to_string(), block.bytes().to_vec());
             Ok(())
         })
     }
+}
+
+#[tokio::test]
+async fn worker_rejects_source_drift_without_remote_restore() {
+    let (snapshot, _, relations, entities) = fixture();
+    let cache = MemoryContentStore::default();
+    let remote = Remote::default();
+    let session = TransferSession::new(
+        Duration::from_secs(20),
+        RemoteTransferLimits {
+            operations: 20,
+            bytes: 2_000_000,
+            attempts_per_operation: 1,
+            retry_delay: Duration::ZERO,
+        },
+    )
+    .unwrap();
+    let error = execute_property_source_worker_query(
+        PropertySourceWorkerQuery {
+            root: snapshot.cid(),
+            source_name: "healthcare-case-profile",
+            source_text: SOURCE,
+            expected_source_digest: "sha256:stale",
+            relation_catalog: &relations,
+            entity_catalog: &entities,
+            transfer_limits: SnapshotTransferLimits::new(100_000, 10, 100_000, 1_000_000),
+            physical_limits: PropertyQueryLimits {
+                max_input_rows: 10,
+                max_input_bytes: 1_000_000,
+                max_join_rows: 10,
+                max_output_cells: 30,
+                execution_memory_bytes: 16 * 1024 * 1024,
+            },
+            result_limits: mrr::QueryResultLimits::new(
+                NonZeroUsize::new(10).unwrap(),
+                NonZeroUsize::new(30).unwrap(),
+            ),
+        },
+        &cache,
+        &remote,
+        &session,
+    )
+    .await
+    .expect_err("source drift must be rejected before restoration");
+    assert!(error.to_string().contains("source digest mismatch"));
+    assert_eq!(remote.get_calls.load(Ordering::Relaxed), 0);
 }
 
 fn entity(name: &str) -> mrr::EntityId {

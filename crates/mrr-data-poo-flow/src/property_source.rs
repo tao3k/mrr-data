@@ -70,6 +70,11 @@ pub async fn execute_property_source_worker_query(
     remote: &(impl RemoteContentStore + ?Sized),
     session: &TransferSession,
 ) -> Result<AdmittedPropertySourceResult> {
+    let compilation = compile_original_source(
+        input.source_name,
+        input.source_text,
+        input.expected_source_digest,
+    )?;
     let restored = session
         .restore_snapshot(
             local,
@@ -81,16 +86,19 @@ pub async fn execute_property_source_worker_query(
         )
         .await
         .context("verified snapshot restoration")?;
-    execute_restored_property_source_query(RestoredPropertySourceQuery {
-        source_name: input.source_name,
-        source_text: input.source_text,
-        expected_source_digest: input.expected_source_digest,
-        restored: &restored,
-        relation_catalog: input.relation_catalog,
-        entity_catalog: input.entity_catalog,
-        physical_limits: input.physical_limits,
-        result_limits: input.result_limits,
-    })
+    execute_compiled_property_source_query(
+        compilation,
+        RestoredPropertySourceQuery {
+            source_name: input.source_name,
+            source_text: input.source_text,
+            expected_source_digest: input.expected_source_digest,
+            restored: &restored,
+            relation_catalog: input.relation_catalog,
+            entity_catalog: input.entity_catalog,
+            physical_limits: input.physical_limits,
+            result_limits: input.result_limits,
+        },
+    )
     .await
 }
 
@@ -107,6 +115,13 @@ pub async fn execute_restored_property_source_query(
         input.source_text,
         input.expected_source_digest,
     )?;
+    execute_compiled_property_source_query(compilation, input).await
+}
+
+async fn execute_compiled_property_source_query(
+    compilation: ParserOwnedCompilation,
+    input: RestoredPropertySourceQuery<'_>,
+) -> Result<AdmittedPropertySourceResult> {
     let query_id = compilation.query.id();
     let bundle = ReasoningBundle::admit(ReasoningBundleDeclaration {
         entities: input.entity_catalog.entities().to_vec(),

@@ -11,7 +11,7 @@
 - Content identity, local cache, snapshot, and S3: [[file:docs/architecture/content-cache-protocol.org][Content cache protocol]]
 - Snapshot transport acceptance: [[file:docs/architecture/s3-kache-transport-audit.org][S3 and Kache transport audit]]
 - Property snapshot and worker: [[file:docs/architecture/property-snapshot.org][Property snapshot]] and [[file:docs/architecture/healthcare-query-audit.org][Healthcare query audit]]
-- Existing POO Flow static-edge consumer: [[file:integrations/poo_flow/README.md][Integration guide]]
+- Existing POO Flow static-edge consumer: [[file:integrations/poo_flow/README.org][Integration guide]]
 
 * Verify
 

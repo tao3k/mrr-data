@@ -142,7 +142,7 @@ are in [[file:0001-mrr-data-plane.org][RFC 0001]]. Its snapshot distribution del
 records local acceptance for S3/Kache snapshot publication and cold restore,
 whole-operation budgets and cancellation, Kache integration under concurrent
 consumers, and independent SigV4/TLS conformance. The reproducible
-[[file:../../tools/s3-conformance/README.md][local S3 runner]] needs no cloud account.
+[[file:../../tools/s3-conformance/README.org][local S3 runner]] needs no cloud account.
 The [[file:s3-kache-transport-audit.org::*Final remote acceptance][transport acceptance audit]]
 records the final nine-job remote CI acceptance and both platform fingerprints.
 Hosted B2/R2 acceptance and the Healthcare reasoning caller remain separate.
@@ -225,7 +225,7 @@ member crate.
 
 ** POO Flow consumer
 
-The optional [[file:../../integrations/poo_flow/README.md][POO Flow resource]] publishes
+The optional [[file:../../integrations/poo_flow/README.org][POO Flow resource]] publishes
 static runtime-plan edges and restores them through S3/Kache before executing
 an MRR-admitted endpoint query. It plugs into the existing Python Runtime tool
 boundary; it does not execute the Healthcare GQL queries or restore a full plan.

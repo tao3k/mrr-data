@@ -237,7 +237,7 @@ cargo test -p mrr-data-cache --features kache,blocking local::acceptance --locke
 ** Independent SigV4 and TLS acceptance
 
 Run =python3 tools/s3-conformance/run.py= as described in the
-[[file:../../tools/s3-conformance/README.md][conformance runner guide]]. It builds pinned
+[[file:../../tools/s3-conformance/README.org][conformance runner guide]]. It builds pinned
 upstream s3s-fs outside the workspace dependency graph and supplies a temporary
 loopback TLS terminator. Upstream s3s validates real signatures; the terminator
 only relays bytes. The ordinary fault fixture remains useful for deterministic

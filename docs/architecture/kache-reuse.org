@@ -133,7 +133,7 @@ evidence that every child of an MRR snapshot has been published.
 
 The proposed extraction now exists as an unpublished
 [[file:../../tools/kache-remote-probe/kache-remote.patch][upstream patch]], with a
-[[file:../../tools/kache-remote-probe/README.md][reproducible consumer workflow]].
+[[file:../../tools/kache-remote-probe/README.org][reproducible consumer workflow]].
 It exposes the existing =RemoteLayout= entry operations and backend
 construction; the binary retains =CacheRemote= orchestration and prefetch
 planning. A clean pinned checkout plus that patch passed the MRR consumer
