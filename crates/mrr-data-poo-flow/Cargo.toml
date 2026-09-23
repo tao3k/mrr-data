@@ -1,6 +1,6 @@
 [package]
 name = "mrr-data-poo-flow"
-description = "External MRR static-edge snapshot resource for the POO Flow runtime"
+description = "External MRR snapshot and optional source-bound property resource for POO Flow"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,6 +10,7 @@ repository.workspace = true
 [features]
 default = []
 runtime = ["dep:anyhow", "dep:serde", "dep:serde_json", "dep:sha2", "dep:tokio", "dep:reqwest", "dep:meta-relational-reasoning", "dep:mrr-data-arrow", "dep:mrr-data-core", "dep:mrr-data-content", "dep:mrr-data-cache", "dep:mrr-data-datafusion"]
+property-query = ["runtime", "dep:cid", "dep:mrr-frontends"]
 
 [[bin]]
 name = "mrr-data-poo-flow"
@@ -18,12 +19,14 @@ required-features = ["runtime"]
 
 [dependencies]
 anyhow = { workspace = true, optional = true }
+cid = { workspace = true, optional = true }
 serde = { workspace = true, optional = true, features = ["derive"] }
 serde_json = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
 meta-relational-reasoning = { workspace = true, optional = true }
+mrr-frontends = { workspace = true, optional = true }
 mrr-data-arrow = { workspace = true, optional = true }
 mrr-data-core = { workspace = true, optional = true, features = ["ipfs"] }
 mrr-data-content = { workspace = true, optional = true, features = ["transfer"] }
@@ -31,6 +34,9 @@ mrr-data-cache = { workspace = true, optional = true, features = ["kache", "s3",
 mrr-data-datafusion = { workspace = true, optional = true }
 
 [dev-dependencies]
+arrow-array.workspace = true
+arrow-ipc.workspace = true
+arrow-schema.workspace = true
 mrr-data-asp-rust-build-support.workspace = true
 
 [lints]

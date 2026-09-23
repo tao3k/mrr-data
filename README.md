@@ -94,9 +94,11 @@ preserves `RETURN ALL` multiplicity, and orders physical output deterministicall
 It validates exact catalog digests, canonical unique entity IDs, property columns
 and non-dangling endpoints before execution. Explicit row/byte, conservative join,
 output-cell and DataFusion memory budgets fail closed; the caller owns the worker
-deadline. This is a physical execution API: its tests construct MRR IR directly.
-It does not yet qualify original Healthcare GQL parsing, the Scheme caller or
-property-bearing S3 snapshots. See the [M5.1 implementation audit](docs/architecture/healthcare-query-audit.md).
+deadline. The optional POO Flow property-source worker composes this executor
+with parser-owned compilation, verified cold/warm content restoration and MRR
+result admission for the original Healthcare GQL bytes. The actual Scheme caller
+and deployed S3 path remain separate acceptance gates. See the
+[Healthcare original-GQL query audit](docs/architecture/healthcare-query-audit.org).
 
 Native GraphAr publication also returns a `GraphArQuerySource`. This immutable,
 database-neutral value pins the dataset root, canonical GraphAr metadata entry
@@ -118,7 +120,7 @@ carried by `BoundDataQuery`. It still creates no database connection or engine
 lifecycle.
 
 The optional `mrr-data-content` crate also exposes a provider-neutral
-[cache and remote content protocol](docs/architecture/content-cache-protocol.md):
+[cache and remote content protocol](docs/architecture/content-cache-protocol.org):
 verified read-through, explicit cache admission, and remote-acknowledged publication.
 Enable `cache` for Kache and `s3` for the remote adapter (`cache,s3` for both). S3 credentials and TLS policy
 belong to adapters; local integration tests require no cloud account.
@@ -177,7 +179,7 @@ records local acceptance for S3/Kache snapshot publication and cold restore,
 whole-operation budgets and cancellation, Kache integration under concurrent
 consumers, and independent SigV4/TLS conformance. The reproducible
 [local S3 runner](tools/s3-conformance/README.md) needs no cloud account.
-The [M4 audit](docs/architecture/m4-closure-audit.md#final-remote-acceptance)
+The [S3/Kache transport audit](docs/architecture/s3-kache-transport-audit.org#final-remote-acceptance)
 records the final nine-job remote CI acceptance and both platform fingerprints.
 Hosted B2/R2 acceptance and real POO Flow integration remain separate.
 
