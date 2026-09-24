@@ -126,6 +126,34 @@ retention policy must protect an admitted snapshot root and its complete child
 closure for the whole lease, then hand only expired closures to a cache engine
 or explicit collector.
 
+* Device-scale deployment slices
+
+Device classes are deployment examples rather than Cargo features. Build only
+the capabilities the device owns, then select runtime budgets independently:
+
+| Deployment shape | Facade selection | Storage behavior |
+|---+---+---|
+| Wearable-class Linux relay | =--no-default-features --features filesystem= | Verify and retain immutable blocks locally; defer Arrow queries and direct S3 to a paired gateway when resources require it |
+| Jetson or edge agent | default plus optional =s3,transfer= | Arrow interchange, durable local protection and bounded background synchronization |
+| Industrial gateway | default plus =cache,s3,transfer= | Protocol aggregation, durable buffering, Kache acceleration and S3 synchronization |
+| High-capacity industrial Linux data node | default plus =cache,s3,transfer,datafusion= | TB/PB-scale local filesystem or qualified BrewFS mount, large soft cache quota, bounded query execution and process-level sharding |
+
+MCU and =no_std= devices are below the MRR Data runtime boundary. They need a
+power-loss-safe flash filesystem and a compact append-only handoff; a Linux
+gateway owns Arrow encoding, CID closure admission and S3 publication. Capacity,
+thread count, timeouts, retention and upload concurrency are runtime policy and
+must not create hardware-named schema or semantic profiles.
+
+BrewFS is an optional deployment substrate for Jetson-class and high-capacity
+industrial Linux nodes that need a shared POSIX view over local or S3-compatible object data. Point
+the durable filesystem store at a BrewFS mount; do not add a BrewFS dependency or
+another content protocol to MRR Data. A deployment may acknowledge local protection
+only after the mounted filesystem's durability boundary completes (for example,
+=fsync=), and must qualify BrewFS recovery and cross-process visibility for its
+chosen metadata and object backends. Its FUSE, metadata and writeback services are
+outside the wearable and MCU profiles. Kache remains the evictable acceleration
+tier, while direct S3 remains the provider-neutral remote object path.
+
 * Snapshot publication and restoration
 
 Enable facade =snapshot,cache,s3= for =publish_snapshot= and =restore_snapshot=

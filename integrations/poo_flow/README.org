@@ -43,6 +43,18 @@ worker environment: =S3_ENDPOINT=, =S3_BUCKET=, =S3_REGION=, =S3_ROOT=, AWS
 credentials, and optionally =S3_CA_PEM=. Keep credentials out of requests and
 receipts. The resource adds =MRR_CACHE_DIR= itself.
 
+The runtime owner may also set bounded deployment controls:
+
+| Variable | Default | Accepted range | Purpose |
+|---+---+---+---|
+| =MRR_CACHE_MAX_BYTES= | 33,554,432 | 1 MiB through 1 PiB | Kache soft quota |
+| =MRR_WORKER_THREADS= | 2 | 1 through 256 | Dedicated Tokio worker threads |
+| =MRR_S3_REQUEST_TIMEOUT_SECS= | 5 | 1 through 30 | Per-request S3 timeout |
+
+These controls change physical capacity, not the static-edge semantic profile or
+its snapshot/query admission limits. Invalid or out-of-range values fail before
+the worker opens storage.
+
 #+begin_src python
 from pathlib import Path
 from mrr_data_resource import MrrSnapshotResource
@@ -64,7 +76,7 @@ The Python timeout terminates a late worker and never accepts a result from it;
 a completed remote immutable write may remain and can be retried normally.
 
 Limits: 1 MiB request/receipt, 1,024 static edges, 256 UTF-8 bytes per input label,
-32 MiB Kache capacity, 8 MiB per child and 16 MiB snapshot payload. Remote sessions
+32 MiB default Kache capacity, 8 MiB per child and 16 MiB snapshot payload. Remote sessions
 allow 32 logical calls, 32 MiB charged bytes, two attempts per call and 30 seconds;
 the default outer process deadline is 40 seconds. Counters are logical operations
 and bytes, not S3 billing, exact wire traffic or process RSS.
