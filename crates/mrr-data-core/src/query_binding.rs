@@ -3,12 +3,12 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
-#[cfg(feature = "ipfs")]
+#[cfg(feature = "content-identity")]
 use crate::SnapshotBlock;
-#[cfg(feature = "ipfs")]
+#[cfg(feature = "content-identity")]
 use cid::Cid;
 use meta_relational_reasoning::{Binding, GenerationId, QueryResultValue};
-#[cfg(feature = "ipfs")]
+#[cfg(feature = "content-identity")]
 use meta_relational_reasoning::{
     CandidateQueryResult, CatalogBoundQuery, Direction, PageValue, QueryResultBinding, RelationId,
 };
@@ -35,7 +35,7 @@ pub struct DataEngineProfile {
 
 /// One MRR query bound to an immutable physical snapshot and engine profile.
 #[derive(Clone, Debug, Eq, PartialEq)]
-#[cfg(feature = "ipfs")]
+#[cfg(feature = "content-identity")]
 pub struct BoundDataQuery {
     query: CatalogBoundQuery,
     snapshot_root: Cid,
@@ -46,7 +46,7 @@ pub struct BoundDataQuery {
 /// Storage-neutral rows produced by one physical engine invocation.
 ///
 /// This value intentionally carries no semantic identity. The identity is
-/// injected from `BoundDataQuery` (with the `ipfs` feature) only after the producer profile is checked.
+/// injected from `BoundDataQuery` (with the `content-identity` feature) only after the producer profile is checked.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PhysicalQueryOutput {
     columns: Vec<Binding>,
@@ -55,7 +55,7 @@ pub struct PhysicalQueryOutput {
 
 /// Physical output projection failures before MRR result admission.
 #[derive(Clone, Debug, Eq, PartialEq)]
-#[cfg(feature = "ipfs")]
+#[cfg(feature = "content-identity")]
 pub enum DataQueryOutputError {
     EngineProfileMismatch { bound: String, actual: String },
 }
@@ -77,7 +77,7 @@ pub enum DataQueryBindingError {
 
 /// Physical identity failures when selecting a graph source for a bound query.
 #[derive(Clone, Debug, Eq, PartialEq)]
-#[cfg(feature = "ipfs")]
+#[cfg(feature = "content-identity")]
 pub enum DataGraphSourceBindingError {
     GraphProjectionRequired,
     SourceRelationUnavailable(RelationId),
@@ -95,17 +95,17 @@ impl fmt::Display for DataQueryBindingError {
 
 impl std::error::Error for DataQueryBindingError {}
 
-#[cfg(feature = "ipfs")]
+#[cfg(feature = "content-identity")]
 impl fmt::Display for DataGraphSourceBindingError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(formatter, "{self:?}")
     }
 }
 
-#[cfg(feature = "ipfs")]
+#[cfg(feature = "content-identity")]
 impl std::error::Error for DataGraphSourceBindingError {}
 
-#[cfg(feature = "ipfs")]
+#[cfg(feature = "content-identity")]
 impl fmt::Display for DataQueryOutputError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -117,7 +117,7 @@ impl fmt::Display for DataQueryOutputError {
     }
 }
 
-#[cfg(feature = "ipfs")]
+#[cfg(feature = "content-identity")]
 impl std::error::Error for DataQueryOutputError {}
 
 impl DataEngineProfile {
@@ -159,7 +159,7 @@ impl DataEngineProfile {
     }
 }
 
-#[cfg(feature = "ipfs")]
+#[cfg(feature = "content-identity")]
 impl BoundDataQuery {
     #[must_use]
     pub const fn query(&self) -> &CatalogBoundQuery {
@@ -212,7 +212,7 @@ impl PhysicalQueryOutput {
 ///
 /// Returns [`DataQueryOutputError::EngineProfileMismatch`] when the engine that
 /// produced `output` differs from the bound profile.
-#[cfg(feature = "ipfs")]
+#[cfg(feature = "content-identity")]
 pub fn project_data_query_output(
     query: &BoundDataQuery,
     engine: &DataEngineProfile,
@@ -241,7 +241,7 @@ pub fn project_data_query_output(
 ///
 /// Returns [`DataQueryBindingError`] when the query's admitted semantic
 /// identity does not match the snapshot or the engine cannot execute it.
-#[cfg(feature = "ipfs")]
+#[cfg(feature = "content-identity")]
 pub fn bind_data_query(
     query: &CatalogBoundQuery,
     snapshot: &SnapshotBlock,
@@ -296,7 +296,7 @@ pub fn bind_data_query(
 /// Returns [`DataGraphSourceBindingError`] when the bound snapshot has no graph
 /// projection, the query does not reference `relation`, or the supplied
 /// manifest differs from the projection selected during query binding.
-#[cfg(feature = "ipfs")]
+#[cfg(feature = "content-identity")]
 pub fn admit_graph_projection_source(
     query: &BoundDataQuery,
     relation: RelationId,
@@ -326,7 +326,7 @@ pub fn admit_graph_projection_source(
     Ok(())
 }
 
-#[cfg(feature = "ipfs")]
+#[cfg(feature = "content-identity")]
 fn required_features(query: &CatalogBoundQuery) -> BTreeSet<DataQueryFeature> {
     let query = query.query();
     let mut required = BTreeSet::new();

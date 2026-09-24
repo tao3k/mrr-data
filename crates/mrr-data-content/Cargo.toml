@@ -19,7 +19,7 @@ tokio = { workspace = true, optional = true, features = ["time", "sync"] }
 cid.workspace = true
 fvm_ipld_car = { workspace = true, optional = true }
 meta-relational-reasoning = { workspace = true, optional = true }
-mrr-data-core = { workspace = true, features = ["ipfs"] }
+mrr-data-core = { workspace = true, features = ["content-identity"] }
 tempfile = { workspace = true, optional = true }
 unsigned-varint = { workspace = true, optional = true }
 

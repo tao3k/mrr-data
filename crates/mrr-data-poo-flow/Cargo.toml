@@ -28,7 +28,7 @@ reqwest = { workspace = true, optional = true }
 meta-relational-reasoning = { workspace = true, optional = true }
 mrr-frontends = { workspace = true, optional = true }
 mrr-data-arrow = { workspace = true, optional = true }
-mrr-data-core = { workspace = true, optional = true, features = ["ipfs"] }
+mrr-data-core = { workspace = true, optional = true, features = ["content-identity"] }
 mrr-data-content = { workspace = true, optional = true, features = ["transfer"] }
 mrr-data-cache = { workspace = true, optional = true, features = ["kache", "s3", "blocking"] }
 mrr-data-datafusion = { workspace = true, optional = true }

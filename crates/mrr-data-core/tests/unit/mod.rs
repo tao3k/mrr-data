@@ -1,3 +1,3 @@
 mod asp_rust_gate;
-#[cfg(feature = "ipfs")]
+#[cfg(feature = "content-identity")]
 mod contracts;

@@ -1,19 +1,19 @@
 //! Physical engine contracts and optional CID/DAG-CBOR snapshot identity.
 #![forbid(unsafe_code)]
 
-#[cfg(feature = "ipfs")]
+#[cfg(feature = "content-identity")]
 mod error;
-#[cfg(feature = "ipfs")]
+#[cfg(feature = "content-identity")]
 mod manifest;
-#[cfg(feature = "ipfs")]
+#[cfg(feature = "content-identity")]
 mod profile;
 mod query_binding;
-#[cfg(feature = "ipfs")]
+#[cfg(feature = "content-identity")]
 mod snapshot_descriptors;
 
-#[cfg(feature = "ipfs")]
+#[cfg(feature = "content-identity")]
 pub use error::DataError;
-#[cfg(feature = "ipfs")]
+#[cfg(feature = "content-identity")]
 pub use manifest::{
     BatchDescriptor, RelationDescriptor, SnapshotBlock, SnapshotManifest, SnapshotManifestRequest,
     raw_cid,
@@ -24,9 +24,9 @@ pub use mrr_data_profile::{
     GRAPHAR_BINARY_ENTITY_VERSION, PROPERTY_SNAPSHOT_SCHEMA_VERSION, RAW_CODEC, RAW_CODEC_NAME,
     SHA2_256_CODE, SHA2_256_NAME, SNAPSHOT_SCHEMA_NAMESPACE, SNAPSHOT_SCHEMA_VERSION,
 };
-#[cfg(feature = "ipfs")]
+#[cfg(feature = "content-identity")]
 pub use profile::dag_cbor_cid;
-#[cfg(feature = "ipfs")]
+#[cfg(feature = "content-identity")]
 pub use query_binding::{
     BoundDataQuery, DataGraphSourceBindingError, DataQueryOutputError,
     admit_graph_projection_source, bind_data_query, project_data_query_output,
@@ -34,7 +34,7 @@ pub use query_binding::{
 pub use query_binding::{
     DataEngineProfile, DataQueryBindingError, DataQueryFeature, PhysicalQueryOutput,
 };
-#[cfg(feature = "ipfs")]
+#[cfg(feature = "content-identity")]
 pub use snapshot_descriptors::{
     CoverageDescriptor, CoverageKind, EntityDescriptor, GraphProjectionDescriptor,
 };

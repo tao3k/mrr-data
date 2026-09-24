@@ -60,10 +60,10 @@ jobs:
           cargo check -p mrr-data --no-default-features --features cache --locked
           cargo check -p mrr-data --no-default-features --features s3 --locked
           cargo check -p mrr-data --no-default-features --features cache,s3 --locked
-          cargo check -p mrr-data --no-default-features --features ipfs,graphar --locked
+          cargo check -p mrr-data --no-default-features --features content-identity,graphar --locked
           cargo test -p mrr-data --no-default-features --features datafusion --locked
           cargo test -p mrr-data --no-default-features --locked
-          cargo test -p mrr-data --no-default-features --features ipfs,graphar --locked
+          cargo test -p mrr-data --no-default-features --features content-identity,graphar --locked
       - name: Check fuzz formatting
         run: cargo fmt --manifest-path fuzz/Cargo.toml --all -- --check
       - name: Compile IPC fuzz target
@@ -199,7 +199,7 @@ jobs:
       - name: Check facade GraphAr native feature
         run: |
           cargo check -p mrr-data --no-default-features --features graphar-native --locked
-          cargo check -p mrr-data --no-default-features --features ipfs,graphar-native --locked
+          cargo check -p mrr-data --no-default-features --features content-identity,graphar-native --locked
       - name: Lint maintained GraphAr adapter
         run: cargo clippy -p mrr-data-graphar --all-targets --features native-graphar --locked -- -D warnings
 

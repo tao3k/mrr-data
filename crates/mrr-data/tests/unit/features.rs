@@ -33,7 +33,7 @@ fn graphar_surface_is_available_when_selected() {
 }
 
 #[test]
-#[cfg(all(feature = "ipfs", feature = "graphar"))]
+#[cfg(all(feature = "content-identity", feature = "graphar"))]
 fn graphar_query_source_admission_is_available_from_the_composed_facade() {
     let _ = core::mem::size_of::<crate::GraphArQuerySourceBindingError>();
     let _ = crate::admit_graphar_query_source;
@@ -51,9 +51,9 @@ fn datafusion_surface_is_available_when_selected() {
 }
 
 #[test]
-#[cfg(feature = "ipfs")]
-fn ipfs_manifest_surface_is_available_without_storage() {
-    let _ = crate::manifest::raw_cid(b"ipfs identity");
+#[cfg(feature = "content-identity")]
+fn content_identity_surface_is_available_without_storage() {
+    let _ = crate::manifest::raw_cid(b"content identity");
 }
 
 #[test]
@@ -64,7 +64,7 @@ fn car_surface_requires_its_feature() {
 
 #[test]
 #[cfg(feature = "filesystem")]
-fn filesystem_surface_requires_its_feature() {
+fn filesystem_surface_is_available_from_the_default_facade() {
     let _ = core::mem::size_of::<crate::content::FilesystemContentStore>();
 }
 

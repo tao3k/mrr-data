@@ -8,12 +8,12 @@ license.workspace = true
 repository.workspace = true
 
 [features]
-default = ["arrow"]
+default = ["arrow", "filesystem"]
 arrow = ["dep:mrr-data-arrow"]
 cache = ["content", "dep:mrr-data-cache", "mrr-data-cache/kache"]
 s3 = ["content", "dep:mrr-data-cache", "mrr-data-cache/s3"]
-ipfs = ["dep:mrr-data-core", "mrr-data-core/ipfs"]
-content = ["ipfs", "dep:mrr-data-content"]
+content-identity = ["dep:mrr-data-core", "mrr-data-core/content-identity"]
+content = ["content-identity", "dep:mrr-data-content"]
 transfer = ["snapshot", "mrr-data-content/transfer", "dep:mrr-data-cache", "mrr-data-cache/blocking"]
 snapshot = ["content", "mrr-data-content/snapshot"]
 car = ["content", "mrr-data-content/car"]

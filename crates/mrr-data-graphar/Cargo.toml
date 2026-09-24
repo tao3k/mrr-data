@@ -21,7 +21,7 @@ tempfile = { workspace = true, optional = true }
 [dev-dependencies]
 mrr-data-asp-rust-build-support.workspace = true
 mrr-data-arrow.workspace = true
-mrr-data-core = { workspace = true, features = ["ipfs"] }
+mrr-data-core = { workspace = true, features = ["content-identity"] }
 mrr-data-datafusion.workspace = true
 tokio.workspace = true
 

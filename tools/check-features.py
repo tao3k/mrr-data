@@ -8,9 +8,9 @@ from pathlib import Path
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-CASES = [None, "", "arrow", "ipfs", "content", "snapshot", "transfer", "car", "filesystem", "cache", "s3",
-         "datafusion", "graphar", "ipfs,graphar", "cache,s3", "snapshot,cache,s3", "transfer,cache,s3",
-         "arrow,ipfs,content,snapshot,transfer,car,filesystem,cache,s3,datafusion,graphar"]
+CASES = [None, "", "arrow", "content-identity", "content", "snapshot", "transfer", "car", "filesystem", "cache", "s3",
+         "datafusion", "graphar", "content-identity,graphar", "cache,s3", "snapshot,cache,s3", "transfer,cache,s3",
+         "arrow,content-identity,content,snapshot,transfer,car,filesystem,cache,s3,datafusion,graphar"]
 
 
 def main():
@@ -23,9 +23,9 @@ def main():
         flags = [] if selected is None else ["--no-default-features"]
         if selected:
             flags += ["--features", selected]
-        enabled = {"arrow"} if selected is None else set(selected.split(","))
+        enabled = {"arrow", "filesystem"} if selected is None else set(selected.split(","))
         content = bool(enabled & {"content", "snapshot", "transfer", "car", "filesystem", "cache", "s3", "datafusion"})
-        identity = content or "ipfs" in enabled
+        identity = content or "content-identity" in enabled
         expected = {
             "mrr-data-arrow": bool(enabled & {"arrow", "datafusion"}),
             "mrr-data-core": identity or "datafusion" in enabled,
