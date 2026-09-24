@@ -221,7 +221,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: tao3k/meta-relational-reasoning
-          ref: 74cc7ae694fe1825af362f41fbe24f4bcd07e760
+          ref: c4328064ab0bf5eca39dc2f79fbf890b6b99f7c9
           path: .ci/mrr-source
       - uses: dtolnay/rust-toolchain@stable
         with:
