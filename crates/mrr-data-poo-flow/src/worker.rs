@@ -1,14 +1,14 @@
 //! Snapshot publication, verified restore and MRR result admission.
 use crate::{
-    outbox::{self, Guard, LocalPolicy, Record, State},
+    outbox::{self, BoundedQueryCache, Guard, LocalPolicy, Record, State},
     protocol::{self, MAX_EDGES, MAX_INPUT, Operation, Outcome, PROFILE, Receipt, Request},
     semantic::Context,
 };
 use anyhow::{Context as _, Result, ensure};
 use mrr_data_cache::{BlockingContentStore, S3ContentStore};
 use mrr_data_content::{
-    AsyncContentStore, ContentBlock, ContentCodec, FilesystemContentStore, RemoteTransferLimits,
-    SnapshotTransferLimits, TransferSession, restore_snapshot_local,
+    ContentBlock, ContentCodec, ContentStore, FilesystemContentStore, RemoteTransferLimits,
+    RestoredSnapshot, SnapshotTransferLimits, TransferSession, restore_snapshot_local,
 };
 use mrr_data_core::{
     BatchDescriptor, CoverageDescriptor, CoverageKind, RelationDescriptor, SnapshotBlock,
@@ -88,15 +88,17 @@ pub(crate) async fn execute(
             .await?
         }
         Operation::Query { root } => {
-            query(
-                &request,
-                &context,
+            query(QueryInput {
+                request: &request,
+                context: &context,
                 root,
-                &local,
-                remote.as_ref(),
-                &session,
+                local: &local,
+                remote: remote.as_ref(),
+                session: &session,
                 limits,
-            )
+                local_path: Path::new(&local_path),
+                max_bytes: policy.max_bytes,
+            })
             .await?
         }
     };
@@ -244,29 +246,27 @@ async fn protect(
         blocks,
     };
     let path = PathBuf::from(local_path);
-    let guard = tokio::task::spawn_blocking(move || Guard::acquire(&path)).await??;
+    let snapshot_cid = *snapshot.cid();
     let incoming = vec![
         (raw_cid(&ipc), ipc.len()),
         (raw_cid(&coverage), coverage.len()),
-        (*snapshot.cid(), snapshot.bytes().len()),
+        (snapshot_cid, snapshot.bytes().len()),
     ];
     let guard = tokio::task::spawn_blocking(move || {
+        let guard = Guard::acquire(&path)?;
         guard.maintain(now)?;
         guard.preflight(&incoming, policy.max_bytes)?;
+        let store = FilesystemContentStore::open(&path)?;
+        for bytes in [&ipc, &coverage] {
+            store.put(ContentBlock::new(ContentCodec::Raw, bytes))?;
+        }
+        store.put(ContentBlock::new(ContentCodec::DagCbor, snapshot.bytes()))?;
         Ok::<_, anyhow::Error>(guard)
     })
     .await??;
-    for bytes in [&ipc, &coverage] {
-        local
-            .store(ContentBlock::new(ContentCodec::Raw, bytes))
-            .await?;
-    }
-    local
-        .store(ContentBlock::new(ContentCodec::DagCbor, snapshot.bytes()))
-        .await?;
     restore_snapshot_local(
         local,
-        snapshot.cid(),
+        &snapshot_cid,
         &context.relations,
         &context.entities,
         limits,
@@ -358,41 +358,68 @@ async fn sync_protected(input: SyncInput<'_>) -> Result<(String, Outcome)> {
     Ok((root.to_owned(), Outcome::Published))
 }
 
-async fn query(
-    request: &Request,
-    context: &Context,
-    root: &str,
-    local: &BlockingContentStore<FilesystemContentStore>,
-    remote: Option<&S3ContentStore>,
-    session: &TransferSession,
+struct QueryInput<'a> {
+    request: &'a Request,
+    context: &'a Context,
+    root: &'a str,
+    local: &'a BlockingContentStore<FilesystemContentStore>,
+    remote: Option<&'a S3ContentStore>,
+    session: &'a TransferSession,
     limits: SnapshotTransferLimits,
-) -> Result<(String, Outcome)> {
-    let cid = root.parse()?;
-    let restored =
-        match restore_snapshot_local(local, &cid, &context.relations, &context.entities, limits)
-            .await
-        {
-            Ok(restored) => restored,
-            Err(
-                mrr_data_content::SnapshotTransferError::Content(
-                    mrr_data_content::ContentError::NotFound(_),
+    local_path: &'a Path,
+    max_bytes: u64,
+}
+
+async fn restore_for_query(input: &QueryInput<'_>) -> Result<RestoredSnapshot> {
+    let cid = input.root.parse()?;
+    let restored = match restore_snapshot_local(
+        input.local,
+        &cid,
+        &input.context.relations,
+        &input.context.entities,
+        input.limits,
+    )
+    .await
+    {
+        Ok(restored) => restored,
+        Err(
+            mrr_data_content::SnapshotTransferError::Content(
+                mrr_data_content::ContentError::NotFound(_),
+            )
+            | mrr_data_content::SnapshotTransferError::MissingBlock(_),
+        ) => {
+            let remote = input
+                .remote
+                .context("snapshot incomplete locally and S3 unavailable")?;
+            input
+                .session
+                .restore_snapshot(
+                    &BoundedQueryCache {
+                        local: input.local,
+                        path: input.local_path,
+                        max_bytes: input.max_bytes,
+                    },
+                    remote,
+                    &cid,
+                    &input.context.relations,
+                    &input.context.entities,
+                    input.limits,
                 )
-                | mrr_data_content::SnapshotTransferError::MissingBlock(_),
-            ) => {
-                let remote = remote.context("snapshot incomplete locally and S3 unavailable")?;
-                session
-                    .restore_snapshot(
-                        local,
-                        remote,
-                        &cid,
-                        &context.relations,
-                        &context.entities,
-                        limits,
-                    )
-                    .await?
-            }
-            Err(error) => return Err(error.into()),
-        };
+                .await?
+        }
+        Err(error) => return Err(error.into()),
+    };
+    Ok(restored)
+}
+
+async fn query(input: QueryInput<'_>) -> Result<(String, Outcome)> {
+    let restored = restore_for_query(&input).await?;
+    let QueryInput {
+        request,
+        context,
+        root,
+        ..
+    } = input;
     let profile = mrr_data_datafusion::datafusion_engine_profile()?;
     let bound = mrr_data_core::bind_data_query(&context.query, restored.snapshot(), &profile)?;
     let manifest = restored.snapshot().manifest();

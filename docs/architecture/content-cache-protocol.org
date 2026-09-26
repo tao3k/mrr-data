@@ -123,8 +123,9 @@ The POO Flow worker adds an owner-scoped durable outbox above it: a protected
 snapshot records its complete CID closure, source and revision, and a lease.
 Pending closures survive lease expiry until S3 acknowledges the root. On the
 next protect or replay, expired synced records and blocks unshared with retained
-closures are removed. Protection admission counts physical CID files against a
-configured bound; remote query fills are outside that bound. Kache is an
+closures are removed. Protection and remote query-fill admission count physical
+CID files against one configured bound; a verified remote read remains usable
+even if a disposable local fill is refused. Kache is an
 optional acceleration tier and may evict under its configured policy; an
 eviction-capable cache cannot establish a minimum offline-retention promise.
 

@@ -2,11 +2,16 @@
 use crate::protocol::{PROFILE, text};
 use anyhow::{Context as _, Result, ensure};
 use cid::Cid;
+use mrr_data_cache::BlockingContentStore;
+use mrr_data_content::{
+    AsyncContentStore, ContentBlock, ContentError, ContentStore, FilesystemContentStore,
+    LocalFuture,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeSet,
     fs::{self, File, OpenOptions},
-    io::{Read as _, Write as _},
+    io::{ErrorKind, Read as _, Write as _},
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -282,6 +287,49 @@ pub(crate) fn claim(path: &Path, root: &str) -> Result<Option<File>> {
         Ok(()) => Ok(Some(claim)),
         Err(std::fs::TryLockError::WouldBlock) => Ok(None),
         Err(error) => Err(error.into()),
+    }
+}
+
+/// Query read-through may fetch verified remote bytes even when a disposable
+/// local fill cannot fit. Serialize its admission with protection writes so
+/// persisted CID blocks remain under the same owner-scoped capacity bound.
+pub(crate) struct BoundedQueryCache<'a> {
+    pub(crate) local: &'a BlockingContentStore<FilesystemContentStore>,
+    pub(crate) path: &'a Path,
+    pub(crate) max_bytes: u64,
+}
+
+impl AsyncContentStore for BoundedQueryCache<'_> {
+    fn load<'a>(&'a self, cid: &'a Cid, max_bytes: usize) -> LocalFuture<'a, Vec<u8>> {
+        self.local.load(cid, max_bytes)
+    }
+
+    fn store<'a>(&'a self, block: ContentBlock<'a>) -> LocalFuture<'a, Cid> {
+        Box::pin(async move {
+            let path = self.path.to_owned();
+            let cid = block.cid();
+            let bytes = block.bytes().to_vec();
+            let codec = block.codec();
+            let max_bytes = self.max_bytes;
+            tokio::task::spawn_blocking(move || {
+                let guard = Guard::acquire(&path)?;
+                guard.preflight(&[(cid, bytes.len())], max_bytes)?;
+                let local = FilesystemContentStore::open(&path).map_err(anyhow::Error::from)?;
+                local
+                    .put(ContentBlock::new(codec, &bytes))
+                    .map_err(anyhow::Error::from)
+            })
+            .await
+            .map_err(|_| cache_error())?
+            .map_err(|_| cache_error())
+        })
+    }
+}
+
+fn cache_error() -> ContentError {
+    ContentError::Io {
+        operation: "bounded local query cache admission",
+        kind: ErrorKind::Other,
     }
 }
 

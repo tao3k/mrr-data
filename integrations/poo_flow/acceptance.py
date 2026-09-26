@@ -1,6 +1,8 @@
 """Exercise the installed POO Flow tool boundary against real S3 and MRR."""
 import argparse
+import base64
 from dataclasses import asdict
+import hashlib
 import json
 import os
 import subprocess
@@ -54,6 +56,19 @@ def run(executable):
             assert receipt.rows == local.rows
             assert receipt.admission_digest == local.admission_digest
             assert receipt.generation == published.generation
+        constrained_dir = root / "capacity-limited"
+        constrained_dir.mkdir()
+        filler = b"x" * (1024 * 1024)
+        filler_cid = "b" + base64.b32encode(b"\x01\x55\x12\x20" + hashlib.sha256(filler).digest()).decode().lower().rstrip("=")
+        (constrained_dir / filler_cid).write_bytes(filler)
+        constrained = MrrSnapshotResource(executable, constrained_dir,
+                                          dict(os.environ, MRR_LOCAL_MAX_BYTES="1048576"))
+        capacity_limited = constrained.query(root=published.root, **scope)
+        capacity_limited_repeated = constrained.query(root=published.root, **scope)
+        assert capacity_limited.rows == capacity_limited_repeated.rows == local.rows
+        assert capacity_limited.remote_operations > 0 and capacity_limited_repeated.remote_operations > 0
+        assert not (constrained_dir / published.root).exists()
+        assert (constrained_dir / filler_cid).stat().st_size == len(filler)
         negatives = []
         for name, action in (
             ("stale-generation", lambda: consumer.query(root=published.root, **dict(scope, revision="build-plan-2"))),
@@ -89,7 +104,9 @@ def run(executable):
                 "protected": asdict(protected), "offline_query": asdict(offline_query),
                 "synchronized": synchronized, "manually_synced": asdict(manually_synced),
                 "local": asdict(local), "cold": asdict(cold), "warm": asdict(warm),
-                "restarted": asdict(restarted), "negative_cases": negatives}
+                "restarted": asdict(restarted), "capacity_limited": asdict(capacity_limited),
+                "capacity_limited_repeated": asdict(capacity_limited_repeated),
+                "negative_cases": negatives}
 
 
 if __name__ == "__main__":
