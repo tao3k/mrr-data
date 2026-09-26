@@ -259,10 +259,12 @@ async fn query(
             .await
         {
             Ok(restored) => restored,
-            Err(mrr_data_content::SnapshotTransferError::Content(
-                mrr_data_content::ContentError::NotFound(_),
-            ))
-            | Err(mrr_data_content::SnapshotTransferError::MissingBlock(_)) => {
+            Err(
+                mrr_data_content::SnapshotTransferError::Content(
+                    mrr_data_content::ContentError::NotFound(_),
+                )
+                | mrr_data_content::SnapshotTransferError::MissingBlock(_),
+            ) => {
                 let remote = remote.context("snapshot incomplete locally and S3 unavailable")?;
                 session
                     .restore_snapshot(
