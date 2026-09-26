@@ -178,6 +178,7 @@ impl ContentStore for FilesystemContentStore {
                     actual: Box::new(cid_for(block.codec(), &existing)),
                 });
             }
+            self.sync_root()?;
             return Ok(cid);
         }
 
@@ -198,6 +199,7 @@ impl ContentStore for FilesystemContentStore {
             Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {
                 let existing = self.get_bounded(&cid, block.bytes().len())?;
                 if existing == block.bytes() {
+                    self.sync_root()?;
                     Ok(cid)
                 } else {
                     Err(ContentError::CidMismatch {
