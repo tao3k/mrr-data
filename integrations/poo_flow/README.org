@@ -41,13 +41,13 @@ Add this directory to the consumer's Python import path, alongside its existing
 POO Flow runtime installation. Supply runtime-owned S3 configuration through the
 worker environment: =S3_ENDPOINT=, =S3_BUCKET=, =S3_REGION=, =S3_ROOT=, AWS
 credentials, and optionally =S3_CA_PEM=. Keep credentials out of requests and
-receipts. The resource adds =MRR_CACHE_DIR= itself.
+receipts. The resource adds =MRR_LOCAL_DIR= itself. =protect= and a complete
+local =query= require neither S3 configuration nor connectivity.
 
 The runtime owner may also set bounded deployment controls:
 
 | Variable | Default | Accepted range | Purpose |
 |---+---+---+---|
-| =MRR_CACHE_MAX_BYTES= | 33,554,432 | 1 MiB through 1 PiB | Kache soft quota |
 | =MRR_WORKER_THREADS= | 2 | 1 through 256 | Dedicated Tokio worker threads |
 | =MRR_S3_REQUEST_TIMEOUT_SECS= | 5 | 1 through 30 | Per-request S3 timeout |
 
@@ -63,6 +63,8 @@ from mrr_data_resource import MrrSnapshotResource
 resource = MrrSnapshotResource(Path("target/debug/mrr-data-poo-flow"),
                                Path(".cache/mrr"), worker_env)
 published = resource.publish(plan, source="my-workflow", revision=source_revision)
+protected = resource.protect(plan, source="my-workflow", revision=source_revision)
+# Later, after reconnecting: resource.sync(root=protected.root, ...)
 tool = resource.query_tool(root=published.root, source="my-workflow",
                            revision=source_revision)
 # Register tool in the existing POO Flow RuntimeGraphToolNode.
@@ -70,13 +72,20 @@ tool = resource.query_tool(root=published.root, source="my-workflow",
 
 The query tool accepts no arguments: an Agent cannot replace its root, revision,
 credentials, cache path or executable. The runtime owner selects that scope.
-Every invocation starts a new Rust process. Persistence belongs to Kache, so
-worker exit/restart does not require a second journal or a reconstructed cache.
+Every invocation starts a new Rust process. The filesystem store fsyncs each
+CID block and its directory. =protect= stores and verifies the complete closure,
+then fsyncs a =pending-<root>= marker. =pending_roots()= discovers these roots
+after restart. =sync= publishes children before the root and removes the marker
+only after S3 acknowledges the root. Repeating =sync= is safe for immutable blocks.
+Protected local blocks are retained; no automatic expiry or deletion runs.
+The worker uses Tokio for bounded transfer, deadlines and S3 I/O. File writes
+and =fsync= run through its bounded =spawn_blocking= bridge, so the durable
+filesystem store does not block Tokio's async workers.
 The Python timeout terminates a late worker and never accepts a result from it;
 a completed remote immutable write may remain and can be retried normally.
 
 Limits: 1 MiB request/receipt, 1,024 static edges, 256 UTF-8 bytes per input label,
-32 MiB default Kache capacity, 8 MiB per child and 16 MiB snapshot payload. Remote sessions
+8 MiB per child and 16 MiB snapshot payload. Remote sessions
 allow 32 logical calls, 32 MiB charged bytes, two attempts per call and 30 seconds;
 the default outer process deadline is 40 seconds. Counters are logical operations
 and bytes, not S3 billing, exact wire traffic or process RSS.
@@ -93,11 +102,12 @@ python3 tools/s3-conformance/run.py --poo-flow --receipt /tmp/poo-mrr-receipt.js
 The runner fetches clean POO Flow revision
 =7f60e82b609ed2227ce3e71d17c5a1a351902e54= and imports its real public tool API.
 It invokes the worker through =RuntimeGraphToolNode=, not a replacement test
-implementation. It compares local, cold, warm and reopened-cache results and
+implementation. It verifies offline protection, local query and subsequent S3
+sync, then compares local, cold, warm and reopened-filesystem results and
 MRR admission digests. Cold restore must issue remote reads; warm and reopened
-caches must issue zero remote operations. Each operation is already a separate
-process. This proves clean process restart; killed-during-publication recovery
-remains covered by the underlying cache/snapshot tests.
+local stores must issue zero remote operations. Each operation is already a
+separate process. This proves clean process restart and outbox discovery;
+crash injection during marker creation remains a separate qualification gate.
 
 Negative cases include stale generation, substituted source, tool scope
 replacement, duplicate edges, unavailable transport, process deadline and an

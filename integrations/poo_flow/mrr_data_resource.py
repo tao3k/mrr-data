@@ -40,17 +40,17 @@ class MrrReceipt:
 
 
 class MrrSnapshotResource:
-    """One trusted external executable and cache; runtime configuration is local."""
+    """One trusted worker and durable local store; runtime configuration is local."""
 
-    def __init__(self, executable: Path, cache: Path, environment: Mapping[str, str], *, timeout: float = 40):
+    def __init__(self, executable: Path, local: Path, environment: Mapping[str, str], *, timeout: float = 40):
         if timeout <= 0:
             raise ValueError("positive worker timeout required")
         self.executable = executable.resolve(strict=True)
-        self.cache = cache.resolve()
-        self.environment = dict(environment, MRR_CACHE_DIR=str(self.cache))
+        self.local = local.resolve()
+        self.environment = dict(environment, MRR_LOCAL_DIR=str(self.local))
         self.timeout = timeout
 
-    def publish(self, plan: RuntimeGraphPlan, *, source: str, revision: str) -> MrrReceipt:
+    def _edges(self, plan: RuntimeGraphPlan) -> list[list[str]]:
         if not isinstance(plan, RuntimeGraphPlan):
             raise TypeError("an existing POO Flow RuntimeGraphPlan projection is required")
         if plan.conditional_edges:
@@ -61,7 +61,33 @@ class MrrSnapshotResource:
         edges = [[edge.source, edge.target] for edge in plan.edges]
         if any(node not in nodes for edge in edges for node in edge):
             raise MrrResourceError("edge references an undeclared runtime node")
-        return self._invoke(source, revision, {"kind": "publish", "edges": edges})
+        return edges
+
+    def protect(self, plan: RuntimeGraphPlan, *, source: str, revision: str) -> MrrReceipt:
+        """Durably protect a complete snapshot without requiring S3 access."""
+        return self._invoke(source, revision, {"kind": "protect", "edges": self._edges(plan)})
+
+    def publish(self, plan: RuntimeGraphPlan, *, source: str, revision: str) -> MrrReceipt:
+        """Protect locally, then require remote root acknowledgement."""
+        return self._invoke(source, revision, {"kind": "publish", "edges": self._edges(plan)})
+
+    def sync(self, *, root: str, source: str, revision: str) -> MrrReceipt:
+        """Publish a protected root and its children after connectivity returns."""
+        if not isinstance(root, str) or not CID.fullmatch(root):
+            raise MrrResourceError("canonical snapshot root required")
+        return self._invoke(source, revision, {"kind": "sync", "root": root})
+
+    def pending_roots(self) -> tuple[str, ...]:
+        """Discover local outbox roots after a process restart."""
+        if not self.local.is_dir():
+            return ()
+        roots = []
+        for marker in self.local.glob("pending-b*"):
+            root = marker.name.removeprefix("pending-")
+            if (CID.fullmatch(root) and marker.is_file() and not marker.is_symlink()
+                    and marker.stat().st_size == len(root) and marker.read_bytes() == root.encode()):
+                roots.append(root)
+        return tuple(sorted(roots))
 
     def query(self, *, root: str, source: str, revision: str) -> MrrReceipt:
         if not isinstance(root, str) or not CID.fullmatch(root):
@@ -118,9 +144,12 @@ class MrrSnapshotResource:
                     raise ValueError("invalid counter")
             result = receipt["result"]
             rows, digest = None, None
-            if operation["kind"] == "publish":
-                if result != {"kind": "published"}:
-                    raise ValueError("publication receipt expected")
+            if operation["kind"] in ("publish", "protect", "sync"):
+                expected = "protected" if operation["kind"] == "protect" else "published"
+                if result != {"kind": expected}:
+                    raise ValueError("snapshot receipt mismatch")
+                if operation["kind"] == "sync" and receipt["root"] != operation["root"]:
+                    raise ValueError("synchronization root mismatch")
             else:
                 if receipt["root"] != operation["root"] or set(result) != {"kind", "rows", "admission_digest"}:
                     raise ValueError("query receipt binding mismatch")

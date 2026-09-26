@@ -18,6 +18,15 @@ def run(executable):
     scope = {"source": "poo-flow/build-plan", "revision": "build-plan-1"}
     with tempfile.TemporaryDirectory(prefix="poo-mrr-") as temporary:
         root = Path(temporary)
+        offline = MrrSnapshotResource(executable, root / "offline-protected", {})
+        protected = offline.protect(plan, **scope)
+        assert protected.remote_operations == 0
+        assert offline.pending_roots() == (protected.root,)
+        offline_query = MrrSnapshotResource(executable, root / "offline-protected", {}).query(root=protected.root, **scope)
+        assert offline_query.remote_operations == 0 and len(offline_query.rows) == 2
+        synchronized = MrrSnapshotResource(executable, root / "offline-protected", os.environ).sync(root=protected.root, **scope)
+        assert synchronized.root == protected.root and synchronized.remote_operations > 0
+        assert offline.pending_roots() == ()
         producer = MrrSnapshotResource(executable, root / "producer", os.environ)
         published = producer.publish(plan, **scope)
         reordered = producer.publish(RuntimeGraphPlan(nodes=plan.nodes, edges=tuple(reversed(plan.edges))), **scope)
@@ -71,6 +80,8 @@ def run(executable):
         else:
             raise AssertionError("corrupt root produced an accepted result")
         return {"profile": "poo-flow.static-edges.v1", "result": "passed",
+                "protected": asdict(protected), "offline_query": asdict(offline_query),
+                "synchronized": asdict(synchronized),
                 "local": asdict(local), "cold": asdict(cold), "warm": asdict(warm),
                 "restarted": asdict(restarted), "negative_cases": negatives}
 

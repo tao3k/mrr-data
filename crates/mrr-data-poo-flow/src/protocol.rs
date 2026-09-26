@@ -17,7 +17,9 @@ pub(crate) struct Request {
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum Operation {
+    Protect { edges: Vec<[String; 2]> },
     Publish { edges: Vec<[String; 2]> },
+    Sync { root: String },
     Query { root: String },
 }
 #[derive(Serialize)]
@@ -37,6 +39,7 @@ pub(crate) struct Receipt {
 #[derive(Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub(crate) enum Outcome {
+    Protected,
     Published,
     Admitted {
         rows: Vec<[String; 2]>,

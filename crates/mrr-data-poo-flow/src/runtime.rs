@@ -1,18 +1,14 @@
 //! Dedicated one-request process owner; blocking setup precedes the async runtime.
 use crate::protocol::{MAX_INPUT, PROFILE, Request};
 use anyhow::{Context as _, Result, ensure};
-use mrr_data_cache::{
-    BlockingContentStore, KacheContentStore, S3Config, S3ContentStore, http_client_builder,
-};
+use mrr_data_cache::{BlockingContentStore, S3Config, S3ContentStore, http_client_builder};
+use mrr_data_content::FilesystemContentStore;
 use std::{
     env,
     io::{self, Read},
     time::Duration,
 };
 
-const DEFAULT_CACHE_MAX_BYTES: u64 = 32 * 1024 * 1024;
-const MIN_CACHE_MAX_BYTES: u64 = 1024 * 1024;
-const MAX_CACHE_MAX_BYTES: u64 = 1024 * 1024 * 1024 * 1024 * 1024;
 const DEFAULT_WORKER_THREADS: usize = 2;
 const MAX_WORKER_THREADS: usize = 256;
 const DEFAULT_S3_TIMEOUT_SECS: u64 = 5;
@@ -20,7 +16,6 @@ const MAX_S3_TIMEOUT_SECS: u64 = 30;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct RuntimeConfig {
-    cache_max_bytes: u64,
     worker_threads: usize,
     s3_timeout: Duration,
 }
@@ -31,13 +26,6 @@ impl RuntimeConfig {
     }
 
     fn from_lookup(mut lookup: impl FnMut(&str) -> Option<String>) -> Result<Self> {
-        let cache_max_bytes = bounded_u64(
-            "MRR_CACHE_MAX_BYTES",
-            lookup("MRR_CACHE_MAX_BYTES"),
-            DEFAULT_CACHE_MAX_BYTES,
-            MIN_CACHE_MAX_BYTES,
-            MAX_CACHE_MAX_BYTES,
-        )?;
         let worker_threads = bounded_u64(
             "MRR_WORKER_THREADS",
             lookup("MRR_WORKER_THREADS"),
@@ -55,7 +43,6 @@ impl RuntimeConfig {
             MAX_S3_TIMEOUT_SECS,
         )?;
         Ok(Self {
-            cache_max_bytes,
             worker_threads,
             s3_timeout: Duration::from_secs(s3_timeout_secs),
         })
@@ -102,16 +89,17 @@ pub fn execute(input: &[u8]) -> Result<String> {
     ensure!(request.profile == PROFILE, "unsupported consumer profile");
     crate::semantic::Context::new(&request.source, &request.revision)?;
     let config = RuntimeConfig::from_env()?;
-    let (local, remote) = stores(config)?;
-    WorkerRuntime::new(config.worker_threads)?.execute(input, local, remote)
+    let path = env::var("MRR_LOCAL_DIR").context("MRR_LOCAL_DIR required")?;
+    let local = BlockingContentStore::new(FilesystemContentStore::open(&path)?);
+    let remote = match request.operation {
+        crate::protocol::Operation::Protect { .. } => None,
+        crate::protocol::Operation::Query { .. } if env::var_os("S3_BUCKET").is_none() => None,
+        _ => Some(remote_store(config)?),
+    };
+    WorkerRuntime::new(config.worker_threads)?.execute(input, local, remote, path)
 }
 
-fn stores(
-    runtime_config: RuntimeConfig,
-) -> Result<(BlockingContentStore<KacheContentStore>, S3ContentStore)> {
-    let path = env::var("MRR_CACHE_DIR").context("MRR_CACHE_DIR required")?;
-    let local = KacheContentStore::open(path, runtime_config.cache_max_bytes)?;
-    let local = BlockingContentStore::new(local);
+fn remote_store(runtime_config: RuntimeConfig) -> Result<S3ContentStore> {
     let s3_config = S3Config::default()
         .bucket(&env::var("S3_BUCKET")?)
         .endpoint(&env::var("S3_ENDPOINT")?)
@@ -123,7 +111,7 @@ fn stores(
             client.add_root_certificate(reqwest::Certificate::from_pem(&std::fs::read(path)?)?);
     }
     let remote = S3ContentStore::new(s3_config, client.build()?, runtime_config.s3_timeout)?;
-    Ok((local, remote))
+    Ok(remote)
 }
 
 struct WorkerRuntime(tokio::runtime::Runtime);
@@ -139,11 +127,12 @@ impl WorkerRuntime {
     fn execute(
         self,
         input: &[u8],
-        local: BlockingContentStore<KacheContentStore>,
-        remote: S3ContentStore,
+        local: BlockingContentStore<FilesystemContentStore>,
+        remote: Option<S3ContentStore>,
+        path: String,
     ) -> Result<String> {
         self.0
-            .block_on(crate::worker::execute(input, local, remote))
+            .block_on(crate::worker::execute(input, local, remote, path))
     }
 }
 

@@ -46,7 +46,7 @@ fn invalid_requests_fail_before_runtime_configuration_or_io() {
         format!(r#"{{"profile":"{PROFILE}","source":"plan","revision":"rev","operation":{{"kind":"query","root":"invalid","query":"MATCH anything"}}}}"#).into_bytes(),
     ] {
         let error = crate::execute(&request).unwrap_err().to_string();
-        assert!(!error.contains("MRR_CACHE_DIR"), "request reached runtime configuration: {error}");
+        assert!(!error.contains("MRR_LOCAL_DIR"), "request reached runtime configuration: {error}");
     }
 }
 
@@ -99,4 +99,38 @@ async fn fixed_query_projects_exact_source_endpoints_before_admission() {
         *b,
         EntityId::from_canonical_bytes(serde_json::to_vec(&("plan", "test")).unwrap()).unwrap()
     );
+}
+
+#[tokio::test]
+async fn protected_snapshot_survives_restart_and_queries_without_s3() {
+    use mrr_data_cache::BlockingContentStore;
+    use mrr_data_content::FilesystemContentStore;
+
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().to_str().unwrap().to_owned();
+    let protect = br#"{"profile":"poo-flow.static-edges.v1","source":"plan","revision":"rev","operation":{"kind":"protect","edges":[["compile","test"]]}}"#;
+    let local = BlockingContentStore::new(FilesystemContentStore::open(&path).unwrap());
+    let receipt: serde_json::Value = serde_json::from_str(
+        &crate::worker::execute(protect, local, None, path.clone())
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(receipt["result"]["kind"], "protected");
+    assert_eq!(receipt["remote_operations"], 0);
+    let root = receipt["root"].as_str().unwrap();
+    assert!(directory.path().join(format!("pending-{root}")).exists());
+
+    let query = serde_json::json!({"profile": PROFILE, "source": "plan", "revision": "rev",
+        "operation": {"kind": "query", "root": root}});
+    let local = BlockingContentStore::new(FilesystemContentStore::open(&path).unwrap());
+    let admitted: serde_json::Value = serde_json::from_str(
+        &crate::worker::execute(&serde_json::to_vec(&query).unwrap(), local, None, path)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(admitted["result"]["kind"], "admitted");
+    assert_eq!(admitted["result"]["rows"].as_array().unwrap().len(), 1);
+    assert_eq!(admitted["remote_operations"], 0);
 }

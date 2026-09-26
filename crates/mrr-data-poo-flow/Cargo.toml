@@ -9,7 +9,7 @@ repository.workspace = true
 
 [features]
 default = []
-runtime = ["dep:anyhow", "dep:serde", "dep:serde_json", "dep:sha2", "dep:tokio", "dep:reqwest", "dep:meta-relational-reasoning", "dep:mrr-data-arrow", "dep:mrr-data-core", "dep:mrr-data-content", "dep:mrr-data-cache", "dep:mrr-data-datafusion"]
+runtime = ["dep:anyhow", "dep:serde", "dep:serde_json", "dep:sha2", "dep:tokio", "dep:reqwest", "dep:tempfile", "dep:cid", "dep:meta-relational-reasoning", "dep:mrr-data-arrow", "dep:mrr-data-core", "dep:mrr-data-content", "dep:mrr-data-cache", "dep:mrr-data-datafusion"]
 property-query = ["runtime", "dep:cid", "dep:mrr-frontends", "dep:arrow-array", "dep:arrow-ipc", "dep:arrow-schema"]
 
 [[bin]]
@@ -25,12 +25,13 @@ serde_json = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
+tempfile = { workspace = true, optional = true }
 meta-relational-reasoning = { workspace = true, optional = true }
 mrr-frontends = { workspace = true, optional = true }
 mrr-data-arrow = { workspace = true, optional = true }
 mrr-data-core = { workspace = true, optional = true, features = ["content-identity"] }
-mrr-data-content = { workspace = true, optional = true, features = ["transfer"] }
-mrr-data-cache = { workspace = true, optional = true, features = ["kache", "s3", "blocking"] }
+mrr-data-content = { workspace = true, optional = true, features = ["transfer", "filesystem"] }
+mrr-data-cache = { workspace = true, optional = true, features = ["s3", "blocking"] }
 mrr-data-datafusion = { workspace = true, optional = true }
 arrow-array = { workspace = true, optional = true }
 arrow-ipc = { workspace = true, optional = true }
