@@ -72,6 +72,39 @@ class ResourceContracts(unittest.TestCase):
             with self.assertRaises(MrrResourceError):
                 self.resource.publish(plan, source="plan", revision="rev")
 
+    def test_pending_roots_read_durable_records(self):
+        self.resource.local.mkdir()
+        record = {"profile": "poo-flow.static-edges.v1", "root": self.root,
+                  "source": "plan", "revision": "rev", "generation": "generation",
+                  "protected_until": 10, "state": "pending", "blocks": [self.root]}
+        path = self.resource.local / f"snapshot-{self.root}.json"
+        path.write_text(json.dumps(record))
+        self.assertEqual(self.resource.pending_roots(), (self.root,))
+        record["state"] = "synced"
+        path.write_text(json.dumps(record))
+        self.assertEqual(self.resource.pending_roots(), ())
+        record["root"] = "other"
+        path.write_text(json.dumps(record))
+        with self.assertRaises(MrrResourceError):
+            self.resource.pending_roots()
+
+    def test_sync_pending_accepts_only_bounded_summary(self):
+        valid = {"profile": "poo-flow.static-edges.v1", "attempted": 1,
+                 "published": 1, "failed_roots": []}
+        for summary, accepted in ((valid, True), ({**valid, "published": 2}, False),
+                                  ({**valid, "failed_roots": [self.root]}, False),
+                                  ({**valid, "unexpected": 1}, False)):
+            def fake_run(*args, **kwargs):
+                self.assertEqual(args[0][-1], "--sync-pending")
+                kwargs["stdout"].write(json.dumps(summary).encode())
+                return subprocess.CompletedProcess(args, 0)
+            with patch("subprocess.run", side_effect=fake_run):
+                if accepted:
+                    self.assertEqual(self.resource.sync_pending(), valid)
+                else:
+                    with self.assertRaises(MrrResourceError):
+                        self.resource.sync_pending()
+
 
 if __name__ == "__main__":
     unittest.main()

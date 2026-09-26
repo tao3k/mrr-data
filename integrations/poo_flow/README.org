@@ -64,7 +64,7 @@ resource = MrrSnapshotResource(Path("target/debug/mrr-data-poo-flow"),
                                Path(".cache/mrr"), worker_env)
 published = resource.publish(plan, source="my-workflow", revision=source_revision)
 protected = resource.protect(plan, source="my-workflow", revision=source_revision)
-# Later, after reconnecting: resource.sync(root=protected.root, ...)
+# Later, after reconnecting: resource.sync_pending() or resource.sync(root=protected.root, ...)
 tool = resource.query_tool(root=published.root, source="my-workflow",
                            revision=source_revision)
 # Register tool in the existing POO Flow RuntimeGraphToolNode.
@@ -74,10 +74,22 @@ The query tool accepts no arguments: an Agent cannot replace its root, revision,
 credentials, cache path or executable. The runtime owner selects that scope.
 Every invocation starts a new Rust process. The filesystem store fsyncs each
 CID block and its directory. =protect= stores and verifies the complete closure,
-then fsyncs a =pending-<root>= marker. =pending_roots()= discovers these roots
-after restart. =sync= publishes children before the root and removes the marker
-only after S3 acknowledges the root. Repeating =sync= is safe for immutable blocks.
-Protected local blocks are retained; no automatic expiry or deletion runs.
+then fsyncs a =snapshot-<root>.json= outbox record with source, revision,
+generation, closure, state and protection deadline. =pending_roots()= discovers
+these roots after restart. =sync_pending()= replays a bounded batch without the
+caller reconstructing each scope; =--serve= repeats this under Tokio. =sync=
+publishes children before the root and marks the record synced only after S3
+acknowledges the root. Repeating =sync= is safe for immutable blocks. Pending
+closures remain protected even past their deadline until acknowledged. Expired,
+synced records and unshared blocks are removed on the next protect or replay.
+The default protection lease is seven days; =MRR_PROTECTION_SECS= changes it.
+=MRR_LOCAL_MAX_BYTES= (default 1 GiB) bounds protection admission against
+physical CID files. Remote query fills can increase disk use beyond this
+admission bound; deployments must provision the local filesystem accordingly.
+=MRR_SYNC_BATCH= (default 16, maximum 128) limits each replay cycle, and
+=MRR_SYNC_INTERVAL_SECS= (default 60) sets the =--serve= retry interval. The
+service requires the same S3 configuration as manual publication. A one-shot
+replay reports attempted, published and failed roots; failed roots remain pending.
 The worker uses Tokio for bounded transfer, deadlines and S3 I/O. File writes
 and =fsync= run through its bounded =spawn_blocking= bridge, so the durable
 filesystem store does not block Tokio's async workers.
@@ -107,7 +119,7 @@ sync, then compares local, cold, warm and reopened-filesystem results and
 MRR admission digests. Cold restore must issue remote reads; warm and reopened
 local stores must issue zero remote operations. Each operation is already a
 separate process. This proves clean process restart and outbox discovery;
-crash injection during marker creation remains a separate qualification gate.
+crash injection during record creation remains a separate qualification gate.
 
 Negative cases include stale generation, substituted source, tool scope
 replacement, duplicate edges, unavailable transport, process deadline and an
