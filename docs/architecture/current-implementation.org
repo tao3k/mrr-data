@@ -2,10 +2,10 @@
 
 ** Current status
 
-The public ~mrr-data~ facade now defaults to ~arrow~. Its dependency-light
+The public ~mrr-data~ facade now defaults to ~arrow,filesystem~. Its dependency-light
 ~mrr-data-profile~ crate owns namespaces and numeric versions without importing
-CID, DAG-CBOR, CAR, or GraphAr native dependencies. Content identity and local
-packaging remain implemented but opt-in rather than part of the default graph.
+CID, DAG-CBOR, CAR, or GraphAr native dependencies. Verified local filesystem
+storage is part of the default graph; CAR packaging remains opt-in.
 
 The Arrow implementation provides relation-specific Arrow
 schemas and lossless complete-Fact round trips. The
@@ -76,7 +76,7 @@ indexes, statistics, CSR caches, and connections remain rebuildable downstream
 state; GraphAr remains the durable physical graph projection and MRR remains
 the semantic authority.
 
-With the explicit ~ipfs,graphar~ feature composition, downstream code can
+With the explicit ~content-identity,graphar~ feature composition, downstream code can
 call ~admit_graphar_query_source~ before registering that descriptor. The
 boundary rejects a source relation outside the MRR-owned query and re-hashes
 the current GraphAr metadata against the exact projection manifest CID already
@@ -182,10 +182,10 @@ cargo check --manifest-path fuzz/Cargo.toml --locked
 cargo clippy --manifest-path fuzz/Cargo.toml --all-targets --locked -- -D warnings
 cargo check -p mrr-data --locked
 cargo check -p mrr-data --no-default-features --locked
-cargo check -p mrr-data --no-default-features --features ipfs,graphar --locked
+cargo check -p mrr-data --no-default-features --features content-identity,graphar --locked
 cargo check -p mrr-data --no-default-features --features datafusion --locked
 cargo test -p mrr-data --no-default-features --locked
-cargo test -p mrr-data --no-default-features --features ipfs,graphar --locked
+cargo test -p mrr-data --no-default-features --features content-identity,graphar --locked
 #+end_src
 
 Facade features:
@@ -196,19 +196,20 @@ Facade features:
 | ~datafusion~ | no | binary-Entity and bounded string-property path execution |
 | ~graphar~ | no | semantic Property Graph projection |
 | ~graphar-native~ | no | maintained GraphAr C++ writer/readback path |
-| ~ipfs~ | no | CID/DAG-CBOR identity and immutable manifests; no IPFS node transport |
-| ~content~ | no | verified blocks, memory store and protocol; implies ~ipfs~ |
+| ~content-identity~ | yes, through ~filesystem~ | CID/DAG-CBOR identity and immutable manifests |
+| ~content~ | yes, through ~filesystem~ | verified blocks, memory store and protocol; implies ~content-identity~ |
 | ~snapshot~ | no | complete Arrow snapshot publication/restore; implies ~content~, not CAR |
 | ~transfer~ | no | Tokio snapshot sessions: deadline, cancellation, retry budgets and blocking local adapter |
 | ~car~ | no | CARv1 packaging/import; implies ~content~ |
-| ~filesystem~ | no | local filesystem store; implies ~content~ |
+| ~filesystem~ | yes | local filesystem store; implies ~content~ |
 | ~cache~ | no | content protocol and Kache local cache |
 | ~s3~ | no | content protocol and S3 remote adapter |
 
-~default = ["arrow"]~ is the only default. ~cache~ and ~s3~ imply ~content~
+~default = ["arrow", "filesystem"]~ provides typed interchange and durable local
+storage without a network dependency. ~cache~ and ~s3~ imply ~content~
 because their protocol addresses blocks by CID; neither enables CAR or the plain
 filesystem store. ~datafusion~ implies Arrow but does not enable CID/DAG-CBOR.
-Member crates also default to no optional providers: ~mrr-data-core/ipfs~,
+Member crates also default to no optional providers: ~mrr-data-core/content-identity~,
 ~mrr-data-content/snapshot~, ~mrr-data-content/transfer~, ~mrr-data-content/car~, ~mrr-data-content/filesystem~, and
 ~mrr-data-cache/kache,s3,blocking~ are selected explicitly. Plain ~snapshot~ does
 not require Tokio; ~transfer~ enables the runtime boundary, with Kache and S3

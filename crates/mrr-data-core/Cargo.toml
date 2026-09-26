@@ -9,7 +9,7 @@ repository.workspace = true
 
 [features]
 default = []
-ipfs = ["dep:cid", "dep:multihash-codetable", "dep:serde", "dep:serde_bytes", "dep:serde_ipld_dagcbor"]
+content-identity = ["dep:cid", "dep:multihash-codetable", "dep:serde", "dep:serde_bytes", "dep:serde_ipld_dagcbor"]
 
 [dependencies]
 cid = { workspace = true, optional = true }

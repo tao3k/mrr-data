@@ -2,7 +2,7 @@
 
 * Purpose
 
-=mrr-data= is the physical data plane for [[https://github.com/tao3k/meta-relational-reasoning][Meta Relational Reasoning]]. MRR owns semantic identities, generations, queries, and result admission; this repository owns Arrow interchange, bounded physical execution, snapshots, and optional storage providers. Arrow is the only default feature.
+=mrr-data= is the physical data plane for [[https://github.com/tao3k/meta-relational-reasoning][Meta Relational Reasoning]]. MRR owns semantic identities, generations, queries, and result admission; this repository owns Arrow interchange, bounded physical execution, snapshots, and storage providers. Arrow and the verified local filesystem store are default features; cache engines and S3 remain optional.
 
 * Start here
 

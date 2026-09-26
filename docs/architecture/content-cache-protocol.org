@@ -106,23 +106,60 @@ All internal crate dependencies are managed by the root Cargo workspace.
 
 * Feature boundaries
 
-Only =arrow= is enabled by default on the facade. =ipfs= selects the existing
-CID/DAG-CBOR manifests, not an IPFS daemon client. =content= adds the verified
-block protocol and memory store. =car= and =filesystem= independently add archive
-packaging and the plain filesystem store. =cache= and =s3= imply =content= because
-they address blocks by CID, but neither pulls in CAR or the plain filesystem
-provider. DataFusion's engine/output types remain usable without =ipfs=.
+The facade defaults to =arrow,filesystem=. =content-identity= selects the
+CID/DAG-CBOR manifests without any network client. =content= adds the verified
+block protocol and memory store. =car= independently adds archive packaging;
+=filesystem= adds the durable local store and is enabled by default. =cache= and
+=s3= imply =content= because they address blocks by CID, but neither pulls in CAR.
+DataFusion's engine/output types remain usable without =content-identity=.
 
-Direct member-crate users explicitly select =mrr-data-core/ipfs=,
+Direct member-crate users explicitly select =mrr-data-core/content-identity=,
 =mrr-data-content/car=, =mrr-data-content/filesystem=, or
 =mrr-data-cache/kache,s3=. These member crates have empty defaults.
+
+The default filesystem store is the durable offline tier: blocks remain until
+an explicit owner removes them, and every read re-verifies the requested CID.
+It does not run capacity eviction or background GC. Kache is an optional
+acceleration tier and may evict under its configured policy; an eviction-capable
+cache cannot establish a minimum offline-retention promise. A future bounded
+retention policy must protect an admitted snapshot root and its complete child
+closure for the whole lease, then hand only expired closures to a cache engine
+or explicit collector.
+
+* Device-scale deployment slices
+
+Device classes are deployment examples rather than Cargo features. Build only
+the capabilities the device owns, then select runtime budgets independently:
+
+| Deployment shape | Facade selection | Storage behavior |
+|---+---+---|
+| Wearable-class Linux relay | =--no-default-features --features filesystem= | Verify and retain immutable blocks locally; defer Arrow queries and direct S3 to a paired gateway when resources require it |
+| Jetson or edge agent | default plus optional =s3,transfer= | Arrow interchange, durable local protection and bounded background synchronization |
+| Industrial gateway | default plus =cache,s3,transfer= | Protocol aggregation, durable buffering, Kache acceleration and S3 synchronization |
+| High-capacity industrial Linux data node | default plus =cache,s3,transfer,datafusion= | TB/PB-scale local filesystem or qualified BrewFS mount, large soft cache quota, bounded query execution and process-level sharding |
+
+MCU and =no_std= devices are below the MRR Data runtime boundary. They need a
+power-loss-safe flash filesystem and a compact append-only handoff; a Linux
+gateway owns Arrow encoding, CID closure admission and S3 publication. Capacity,
+thread count, timeouts, retention and upload concurrency are runtime policy and
+must not create hardware-named schema or semantic profiles.
+
+BrewFS is an optional deployment substrate for Jetson-class and high-capacity
+industrial Linux nodes that need a shared POSIX view over local or S3-compatible object data. Point
+the durable filesystem store at a BrewFS mount; do not add a BrewFS dependency or
+another content protocol to MRR Data. A deployment may acknowledge local protection
+only after the mounted filesystem's durability boundary completes (for example,
+=fsync=), and must qualify BrewFS recovery and cross-process visibility for its
+chosen metadata and object backends. Its FUSE, metadata and writeback services are
+outside the wearable and MCU profiles. Kache remains the evictable acceleration
+tier, while direct S3 remains the provider-neutral remote object path.
 
 * Snapshot publication and restoration
 
 Enable facade =snapshot,cache,s3= for =publish_snapshot= and =restore_snapshot=
-with Kache and S3; Arrow is still the sole default feature. Direct content-crate
-users select =snapshot=. CAR, the filesystem provider and Arrow are not dependencies
-of the coordinator. Arrow encoding/admission remain with the Arrow adapter.
+with Kache and S3. Direct content-crate users select =snapshot=. CAR and Arrow
+are not dependencies of the coordinator. Arrow encoding/admission remain with
+the Arrow adapter.
 
 =SnapshotTransferLimits::new(root_bytes, blocks, block_bytes, total_bytes)= caps
 the root, unique block count including root, each child, and aggregate logical

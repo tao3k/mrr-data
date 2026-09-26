@@ -150,6 +150,19 @@ impl FilesystemContentStore {
     fn path(&self, cid: &Cid) -> PathBuf {
         self.root.join(cid.to_string())
     }
+
+    fn sync_root(&self) -> Result<(), ContentError> {
+        #[cfg(unix)]
+        {
+            fs::File::open(&self.root)
+                .and_then(|directory| directory.sync_all())
+                .map_err(|error| ContentError::io("sync store directory", &error))
+        }
+        #[cfg(not(unix))]
+        {
+            Ok(())
+        }
+    }
 }
 
 #[cfg(feature = "filesystem")]
@@ -165,6 +178,7 @@ impl ContentStore for FilesystemContentStore {
                     actual: Box::new(cid_for(block.codec(), &existing)),
                 });
             }
+            self.sync_root()?;
             return Ok(cid);
         }
 
@@ -178,10 +192,14 @@ impl ContentStore for FilesystemContentStore {
             .sync_all()
             .map_err(|error| ContentError::io("sync temporary block", &error))?;
         match temporary.persist_noclobber(&path) {
-            Ok(_) => Ok(cid),
+            Ok(_) => {
+                self.sync_root()?;
+                Ok(cid)
+            }
             Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {
                 let existing = self.get_bounded(&cid, block.bytes().len())?;
                 if existing == block.bytes() {
+                    self.sync_root()?;
                     Ok(cid)
                 } else {
                     Err(ContentError::CidMismatch {

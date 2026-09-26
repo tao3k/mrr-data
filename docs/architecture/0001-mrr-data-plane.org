@@ -336,7 +336,7 @@ without adding that database to =mrr-data=.  Its catalog, indexes, statistics,
 and CSR caches are derived state and must be rebuildable from the GraphAr
 source plus the MRR snapshot manifest.
 
-When both =ipfs= and =graphar= are selected, the facade composes these
+When both =content-identity= and =graphar= are selected, the facade composes these
 otherwise independent crates at =admit_graphar_query_source=.  This boundary
 requires the source relation to occur in the MRR-owned query and re-hashes the
 current GraphAr metadata against the exact raw projection-manifest CID carried
@@ -449,15 +449,16 @@ Content.
 * API surface
 
 The V1 API follows implemented owners instead of speculative common traits.
-The default =mrr-data::arrow= facade exposes relation-specific schema
-projection, native =RecordBatch= conversion, and bounded IPC import.  The
-opt-in =ipfs= feature exposes CID/DAG-CBOR manifests through =mrr-data::manifest=.
+The default facade exposes relation-specific Arrow schema projection, native
+=RecordBatch= conversion, bounded IPC import, and verified local filesystem
+storage. The =content-identity= feature exposes CID/DAG-CBOR manifests through
+=mrr-data::manifest= and is enabled transitively by the default =filesystem= feature.
 The =content= feature exposes =ContentStore=, =MemoryContentStore= and the remote
 protocol; =filesystem= adds =FilesystemContentStore= and =car= adds CAR operations.
 The =cache= and =s3= adapters depend on =content= without enabling CAR or the
 plain filesystem provider. These member crates have empty default features;
-only the facade's =arrow= feature is enabled by default. The =ipfs= feature names
-existing content-addressed identity, not a daemon or network implementation.  The
+the facade enables =arrow,filesystem= by default. No IPFS transport, daemon,
+gateway, discovery mechanism, or compatibility feature is present. The
 opt-in =mrr-data::graphar= facade exposes the admitted binary-Entity
 projection and, only with =graphar-native=, the maintained native writer plus
 bounded semantic reader.  The reader reconstructs physical endpoints through
@@ -495,16 +496,17 @@ crate in V1.
 * Implemented features and proof obligations
 
 The feature records below retain implementation and proof dependencies. The
-active priority is Arrow-first:
+active priority is Arrow plus protective local storage:
 
-1. keep the public facade's default dependency graph limited to Arrow and the
-   dependency-light profile crate;
+1. keep Arrow and verified local filesystem storage in the public facade's
+   default dependency graph;
 2. close trusted in-process Arrow interchange and its performance evidence;
 3. extend opt-in DataFusion execution only through typed, differential slices;
 4. close maintained GraphAr writer/read-back evidence for graph-shaped data;
-5. maintain manifest and local CID/CAR packaging as an explicit opt-in;
-6. defer remote distribution, including IPFS, until a concrete requirement and
-   scenario justify it.
+5. maintain manifest identity and local storage by default while keeping CAR
+   packaging opt-in;
+6. prioritize S3-compatible remote distribution and leave IPFS transport out
+   of the dependency graph.
 
 ** Lossless Arrow interchange
 
@@ -529,9 +531,9 @@ the later data-plane capabilities.
 
 Implementation status: canonical manifest admission, MRR catalog/source
 binding, deterministic DAG-CBOR, frozen CID profiles, typed negative contracts,
-and a golden root vector are implemented.  This capability is retained behind
-the facade's explicit =ipfs= feature; it is not part of the default Arrow
-dependency graph. Snapshot identity is accepted only after the current-head CI and review
+and a golden root vector are implemented. This capability is retained behind
+the facade's =content-identity= feature and enters the default graph through
+=filesystem=. Snapshot identity is accepted only after the current-head CI and review
 receipts are green.
 
 - freeze namespace =mrr.data.snapshot= at schema version =1= only after the
@@ -749,7 +751,8 @@ reservation; PUT attempts charge their full logical payload. Counters describe
 protocol calls and logical bytes, not provider-internal HTTP requests or exact
 wire usage. =AsyncContentStore= and optional =BlockingContentStore= move disk
 operations off the executor and retain the worker permit after cancellation.
-The synchronous API remains available; only Arrow is enabled by default.
+The synchronous API remains available; Arrow and verified filesystem storage
+are enabled by default.
 
 Local acceptance (2026-09-20, macOS/Rust 1.95.0): 119 workspace tests pass,
 2 subprocess entry points are ignored by ordinary discovery and invoked by their
@@ -1070,8 +1073,8 @@ Exit gates for this batch:
   execution, with remote operations/bytes and dataset cardinalities. Choose and
   record representative sizes from the actual producer before measuring; do not
   infer scalability from the two-edge POO Flow static-edge resource fixture.
-- Keep Arrow as the only facade default. Cache, S3, IPFS, GraphAr and the consumer
-  runtime remain optional; feature-isolation checks, workspace tests, Clippy
+- Keep Arrow and filesystem storage as facade defaults. Cache, S3, GraphAr and
+  the consumer runtime remain optional; feature-isolation checks, workspace tests, Clippy
   =-D warnings= and the existing nine CI checks pass at the delivered revision.
 
 *** Reuse of the admitted Healthcare query path
