@@ -94,8 +94,9 @@ verification and a durable pending record write; the record binds source, revisi
 generation. Tokio's one-shot and continuous replay paths publish children
 before the root, then persist remote acknowledgement. Pending closures survive
 lease expiry, while expired acknowledged closures are collected on subsequent
-activity. The configured local byte bound applies to protection admission;
-remote query fills may use additional disk space.
+activity. Protection and S3 read-through fills share a persisted-CID byte
+bound. A remote query can still return verified bytes when a disposable fill
+does not fit; a later query then fetches from S3 again.
 
 The optional ~mrr-data-content~ crate provides packaging under ~car~ and disk
 storage under ~filesystem~. Its memory and

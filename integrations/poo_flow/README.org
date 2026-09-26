@@ -83,9 +83,11 @@ acknowledges the root. Repeating =sync= is safe for immutable blocks. Pending
 closures remain protected even past their deadline until acknowledged. Expired,
 synced records and unshared blocks are removed on the next protect or replay.
 The default protection lease is seven days; =MRR_PROTECTION_SECS= changes it.
-=MRR_LOCAL_MAX_BYTES= (default 1 GiB) bounds protection admission against
-physical CID files. Remote query fills can increase disk use beyond this
-admission bound; deployments must provision the local filesystem accordingly.
+=MRR_LOCAL_MAX_BYTES= (default 1 GiB) bounds persisted CID blocks for both
+protection and S3 read-through fills. A verified remote query still succeeds
+when its disposable cache fill cannot fit; a repeat query then reads S3 again.
+This bound does not count temporary staging files, record metadata, or writes
+by processes outside this worker.
 =MRR_SYNC_BATCH= (default 16, maximum 128) limits each replay cycle, and
 =MRR_SYNC_INTERVAL_SECS= (default 60) sets the =--serve= retry interval. The
 service requires the same S3 configuration as manual publication. A one-shot
@@ -117,7 +119,9 @@ It invokes the worker through =RuntimeGraphToolNode=, not a replacement test
 implementation. It verifies offline protection, local query and subsequent S3
 sync, then compares local, cold, warm and reopened-filesystem results and
 MRR admission digests. Cold restore must issue remote reads; warm and reopened
-local stores must issue zero remote operations. Each operation is already a
+local stores must issue zero remote operations. A capacity-limited local store
+must still admit the remote result while refusing persistent cache fills, so
+its repeat query reads S3 again. Each operation is already a
 separate process. This proves clean process restart and outbox discovery;
 crash injection during record creation remains a separate qualification gate.
 
