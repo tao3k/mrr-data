@@ -310,3 +310,44 @@ pub async fn restore_snapshot(
         sources,
     })
 }
+
+/// Restores a complete snapshot exclusively from durable local content.
+/// No remote fallback is attempted, so success is evidence that every block
+/// needed for an offline query is present and verified locally.
+/// # Errors
+/// Returns missing-block, catalog, integrity, unsupported-graph or budget failures.
+pub async fn restore_snapshot_local(
+    local: &(impl AsyncContentStore + ?Sized),
+    root: &Cid,
+    relations: &RelationCatalog,
+    entities: &EntityCatalog,
+    limits: SnapshotTransferLimits,
+) -> Result<RestoredSnapshot, SnapshotTransferError> {
+    check(SnapshotResource::Blocks, limits.blocks, 1)?;
+    if ContentCodec::from_cid(root)? != ContentCodec::DagCbor {
+        return Err(ContentError::InvalidCidProfile(Box::new(*root)).into());
+    }
+    let bytes = local
+        .load(root, limits.root_bytes.min(limits.total_bytes))
+        .await?;
+    check(SnapshotResource::RootBytes, limits.root_bytes, bytes.len())?;
+    let mut total = add_total(0, bytes.len(), limits.total_bytes)?;
+    let manifest = SnapshotManifest::decode_checked(&bytes, root).map_err(ContentError::from)?;
+    let cids = inventory(&manifest, relations, entities, limits)?;
+    let snapshot = SnapshotBlock::encode(manifest).map_err(ContentError::from)?;
+    let mut sources = BTreeMap::from([(*root, ContentSource::Local)]);
+    let mut children = BTreeMap::new();
+    for cid in cids {
+        let remaining = limits.total_bytes - total;
+        let bytes = local.load(&cid, limits.block_bytes.min(remaining)).await?;
+        total = add_total(total, bytes.len(), limits.total_bytes)?;
+        children.insert(cid, bytes);
+        sources.insert(cid, ContentSource::Local);
+    }
+    closure(snapshot.manifest(), &children)?;
+    Ok(RestoredSnapshot {
+        snapshot,
+        children,
+        sources,
+    })
+}

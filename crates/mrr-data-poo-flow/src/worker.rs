@@ -4,27 +4,32 @@ use crate::{
     semantic::Context,
 };
 use anyhow::{Context as _, Result, ensure};
-use mrr_data_cache::{BlockingContentStore, KacheContentStore, S3ContentStore};
+use mrr_data_cache::{BlockingContentStore, S3ContentStore};
 use mrr_data_content::{
-    AsyncContentStore, ContentBlock, ContentCodec, RemoteTransferLimits, SnapshotTransferLimits,
-    TransferSession,
+    AsyncContentStore, ContentBlock, ContentCodec, FilesystemContentStore, RemoteTransferLimits,
+    SnapshotTransferLimits, TransferSession, restore_snapshot_local,
 };
 use mrr_data_core::{
     BatchDescriptor, CoverageDescriptor, CoverageKind, RelationDescriptor, SnapshotBlock,
     SnapshotManifest, SnapshotManifestRequest, raw_cid,
 };
+use std::io::Write as _;
 use std::{
+    fs,
     num::NonZeroUsize,
+    path::Path,
     time::{Duration, Instant},
 };
+use tempfile::NamedTempFile;
 
 /// Execute one bounded request in an externally managed worker process.
 /// # Errors
 /// Rejects malformed inputs, identity drift, transport failures and failed MRR admission.
 pub(crate) async fn execute(
     input: &[u8],
-    local: BlockingContentStore<KacheContentStore>,
-    remote: S3ContentStore,
+    local: BlockingContentStore<FilesystemContentStore>,
+    remote: Option<S3ContentStore>,
+    local_path: String,
 ) -> Result<String> {
     ensure!(input.len() <= MAX_INPUT, "request exceeds 1 MiB");
     let request: Request = serde_json::from_slice(input)?;
@@ -42,11 +47,49 @@ pub(crate) async fn execute(
     )?;
     let limits = SnapshotTransferLimits::new(64 * 1024, 8, 8 * 1024 * 1024, 16 * 1024 * 1024);
     let (root, outcome) = match &request.operation {
+        Operation::Protect { edges } => {
+            protect(&request, &context, edges, &local, &local_path, limits).await?
+        }
         Operation::Publish { edges } => {
-            publish(&request, &context, edges, &local, &remote, &session, limits).await?
+            let (root, _) = protect(&request, &context, edges, &local, &local_path, limits).await?;
+            let receipt = sync(
+                &request,
+                &context,
+                &root,
+                &local,
+                remote.as_ref().context("S3 required")?,
+                &session,
+                limits,
+            )
+            .await?;
+            clear_pending(Path::new(&local_path), &root)?;
+            receipt
+        }
+        Operation::Sync { root } => {
+            let receipt = sync(
+                &request,
+                &context,
+                root,
+                &local,
+                remote.as_ref().context("S3 required")?,
+                &session,
+                limits,
+            )
+            .await?;
+            clear_pending(Path::new(&local_path), root)?;
+            receipt
         }
         Operation::Query { root } => {
-            query(&request, &context, root, &local, &remote, &session, limits).await?
+            query(
+                &request,
+                &context,
+                root,
+                &local,
+                remote.as_ref(),
+                &session,
+                limits,
+            )
+            .await?
         }
     };
     let stats = session.stats();
@@ -65,13 +108,12 @@ pub(crate) async fn execute(
     })?)
 }
 
-async fn publish(
+async fn protect(
     request: &Request,
     context: &Context,
     edges: &[[String; 2]],
-    local: &BlockingContentStore<KacheContentStore>,
-    remote: &S3ContentStore,
-    session: &TransferSession,
+    local: &BlockingContentStore<FilesystemContentStore>,
+    local_path: &str,
     limits: SnapshotTransferLimits,
 ) -> Result<(String, Outcome)> {
     let facts = context.facts(&request.source, edges)?;
@@ -99,38 +141,142 @@ async fn publish(
             .store(ContentBlock::new(ContentCodec::Raw, bytes))
             .await?;
     }
-    let publication = session
+    local
+        .store(ContentBlock::new(ContentCodec::DagCbor, snapshot.bytes()))
+        .await?;
+    restore_snapshot_local(
+        local,
+        snapshot.cid(),
+        &context.relations,
+        &context.entities,
+        limits,
+    )
+    .await?;
+    mark_pending(Path::new(local_path), &snapshot.cid().to_string())?;
+    Ok((snapshot.cid().to_string(), Outcome::Protected))
+}
+
+async fn sync(
+    request: &Request,
+    context: &Context,
+    root: &str,
+    local: &BlockingContentStore<FilesystemContentStore>,
+    remote: &S3ContentStore,
+    session: &TransferSession,
+    limits: SnapshotTransferLimits,
+) -> Result<(String, Outcome)> {
+    let cid = root.parse()?;
+    let restored =
+        restore_snapshot_local(local, &cid, &context.relations, &context.entities, limits).await?;
+    ensure!(
+        restored.snapshot().manifest().semantic_snapshot() == &context.semantic,
+        "snapshot semantic context mismatch"
+    );
+    let coverage = serde_json::to_vec(&(PROFILE, &request.source, &request.revision))?;
+    ensure!(
+        restored.snapshot().manifest().coverage().declaration_cid() == &raw_cid(&coverage),
+        "snapshot source mismatch"
+    );
+    session
         .publish_snapshot(
             local,
             remote,
-            &snapshot,
+            restored.snapshot(),
             &context.relations,
             &context.entities,
             limits,
         )
         .await?;
-    Ok((publication.root().to_string(), Outcome::Published))
+    Ok((root.to_owned(), Outcome::Published))
+}
+
+fn marker_path(path: &Path, root: &str) -> Result<std::path::PathBuf> {
+    let cid: cid::Cid = root.parse()?;
+    ensure!(cid.to_string() == root, "canonical root required");
+    Ok(path.join(format!("pending-{root}")))
+}
+
+fn sync_dir(path: &Path) -> Result<()> {
+    fs::File::open(path)?.sync_all()?;
+    Ok(())
+}
+
+fn mark_pending(path: &Path, root: &str) -> Result<()> {
+    let marker = marker_path(path, root)?;
+    if marker.exists() {
+        ensure!(
+            fs::symlink_metadata(&marker)?.file_type().is_file(),
+            "pending marker is not a file"
+        );
+        ensure!(
+            fs::read(&marker)? == root.as_bytes(),
+            "pending marker mismatch"
+        );
+        sync_dir(path)?;
+        return Ok(());
+    }
+    let mut temporary = NamedTempFile::new_in(path)?;
+    temporary.write_all(root.as_bytes())?;
+    temporary.as_file().sync_all()?;
+    match temporary.persist_noclobber(&marker) {
+        Ok(_) => (),
+        Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {
+            ensure!(
+                fs::symlink_metadata(&marker)?.file_type().is_file(),
+                "pending marker is not a file"
+            );
+            ensure!(
+                fs::read(&marker)? == root.as_bytes(),
+                "pending marker mismatch"
+            );
+        }
+        Err(error) => return Err(error.error.into()),
+    }
+    sync_dir(path)
+}
+
+fn clear_pending(path: &Path, root: &str) -> Result<()> {
+    let marker = marker_path(path, root)?;
+    match fs::remove_file(marker) {
+        Ok(()) => sync_dir(path),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
 }
 
 async fn query(
     request: &Request,
     context: &Context,
     root: &str,
-    local: &BlockingContentStore<KacheContentStore>,
-    remote: &S3ContentStore,
+    local: &BlockingContentStore<FilesystemContentStore>,
+    remote: Option<&S3ContentStore>,
     session: &TransferSession,
     limits: SnapshotTransferLimits,
 ) -> Result<(String, Outcome)> {
-    let restored = session
-        .restore_snapshot(
-            local,
-            remote,
-            &root.parse()?,
-            &context.relations,
-            &context.entities,
-            limits,
-        )
-        .await?;
+    let cid = root.parse()?;
+    let restored =
+        match restore_snapshot_local(local, &cid, &context.relations, &context.entities, limits)
+            .await
+        {
+            Ok(restored) => restored,
+            Err(mrr_data_content::SnapshotTransferError::Content(
+                mrr_data_content::ContentError::NotFound(_),
+            ))
+            | Err(mrr_data_content::SnapshotTransferError::MissingBlock(_)) => {
+                let remote = remote.context("snapshot incomplete locally and S3 unavailable")?;
+                session
+                    .restore_snapshot(
+                        local,
+                        remote,
+                        &cid,
+                        &context.relations,
+                        &context.entities,
+                        limits,
+                    )
+                    .await?
+            }
+            Err(error) => return Err(error.into()),
+        };
     let profile = mrr_data_datafusion::datafusion_engine_profile()?;
     let bound = mrr_data_core::bind_data_query(&context.query, restored.snapshot(), &profile)?;
     let manifest = restored.snapshot().manifest();

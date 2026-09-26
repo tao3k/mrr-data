@@ -1,5 +1,6 @@
 """Fail-closed receipt and POO Flow tool scope contracts; no cloud needed."""
 import json
+import hashlib
 from pathlib import Path
 import subprocess
 import tempfile
@@ -51,6 +52,25 @@ class ResourceContracts(unittest.TestCase):
         with patch("subprocess.run", return_value=subprocess.CompletedProcess("worker", 1)):
             with self.assertRaises(MrrResourceError):
                 self.resource.query(root=self.root, source="plan", revision="rev")
+
+    def test_protected_receipt_is_distinct_from_remote_publication(self):
+        plan = RuntimeGraphPlan(nodes=("compile", "test"), edges=(RuntimeGraphEdge("compile", "test"),))
+
+        def fake_run(*args, **kwargs):
+            request = json.loads(kwargs["input"])
+            receipt = {"profile": request["profile"], "producer": "mrr-data-poo-flow",
+                       "request_sha256": hashlib.sha256(kwargs["input"]).hexdigest(),
+                       "source": request["source"], "revision": request["revision"],
+                       "root": self.root, "generation": "generation", "result": {"kind": "protected"},
+                       "remote_operations": 0, "charged_bytes": 0, "elapsed_micros": 1}
+            kwargs["stdout"].write(json.dumps(receipt).encode())
+            return subprocess.CompletedProcess(args, 0)
+
+        with patch("subprocess.run", side_effect=fake_run):
+            protected = self.resource.protect(plan, source="plan", revision="rev")
+            self.assertEqual(protected.root, self.root)
+            with self.assertRaises(MrrResourceError):
+                self.resource.publish(plan, source="plan", revision="rev")
 
 
 if __name__ == "__main__":
