@@ -1,5 +1,6 @@
 //! Snapshot publication, verified restore and MRR result admission.
 use crate::{
+    outbox::{self, Guard, LocalPolicy, Record, State},
     protocol::{self, MAX_EDGES, MAX_INPUT, Operation, Outcome, PROFILE, Receipt, Request},
     semantic::Context,
 };
@@ -13,14 +14,12 @@ use mrr_data_core::{
     BatchDescriptor, CoverageDescriptor, CoverageKind, RelationDescriptor, SnapshotBlock,
     SnapshotManifest, SnapshotManifestRequest, raw_cid,
 };
-use std::io::Write as _;
+use serde::Serialize;
 use std::{
-    fs,
     num::NonZeroUsize,
-    path::Path,
+    path::{Path, PathBuf},
     time::{Duration, Instant},
 };
-use tempfile::NamedTempFile;
 
 /// Execute one bounded request in an externally managed worker process.
 /// # Errors
@@ -30,54 +29,63 @@ pub(crate) async fn execute(
     local: BlockingContentStore<FilesystemContentStore>,
     remote: Option<S3ContentStore>,
     local_path: String,
+    policy: LocalPolicy,
 ) -> Result<String> {
     ensure!(input.len() <= MAX_INPUT, "request exceeds 1 MiB");
     let request: Request = serde_json::from_slice(input)?;
     ensure!(request.profile == PROFILE, "unsupported consumer profile");
     let context = Context::new(&request.source, &request.revision)?;
     let start = Instant::now();
-    let session = TransferSession::new(
-        Duration::from_secs(30),
-        RemoteTransferLimits {
-            operations: 32,
-            bytes: 32 * 1024 * 1024,
-            attempts_per_operation: 2,
-            retry_delay: Duration::from_millis(50),
-        },
-    )?;
-    let limits = SnapshotTransferLimits::new(64 * 1024, 8, 8 * 1024 * 1024, 16 * 1024 * 1024);
+    let session = transfer_session()?;
+    let limits = transfer_limits();
     let (root, outcome) = match &request.operation {
         Operation::Protect { edges } => {
-            protect(&request, &context, edges, &local, &local_path, limits).await?
+            protect(
+                &request,
+                &context,
+                edges,
+                &local,
+                &local_path,
+                limits,
+                policy,
+            )
+            .await?
         }
         Operation::Publish { edges } => {
-            let (root, _) = protect(&request, &context, edges, &local, &local_path, limits).await?;
-            let receipt = sync(
+            let (root, _) = protect(
                 &request,
                 &context,
-                &root,
+                edges,
                 &local,
-                remote.as_ref().context("S3 required")?,
-                &session,
+                &local_path,
                 limits,
+                policy,
             )
             .await?;
-            clear_pending(Path::new(&local_path), &root)?;
-            receipt
+            sync_protected(SyncInput {
+                request: &request,
+                context: &context,
+                root: &root,
+                local: &local,
+                remote: remote.as_ref().context("S3 required")?,
+                session: &session,
+                limits,
+                local_path: Path::new(&local_path),
+            })
+            .await?
         }
         Operation::Sync { root } => {
-            let receipt = sync(
-                &request,
-                &context,
+            sync_protected(SyncInput {
+                request: &request,
+                context: &context,
                 root,
-                &local,
-                remote.as_ref().context("S3 required")?,
-                &session,
+                local: &local,
+                remote: remote.as_ref().context("S3 required")?,
+                session: &session,
                 limits,
-            )
-            .await?;
-            clear_pending(Path::new(&local_path), root)?;
-            receipt
+                local_path: Path::new(&local_path),
+            })
+            .await?
         }
         Operation::Query { root } => {
             query(
@@ -108,6 +116,82 @@ pub(crate) async fn execute(
     })?)
 }
 
+fn transfer_session() -> Result<TransferSession> {
+    Ok(TransferSession::new(
+        Duration::from_secs(30),
+        RemoteTransferLimits {
+            operations: 32,
+            bytes: 32 * 1024 * 1024,
+            attempts_per_operation: 2,
+            retry_delay: Duration::from_millis(50),
+        },
+    )?)
+}
+
+fn transfer_limits() -> SnapshotTransferLimits {
+    SnapshotTransferLimits::new(64 * 1024, 8, 8 * 1024 * 1024, 16 * 1024 * 1024)
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct SyncSummary {
+    profile: &'static str,
+    attempted: usize,
+    published: usize,
+    pub(crate) failed_roots: Vec<String>,
+}
+
+/// Replay a bounded batch of durable outbox entries. Each snapshot gets its
+/// own transfer budget; failures remain pending for a later Tokio cycle.
+pub(crate) async fn sync_pending(
+    local: &BlockingContentStore<FilesystemContentStore>,
+    remote: &S3ContentStore,
+    local_path: &Path,
+    batch_limit: usize,
+) -> Result<SyncSummary> {
+    let path = local_path.to_owned();
+    let pending = tokio::task::spawn_blocking(move || {
+        let guard = Guard::acquire(&path)?;
+        guard.maintain(outbox::now_secs()?)?;
+        guard.pending(batch_limit)
+    })
+    .await??;
+    let mut summary = SyncSummary {
+        profile: PROFILE,
+        attempted: 0,
+        published: 0,
+        failed_roots: Vec::new(),
+    };
+    for record in pending {
+        summary.attempted += 1;
+        let request = Request {
+            profile: PROFILE.to_owned(),
+            source: record.source.clone(),
+            revision: record.revision.clone(),
+            operation: Operation::Sync {
+                root: record.root.clone(),
+            },
+        };
+        let context = Context::new(&request.source, &request.revision)?;
+        let session = transfer_session()?;
+        let result = sync_protected(SyncInput {
+            request: &request,
+            context: &context,
+            root: &record.root,
+            local,
+            remote,
+            session: &session,
+            limits: transfer_limits(),
+            local_path,
+        })
+        .await;
+        match result {
+            Ok(_) => summary.published += 1,
+            Err(_) => summary.failed_roots.push(record.root),
+        }
+    }
+    Ok(summary)
+}
+
 async fn protect(
     request: &Request,
     context: &Context,
@@ -115,6 +199,7 @@ async fn protect(
     local: &BlockingContentStore<FilesystemContentStore>,
     local_path: &str,
     limits: SnapshotTransferLimits,
+    policy: LocalPolicy,
 ) -> Result<(String, Outcome)> {
     let facts = context.facts(&request.source, edges)?;
     let ipc = mrr_data_arrow::facts_to_ipc(&context.relation, &facts)
@@ -136,6 +221,41 @@ async fn protect(
         CoverageDescriptor::new(CoverageKind::Complete, raw_cid(&coverage))?,
     ))?;
     let snapshot = SnapshotBlock::encode(manifest)?;
+    let root = snapshot.cid().to_string();
+    let mut blocks = snapshot
+        .manifest()
+        .referenced_cids()
+        .into_iter()
+        .map(|cid| cid.to_string())
+        .collect::<Vec<_>>();
+    blocks.push(root.clone());
+    blocks.sort();
+    let now = outbox::now_secs()?;
+    let record = Record {
+        profile: PROFILE.to_owned(),
+        root: root.clone(),
+        source: request.source.clone(),
+        revision: request.revision.clone(),
+        generation: context.semantic.generation().to_string(),
+        protected_until: now
+            .checked_add(policy.protection_secs)
+            .context("protection expiry overflow")?,
+        state: State::Pending,
+        blocks,
+    };
+    let path = PathBuf::from(local_path);
+    let guard = tokio::task::spawn_blocking(move || Guard::acquire(&path)).await??;
+    let incoming = vec![
+        (raw_cid(&ipc), ipc.len()),
+        (raw_cid(&coverage), coverage.len()),
+        (*snapshot.cid(), snapshot.bytes().len()),
+    ];
+    let guard = tokio::task::spawn_blocking(move || {
+        guard.maintain(now)?;
+        guard.preflight(&incoming, policy.max_bytes)?;
+        Ok::<_, anyhow::Error>(guard)
+    })
+    .await??;
     for bytes in [&ipc, &coverage] {
         local
             .store(ContentBlock::new(ContentCodec::Raw, bytes))
@@ -152,19 +272,57 @@ async fn protect(
         limits,
     )
     .await?;
-    mark_pending(Path::new(local_path), &snapshot.cid().to_string())?;
-    Ok((snapshot.cid().to_string(), Outcome::Protected))
+    tokio::task::spawn_blocking(move || guard.commit(record)).await??;
+    Ok((root, Outcome::Protected))
 }
 
-async fn sync(
-    request: &Request,
-    context: &Context,
-    root: &str,
-    local: &BlockingContentStore<FilesystemContentStore>,
-    remote: &S3ContentStore,
-    session: &TransferSession,
+struct SyncInput<'a> {
+    request: &'a Request,
+    context: &'a Context,
+    root: &'a str,
+    local: &'a BlockingContentStore<FilesystemContentStore>,
+    remote: &'a S3ContentStore,
+    session: &'a TransferSession,
     limits: SnapshotTransferLimits,
-) -> Result<(String, Outcome)> {
+    local_path: &'a Path,
+}
+
+async fn sync_protected(input: SyncInput<'_>) -> Result<(String, Outcome)> {
+    let SyncInput {
+        request,
+        context,
+        root,
+        local,
+        remote,
+        session,
+        limits,
+        local_path,
+    } = input;
+    let path = local_path.to_owned();
+    let root_owned = root.to_owned();
+    let claim = tokio::task::spawn_blocking(move || outbox::claim(&path, &root_owned))
+        .await??
+        .context("snapshot is already synchronizing")?;
+    let path = local_path.to_owned();
+    let root_owned = root.to_owned();
+    let record = tokio::task::spawn_blocking(move || {
+        let guard = Guard::acquire(&path)?;
+        guard.read(&root_owned)
+    })
+    .await??;
+    ensure!(
+        record.state == State::Pending || record.state == State::Synced,
+        "invalid protection state"
+    );
+    ensure!(
+        record.source == request.source
+            && record.revision == request.revision
+            && record.generation == context.semantic.generation().to_string(),
+        "sync scope mismatch"
+    );
+    if record.state == State::Synced {
+        return Ok((root.to_owned(), Outcome::Published));
+    }
     let cid = root.parse()?;
     let restored =
         restore_snapshot_local(local, &cid, &context.relations, &context.entities, limits).await?;
@@ -187,61 +345,17 @@ async fn sync(
             limits,
         )
         .await?;
+    let path = local_path.to_owned();
+    let root_owned = root.to_owned();
+    let source = request.source.clone();
+    let revision = request.revision.clone();
+    tokio::task::spawn_blocking(move || {
+        let guard = Guard::acquire(&path)?;
+        guard.mark_synced(&root_owned, &source, &revision)
+    })
+    .await??;
+    drop(claim);
     Ok((root.to_owned(), Outcome::Published))
-}
-
-fn marker_path(path: &Path, root: &str) -> Result<std::path::PathBuf> {
-    let cid: cid::Cid = root.parse()?;
-    ensure!(cid.to_string() == root, "canonical root required");
-    Ok(path.join(format!("pending-{root}")))
-}
-
-fn sync_dir(path: &Path) -> Result<()> {
-    fs::File::open(path)?.sync_all()?;
-    Ok(())
-}
-
-fn mark_pending(path: &Path, root: &str) -> Result<()> {
-    let marker = marker_path(path, root)?;
-    if marker.exists() {
-        ensure!(
-            fs::symlink_metadata(&marker)?.file_type().is_file(),
-            "pending marker is not a file"
-        );
-        ensure!(
-            fs::read(&marker)? == root.as_bytes(),
-            "pending marker mismatch"
-        );
-        sync_dir(path)?;
-        return Ok(());
-    }
-    let mut temporary = NamedTempFile::new_in(path)?;
-    temporary.write_all(root.as_bytes())?;
-    temporary.as_file().sync_all()?;
-    match temporary.persist_noclobber(&marker) {
-        Ok(_) => (),
-        Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {
-            ensure!(
-                fs::symlink_metadata(&marker)?.file_type().is_file(),
-                "pending marker is not a file"
-            );
-            ensure!(
-                fs::read(&marker)? == root.as_bytes(),
-                "pending marker mismatch"
-            );
-        }
-        Err(error) => return Err(error.error.into()),
-    }
-    sync_dir(path)
-}
-
-fn clear_pending(path: &Path, root: &str) -> Result<()> {
-    let marker = marker_path(path, root)?;
-    match fs::remove_file(marker) {
-        Ok(()) => sync_dir(path),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error.into()),
-    }
 }
 
 async fn query(

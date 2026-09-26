@@ -82,12 +82,66 @@ class MrrSnapshotResource:
         if not self.local.is_dir():
             return ()
         roots = []
-        for marker in self.local.glob("pending-b*"):
-            root = marker.name.removeprefix("pending-")
-            if (CID.fullmatch(root) and marker.is_file() and not marker.is_symlink()
-                    and marker.stat().st_size == len(root) and marker.read_bytes() == root.encode()):
+        for record in self.local.glob("snapshot-*.json"):
+            root = record.name.removeprefix("snapshot-").removesuffix(".json")
+            if not CID.fullmatch(root) or not record.is_file() or record.is_symlink() or record.stat().st_size > 4096:
+                raise MrrResourceError("invalid local protection record")
+            try:
+                data = json.loads(record.read_bytes())
+                if (set(data) != {"profile", "root", "source", "revision", "generation",
+                                  "protected_until", "state", "blocks"}
+                        or data["profile"] != PROFILE or data["root"] != root
+                        or not isinstance(data["source"], str) or not data["source"]
+                        or not isinstance(data["revision"], str) or not data["revision"]
+                        or not isinstance(data["generation"], str) or not data["generation"]
+                        or type(data["protected_until"]) is not int or data["protected_until"] < 0
+                        or data["state"] not in ("pending", "synced")
+                        or not isinstance(data["blocks"], list) or not 1 <= len(data["blocks"]) <= 8
+                        or any(not isinstance(block, str) or not CID.fullmatch(block)
+                               for block in data["blocks"])
+                        or len(set(data["blocks"])) != len(data["blocks"])
+                        or root not in data["blocks"]):
+                    raise ValueError("record identity")
+            except (ValueError, TypeError) as error:
+                raise MrrResourceError("invalid local protection record") from error
+            if data["state"] == "pending":
                 roots.append(root)
         return tuple(sorted(roots))
+
+    def sync_pending(self) -> dict[str, object]:
+        """Replay one bounded batch from the durable outbox using Tokio."""
+        with tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as errors:
+            try:
+                completed = subprocess.run([str(self.executable), "--sync-pending"], input=b"",
+                                           stdout=output, stderr=errors, env=self.environment,
+                                           timeout=self.timeout, check=False)
+            except subprocess.TimeoutExpired as error:
+                raise MrrResourceError("MRR sync deadline exceeded") from error
+            if completed.returncode:
+                errors.seek(0)
+                raise MrrResourceError(errors.read(4096).decode(errors="replace"))
+            output.seek(0)
+            raw = output.read(MAX_BYTES + 1)
+        if len(raw) > MAX_BYTES:
+            raise MrrResourceError("sync receipt exceeds 1 MiB")
+        try:
+            summary = json.loads(raw)
+            if (not isinstance(summary, dict)
+                    or set(summary) != {"profile", "attempted", "published", "failed_roots"}
+                    or summary["profile"] != PROFILE
+                    or any(type(summary[key]) is not int or summary[key] < 0
+                           for key in ("attempted", "published"))
+                    or summary["attempted"] > 128
+                    or summary["published"] > summary["attempted"]
+                    or not isinstance(summary["failed_roots"], list)
+                    or len(summary["failed_roots"]) + summary["published"] != summary["attempted"]
+                    or any(not isinstance(root, str) or not CID.fullmatch(root)
+                           for root in summary["failed_roots"])
+                    or len(set(summary["failed_roots"])) != len(summary["failed_roots"])):
+                raise ValueError("sync summary")
+            return summary
+        except (ValueError, TypeError, KeyError) as error:
+            raise MrrResourceError("invalid sync receipt") from error
 
     def query(self, *, root: str, source: str, revision: str) -> MrrReceipt:
         if not isinstance(root, str) or not CID.fullmatch(root):

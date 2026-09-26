@@ -1,5 +1,7 @@
 //! Opt-in external snapshot resources. POO Flow retains execution policy.
 #![forbid(unsafe_code)]
+#[cfg(feature = "runtime")]
+mod outbox;
 #[cfg(feature = "property-query")]
 mod property_snapshot;
 #[cfg(feature = "property-query")]
@@ -23,7 +25,7 @@ pub use property_source::{
     execute_property_source_worker_query, execute_restored_property_source_query,
 };
 #[cfg(feature = "runtime")]
-pub use runtime::{execute, run_cli};
+pub use runtime::{execute, run_cli, run_sync_pending, run_sync_service};
 #[cfg(test)]
 #[path = "../tests/unit/mod.rs"]
 mod tests;

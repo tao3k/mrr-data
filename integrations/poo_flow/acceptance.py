@@ -24,8 +24,14 @@ def run(executable):
         assert offline.pending_roots() == (protected.root,)
         offline_query = MrrSnapshotResource(executable, root / "offline-protected", {}).query(root=protected.root, **scope)
         assert offline_query.remote_operations == 0 and len(offline_query.rows) == 2
-        synchronized = MrrSnapshotResource(executable, root / "offline-protected", os.environ).sync(root=protected.root, **scope)
-        assert synchronized.root == protected.root and synchronized.remote_operations > 0
+        synchronized = MrrSnapshotResource(executable, root / "offline-protected", os.environ).sync_pending()
+        assert synchronized["attempted"] == synchronized["published"] == 1
+        assert synchronized["failed_roots"] == []
+        assert offline.pending_roots() == ()
+        reprotected = offline.protect(plan, **scope)
+        assert reprotected.root == protected.root
+        manually_synced = MrrSnapshotResource(executable, root / "offline-protected", os.environ).sync(root=protected.root, **scope)
+        assert manually_synced.root == protected.root and manually_synced.remote_operations > 0
         assert offline.pending_roots() == ()
         producer = MrrSnapshotResource(executable, root / "producer", os.environ)
         published = producer.publish(plan, **scope)
@@ -81,7 +87,7 @@ def run(executable):
             raise AssertionError("corrupt root produced an accepted result")
         return {"profile": "poo-flow.static-edges.v1", "result": "passed",
                 "protected": asdict(protected), "offline_query": asdict(offline_query),
-                "synchronized": asdict(synchronized),
+                "synchronized": synchronized, "manually_synced": asdict(manually_synced),
                 "local": asdict(local), "cold": asdict(cold), "warm": asdict(warm),
                 "restarted": asdict(restarted), "negative_cases": negatives}
 

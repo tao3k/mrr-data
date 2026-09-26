@@ -103,6 +103,7 @@ async fn fixed_query_projects_exact_source_endpoints_before_admission() {
 
 #[tokio::test]
 async fn protected_snapshot_survives_restart_and_queries_without_s3() {
+    use crate::outbox::LocalPolicy;
     use mrr_data_cache::BlockingContentStore;
     use mrr_data_content::FilesystemContentStore;
 
@@ -111,26 +112,83 @@ async fn protected_snapshot_survives_restart_and_queries_without_s3() {
     let protect = br#"{"profile":"poo-flow.static-edges.v1","source":"plan","revision":"rev","operation":{"kind":"protect","edges":[["compile","test"]]}}"#;
     let local = BlockingContentStore::new(FilesystemContentStore::open(&path).unwrap());
     let receipt: serde_json::Value = serde_json::from_str(
-        &crate::worker::execute(protect, local, None, path.clone())
-            .await
-            .unwrap(),
+        &crate::worker::execute(
+            protect,
+            local,
+            None,
+            path.clone(),
+            LocalPolicy {
+                max_bytes: 1024 * 1024,
+                protection_secs: 3600,
+            },
+        )
+        .await
+        .unwrap(),
     )
     .unwrap();
     assert_eq!(receipt["result"]["kind"], "protected");
     assert_eq!(receipt["remote_operations"], 0);
     let root = receipt["root"].as_str().unwrap();
-    assert!(directory.path().join(format!("pending-{root}")).exists());
+    let record: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(directory.path().join(format!("snapshot-{root}.json"))).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(record["source"], "plan");
+    assert_eq!(record["revision"], "rev");
+    assert_eq!(record["state"], "pending");
 
     let query = serde_json::json!({"profile": PROFILE, "source": "plan", "revision": "rev",
         "operation": {"kind": "query", "root": root}});
     let local = BlockingContentStore::new(FilesystemContentStore::open(&path).unwrap());
     let admitted: serde_json::Value = serde_json::from_str(
-        &crate::worker::execute(&serde_json::to_vec(&query).unwrap(), local, None, path)
-            .await
-            .unwrap(),
+        &crate::worker::execute(
+            &serde_json::to_vec(&query).unwrap(),
+            local,
+            None,
+            path,
+            LocalPolicy {
+                max_bytes: 1024 * 1024,
+                protection_secs: 3600,
+            },
+        )
+        .await
+        .unwrap(),
     )
     .unwrap();
     assert_eq!(admitted["result"]["kind"], "admitted");
     assert_eq!(admitted["result"]["rows"].as_array().unwrap().len(), 1);
     assert_eq!(admitted["remote_operations"], 0);
+}
+
+#[tokio::test]
+async fn capacity_rejection_never_creates_a_protection_record() {
+    use crate::outbox::LocalPolicy;
+    use mrr_data_cache::BlockingContentStore;
+    use mrr_data_content::FilesystemContentStore;
+
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().to_str().unwrap().to_owned();
+    let protect = br#"{"profile":"poo-flow.static-edges.v1","source":"plan","revision":"rev","operation":{"kind":"protect","edges":[["a","b"]]}}"#;
+    let local = BlockingContentStore::new(FilesystemContentStore::open(&path).unwrap());
+    let error = crate::worker::execute(
+        protect,
+        local,
+        None,
+        path,
+        LocalPolicy {
+            max_bytes: 1,
+            protection_secs: 3600,
+        },
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("local protection capacity exceeded")
+    );
+    assert!(std::fs::read_dir(directory.path()).unwrap().all(|entry| {
+        let name = entry.unwrap().file_name();
+        !name.to_string_lossy().starts_with("snapshot-")
+    }));
 }
