@@ -1,0 +1,27 @@
+[package]
+name = "mrr-data-pseudonymization"
+description = "Optional Cedar POO pseudonymization binding for MRR Data"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+google-sdp = ["cedar-poo-bridge/google-sdp"]
+
+[dependencies]
+cedar-poo-bridge = { git = "https://github.com/tao3k/cedar-poo-spec", rev = "ccba5d59c2844df5b6f7f7325d4f094ee6e661a3", default-features = false, features = ["pseudonymization"] }
+mrr-data-core = { path = "../mrr-data-core", version = "0.1.0", default-features = false, features = ["pseudonymization"] }
+
+[dev-dependencies]
+meta-relational-reasoning.workspace = true
+mrr-data-asp-rust-build-support.workspace = true
+
+[lints]
+workspace = true
+
+[[example]]
+name = "token_catalog_latency"
+path = "examples/token_catalog_latency.rs"

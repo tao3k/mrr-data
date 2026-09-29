@@ -13,6 +13,9 @@ arrow = ["dep:mrr-data-arrow"]
 cache = ["content", "dep:mrr-data-cache", "mrr-data-cache/kache"]
 s3 = ["content", "dep:mrr-data-cache", "mrr-data-cache/s3"]
 content-identity = ["dep:mrr-data-core", "mrr-data-core/content-identity"]
+pseudonymization = ["content-identity", "mrr-data-core/pseudonymization"]
+pseudonymization-cedar = ["pseudonymization", "dep:mrr-data-pseudonymization"]
+google-sdp = ["pseudonymization-cedar", "mrr-data-pseudonymization/google-sdp"]
 content = ["content-identity", "dep:mrr-data-content"]
 transfer = ["snapshot", "mrr-data-content/transfer", "dep:mrr-data-cache", "mrr-data-cache/blocking"]
 snapshot = ["content", "mrr-data-content/snapshot"]
@@ -29,6 +32,7 @@ mrr-data-content = { workspace = true, optional = true }
 mrr-data-core = { workspace = true, optional = true }
 mrr-data-datafusion = { workspace = true, optional = true }
 mrr-data-graphar = { workspace = true, optional = true }
+mrr-data-pseudonymization = { path = "../mrr-data-pseudonymization", version = "0.1.0", optional = true }
 mrr-data-profile.workspace = true
 
 [dev-dependencies]

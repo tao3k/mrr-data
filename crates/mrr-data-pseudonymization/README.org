@@ -1,0 +1,45 @@
+#+TITLE: Optional Cedar POO Pseudonymization Binding
+#+OPTIONS: toc:nil
+
+This crate is maintained in =mrr-data= and depends on an immutable
+=cedar-poo-spec= revision. It enables only the bridge's lightweight
+=pseudonymization= feature by default. =google-sdp= is a separate opt-in
+feature for Google Sensitive Data Protection request and response types.
+Neither feature enables the official Cedar runtime or a cloud SDK.
+
+| Facade feature | Adds | Cedar dependency |
+|----------------+------+------------------|
+| =pseudonymization= | Snapshot and selected-input binding | None |
+| =pseudonymization-cedar= | Common Cedar POO token profile | Lightweight bridge only |
+| =google-sdp= | Google SDP wire contract | Lightweight bridge, no =cedar-policy= |
+
+Only Rust capabilities with an actual implementation receive a feature.
+Lean-only controls are published as Cedar artifacts for the deploying Host;
+this package does not create placeholder flags for them.
+
+The public =TokenInputBinding= relates a selected value digest and actual
+per-record context to one =mrr-data= snapshot root and a common token
+profile. =compatible_inputs= uses the same recipe/context rule as the Lean
+AES-SIV table capability; =hmac_catalog_separated= checks declared HMAC
+key-domain reuse across scopes. These metadata checks do not authenticate
+the profile, key material, input bytes, provider response, or authorization.
+The deploying Host must provide those facts and control execution.
+
+#+begin_src mermaid
+flowchart LR
+  S[mrr-data snapshot root] --> B[Token input binding]
+  P[Cedar POO token profile] --> B
+  B --> H[Deploying Host]
+  H --> L[Local provider]
+  H --> G[Optional Google SDP provider]
+#+end_src
+
+#+begin_src sh
+just test-data-bindings
+just test-pseudonymization-bridge
+just bench-token-catalog
+#+end_src
+
+The HMAC catalog check uses a borrowed-key hash index at deployment time;
+the benchmark reports batch-average nanoseconds per profile at increasing
+catalog sizes. It does not measure Cedar authorization or provider I/O.

@@ -15,11 +15,12 @@ use multihash_codetable::{Code, MultihashDigest};
 
 use crate::{
     BatchDescriptor, CoverageDescriptor, CoverageKind, DAG_CBOR_CODEC, DataEngineProfile,
-    DataError, DataGraphSourceBindingError, DataQueryBindingError, DataQueryFeature,
-    DataQueryOutputError, EntityDescriptor, GraphProjectionDescriptor,
-    PROPERTY_SNAPSHOT_SCHEMA_VERSION, PhysicalQueryOutput, RAW_CODEC, RelationDescriptor,
-    SnapshotBlock, SnapshotManifest, SnapshotManifestRequest, admit_graph_projection_source,
-    bind_data_query, project_data_query_output, raw_cid,
+    DataError, DataGraphSourceBindingError, DataOperationBinding, DataQueryBindingError,
+    DataQueryFeature, DataQueryOutputError, EntityDescriptor, GraphProjectionDescriptor,
+    PROPERTY_SNAPSHOT_SCHEMA_VERSION, PhysicalQueryOutput, QueryOperationBinding, RAW_CODEC,
+    RelationDescriptor, ReleaseBindingError, ReleaseOperationBinding, SnapshotBlock,
+    SnapshotManifest, SnapshotManifestRequest, SnapshotOperationBinding,
+    admit_graph_projection_source, bind_data_query, project_data_query_output, raw_cid,
 };
 
 fn relation_id(name: &str) -> RelationId {
@@ -287,6 +288,46 @@ fn admitted_query_binds_to_exact_physical_snapshot_and_graph_projection() {
             .map(GraphProjectionDescriptor::manifest_cid)
     );
     assert_eq!(bound.engine().name(), "graphar-native");
+
+    let snapshot_binding = SnapshotOperationBinding::new(&snapshot);
+    let query_binding = QueryOperationBinding::new(&bound);
+    assert_eq!(snapshot_binding.root(), query_binding.root());
+    assert_eq!(snapshot_binding.generation(), query_binding.generation());
+    assert_eq!(
+        snapshot_binding.semantic_digest(),
+        bound.query().snapshot_digest()
+    );
+    assert_eq!(query_binding.query_binding_digest(), bound.query().digest());
+    assert_eq!(query_binding.engine_name(), "graphar-native");
+    assert!(matches!(
+        DataOperationBinding::Publish(snapshot_binding),
+        DataOperationBinding::Publish(_)
+    ));
+}
+
+#[cfg(feature = "pseudonymization")]
+#[test]
+fn pseudonymization_input_keeps_snapshot_and_selected_context() {
+    use crate::PseudonymizationInputBinding;
+
+    let snapshot = SnapshotBlock::encode(manifest(false)).unwrap();
+    let value_digest = [9; 32];
+    let input = PseudonymizationInputBinding::new(
+        &snapshot,
+        "patient_id",
+        &value_digest,
+        "tenant-a:study-1",
+        "aes-siv-profile",
+    );
+    assert_eq!(input.source().root(), snapshot.cid());
+    assert_eq!(
+        input.source().generation(),
+        snapshot.manifest().semantic_snapshot().generation()
+    );
+    assert_eq!(input.field(), "patient_id");
+    assert_eq!(input.value_digest(), &value_digest);
+    assert_eq!(input.context(), "tenant-a:study-1");
+    assert_eq!(input.profile(), &"aes-siv-profile");
 }
 
 #[test]
@@ -354,6 +395,25 @@ fn physical_execution_injects_binding_then_mrr_admits_the_candidate() {
     )
     .unwrap();
     assert_eq!(receipt.row_count(), 1);
+
+    let output_digest = [7; 32];
+    let release = ReleaseOperationBinding::new(&bound, &receipt, &output_digest).unwrap();
+    assert_eq!(release.query().root(), snapshot.cid());
+    assert_eq!(release.admitted_result_digest(), receipt.digest());
+    assert_eq!(release.output_digest(), &output_digest);
+    assert_eq!(release.row_count(), 1);
+
+    let other_engine = DataEngineProfile::new(
+        "arrow-native",
+        false,
+        [DataQueryFeature::BoundedVariableLengthPath],
+    )
+    .unwrap();
+    let other = bind_data_query(&bound_query(Some(2)), &snapshot, &other_engine).unwrap();
+    assert_eq!(
+        ReleaseOperationBinding::new(&other, &receipt, &output_digest).err(),
+        Some(ReleaseBindingError::QueryBindingMismatch)
+    );
 }
 
 #[test]

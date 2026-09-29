@@ -88,6 +88,16 @@ The optional ~mrr-data-content~ crate also exposes a provider-neutral
 verified read-through, explicit cache admission, and remote-acknowledged publication.
 Enable ~cache~ for Kache and ~s3~ for the remote adapter (~cache,s3~ for both). S3 credentials and TLS policy
 belong to adapters; local integration tests require no cloud account.
+
+The facade's ~pseudonymization~ feature adds only borrowed selected-input
+bindings above ~content-identity~. ~pseudonymization-cedar~ opts into the
+separate =mrr-data-pseudonymization= package and its pinned, lightweight
+=cedar-poo-bridge/pseudonymization= token profile. ~google-sdp~ additionally
+exposes the provider wire contract. None of these features enables the
+official Cedar runtime unless a downstream Host explicitly selects it.
+[[file:../../crates/mrr-data-core/src/operation_binding.org][Operation bindings]] and
+[[file:../../crates/mrr-data-pseudonymization/README.org][Pseudonymization binding]] document those boundaries next to the code.
+
 The bounded POO Flow static-edge worker owns a durable local outbox above the
 default filesystem store. A protection receipt follows complete closure
 verification and a durable pending record write; the record binds source, revision and
