@@ -24,6 +24,13 @@ mrr-data-asp-rust-build-support.workspace = true
 [lints]
 workspace = true
 
-[[example]]
-name = "token_catalog_latency"
-path = "examples/token_catalog_latency.rs"
+[[bench]]
+name = "token_catalog"
+path = "benches/token_catalog.rs"
+harness = false
+
+[[bench]]
+name = "google_sdp"
+path = "benches/google_sdp.rs"
+harness = false
+required-features = ["google-sdp"]

@@ -47,8 +47,12 @@ flowchart LR
 just test-data-bindings
 just test-pseudonymization-bridge
 just bench-token-catalog
+just bench-google-sdp
 #+end_src
 
-The HMAC catalog check uses a borrowed-key hash index at deployment time;
-the benchmark reports batch-average nanoseconds per profile at increasing
-catalog sizes. It does not measure Cedar authorization or provider I/O.
+The benchmarks are Cargo bench targets using stable Rust's
+=std::hint::black_box= and =std::time::Instant=. The HMAC catalog check uses a
+borrowed-key hash index at deployment time. The Google benchmark separates
+claim matching from SHA-256 selected-value checking and request construction.
+Measurements are batch averages under release optimization; they do not
+measure Cedar authorization, network, KMS, or provider execution.

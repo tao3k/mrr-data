@@ -17,11 +17,15 @@ test-pseudonymization-bridge:
 
 [group('bench')]
 bench-data-bindings:
-    {{ native_env }} {{ cargo }} run --release -p mrr-data-core --features pseudonymization --example operation_binding_latency --locked
+    {{ native_env }} {{ cargo }} bench -p mrr-data-core --features pseudonymization --bench operation_binding --locked
 
 [group('bench')]
 bench-token-catalog:
-    {{ native_env }} {{ cargo }} run --release -p mrr-data-pseudonymization --example token_catalog_latency --locked
+    {{ native_env }} {{ cargo }} bench -p mrr-data-pseudonymization --bench token_catalog --locked
+
+[group('bench')]
+bench-google-sdp:
+    {{ native_env }} {{ cargo }} bench -p mrr-data-pseudonymization --features google-sdp --bench google_sdp --locked
 
 [group('test')]
 test-property-query:

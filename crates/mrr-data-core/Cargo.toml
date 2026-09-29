@@ -28,7 +28,8 @@ mrr-data-asp-rust-build-support.workspace = true
 [lints]
 workspace = true
 
-[[example]]
-name = "operation_binding_latency"
-path = "examples/operation_binding_latency.rs"
+[[bench]]
+name = "operation_binding"
+path = "benches/operation_binding.rs"
+harness = false
 required-features = ["pseudonymization"]

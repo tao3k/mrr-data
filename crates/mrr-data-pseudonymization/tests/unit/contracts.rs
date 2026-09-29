@@ -217,7 +217,8 @@ fn google_key() -> cedar_poo_bridge::google_sdp::WrappedKeyBinding {
 #[cfg(feature = "google-sdp")]
 #[test]
 fn google_request_requires_exact_snapshot_selection() {
-    use crate::{CurrentGovernance, GoogleSelectionMismatch, prepare_google_aes_siv_deidentify};
+    use crate::{CurrentGovernance, prepare_google_aes_siv_deidentify};
+    use cedar_poo_bridge::google_sdp::GoogleSdpResponse;
     use sha2::{Digest, Sha256};
 
     let source = snapshot();
@@ -267,10 +268,34 @@ fn google_request_requires_exact_snapshot_selection() {
     .unwrap();
     let body = String::from_utf8(plan.deidentify_body().unwrap().to_json_bytes().unwrap()).unwrap();
     assert!(body.contains("cryptoDeterministicConfig"));
+    assert_eq!(plan.identity().root(), source.cid());
+    let response = GoogleSdpResponse::from_json_bytes(
+        br#"{"item":{"table":{"headers":[{"name":"patient_id"},{"name":"study_context"}],"rows":[{"values":[{"stringValue":"c3ludGhldGljLWNpcGhlcnRleHQ="},{"stringValue":"study-1"}]}]}},"overview":{"transformationSummaries":[{"field":{"name":"patient_id"},"results":[{"count":"1","code":"SUCCESS"}]}]}}"#,
+    )
+    .unwrap();
+    let checked = plan.check_response(&response).unwrap();
+    assert_eq!(checked.identity().policy_digest(), &policy);
+    assert_eq!(checked.identity().governance_epoch(), 7);
+    assert_eq!(checked.identity().dataset(), "cohort-a");
+    assert_eq!(checked.identity().input_digest(), &digest);
+    assert_eq!(checked.token(), "c3ludGhldGljLWNpcGhlcnRleHQ=");
+    let expected_token_digest: [u8; 32] = Sha256::digest(checked.token().as_bytes()).into();
+    assert_eq!(checked.token_digest(), expected_token_digest);
+    assert_google_rejections(&request, &claim, current);
+}
+
+#[cfg(feature = "google-sdp")]
+fn assert_google_rejections(
+    request: &TokenAuthorizationRequest<'_>,
+    claim: &TokenAuthorizationClaim<'_>,
+    current: crate::CurrentGovernance<'_>,
+) {
+    use crate::{GoogleSelectionMismatch, prepare_google_aes_siv_deidentify};
+
     assert_eq!(
         prepare_google_aes_siv_deidentify(
-            &request,
-            &claim,
+            request,
+            claim,
             current,
             google_selected("synthetic-patient-1", "cohort-b"),
             "projects/p/locations/us".to_owned(),
@@ -281,8 +306,8 @@ fn google_request_requires_exact_snapshot_selection() {
     );
     assert_eq!(
         prepare_google_aes_siv_deidentify(
-            &request,
-            &claim,
+            request,
+            claim,
             current,
             google_selected("substituted-patient", "cohort-a"),
             "projects/p/locations/us".to_owned(),
@@ -293,9 +318,9 @@ fn google_request_requires_exact_snapshot_selection() {
     );
     assert_eq!(
         prepare_google_aes_siv_deidentify(
-            &request,
-            &claim,
-            CurrentGovernance {
+            request,
+            claim,
+            crate::CurrentGovernance {
                 epoch: 8,
                 ..current
             },
