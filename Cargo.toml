@@ -44,8 +44,8 @@ arrow-ipc = "58.4.0"
 arrow-schema = "58.4.0"
 datafusion = { version = "=53.1.0", default-features = false }
 flatbuffers = "25.2.10"
-meta-relational-reasoning = { git = "https://github.com/tao3k/meta-relational-reasoning.git", rev = "21d731effe3c68ee3b1f719aaf8707de4c0aa85c", version = "0.1.0" }
-mrr-property-source = { git = "https://github.com/tao3k/meta-relational-reasoning.git", rev = "21d731effe3c68ee3b1f719aaf8707de4c0aa85c", version = "0.1.0" }
+meta-relational-reasoning = { git = "https://github.com/tao3k/meta-relational-reasoning.git", rev = "faedb3e49d63b0ba32e74a037a1bd0859a18b9c6", version = "0.1.0" }
+mrr-property-source = { git = "https://github.com/tao3k/meta-relational-reasoning.git", rev = "faedb3e49d63b0ba32e74a037a1bd0859a18b9c6", version = "0.1.0" }
 mrr-data-asp-rust-build-support = { path = "build-support/mrr-data-asp-rust-project-policy", version = "0.1.0" }
 mrr-data-arrow = { path = "crates/mrr-data-arrow", version = "0.1.0" }
 mrr-data-content = { path = "crates/mrr-data-content", version = "0.1.0", default-features = false }
