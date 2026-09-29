@@ -19,9 +19,16 @@ transformation decision before Google request construction. Both decisions
 must be bound to the same root, dataset, artifact digest, and state epoch as
 the selected release; the token claim and release must share the current epoch.
 The Cloud path requires a checked =SnapshotRowBinding= and retains its
-relation, child CID, and row ordinal with the output. The Host verifies the
-child bytes and reads the actual named columns; manifest membership alone does
-not authenticate a cell value. The [[file:google_sdp_binding.rs][CloudPseudonymizationGate]] mirrors the
+relation, child CID, and row ordinal with the output. The
+[[file:google_arrow.rs][Arrow-backed preparation API]] verifies the complete
+MRR catalog digest, child byte length and CID, relation-specific Arrow IPC
+schema, batch row count, and selected row's named UTF-8 value and context.
+It uses the existing bounded MRR Arrow decoder and rejects missing or
+ambiguous fields, null or empty cells, and differences from the proposed
+selection. The Host must pass explicit decode limits and authenticate the
+manifest root and catalog source before invoking it. The older projection
+API accepts Host-authenticated selection directly; callers handling Arrow
+child bytes should use the Arrow-backed API. The [[file:google_sdp_binding.rs][CloudPseudonymizationGate]] mirrors the
 public Cedar POO Cloud gate's mode, recipe, tenant, key grant, row context, and
 artifact-digest relation against the selected MRR Data input. These checks
 compare Host-authenticated projections; they do not execute Cedar or prove
@@ -38,6 +45,9 @@ projected facts as follows:
 | =recovery-restores-release= | A new Host-authenticated decision pair can admit the recovered root |
 
 The test fixtures are synthetic; Rust does not re-evaluate these Cedar policies.
+The Arrow-backed fixture contains actual MRR IPC child bytes and checks the
+second row, altered value or context, missing fields, tampered content,
+truncated content, and decode limits.
 
 The common token profile is independent of provider. Google is selected with
 the optional =google-sdp= feature; a local provider can consume the same

@@ -36,6 +36,8 @@ The value digest convention is required for this Google operation; generic
 =TokenInputBinding= remains independent of a hash algorithm. The Cloud path
 checks the same projected gate relations as the public Cedar POO Cloud
 DataProtection model and keeps the release identity with the checked output.
+For MRR Arrow children, [[file:src/google_sdp_binding.org][Arrow-backed preparation]]
+also checks the catalog, child content, schema, row, and selected cells.
 
 #+begin_src mermaid
 flowchart LR

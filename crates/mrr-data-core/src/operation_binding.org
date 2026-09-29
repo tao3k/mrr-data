@@ -53,6 +53,8 @@ authorization latency.
 
 =SnapshotRowBinding= checks that a relation, Arrow child CID, and child-local
 row ordinal belong to the selected immutable snapshot. It is a physical
-location check. The Host authenticates the child payload and schema, then
-reads the actual value and context columns before constructing a security
-selection. The binding itself never grants access or loads bytes.
+location check. The source exposes the immutable snapshot so an adapter can
+verify the catalog digest and child payload before reading named cells. The
+Google SDP adapter does this using the bounded MRR Arrow decoder. The Host
+still authenticates the snapshot root and catalog source and controls effects.
+The binding itself never grants access or loads bytes.

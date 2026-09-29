@@ -13,7 +13,13 @@ pub use binding::{
 };
 
 #[cfg(feature = "google-sdp")]
+mod google_arrow;
+#[cfg(feature = "google-sdp")]
 mod google_sdp_binding;
+#[cfg(feature = "google-sdp")]
+pub use google_arrow::{
+    GoogleArrowSelectionError, prepare_cloud_google_aes_siv_from_arrow, verify_google_arrow_row,
+};
 #[cfg(feature = "google-sdp")]
 pub use google_sdp_binding::{
     BoundGoogleDeidentifyOutput, BoundGoogleDeidentifyPlan, CloudDataProtectionSelection,

@@ -2963,6 +2963,7 @@ dependencies = [
  "cedar-poo-bridge",
  "cid",
  "meta-relational-reasoning",
+ "mrr-data-arrow",
  "mrr-data-asp-rust-build-support",
  "mrr-data-core",
  "mrr-data-security",

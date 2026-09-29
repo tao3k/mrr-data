@@ -25,6 +25,12 @@ impl<'a> SnapshotOperationBinding<'a> {
         Self { snapshot }
     }
 
+    /// The immutable manifest and canonical root used by this binding.
+    #[must_use]
+    pub const fn snapshot(&self) -> &'a SnapshotBlock {
+        self.snapshot
+    }
+
     #[must_use]
     pub const fn root(&self) -> &Cid {
         self.snapshot.cid()
