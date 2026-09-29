@@ -10,6 +10,7 @@ repository.workspace = true
 [features]
 default = []
 content-identity = ["dep:cid", "dep:multihash-codetable", "dep:serde", "dep:serde_bytes", "dep:serde_ipld_dagcbor"]
+pseudonymization = ["content-identity"]
 
 [dependencies]
 cid = { workspace = true, optional = true }
@@ -26,3 +27,8 @@ mrr-data-asp-rust-build-support.workspace = true
 
 [lints]
 workspace = true
+
+[[example]]
+name = "operation_binding_latency"
+path = "examples/operation_binding_latency.rs"
+required-features = ["pseudonymization"]

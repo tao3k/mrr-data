@@ -8,6 +8,22 @@ format:
     {{ cargo }} fmt --all
 
 [group('test')]
+test-data-bindings:
+    {{ native_env }} {{ cargo }} test -p mrr-data-core --features pseudonymization --lib --locked
+
+[group('test')]
+test-pseudonymization-bridge:
+    {{ native_env }} {{ cargo }} test -p mrr-data-pseudonymization --features google-sdp --lib --locked
+
+[group('bench')]
+bench-data-bindings:
+    {{ native_env }} {{ cargo }} run --release -p mrr-data-core --features pseudonymization --example operation_binding_latency --locked
+
+[group('bench')]
+bench-token-catalog:
+    {{ native_env }} {{ cargo }} run --release -p mrr-data-pseudonymization --example token_catalog_latency --locked
+
+[group('test')]
 test-property-query:
     #!/usr/bin/env bash
     set -euo pipefail

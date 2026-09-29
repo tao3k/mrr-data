@@ -6,7 +6,11 @@ mod error;
 #[cfg(feature = "content-identity")]
 mod manifest;
 #[cfg(feature = "content-identity")]
+mod operation_binding;
+#[cfg(feature = "content-identity")]
 mod profile;
+#[cfg(feature = "pseudonymization")]
+mod pseudonymization;
 mod query_binding;
 #[cfg(feature = "content-identity")]
 mod snapshot_descriptors;
@@ -25,7 +29,14 @@ pub use mrr_data_profile::{
     SHA2_256_CODE, SHA2_256_NAME, SNAPSHOT_SCHEMA_NAMESPACE, SNAPSHOT_SCHEMA_VERSION,
 };
 #[cfg(feature = "content-identity")]
+pub use operation_binding::{
+    DataOperationBinding, QueryOperationBinding, ReleaseBindingError, ReleaseOperationBinding,
+    SnapshotOperationBinding,
+};
+#[cfg(feature = "content-identity")]
 pub use profile::dag_cbor_cid;
+#[cfg(feature = "pseudonymization")]
+pub use pseudonymization::PseudonymizationInputBinding;
 #[cfg(feature = "content-identity")]
 pub use query_binding::{
     BoundDataQuery, DataGraphSourceBindingError, DataQueryOutputError,

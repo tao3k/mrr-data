@@ -7,6 +7,7 @@ members = [
   "crates/mrr-data-content",
   "crates/mrr-data-cache",
   "crates/mrr-data-core",
+  "crates/mrr-data-pseudonymization",
   "crates/mrr-data-datafusion",
   "crates/mrr-data-graphar",
   "crates/mrr-data-profile",

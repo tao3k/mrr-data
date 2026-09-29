@@ -10,6 +10,10 @@ pub use graphar_binding::{GraphArQuerySourceBindingError, admit_graphar_query_so
 /// Stable schema and physical profile identifiers.
 pub use mrr_data_profile as profile;
 
+/// Optional Cedar POO token-profile binding for the physical data plane.
+#[cfg(feature = "pseudonymization-cedar")]
+pub use mrr_data_pseudonymization as pseudonymization;
+
 /// Lossless relation-specific Arrow interchange, enabled by default.
 #[cfg(feature = "arrow")]
 pub use mrr_data_arrow as arrow;

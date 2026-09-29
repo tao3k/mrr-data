@@ -1,0 +1,50 @@
+#+TITLE: Data Operation Bindings
+#+OPTIONS: toc:nil
+
+The =content-identity= feature exports borrowed physical identities for data
+operations. [[file:operation_binding.rs][operation_binding.rs]] defines root reads, snapshot publication,
+bound queries, and result release as distinct operation phases. A consumer
+can project these values into Cedar or another policy engine without giving
+=mrr-data-core= a policy-language or cloud-provider dependency.
+
+#+begin_src mermaid
+flowchart LR
+  S[SnapshotBlock] --> P[Publish binding]
+  B[BoundDataQuery] --> Q[Query binding]
+  Q --> R[Release binding]
+  M[MRR result admission receipt] --> R
+  R --> H[Deploying Host]
+#+end_src
+
+The bindings borrow existing CIDs and digests. Construction neither encodes
+a manifest nor hashes or copies data. =ReleaseOperationBinding.new= rejects
+an MRR result receipt for a different query binding. The receipt admits a
+candidate result, but it does not prove that the Host's released bytes match
+the supplied output digest. The Host must authenticate labels, principal,
+purpose, destination, policy revision, and actual bytes, then enforce any
+budget, revocation, audit, or provider effect.
+
+A read can be considered before a manifest is loaded by binding its requested
+root CID. A cache hit is still a new read operation for authorization
+purposes. The immutable snapshot root does not contain mutable grants or
+authorization tokens.
+
+* Verification
+
+#+begin_src sh
+just test-data-bindings
+#+end_src
+
+#+begin_src sh
+just bench-data-bindings
+#+end_src
+
+The tests compare projected roots, generations, digests, and engine identity
+with their admitted sources, and reject a result receipt for a different
+query. They establish a projection contract, not end-to-end authorization.
+The benchmark compares direct getters with the borrowed binding in alternating
+order, using a constructed snapshot outside the timed loops. It reports p50
+and p95 of *batch-average* nanoseconds per operation, not single-request tail
+latency. Provider I/O, Cedar policy evaluation, and allocation counts are
+outside this first measurement. These figures cannot establish end-to-end
+authorization latency.
