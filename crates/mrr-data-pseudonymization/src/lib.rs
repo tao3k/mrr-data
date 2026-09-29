@@ -2,10 +2,20 @@
 #![forbid(unsafe_code)]
 
 pub use cedar_poo_bridge::pseudonymization::{Mode, TokenLineage, TokenProfile};
+mod authorization;
 mod binding;
+pub use authorization::{
+    ClaimMismatch, CurrentGovernance, TokenAction, TokenAuthorizationClaim,
+    TokenAuthorizationRequest,
+};
 pub use binding::{
     SelectedTokenInput, TokenInputBinding, compatible_inputs, hmac_catalog_separated,
 };
+
+#[cfg(feature = "google-sdp")]
+mod google_sdp_binding;
+#[cfg(feature = "google-sdp")]
+pub use google_sdp_binding::{GoogleSelectionMismatch, prepare_google_aes_siv_deidentify};
 
 /// Optional Google Sensitive Data Protection wire contract, without a cloud
 /// SDK or Cedar runtime dependency.

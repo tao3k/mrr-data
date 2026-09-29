@@ -8,7 +8,9 @@ use mrr_data_core::{
 };
 
 use crate::{
-    Mode, SelectedTokenInput, TokenLineage, TokenProfile, compatible_inputs, hmac_catalog_separated,
+    ClaimMismatch, Mode, SelectedTokenInput, TokenAction, TokenAuthorizationClaim,
+    TokenAuthorizationRequest, TokenLineage, TokenProfile, compatible_inputs,
+    hmac_catalog_separated,
 };
 
 fn snapshot() -> SnapshotBlock {
@@ -94,4 +96,214 @@ fn hmac_scope_separation_is_independent_of_wrapper_rotation() {
         profile(Mode::HmacSha256, "study-1", "wrapping-2"),
     ];
     assert!(hmac_catalog_separated(&same_scope));
+}
+
+#[test]
+fn claim_must_match_exact_effect_and_current_governance() {
+    let source = snapshot();
+    let digest = [23; 32];
+    let input = SelectedTokenInput {
+        field: "patient_id",
+        value_digest: &digest,
+        context: "study-1",
+        profile: profile(Mode::AesSiv, "study-1", "wrapper-1"),
+    }
+    .bind_to(&source);
+    let policy = [31; 32];
+    let request = TokenAuthorizationRequest {
+        subject: "researcher-1",
+        purpose: "approved-study",
+        dataset: "cohort-a",
+        action: TokenAction::Deidentify,
+        input: &input,
+    };
+    let claim = TokenAuthorizationClaim {
+        subject: request.subject,
+        purpose: request.purpose,
+        dataset: request.dataset,
+        action: request.action,
+        root: source.cid(),
+        field: input.field(),
+        value_digest: &digest,
+        context: input.context(),
+        profile: *input.profile(),
+        policy_digest: &policy,
+        governance_epoch: 7,
+        expires_at: 100,
+    };
+    assert_eq!(request.check_claim(&claim, &policy, 7, 99), Ok(()));
+    assert_eq!(
+        request.check_claim(&claim, &policy, 8, 99),
+        Err(ClaimMismatch::Stale)
+    );
+    assert_eq!(
+        request.check_claim(&claim, &policy, 7, 100),
+        Err(ClaimMismatch::Stale)
+    );
+    let other_policy = [32; 32];
+    assert_eq!(
+        request.check_claim(&claim, &other_policy, 7, 99),
+        Err(ClaimMismatch::Stale)
+    );
+    assert_eq!(
+        request.check_claim(
+            &TokenAuthorizationClaim {
+                dataset: "cohort-b",
+                ..claim
+            },
+            &policy,
+            7,
+            99
+        ),
+        Err(ClaimMismatch::DifferentOperation)
+    );
+    assert_eq!(
+        request.check_claim(
+            &TokenAuthorizationClaim {
+                action: TokenAction::Reidentify,
+                ..claim
+            },
+            &policy,
+            7,
+            99
+        ),
+        Err(ClaimMismatch::DifferentOperation)
+    );
+    let other_digest = [24; 32];
+    assert_eq!(
+        request.check_claim(
+            &TokenAuthorizationClaim {
+                value_digest: &other_digest,
+                ..claim
+            },
+            &policy,
+            7,
+            99
+        ),
+        Err(ClaimMismatch::DifferentOperation)
+    );
+}
+
+#[cfg(feature = "google-sdp")]
+fn google_selected(
+    value: &str,
+    dataset: &str,
+) -> cedar_poo_bridge::google_sdp::SelectedTabularInput {
+    cedar_poo_bridge::google_sdp::SelectedTabularInput {
+        dataset: dataset.into(),
+        value_field: "patient_id".into(),
+        context_field: "study_context".into(),
+        value: value.into(),
+        context: "study-1".into(),
+        key_domain: "research-key".into(),
+        token_key_version: "key-1".into(),
+        transform_version: "normalization-1".into(),
+        wrapping_version: "wrapper-1".into(),
+        surrogate_info_type: None,
+    }
+}
+
+#[cfg(feature = "google-sdp")]
+fn google_key() -> cedar_poo_bridge::google_sdp::WrappedKeyBinding {
+    cedar_poo_bridge::google_sdp::WrappedKeyBinding {
+        key_domain: "research-key".into(),
+        token_key_version: "key-1".into(),
+        wrapping_version: "wrapper-1".into(),
+        kms_key_name: "projects/p/locations/us/keyRings/r/cryptoKeys/k".into(),
+        wrapped_key_base64: "a2V5".into(),
+    }
+}
+
+#[cfg(feature = "google-sdp")]
+#[test]
+fn google_request_requires_exact_snapshot_selection() {
+    use crate::{CurrentGovernance, GoogleSelectionMismatch, prepare_google_aes_siv_deidentify};
+    use sha2::{Digest, Sha256};
+
+    let source = snapshot();
+    let digest: [u8; 32] = Sha256::digest(b"synthetic-patient-1").into();
+    let input = SelectedTokenInput {
+        field: "patient_id",
+        value_digest: &digest,
+        context: "study-1",
+        profile: profile(Mode::AesSiv, "study-1", "wrapper-1"),
+    }
+    .bind_to(&source);
+    let policy = [31; 32];
+    let request = TokenAuthorizationRequest {
+        subject: "researcher-1",
+        purpose: "approved-study",
+        dataset: "cohort-a",
+        action: TokenAction::Deidentify,
+        input: &input,
+    };
+    let claim = TokenAuthorizationClaim {
+        subject: request.subject,
+        purpose: request.purpose,
+        dataset: request.dataset,
+        action: request.action,
+        root: source.cid(),
+        field: input.field(),
+        value_digest: &digest,
+        context: input.context(),
+        profile: *input.profile(),
+        policy_digest: &policy,
+        governance_epoch: 7,
+        expires_at: 100,
+    };
+    let current = CurrentGovernance {
+        policy_digest: &policy,
+        epoch: 7,
+        now: 99,
+    };
+    let plan = prepare_google_aes_siv_deidentify(
+        &request,
+        &claim,
+        current,
+        google_selected("synthetic-patient-1", "cohort-a"),
+        "projects/p/locations/us".to_owned(),
+        google_key(),
+    )
+    .unwrap();
+    let body = String::from_utf8(plan.deidentify_body().unwrap().to_json_bytes().unwrap()).unwrap();
+    assert!(body.contains("cryptoDeterministicConfig"));
+    assert_eq!(
+        prepare_google_aes_siv_deidentify(
+            &request,
+            &claim,
+            current,
+            google_selected("synthetic-patient-1", "cohort-b"),
+            "projects/p/locations/us".to_owned(),
+            google_key(),
+        )
+        .err(),
+        Some(GoogleSelectionMismatch::Dataset)
+    );
+    assert_eq!(
+        prepare_google_aes_siv_deidentify(
+            &request,
+            &claim,
+            current,
+            google_selected("substituted-patient", "cohort-a"),
+            "projects/p/locations/us".to_owned(),
+            google_key(),
+        )
+        .err(),
+        Some(GoogleSelectionMismatch::ValueDigest)
+    );
+    assert_eq!(
+        prepare_google_aes_siv_deidentify(
+            &request,
+            &claim,
+            CurrentGovernance {
+                epoch: 8,
+                ..current
+            },
+            google_selected("synthetic-patient-1", "cohort-a"),
+            "projects/p/locations/us".to_owned(),
+            google_key(),
+        )
+        .err(),
+        Some(GoogleSelectionMismatch::Claim(ClaimMismatch::Stale))
+    );
 }

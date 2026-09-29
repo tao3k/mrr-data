@@ -3108,9 +3108,11 @@ name = "mrr-data-pseudonymization"
 version = "0.1.0"
 dependencies = [
  "cedar-poo-bridge",
+ "cid",
  "meta-relational-reasoning",
  "mrr-data-asp-rust-build-support",
  "mrr-data-core",
+ "sha2 0.10.9",
 ]
 
 [[package]]

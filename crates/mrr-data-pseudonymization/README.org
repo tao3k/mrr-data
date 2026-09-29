@@ -25,6 +25,15 @@ key-domain reuse across scopes. These metadata checks do not authenticate
 the profile, key material, input bytes, provider response, or authorization.
 The deploying Host must provide those facts and control execution.
 
+[[file:src/authorization.org][Scoped claim matching]] compares the exact
+requested de-identify or re-identify effect against Host-authenticated claim
+fields and current governance state. It is not a policy decision. With the
+optional Google feature, [[file:src/google_sdp_binding.org][Google selection
+binding]] checks the selected dataset, field, context, profile, and SHA-256
+of the exact UTF-8 value before constructing the bridge's AES-SIV request.
+The value digest convention is required for this Google operation; generic
+=TokenInputBinding= remains independent of a hash algorithm.
+
 #+begin_src mermaid
 flowchart LR
   S[mrr-data snapshot root] --> B[Token input binding]

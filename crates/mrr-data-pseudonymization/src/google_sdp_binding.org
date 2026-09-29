@@ -1,0 +1,27 @@
+#+TITLE: Google Sensitive Data Protection Selection Binding
+#+OPTIONS: toc:nil
+
+[[file:google_sdp_binding.rs][google_sdp_binding.rs]] checks one selected
+tabular AES-SIV input against its MRR Data snapshot binding before constructing
+the public =cedar-poo-bridge= Google SDP request. It first compares the
+Host-authenticated authorization claim and current governance state; then the
+selected dataset, field, actual context, complete token profile, and SHA-256
+of the exact UTF-8 selected value must agree. The bridge then checks the
+wrapped-key lineage and Google request configuration. This is a selected-input
+check, not an encryption implementation or an authenticated provider call.
+
+The common token profile is independent of provider. Google is selected with
+the optional =google-sdp= feature; a local provider can consume the same
+=TokenInputBinding=. Only AES-SIV is accepted by this Google operation because
+the current bridge implements that tabular transformation. AES-GCM and HMAC
+remain distinct catalog modes and are not silently mapped to Google AES-SIV.
+
+Google documents that an AES-SIV context tweak changes equality scope and is
+required for re-identification. Google also documents separate de-identify
+and re-identify API calls. The Host must authenticate the returned response,
+check the bridge's response contract, and bind any output or plaintext release
+to the same authorization and audit state.
+
+- [[https://docs.cloud.google.com/sensitive-data-protection/docs/pseudonymization][Google Sensitive Data Protection pseudonymization]]
+- [[https://docs.cloud.google.com/sensitive-data-protection/docs/deidentify-sensitive-data][Google de-identification API overview]]
+- [[https://docs.cloud.google.com/sensitive-data-protection/docs/reference/rest/v2/projects.locations.content/reidentify][Google re-identification method]]
