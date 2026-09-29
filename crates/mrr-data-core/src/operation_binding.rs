@@ -4,7 +4,9 @@
 //! governance facts, selects a policy, and controls the actual effect.
 
 use cid::Cid;
-use meta_relational_reasoning::{GenerationId, QueryResultAdmissionReceipt, QueryResultBinding};
+use meta_relational_reasoning::{
+    GenerationId, QueryResultAdmissionReceipt, QueryResultBinding, RelationId,
+};
 
 use crate::{BoundDataQuery, SnapshotBlock};
 
@@ -46,6 +48,83 @@ impl<'a> SnapshotOperationBinding<'a> {
     #[must_use]
     pub const fn entity_catalog_digest(&self) -> &[u8; 32] {
         self.snapshot.manifest().entity_catalog_digest()
+    }
+}
+
+/// A selected row does not exist in the stated relation and child block.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SnapshotRowBindingError {
+    RelationUnavailable,
+    ChildUnavailable,
+    RowOutOfBounds,
+}
+
+/// Location of one row in an immutable snapshot's ordered Arrow child blocks.
+///
+/// Membership and the child-local row bound are checked against the manifest.
+/// The Host still authenticates the child bytes, field schema, and selected
+/// value before using this location for an effect.
+#[derive(Clone, Copy, Debug)]
+pub struct SnapshotRowBinding<'a> {
+    source: SnapshotOperationBinding<'a>,
+    relation_id: RelationId,
+    child_cid: &'a Cid,
+    row_index: u64,
+}
+
+impl<'a> SnapshotRowBinding<'a> {
+    /// Bind a child-local row ordinal to a relation in the selected snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SnapshotRowBindingError`] for a missing relation, missing
+    /// child, or an ordinal outside the child row count.
+    pub fn new(
+        snapshot: &'a SnapshotBlock,
+        relation_id: RelationId,
+        child_cid: &Cid,
+        row_index: u64,
+    ) -> Result<Self, SnapshotRowBindingError> {
+        let relation = snapshot
+            .manifest()
+            .relations()
+            .iter()
+            .find(|relation| relation.relation_id() == relation_id)
+            .ok_or(SnapshotRowBindingError::RelationUnavailable)?;
+        let child = relation
+            .batches()
+            .iter()
+            .find(|child| child.cid() == child_cid)
+            .ok_or(SnapshotRowBindingError::ChildUnavailable)?;
+        if row_index >= child.row_count() {
+            return Err(SnapshotRowBindingError::RowOutOfBounds);
+        }
+        Ok(Self {
+            source: SnapshotOperationBinding::new(snapshot),
+            relation_id,
+            child_cid: child.cid(),
+            row_index,
+        })
+    }
+
+    #[must_use]
+    pub const fn source(&self) -> SnapshotOperationBinding<'a> {
+        self.source
+    }
+
+    #[must_use]
+    pub const fn relation_id(&self) -> RelationId {
+        self.relation_id
+    }
+
+    #[must_use]
+    pub const fn child_cid(&self) -> &'a Cid {
+        self.child_cid
+    }
+
+    #[must_use]
+    pub const fn row_index(&self) -> u64 {
+        self.row_index
     }
 }
 

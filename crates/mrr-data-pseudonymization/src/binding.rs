@@ -1,7 +1,7 @@
 //! Snapshot, selected input, and token-profile composition.
 
 use cedar_poo_bridge::pseudonymization::TokenProfile;
-use mrr_data_core::SnapshotBlock;
+use mrr_data_core::{SnapshotBlock, SnapshotRowBinding};
 use mrr_data_security::data_protection::PseudonymizationInputBinding;
 use std::collections::HashMap;
 
@@ -19,6 +19,18 @@ pub struct SelectedTokenInput<'a> {
 }
 
 impl<'a> SelectedTokenInput<'a> {
+    /// Bind the selected value to a checked relation child and row ordinal.
+    #[must_use]
+    pub const fn bind_to_row(self, row: SnapshotRowBinding<'a>) -> TokenInputBinding<'a> {
+        PseudonymizationInputBinding::at_row(
+            row,
+            self.field,
+            self.value_digest,
+            self.context,
+            self.profile,
+        )
+    }
+
     /// Bind the selected value and common token profile to an immutable
     /// snapshot. This does not encrypt or authorize release.
     #[must_use]

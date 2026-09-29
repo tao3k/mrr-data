@@ -11,7 +11,10 @@ use mrr_data_core::{
     BatchDescriptor, CoverageDescriptor, CoverageKind, RelationDescriptor, SnapshotBlock,
     SnapshotManifest, SnapshotManifestRequest, raw_cid,
 };
-use mrr_data_security::data_protection::PseudonymizationInputBinding;
+use mrr_data_security::data_protection::{
+    DataProtectionDecisions, DataProtectionProfile, PseudonymizationInputBinding,
+    ReleaseReceiptClaim,
+};
 
 const ROUNDS: usize = 40;
 const ITERATIONS: usize = 100_000;
@@ -100,4 +103,31 @@ fn main() {
     println!("rounds={ROUNDS} iterations_per_round={ITERATIONS} profile=release");
     report("direct-pseudonymization", direct);
     report("bound-pseudonymization", bound);
+
+    let release = ReleaseReceiptClaim {
+        artifact_digest: "sha256:candidate",
+        source_commit: "commit-a",
+        policy_root: "CustomerDataRelease",
+        epoch: 7,
+    };
+    let profile = DataProtectionProfile::new(&snapshot, "customer-campaign", release);
+    let decisions = DataProtectionDecisions {
+        policy_root: release.policy_root,
+        dataset: profile.dataset(),
+        artifact_digest: release.artifact_digest,
+        epoch: 7,
+        pipeline_release_allowed: true,
+        transformation_allowed: true,
+    };
+    let mut checks = Vec::with_capacity(ROUNDS);
+    for _ in 0..ROUNDS {
+        checks.push(timed(|| {
+            black_box(
+                black_box(&profile)
+                    .check(black_box(release), 7, black_box(decisions))
+                    .is_ok(),
+            );
+        }));
+    }
+    report("cloud-release-check", checks);
 }

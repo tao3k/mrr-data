@@ -33,7 +33,9 @@ optional Google feature, [[file:src/google_sdp_binding.org][Google selection
 binding]] checks the selected dataset, field, context, profile, and SHA-256
 of the exact UTF-8 value before constructing the bridge's AES-SIV request.
 The value digest convention is required for this Google operation; generic
-=TokenInputBinding= remains independent of a hash algorithm.
+=TokenInputBinding= remains independent of a hash algorithm. The Cloud path
+checks the same projected gate relations as the public Cedar POO Cloud
+DataProtection model and keeps the release identity with the checked output.
 
 #+begin_src mermaid
 flowchart LR
@@ -54,6 +56,8 @@ just bench-google-sdp
 The benchmarks are Cargo bench targets using stable Rust's
 =std::hint::black_box= and =std::time::Instant=. The HMAC catalog check uses a
 borrowed-key hash index at deployment time. The Google benchmark separates
-claim matching from SHA-256 selected-value checking and request construction.
+claim matching, Cloud gate and release checks, SHA-256 selected-value
+checking, and request construction. Cloud preparation and the baseline Google
+preparation run in alternating order by round to reduce timing drift.
 Measurements are batch averages under release optimization; they do not
 measure Cedar authorization, network, KMS, or provider execution.

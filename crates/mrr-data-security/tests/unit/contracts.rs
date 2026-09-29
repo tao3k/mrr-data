@@ -4,7 +4,7 @@ use meta_relational_reasoning::{
 };
 use mrr_data_core::{
     BatchDescriptor, CoverageDescriptor, CoverageKind, RelationDescriptor, SnapshotBlock,
-    SnapshotManifest, SnapshotManifestRequest, raw_cid,
+    SnapshotManifest, SnapshotManifestRequest, SnapshotRowBinding, raw_cid,
 };
 
 fn snapshot() -> SnapshotBlock {
@@ -54,6 +54,27 @@ fn selected_input_stays_on_immutable_snapshot() {
     assert_eq!(input.value_digest(), &digest);
     assert_eq!(input.context(), "campaign-a");
     assert_eq!(input.profile(), &"aes-siv-profile");
+    assert!(input.row().is_none());
+    let relation = &source.manifest().relations()[0];
+    let row = SnapshotRowBinding::new(
+        &source,
+        relation.relation_id(),
+        relation.batches()[0].cid(),
+        0,
+    )
+    .unwrap();
+    let located = PseudonymizationInputBinding::at_row(
+        row,
+        "customer_id",
+        &digest,
+        "campaign-a",
+        "aes-siv-profile",
+    );
+    assert_eq!(located.source().root(), source.cid());
+    assert_eq!(
+        located.row().unwrap().child_cid(),
+        relation.batches()[0].cid()
+    );
 }
 
 #[test]
@@ -67,6 +88,10 @@ fn cloud_profile_requires_exact_release_and_two_decisions() {
     };
     let profile = DataProtectionProfile::new(&source, "customer-campaign", receipt);
     let both = DataProtectionDecisions {
+        policy_root: receipt.policy_root,
+        dataset: "customer-campaign",
+        artifact_digest: receipt.artifact_digest,
+        epoch: 7,
         pipeline_release_allowed: true,
         transformation_allowed: true,
     };
@@ -87,6 +112,26 @@ fn cloud_profile_requires_exact_release_and_two_decisions() {
         ),
         Err(DataProtectionMismatch::ReleaseReceipt)
     );
+    for wrong in [
+        DataProtectionDecisions {
+            policy_root: "ReleaseReady",
+            ..both
+        },
+        DataProtectionDecisions {
+            dataset: "other-dataset",
+            ..both
+        },
+        DataProtectionDecisions {
+            artifact_digest: "sha256:other",
+            ..both
+        },
+        DataProtectionDecisions { epoch: 8, ..both },
+    ] {
+        assert_eq!(
+            profile.check(receipt, 7, wrong),
+            Err(DataProtectionMismatch::DecisionScope)
+        );
+    }
     assert_eq!(
         profile.check(
             receipt,

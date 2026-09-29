@@ -17,8 +17,9 @@ mod google_sdp_binding;
 #[cfg(feature = "google-sdp")]
 pub use google_sdp_binding::{
     BoundGoogleDeidentifyOutput, BoundGoogleDeidentifyPlan, CloudDataProtectionSelection,
-    CloudReleaseIdentity, GoogleBoundIdentity, GoogleSelectionMismatch,
-    prepare_cloud_google_aes_siv_deidentify, prepare_google_aes_siv_deidentify,
+    CloudGateMismatch, CloudPseudonymizationGate, CloudReleaseIdentity, CloudRowIdentity,
+    GoogleBoundIdentity, GoogleSelectionMismatch, prepare_cloud_google_aes_siv_deidentify,
+    prepare_google_aes_siv_deidentify,
 };
 
 /// Optional Google Sensitive Data Protection wire contract, without a cloud

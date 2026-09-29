@@ -29,7 +29,7 @@ pub use mrr_data_profile::{
 #[cfg(feature = "content-identity")]
 pub use operation_binding::{
     DataOperationBinding, QueryOperationBinding, ReleaseBindingError, ReleaseOperationBinding,
-    SnapshotOperationBinding,
+    SnapshotOperationBinding, SnapshotRowBinding, SnapshotRowBindingError,
 };
 #[cfg(feature = "content-identity")]
 pub use profile::dag_cbor_cid;

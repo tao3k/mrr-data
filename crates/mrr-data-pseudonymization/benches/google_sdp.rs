@@ -13,11 +13,16 @@ use meta_relational_reasoning::{
 };
 use mrr_data_core::{
     BatchDescriptor, CoverageDescriptor, CoverageKind, RelationDescriptor, SnapshotBlock,
-    SnapshotManifest, SnapshotManifestRequest, raw_cid,
+    SnapshotManifest, SnapshotManifestRequest, SnapshotRowBinding, raw_cid,
 };
 use mrr_data_pseudonymization::{
-    CurrentGovernance, Mode, SelectedTokenInput, TokenAction, TokenAuthorizationClaim,
-    TokenAuthorizationRequest, TokenLineage, TokenProfile, prepare_google_aes_siv_deidentify,
+    CloudDataProtectionSelection, CloudPseudonymizationGate, CurrentGovernance, Mode,
+    SelectedTokenInput, TokenAction, TokenAuthorizationClaim, TokenAuthorizationRequest,
+    TokenInputBinding, TokenLineage, TokenProfile, prepare_cloud_google_aes_siv_deidentify,
+    prepare_google_aes_siv_deidentify,
+};
+use mrr_data_security::data_protection::{
+    DataProtectionDecisions, DataProtectionProfile, ReleaseReceiptClaim,
 };
 use sha2::{Digest, Sha256};
 
@@ -78,15 +83,15 @@ fn key() -> WrappedKeyBinding {
     }
 }
 
-fn bench(name: &str, iterations: usize, mut work: impl FnMut()) {
-    let mut samples = Vec::with_capacity(ROUNDS);
-    for _ in 0..ROUNDS {
-        let start = Instant::now();
-        for _ in 0..iterations {
-            work();
-        }
-        samples.push(start.elapsed());
+fn timed(iterations: usize, work: &mut impl FnMut()) -> Duration {
+    let start = Instant::now();
+    for _ in 0..iterations {
+        work();
     }
+    start.elapsed()
+}
+
+fn report(name: &str, iterations: usize, mut samples: Vec<Duration>) {
     samples.sort_unstable();
     let hundredths = |elapsed: Duration| {
         elapsed.as_nanos().saturating_mul(100) / u128::try_from(iterations).unwrap()
@@ -100,6 +105,32 @@ fn bench(name: &str, iterations: usize, mut work: impl FnMut()) {
         p95 / 100,
         p95 % 100
     );
+}
+
+fn bench(name: &str, iterations: usize, mut work: impl FnMut()) {
+    let samples = (0..ROUNDS).map(|_| timed(iterations, &mut work)).collect();
+    report(name, iterations, samples);
+}
+
+fn bench_pair(
+    first_name: &str,
+    mut first: impl FnMut(),
+    second_name: &str,
+    mut second: impl FnMut(),
+) {
+    let mut first_samples = Vec::with_capacity(ROUNDS);
+    let mut second_samples = Vec::with_capacity(ROUNDS);
+    for round in 0..ROUNDS {
+        if round % 2 == 0 {
+            first_samples.push(timed(GOOGLE_ITERATIONS, &mut first));
+            second_samples.push(timed(GOOGLE_ITERATIONS, &mut second));
+        } else {
+            second_samples.push(timed(GOOGLE_ITERATIONS, &mut second));
+            first_samples.push(timed(GOOGLE_ITERATIONS, &mut first));
+        }
+    }
+    report(first_name, GOOGLE_ITERATIONS, first_samples);
+    report(second_name, GOOGLE_ITERATIONS, second_samples);
 }
 
 fn bench_claim(
@@ -116,13 +147,95 @@ fn bench_claim(
     });
 }
 
-fn run(value_bytes: usize, source: &SnapshotBlock, response: &GoogleSdpResponse) {
-    let value = "x".repeat(value_bytes);
-    let digest: [u8; 32] = Sha256::digest(value.as_bytes()).into();
-    let policy = [31; 32];
-    let input = SelectedTokenInput {
+fn bench_cloud(
+    source: &SnapshotBlock,
+    request: &TokenAuthorizationRequest<'_>,
+    claim: &TokenAuthorizationClaim<'_>,
+    current: CurrentGovernance<'_>,
+    input: &TokenInputBinding<'_>,
+    selection: &SelectedTabularInput,
+) {
+    let release = ReleaseReceiptClaim {
+        artifact_digest: "sha256:candidate",
+        source_commit: "commit-a",
+        policy_root: "CustomerDataRelease",
+        epoch: 7,
+    };
+    let protection = DataProtectionProfile::new(source, request.dataset, release);
+    let gate = CloudPseudonymizationGate {
+        target_profile: *input.profile(),
+        admitted_context: input.context(),
+        artifact_digest: release.artifact_digest,
+        key_authorized: true,
+    };
+    let cloud = CloudDataProtectionSelection {
+        profile: &protection,
+        receipt: release,
+        current_epoch: 7,
+        decisions: DataProtectionDecisions {
+            policy_root: release.policy_root,
+            dataset: request.dataset,
+            artifact_digest: release.artifact_digest,
+            epoch: 7,
+            pipeline_release_allowed: true,
+            transformation_allowed: true,
+        },
+        gate,
+    };
+    bench("cloud_gate", CLAIM_ITERATIONS, || {
+        black_box(
+            gate.check(black_box(input), release.artifact_digest)
+                .is_ok(),
+        );
+    });
+    bench("cloud_release", CLAIM_ITERATIONS, || {
+        black_box(protection.check(release, 7, cloud.decisions).is_ok());
+    });
+    bench_pair(
+        "cloud_google_prepare",
+        || {
+            black_box(
+                prepare_cloud_google_aes_siv_deidentify(
+                    cloud,
+                    black_box(request),
+                    black_box(claim),
+                    current,
+                    black_box(selection.clone()),
+                    PARENT.to_owned(),
+                    key(),
+                )
+                .unwrap(),
+            );
+        },
+        "google_prepare",
+        || {
+            black_box(
+                prepare_google_aes_siv_deidentify(
+                    black_box(request),
+                    black_box(claim),
+                    current,
+                    black_box(selection.clone()),
+                    PARENT.to_owned(),
+                    key(),
+                )
+                .unwrap(),
+            );
+        },
+    );
+}
+
+fn bound_input<'a>(source: &'a SnapshotBlock, digest: &'a [u8; 32]) -> TokenInputBinding<'a> {
+    let relation = &source.manifest().relations()[0];
+    let row = SnapshotRowBinding::new(
+        source,
+        relation.relation_id(),
+        relation.batches()[0].cid(),
+        0,
+    )
+    .unwrap();
+    SelectedTokenInput {
         field: "patient_id",
-        value_digest: &digest,
+        value_digest: digest,
         context: "study-1",
         profile: TokenProfile {
             mode: Mode::AesSiv,
@@ -136,7 +249,14 @@ fn run(value_bytes: usize, source: &SnapshotBlock, response: &GoogleSdpResponse)
             },
         },
     }
-    .bind_to(source);
+    .bind_to_row(row)
+}
+
+fn run(value_bytes: usize, source: &SnapshotBlock, response: &GoogleSdpResponse) {
+    let value = "x".repeat(value_bytes);
+    let digest: [u8; 32] = Sha256::digest(value.as_bytes()).into();
+    let policy = [31; 32];
+    let input = bound_input(source, &digest);
     let request = TokenAuthorizationRequest {
         subject: "researcher-1",
         purpose: "approved-study",
@@ -167,6 +287,7 @@ fn run(value_bytes: usize, source: &SnapshotBlock, response: &GoogleSdpResponse)
     let direct_plan =
         TabularAesSiv::from_selected(PARENT.to_owned(), selection.clone(), key()).unwrap();
     bench_claim(&request, &claim, &policy);
+    bench_cloud(source, &request, &claim, current, &input, &selection);
     bench("sha256_selected_value", GOOGLE_ITERATIONS, || {
         black_box(Sha256::digest(black_box(value.as_bytes())));
     });
@@ -181,19 +302,6 @@ fn run(value_bytes: usize, source: &SnapshotBlock, response: &GoogleSdpResponse)
             direct_plan
                 .check_deidentify_response(black_box(response))
                 .unwrap(),
-        );
-    });
-    bench("google_prepare", GOOGLE_ITERATIONS, || {
-        black_box(
-            prepare_google_aes_siv_deidentify(
-                black_box(&request),
-                black_box(&claim),
-                current,
-                black_box(selection.clone()),
-                PARENT.to_owned(),
-                key(),
-            )
-            .unwrap(),
         );
     });
     bench(

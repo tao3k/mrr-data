@@ -9,7 +9,8 @@ use meta_relational_reasoning::{
 };
 use mrr_data_core::{
     BatchDescriptor, CoverageDescriptor, CoverageKind, RelationDescriptor, SnapshotBlock,
-    SnapshotManifest, SnapshotManifestRequest, SnapshotOperationBinding, raw_cid,
+    SnapshotManifest, SnapshotManifestRequest, SnapshotOperationBinding, SnapshotRowBinding,
+    raw_cid,
 };
 
 const ROUNDS: usize = 40;
@@ -90,4 +91,16 @@ fn main() {
     println!("rounds={ROUNDS} iterations_per_round={ITERATIONS} profile=release");
     report("direct-snapshot", direct_snapshot);
     report("bound-snapshot", bound_snapshot);
+    let relation = &snapshot.manifest().relations()[0];
+    let child_cid = relation.batches()[0].cid();
+    let mut row_binding = Vec::with_capacity(ROUNDS);
+    for _ in 0..ROUNDS {
+        row_binding.push(timed(|| {
+            black_box(
+                SnapshotRowBinding::new(black_box(&snapshot), relation.relation_id(), child_cid, 0)
+                    .unwrap(),
+            );
+        }));
+    }
+    report("bind-snapshot-row", row_binding);
 }

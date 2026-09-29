@@ -4,7 +4,10 @@
 The =mrr-data-security= crate exports
 [[file:pseudonymization.rs][PseudonymizationInputBinding]]. It relates one selected value digest,
 field, per-record context, and consumer-owned profile to an immutable
-snapshot root and semantic generation. The type is generic in the profile:
+snapshot root and semantic generation. For a structured-data operation,
+=at_row= additionally retains a checked relation, Arrow child CID, and
+child-local row ordinal from =mrr-data-core=. A root-only binding remains
+available for callers that do not select a table row. The type is generic in the profile:
 downstream code can use the public =cedar-poo-bridge/pseudonymization= token
 profile, another declared recipe, or an application profile without adding
 Cedar to this provider-neutral crate.

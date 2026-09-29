@@ -5,6 +5,7 @@ use cedar_poo_bridge::google_sdp::{
     WrappedKeyBinding,
 };
 use cid::Cid;
+use meta_relational_reasoning::RelationId;
 use mrr_data_security::data_protection::{
     DataProtectionDecisions, DataProtectionMismatch, DataProtectionProfile, ReleaseReceiptClaim,
 };
@@ -12,7 +13,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     ClaimMismatch, CurrentGovernance, Mode, TokenAction, TokenAuthorizationClaim,
-    TokenAuthorizationRequest,
+    TokenAuthorizationRequest, TokenInputBinding, TokenProfile,
 };
 
 /// The provider selection differs from the authenticated snapshot selection.
@@ -20,6 +21,9 @@ use crate::{
 pub enum GoogleSelectionMismatch {
     Claim(ClaimMismatch),
     DataProtection(DataProtectionMismatch),
+    CloudGate(CloudGateMismatch),
+    GovernanceEpoch,
+    RowUnbound,
     Source,
     WrongAction,
     Dataset,
@@ -40,13 +44,80 @@ pub struct CloudReleaseIdentity {
     pub epoch: i64,
 }
 
+/// The specific Cloud pseudonymization veto relation in Cedar POO.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CloudGateMismatch {
+    Mode,
+    Recipe,
+    Tenant,
+    KeyNotAuthorized,
+    Context,
+    ArtifactDigest,
+}
+
+/// Host-authenticated projection of the target dataset and key grant.
+///
+/// The target profile comes from the selected Cedar dataset entity; the
+/// selected input comes from the exact MRR Data snapshot. Key authorization
+/// remains a Host fact, not proof of key possession or Cedar evaluation.
+#[derive(Clone, Copy, Debug)]
+pub struct CloudPseudonymizationGate<'a> {
+    pub target_profile: TokenProfile<'a>,
+    pub admitted_context: &'a str,
+    pub artifact_digest: &'a str,
+    pub key_authorized: bool,
+}
+
+impl CloudPseudonymizationGate<'_> {
+    /// Mirror the public Cedar POO `pseudonymizationReady` relation.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first mismatched projected gate fact.
+    pub fn check(
+        &self,
+        selected: &TokenInputBinding<'_>,
+        released_artifact_digest: &str,
+    ) -> Result<(), CloudGateMismatch> {
+        if self.target_profile.mode != Mode::AesSiv {
+            return Err(CloudGateMismatch::Mode);
+        }
+        if !self.target_profile.same_recipe(selected.profile()) {
+            return Err(CloudGateMismatch::Recipe);
+        }
+        if self.target_profile.lineage.tenant != selected.profile().lineage.tenant {
+            return Err(CloudGateMismatch::Tenant);
+        }
+        if !self.key_authorized {
+            return Err(CloudGateMismatch::KeyNotAuthorized);
+        }
+        if selected.context() != self.admitted_context {
+            return Err(CloudGateMismatch::Context);
+        }
+        if released_artifact_digest != self.artifact_digest {
+            return Err(CloudGateMismatch::ArtifactDigest);
+        }
+        Ok(())
+    }
+}
+
 /// Host-authenticated Cloud `DataProtection` selection for both Cedar decisions.
 #[derive(Clone, Copy, Debug)]
 pub struct CloudDataProtectionSelection<'a> {
     pub profile: &'a DataProtectionProfile<'a>,
     pub receipt: ReleaseReceiptClaim<'a>,
     pub current_epoch: i64,
-    pub decisions: DataProtectionDecisions,
+    pub decisions: DataProtectionDecisions<'a>,
+    pub gate: CloudPseudonymizationGate<'a>,
+}
+
+/// Owned location of the selected row within an MRR Data snapshot.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CloudRowIdentity {
+    pub relation_id: RelationId,
+    pub child_cid: Cid,
+    /// Ordinal within the selected Arrow child, not the whole relation.
+    pub row_index: u64,
 }
 
 /// Physical and governance identity retained across provider I/O.
@@ -57,6 +128,7 @@ pub struct GoogleBoundIdentity {
     input_digest: [u8; 32],
     policy_digest: [u8; 32],
     governance_epoch: i64,
+    row: Option<CloudRowIdentity>,
     cloud_release: Option<CloudReleaseIdentity>,
 }
 
@@ -89,6 +161,11 @@ impl GoogleBoundIdentity {
     #[must_use]
     pub const fn cloud_release(&self) -> Option<&CloudReleaseIdentity> {
         self.cloud_release.as_ref()
+    }
+
+    #[must_use]
+    pub const fn row(&self) -> Option<&CloudRowIdentity> {
+        self.row.as_ref()
     }
 }
 
@@ -223,6 +300,7 @@ pub fn prepare_google_aes_siv_deidentify(
             input_digest: *bound.value_digest(),
             policy_digest: *current.policy_digest,
             governance_epoch: current.epoch,
+            row: None,
             cloud_release: None,
         },
         plan,
@@ -245,6 +323,9 @@ pub fn prepare_cloud_google_aes_siv_deidentify(
     parent: String,
     key: WrappedKeyBinding,
 ) -> Result<BoundGoogleDeidentifyPlan, GoogleSelectionMismatch> {
+    if cloud.current_epoch != current.epoch {
+        return Err(GoogleSelectionMismatch::GovernanceEpoch);
+    }
     cloud
         .profile
         .check(cloud.receipt, cloud.current_epoch, cloud.decisions)
@@ -255,9 +336,22 @@ pub fn prepare_cloud_google_aes_siv_deidentify(
     if cloud.profile.dataset() != request.dataset {
         return Err(GoogleSelectionMismatch::Dataset);
     }
+    let row = request
+        .input
+        .row()
+        .ok_or(GoogleSelectionMismatch::RowUnbound)?;
+    cloud
+        .gate
+        .check(request.input, cloud.profile.release().artifact_digest)
+        .map_err(GoogleSelectionMismatch::CloudGate)?;
     let mut plan =
         prepare_google_aes_siv_deidentify(request, claim, current, selected, parent, key)?;
     let release = cloud.profile.release();
+    plan.identity.row = Some(CloudRowIdentity {
+        relation_id: row.relation_id(),
+        child_cid: *row.child_cid(),
+        row_index: row.row_index(),
+    });
     plan.identity.cloud_release = Some(CloudReleaseIdentity {
         artifact_digest: release.artifact_digest.to_owned(),
         source_commit: release.source_commit.to_owned(),

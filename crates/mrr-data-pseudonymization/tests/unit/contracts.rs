@@ -341,15 +341,25 @@ fn assert_google_rejections(
 )]
 fn cloud_profile_requires_release_and_transformation_decisions() {
     use crate::{
-        CloudDataProtectionSelection, CurrentGovernance, GoogleSelectionMismatch,
-        prepare_cloud_google_aes_siv_deidentify,
+        CloudDataProtectionSelection, CloudGateMismatch, CloudPseudonymizationGate,
+        CurrentGovernance, GoogleSelectionMismatch, prepare_cloud_google_aes_siv_deidentify,
     };
+    use cedar_poo_bridge::google_sdp::GoogleSdpResponse;
+    use mrr_data_core::SnapshotRowBinding;
     use mrr_data_security::data_protection::{
         DataProtectionDecisions, DataProtectionMismatch, DataProtectionProfile, ReleaseReceiptClaim,
     };
     use sha2::{Digest, Sha256};
 
     let source = snapshot();
+    let relation = &source.manifest().relations()[0];
+    let row = SnapshotRowBinding::new(
+        &source,
+        relation.relation_id(),
+        relation.batches()[0].cid(),
+        0,
+    )
+    .unwrap();
     let digest: [u8; 32] = Sha256::digest(b"synthetic-customer-1").into();
     let policy = [31; 32];
     let input = SelectedTokenInput {
@@ -368,7 +378,7 @@ fn cloud_profile_requires_release_and_transformation_decisions() {
             },
         },
     }
-    .bind_to(&source);
+    .bind_to_row(row);
     let request = TokenAuthorizationRequest {
         subject: "data-protection-service",
         purpose: "customer-campaign",
@@ -398,14 +408,25 @@ fn cloud_profile_requires_release_and_transformation_decisions() {
     };
     let profile = DataProtectionProfile::new(&source, request.dataset, release);
     let both = DataProtectionDecisions {
+        policy_root: release.policy_root,
+        dataset: request.dataset,
+        artifact_digest: release.artifact_digest,
+        epoch: 7,
         pipeline_release_allowed: true,
         transformation_allowed: true,
+    };
+    let gate = CloudPseudonymizationGate {
+        target_profile: *input.profile(),
+        admitted_context: "campaign-a",
+        artifact_digest: release.artifact_digest,
+        key_authorized: true,
     };
     let cloud = CloudDataProtectionSelection {
         profile: &profile,
         receipt: release,
         current_epoch: 7,
         decisions: both,
+        gate,
     };
     let current = CurrentGovernance {
         policy_digest: &policy,
@@ -432,18 +453,93 @@ fn cloud_profile_requires_release_and_transformation_decisions() {
         )
     };
     let plan = prepare(cloud).unwrap();
-    let bound_release = plan.identity().cloud_release().unwrap();
+    let bound_release = plan.identity().cloud_release().unwrap().clone();
     assert_eq!(bound_release.artifact_digest, release.artifact_digest);
     assert_eq!(bound_release.policy_root, release.policy_root);
     assert_eq!(bound_release.epoch, 7);
+    let bound_row = plan.identity().row().unwrap().clone();
+    assert_eq!(bound_row.relation_id, relation.relation_id());
+    assert_eq!(bound_row.child_cid, *relation.batches()[0].cid());
+    assert_eq!(bound_row.row_index, 0);
+    let response = GoogleSdpResponse::from_json_bytes(
+        br#"{"item":{"table":{"headers":[{"name":"customer_id"},{"name":"campaign"}],"rows":[{"values":[{"stringValue":"c3ludGhldGljLWNpcGhlcnRleHQ="},{"stringValue":"campaign-a"}]}]}},"overview":{"transformationSummaries":[{"field":{"name":"customer_id"},"results":[{"count":"1","code":"SUCCESS"}]}]}}"#,
+    )
+    .unwrap();
+    let checked = plan.check_response(&response).unwrap();
+    assert_eq!(checked.identity().row().unwrap(), &bound_row);
+    assert_eq!(checked.identity().cloud_release().unwrap(), &bound_release);
+    let unbound = SelectedTokenInput {
+        field: input.field(),
+        value_digest: &digest,
+        context: input.context(),
+        profile: *input.profile(),
+    }
+    .bind_to(&source);
+    let unbound_request = TokenAuthorizationRequest {
+        input: &unbound,
+        ..request
+    };
+    assert_eq!(
+        prepare_cloud_google_aes_siv_deidentify(
+            cloud,
+            &unbound_request,
+            &claim,
+            current,
+            selected.clone(),
+            "projects/p/locations/us".to_owned(),
+            google_key_for_campaign(),
+        )
+        .err(),
+        Some(GoogleSelectionMismatch::RowUnbound)
+    );
+    assert_eq!(
+        prepare_cloud_google_aes_siv_deidentify(
+            cloud,
+            &request,
+            &claim,
+            CurrentGovernance {
+                epoch: 8,
+                ..current
+            },
+            selected.clone(),
+            "projects/p/locations/us".to_owned(),
+            google_key_for_campaign(),
+        )
+        .err(),
+        Some(GoogleSelectionMismatch::GovernanceEpoch)
+    );
     assert_eq!(
         prepare(CloudDataProtectionSelection {
             current_epoch: 8,
             ..cloud
         })
         .err(),
+        Some(GoogleSelectionMismatch::GovernanceEpoch)
+    );
+    assert_eq!(
+        prepare(CloudDataProtectionSelection {
+            decisions: DataProtectionDecisions {
+                policy_root: "ReleaseReady",
+                ..both
+            },
+            ..cloud
+        })
+        .err(),
         Some(GoogleSelectionMismatch::DataProtection(
-            DataProtectionMismatch::ReleaseReceipt
+            DataProtectionMismatch::DecisionScope
+        ))
+    );
+    assert_eq!(
+        prepare(CloudDataProtectionSelection {
+            gate: CloudPseudonymizationGate {
+                key_authorized: false,
+                ..gate
+            },
+            ..cloud
+        })
+        .err(),
+        Some(GoogleSelectionMismatch::CloudGate(
+            CloudGateMismatch::KeyNotAuthorized
         ))
     );
     assert_eq!(
@@ -471,6 +567,98 @@ fn cloud_profile_requires_release_and_transformation_decisions() {
         Some(GoogleSelectionMismatch::DataProtection(
             DataProtectionMismatch::TransformationDenied
         ))
+    );
+}
+
+#[cfg(feature = "google-sdp")]
+#[test]
+fn cloud_gate_mirrors_the_lean_recipe_tenant_context_and_artifact_relation() {
+    use crate::{CloudGateMismatch, CloudPseudonymizationGate};
+
+    let source = snapshot();
+    let digest = [17; 32];
+    let selected = SelectedTokenInput {
+        field: "customer_id",
+        value_digest: &digest,
+        context: "campaign-a",
+        profile: TokenProfile {
+            mode: Mode::AesSiv,
+            scope: "campaign-a",
+            lineage: TokenLineage {
+                tenant: "customer-a",
+                key_domain: "campaign-key",
+                token_key_version: "dek-a",
+                transform_version: "canonical-v1",
+                wrapping_version: "kek-a",
+            },
+        },
+    }
+    .bind_to(&source);
+    let gate = CloudPseudonymizationGate {
+        target_profile: *selected.profile(),
+        admitted_context: "campaign-a",
+        artifact_digest: "sha256:candidate",
+        key_authorized: true,
+    };
+    assert_eq!(gate.check(&selected, "sha256:candidate"), Ok(()));
+    assert_eq!(
+        CloudPseudonymizationGate {
+            target_profile: TokenProfile {
+                mode: Mode::HmacSha256,
+                ..gate.target_profile
+            },
+            ..gate
+        }
+        .check(&selected, "sha256:candidate"),
+        Err(CloudGateMismatch::Mode)
+    );
+    assert_eq!(
+        CloudPseudonymizationGate {
+            target_profile: TokenProfile {
+                lineage: TokenLineage {
+                    token_key_version: "dek-other",
+                    ..gate.target_profile.lineage
+                },
+                ..gate.target_profile
+            },
+            ..gate
+        }
+        .check(&selected, "sha256:candidate"),
+        Err(CloudGateMismatch::Recipe)
+    );
+    assert_eq!(
+        CloudPseudonymizationGate {
+            target_profile: TokenProfile {
+                lineage: TokenLineage {
+                    tenant: "customer-b",
+                    ..gate.target_profile.lineage
+                },
+                ..gate.target_profile
+            },
+            ..gate
+        }
+        .check(&selected, "sha256:candidate"),
+        Err(CloudGateMismatch::Tenant)
+    );
+    assert_eq!(
+        CloudPseudonymizationGate {
+            key_authorized: false,
+            ..gate
+        }
+        .check(&selected, "sha256:candidate"),
+        Err(CloudGateMismatch::KeyNotAuthorized)
+    );
+    assert_eq!(
+        CloudPseudonymizationGate {
+            admitted_context: "campaign-b",
+            ..gate
+        }
+        .check(&selected, "sha256:candidate"),
+        Err(CloudGateMismatch::Context)
+    );
+    assert_eq!(
+        gate.check(&selected, "sha256:other"),
+        Err(CloudGateMismatch::ArtifactDigest)
     );
 }
 

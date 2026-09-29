@@ -16,9 +16,17 @@ pub struct ReleaseReceiptClaim<'a> {
     pub epoch: i64,
 }
 
-/// Two distinct Host-authenticated Cedar decisions for the selected root.
+/// Two Host-authenticated Cedar decisions bound to one selected release.
+///
+/// The Host obtains both decisions from the same compiled policy root and
+/// authenticates their request identities. These fields prevent accidental
+/// reuse of a decision pair for another dataset, artifact, or state epoch.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct DataProtectionDecisions {
+pub struct DataProtectionDecisions<'a> {
+    pub policy_root: &'a str,
+    pub dataset: &'a str,
+    pub artifact_digest: &'a str,
+    pub epoch: i64,
     pub pipeline_release_allowed: bool,
     pub transformation_allowed: bool,
 }
@@ -39,6 +47,7 @@ pub struct DataProtectionProfile<'a> {
 pub enum DataProtectionMismatch {
     EmptySelection,
     ReleaseReceipt,
+    DecisionScope,
     PipelineDenied,
     TransformationDenied,
 }
@@ -85,7 +94,7 @@ impl<'a> DataProtectionProfile<'a> {
         &self,
         authenticated_receipt: ReleaseReceiptClaim<'_>,
         current_epoch: i64,
-        decisions: DataProtectionDecisions,
+        decisions: DataProtectionDecisions<'_>,
     ) -> Result<(), DataProtectionMismatch> {
         if self.dataset.is_empty()
             || self.release.artifact_digest.is_empty()
@@ -96,6 +105,13 @@ impl<'a> DataProtectionProfile<'a> {
         }
         if self.release != authenticated_receipt || self.release.epoch != current_epoch {
             return Err(DataProtectionMismatch::ReleaseReceipt);
+        }
+        if decisions.policy_root != self.release.policy_root
+            || decisions.dataset != self.dataset
+            || decisions.artifact_digest != self.release.artifact_digest
+            || decisions.epoch != current_epoch
+        {
+            return Err(DataProtectionMismatch::DecisionScope);
         }
         if !decisions.pipeline_release_allowed {
             return Err(DataProtectionMismatch::PipelineDenied);

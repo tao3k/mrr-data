@@ -1,7 +1,7 @@
 //! Snapshot and selected-value binding for an external pseudonymization
 //! profile. This module does not implement encryption or authorize effects.
 
-use mrr_data_core::{SnapshotBlock, SnapshotOperationBinding};
+use mrr_data_core::{SnapshotBlock, SnapshotOperationBinding, SnapshotRowBinding};
 
 /// A selected input anchored to one immutable mrr-data snapshot.
 ///
@@ -11,6 +11,7 @@ use mrr_data_core::{SnapshotBlock, SnapshotOperationBinding};
 #[derive(Clone, Copy, Debug)]
 pub struct PseudonymizationInputBinding<'a, Profile> {
     source: SnapshotOperationBinding<'a>,
+    row: Option<SnapshotRowBinding<'a>>,
     field: &'a str,
     value_digest: &'a [u8; 32],
     context: &'a str,
@@ -31,6 +32,27 @@ impl<'a, Profile> PseudonymizationInputBinding<'a, Profile> {
     ) -> Self {
         Self {
             source: SnapshotOperationBinding::new(source),
+            row: None,
+            field,
+            value_digest,
+            context,
+            profile,
+        }
+    }
+
+    /// Bind a selected value to an already checked snapshot row location.
+    /// The Host still authenticates the child bytes and actual selected value.
+    #[must_use]
+    pub const fn at_row(
+        row: SnapshotRowBinding<'a>,
+        field: &'a str,
+        value_digest: &'a [u8; 32],
+        context: &'a str,
+        profile: Profile,
+    ) -> Self {
+        Self {
+            source: row.source(),
+            row: Some(row),
             field,
             value_digest,
             context,
@@ -41,6 +63,11 @@ impl<'a, Profile> PseudonymizationInputBinding<'a, Profile> {
     #[must_use]
     pub const fn source(&self) -> SnapshotOperationBinding<'a> {
         self.source
+    }
+
+    #[must_use]
+    pub const fn row(&self) -> Option<SnapshotRowBinding<'a>> {
+        self.row
     }
 
     #[must_use]

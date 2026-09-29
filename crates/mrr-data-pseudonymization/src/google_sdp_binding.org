@@ -15,8 +15,31 @@ selection and response check, not encryption or authenticated provider I/O.
 
 The [[file:../../mrr-data-security/src/data_protection/profile.org][Cloud profile]]
 additionally requires the exact pipeline release receipt and independent
-transformation decision before Google request construction. The common token
-profile is independent of provider. Google is selected with
+transformation decision before Google request construction. Both decisions
+must be bound to the same root, dataset, artifact digest, and state epoch as
+the selected release; the token claim and release must share the current epoch.
+The Cloud path requires a checked =SnapshotRowBinding= and retains its
+relation, child CID, and row ordinal with the output. The Host verifies the
+child bytes and reads the actual named columns; manifest membership alone does
+not authenticate a cell value. The [[file:google_sdp_binding.rs][CloudPseudonymizationGate]] mirrors the
+public Cedar POO Cloud gate's mode, recipe, tenant, key grant, row context, and
+artifact-digest relation against the selected MRR Data input. These checks
+compare Host-authenticated projections; they do not execute Cedar or prove
+key possession. The [[https://github.com/tao3k/cedar-poo-spec/blob/main/Examples/Cloud/DataProtection/GoogleSdpRelease.lean][Cloud example]] supplies the scenario names. The Rust checks map those
+projected facts as follows:
+
+| Lean choice | Rust boundary |
+|-------------+---------------|
+| =combined-ready= | Both scoped decisions and the Cloud gate admit the selected snapshot input |
+| =pipeline-only=, =poisoned-runner=, =incident-suspends-release= | Pipeline decision denies the effect |
+| =other-recipe-key=, =other-tenant-profile= | Target recipe or tenant differs |
+| =other-row-context=, =other-released-digest= | Context or artifact digest differs |
+| =key-not-authorized= | Key grant is absent |
+| =recovery-restores-release= | A new Host-authenticated decision pair can admit the recovered root |
+
+The test fixtures are synthetic; Rust does not re-evaluate these Cedar policies.
+
+The common token profile is independent of provider. Google is selected with
 the optional =google-sdp= feature; a local provider can consume the same
 =TokenInputBinding=. Only AES-SIV is accepted by this Google operation because
 the current bridge implements that tabular transformation. AES-GCM and HMAC

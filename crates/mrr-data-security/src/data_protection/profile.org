@@ -5,7 +5,10 @@
 an immutable snapshot and to the release receipt fields used by Cedar POO's
 Cloud Pipeline evidence: artifact digest, source commit, policy root, and
 state epoch. It requires separate pipeline-release and transformation decisions.
-The epoch is a state version, not a wall-clock timestamp.
+Both decisions must name the same policy root, target dataset, artifact digest,
+and state epoch as the selected release. The epoch is a state version, not a
+wall-clock timestamp. A decision pair from another root or artifact cannot be
+reused by this profile.
 
 The public Cedar POO Cloud DataProtection example supplies the reference
 composition of pipeline owners and a Sensitive Data Protection recipe:

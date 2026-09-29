@@ -19,8 +19,9 @@ use crate::{
     DataQueryFeature, DataQueryOutputError, EntityDescriptor, GraphProjectionDescriptor,
     PROPERTY_SNAPSHOT_SCHEMA_VERSION, PhysicalQueryOutput, QueryOperationBinding, RAW_CODEC,
     RelationDescriptor, ReleaseBindingError, ReleaseOperationBinding, SnapshotBlock,
-    SnapshotManifest, SnapshotManifestRequest, SnapshotOperationBinding,
-    admit_graph_projection_source, bind_data_query, project_data_query_output, raw_cid,
+    SnapshotManifest, SnapshotManifestRequest, SnapshotOperationBinding, SnapshotRowBinding,
+    SnapshotRowBindingError, admit_graph_projection_source, bind_data_query,
+    project_data_query_output, raw_cid,
 };
 
 fn relation_id(name: &str) -> RelationId {
@@ -303,6 +304,38 @@ fn admitted_query_binds_to_exact_physical_snapshot_and_graph_projection() {
         DataOperationBinding::Publish(snapshot_binding),
         DataOperationBinding::Publish(_)
     ));
+}
+
+#[test]
+fn selected_row_must_belong_to_the_relation_child_and_ordinal() {
+    let source = SnapshotBlock::encode(manifest(false)).unwrap();
+    let relations = source.manifest().relations();
+    let alpha = relations
+        .iter()
+        .find(|relation| relation.relation_id() == relation_id("alpha"))
+        .unwrap();
+    let beta = relations
+        .iter()
+        .find(|relation| relation.relation_id() == relation_id("beta"))
+        .unwrap();
+    let child = &alpha.batches()[0];
+    let row = SnapshotRowBinding::new(&source, alpha.relation_id(), child.cid(), 0).unwrap();
+    assert_eq!(row.source().root(), source.cid());
+    assert_eq!(row.relation_id(), alpha.relation_id());
+    assert_eq!(row.child_cid(), child.cid());
+    assert_eq!(row.row_index(), 0);
+    assert_eq!(
+        SnapshotRowBinding::new(&source, relation_id("other"), child.cid(), 0).err(),
+        Some(SnapshotRowBindingError::RelationUnavailable)
+    );
+    assert_eq!(
+        SnapshotRowBinding::new(&source, alpha.relation_id(), beta.batches()[0].cid(), 0).err(),
+        Some(SnapshotRowBindingError::ChildUnavailable)
+    );
+    assert_eq!(
+        SnapshotRowBinding::new(&source, alpha.relation_id(), child.cid(), child.row_count()).err(),
+        Some(SnapshotRowBindingError::RowOutOfBounds)
+    );
 }
 
 #[test]
