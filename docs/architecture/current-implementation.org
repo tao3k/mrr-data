@@ -240,3 +240,10 @@ static runtime-plan edges and restores them through S3/Kache before executing
 an MRR-admitted endpoint query. It plugs into the existing Python Runtime tool
 boundary; it does not execute the Healthcare GQL queries or restore a full plan.
 Build it explicitly with ~cargo build -p mrr-data-poo-flow --features runtime~.
+
+With ~property-query~, the original GQL worker delegates source compilation,
+digest checking, catalog/snapshot binding, and candidate admission to MRR's
+~property-source~ interface. MRR Data keeps verified snapshot restore, bounded
+DataFusion execution, and physical output projection. This Rust boundary does
+not by itself establish a POO Flow property-query invocation; the existing
+Python tool integration remains the static-edge profile.

@@ -1,4 +1,3 @@
-use super::compile_original_source;
 use crate::{
     PropertyEntityRow, PropertyRelationRow, PropertySnapshotInput, PropertySnapshotLimits,
     PropertySnapshotRows, PropertySourceWorkerQuery, execute_property_source_worker_query,
@@ -8,6 +7,7 @@ use arrow_array::{ArrayRef, RecordBatch, StringArray};
 use arrow_ipc::writer::StreamWriter;
 use arrow_schema::{DataType, Field, Schema};
 use meta_relational_reasoning as mrr;
+use meta_relational_reasoning::compile_property_source_query;
 use mrr_data_content::{
     ContentBlock, ContentCodec, ContentStore, MemoryContentStore, RemoteContentStore, RemoteError,
     RemoteFuture, RemoteTransferLimits, SnapshotTransferLimits, TransferSession, publish_snapshot,
@@ -35,12 +35,15 @@ const SOURCE_DIGEST: &str =
 fn parser_owned_source_receipt_rejects_source_drift() {
     let expected = format!("sha256:{}", crate::protocol::digest(SOURCE.as_bytes()));
     assert_eq!(expected, SOURCE_DIGEST);
-    let compiled = compile_original_source("healthcare-case-profile", SOURCE, &expected)
+    let compiled = compile_property_source_query("healthcare-case-profile", SOURCE, &expected)
         .expect("original GQL source compiles through MRR");
-    assert_eq!(compiled.receipt.source_name, "healthcare-case-profile");
-    assert_eq!(compiled.receipt.source_digest, expected);
+    assert_eq!(
+        compiled.compilation().source_name,
+        "healthcare-case-profile"
+    );
+    assert_eq!(compiled.compilation().source_digest, expected);
     assert!(
-        compile_original_source("healthcare-case-profile", SOURCE, "sha256:stale")
+        compile_property_source_query("healthcare-case-profile", SOURCE, "sha256:stale")
             .unwrap_err()
             .to_string()
             .contains("source digest mismatch")
@@ -146,8 +149,9 @@ fn source_type_ids() -> ([mrr::EntityId; 3], [mrr::RelationId; 2]) {
     // The frontend owns label-to-type identity; the physical fixture does not
     // restate its namespace or derive parallel identifiers from label text.
     let digest = format!("sha256:{}", crate::protocol::digest(SOURCE.as_bytes()));
-    let compiled = compile_original_source("healthcare-case-profile", SOURCE, &digest).unwrap();
-    let path = &compiled.query.graph().paths()[0];
+    let compiled =
+        compile_property_source_query("healthcare-case-profile", SOURCE, &digest).unwrap();
+    let path = &compiled.query().graph().paths()[0];
     let entities = [
         path.start().types()[0],
         path.segments()[0].node().types()[0],

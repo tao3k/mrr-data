@@ -2,12 +2,12 @@
 //! MRR owns parsing, semantic binding, and result admission; this crate only
 //! connects those authorities to the MRR Data physical executor.
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result};
 use cid::Cid;
 use meta_relational_reasoning::{
-    CandidateQueryResult, EntityCatalog, QueryResultAdmissionReceipt, QueryResultLimits,
-    QueryTemplate, ReasoningBundle, ReasoningBundleDeclaration, RelationCatalog,
-    admit_query_result_candidate, bind_query_to_catalog,
+    CandidateQueryResult, CompiledPropertySourceQuery, EntityCatalog,
+    ParserOwnedCompilationReceipt, QueryResultAdmissionReceipt, QueryResultLimits, RelationCatalog,
+    compile_property_source_query,
 };
 use mrr_data_content::{
     AsyncContentStore, RemoteContentStore, RestoredSnapshot, SnapshotTransferLimits,
@@ -17,9 +17,6 @@ use mrr_data_core::{bind_data_query, project_data_query_output};
 use mrr_data_datafusion::{
     PropertyQueryLimits, RestoredPropertyQuery, datafusion_engine_profile,
     execute_restored_property_path_query,
-};
-use mrr_frontends::{
-    ParserLanguage, ParserOwnedCompilation, ParserOwnedCompilationReceipt, QueryFrontend,
 };
 
 /// All source and catalog authority is caller-owned; the snapshot must already
@@ -70,7 +67,7 @@ pub async fn execute_property_source_worker_query(
     remote: &(impl RemoteContentStore + ?Sized),
     session: &TransferSession,
 ) -> Result<AdmittedPropertySourceResult> {
-    let compilation = compile_original_source(
+    let compilation = compile_property_source_query(
         input.source_name,
         input.source_text,
         input.expected_source_digest,
@@ -110,7 +107,7 @@ pub async fn execute_property_source_worker_query(
 pub async fn execute_restored_property_source_query(
     input: RestoredPropertySourceQuery<'_>,
 ) -> Result<AdmittedPropertySourceResult> {
-    let compilation = compile_original_source(
+    let compilation = compile_property_source_query(
         input.source_name,
         input.source_text,
         input.expected_source_digest,
@@ -119,28 +116,22 @@ pub async fn execute_restored_property_source_query(
 }
 
 async fn execute_compiled_property_source_query(
-    compilation: ParserOwnedCompilation,
+    compilation: CompiledPropertySourceQuery,
     input: RestoredPropertySourceQuery<'_>,
 ) -> Result<AdmittedPropertySourceResult> {
-    let query_id = compilation.query.id();
-    let bundle = ReasoningBundle::admit(ReasoningBundleDeclaration {
-        entities: input.entity_catalog.entities().to_vec(),
-        relations: input.relation_catalog.relations().to_vec(),
-        query_templates: vec![QueryTemplate::new(compilation.query, vec![])],
-        ..ReasoningBundleDeclaration::default()
-    })
-    .context("MRR query bundle admission")?;
-    let query = bind_query_to_catalog(
-        &bundle,
-        query_id,
-        input.restored.snapshot().manifest().semantic_snapshot(),
-    )
-    .context("MRR catalog binding")?;
+    let bound = compilation
+        .bind(
+            input.relation_catalog,
+            input.entity_catalog,
+            input.restored.snapshot().manifest().semantic_snapshot(),
+        )
+        .context("MRR source and catalog binding")?;
+    let query = bound.query();
     let profile = datafusion_engine_profile().context("physical engine profile")?;
-    let physical = bind_data_query(&query, input.restored.snapshot(), &profile)
+    let physical = bind_data_query(query, input.restored.snapshot(), &profile)
         .context("physical snapshot binding")?;
     let output = execute_restored_property_path_query(RestoredPropertyQuery {
-        query: &query,
+        query,
         restored: input.restored,
         relation_catalog: input.relation_catalog,
         entity_catalog: input.entity_catalog,
@@ -150,29 +141,15 @@ async fn execute_compiled_property_source_query(
     .context("verified property execution")?;
     let candidate = project_data_query_output(&physical, &profile, output)
         .context("physical output projection")?;
-    let admission = admit_query_result_candidate(&query, &candidate, input.result_limits)
+    let admission = bound
+        .admit(&candidate, input.result_limits)
         .context("MRR result admission")?;
     Ok(AdmittedPropertySourceResult {
-        compilation: compilation.receipt,
+        compilation: bound.compilation().clone(),
         root: input.restored.snapshot().cid().to_string(),
         candidate,
         admission,
     })
-}
-
-fn compile_original_source(
-    source_name: &str,
-    source_text: &str,
-    expected_source_digest: &str,
-) -> Result<ParserOwnedCompilation> {
-    let compilation = QueryFrontend::new(ParserLanguage::Gql)
-        .compile_with_receipt(source_name, source_text)
-        .map_err(|error| anyhow::anyhow!("parser-owned GQL compilation: {error:?}"))?;
-    ensure!(
-        compilation.receipt.source_digest == expected_source_digest,
-        "original GQL source digest mismatch"
-    );
-    Ok(compilation)
 }
 
 #[cfg(test)]
