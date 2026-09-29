@@ -5,9 +5,8 @@
 use anyhow::{Context, Result};
 use cid::Cid;
 use meta_relational_reasoning::{
-    CandidateQueryResult, CompiledPropertySourceQuery, EntityCatalog,
-    ParserOwnedCompilationReceipt, QueryResultAdmissionReceipt, QueryResultLimits, RelationCatalog,
-    compile_property_source_query,
+    CandidateQueryResult, EntityCatalog, QueryResultAdmissionReceipt, QueryResultLimits,
+    RelationCatalog,
 };
 use mrr_data_content::{
     AsyncContentStore, RemoteContentStore, RestoredSnapshot, SnapshotTransferLimits,
@@ -17,6 +16,9 @@ use mrr_data_core::{bind_data_query, project_data_query_output};
 use mrr_data_datafusion::{
     PropertyQueryLimits, RestoredPropertyQuery, datafusion_engine_profile,
     execute_restored_property_path_query,
+};
+use mrr_property_source::{
+    CompiledPropertySourceQuery, ParserOwnedCompilationReceipt, compile_property_source_query,
 };
 
 /// All source and catalog authority is caller-owned; the snapshot must already

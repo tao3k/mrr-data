@@ -7,7 +7,6 @@ use arrow_array::{ArrayRef, RecordBatch, StringArray};
 use arrow_ipc::writer::StreamWriter;
 use arrow_schema::{DataType, Field, Schema};
 use meta_relational_reasoning as mrr;
-use meta_relational_reasoning::compile_property_source_query;
 use mrr_data_content::{
     ContentBlock, ContentCodec, ContentStore, MemoryContentStore, RemoteContentStore, RemoteError,
     RemoteFuture, RemoteTransferLimits, SnapshotTransferLimits, TransferSession, publish_snapshot,
@@ -17,6 +16,7 @@ use mrr_data_core::{
     SnapshotBlock, SnapshotManifest, SnapshotManifestRequest, raw_cid,
 };
 use mrr_data_datafusion::PropertyQueryLimits;
+use mrr_property_source::compile_property_source_query;
 use std::{
     collections::BTreeMap,
     num::NonZeroUsize,

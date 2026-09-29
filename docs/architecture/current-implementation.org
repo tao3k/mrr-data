@@ -243,7 +243,7 @@ Build it explicitly with ~cargo build -p mrr-data-poo-flow --features runtime~.
 
 With ~property-query~, the original GQL worker delegates source compilation,
 digest checking, catalog/snapshot binding, and candidate admission to MRR's
-~property-source~ interface. MRR Data keeps verified snapshot restore, bounded
+~mrr-property-source~ integration crate. MRR Data keeps verified snapshot restore, bounded
 DataFusion execution, and physical output projection. This Rust boundary does
 not by itself establish a POO Flow property-query invocation; the existing
 Python tool integration remains the static-edge profile.
