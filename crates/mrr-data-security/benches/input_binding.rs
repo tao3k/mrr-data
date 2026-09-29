@@ -9,8 +9,9 @@ use meta_relational_reasoning::{
 };
 use mrr_data_core::{
     BatchDescriptor, CoverageDescriptor, CoverageKind, RelationDescriptor, SnapshotBlock,
-    SnapshotManifest, SnapshotManifestRequest, SnapshotOperationBinding, raw_cid,
+    SnapshotManifest, SnapshotManifestRequest, raw_cid,
 };
+use mrr_data_security::data_protection::PseudonymizationInputBinding;
 
 const ROUNDS: usize = 40;
 const ITERATIONS: usize = 100_000;
@@ -66,28 +67,37 @@ fn report(name: &str, mut samples: Vec<Duration>) {
 
 fn main() {
     let snapshot = snapshot();
-    let mut direct_snapshot = Vec::with_capacity(ROUNDS);
-    let mut bound_snapshot = Vec::with_capacity(ROUNDS);
+    let value_digest = [17; 32];
+    let mut direct = Vec::with_capacity(ROUNDS);
+    let mut bound = Vec::with_capacity(ROUNDS);
 
     for round in 0..ROUNDS {
-        let direct = || {
+        let direct_input = || {
             black_box(snapshot.cid());
-            black_box(snapshot.manifest().semantic_snapshot().generation());
+            black_box(&value_digest);
+            black_box("tenant-a:study-1");
         };
-        let bound = || {
-            let view = SnapshotOperationBinding::new(black_box(&snapshot));
-            black_box(view.root());
-            black_box(view.generation());
+        let bound_input = || {
+            let view = PseudonymizationInputBinding::new(
+                black_box(&snapshot),
+                "patient_id",
+                &value_digest,
+                "tenant-a:study-1",
+                "aes-siv",
+            );
+            black_box(view.source().root());
+            black_box(view.value_digest());
+            black_box(view.context());
         };
         if round % 2 == 0 {
-            direct_snapshot.push(timed(direct));
-            bound_snapshot.push(timed(bound));
+            direct.push(timed(direct_input));
+            bound.push(timed(bound_input));
         } else {
-            bound_snapshot.push(timed(bound));
-            direct_snapshot.push(timed(direct));
+            bound.push(timed(bound_input));
+            direct.push(timed(direct_input));
         }
     }
     println!("rounds={ROUNDS} iterations_per_round={ITERATIONS} profile=release");
-    report("direct-snapshot", direct_snapshot);
-    report("bound-snapshot", bound_snapshot);
+    report("direct-pseudonymization", direct);
+    report("bound-pseudonymization", bound);
 }

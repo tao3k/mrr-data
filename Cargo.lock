@@ -2798,6 +2798,7 @@ dependencies = [
  "mrr-data-graphar",
  "mrr-data-profile",
  "mrr-data-pseudonymization",
+ "mrr-data-security",
 ]
 
 [[package]]
@@ -2964,7 +2965,17 @@ dependencies = [
  "meta-relational-reasoning",
  "mrr-data-asp-rust-build-support",
  "mrr-data-core",
+ "mrr-data-security",
  "sha2 0.10.9",
+]
+
+[[package]]
+name = "mrr-data-security"
+version = "0.1.0"
+dependencies = [
+ "meta-relational-reasoning",
+ "mrr-data-asp-rust-build-support",
+ "mrr-data-core",
 ]
 
 [[package]]

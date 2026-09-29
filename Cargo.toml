@@ -7,6 +7,7 @@ members = [
   "crates/mrr-data-content",
   "crates/mrr-data-cache",
   "crates/mrr-data-core",
+  "crates/mrr-data-security",
   "crates/mrr-data-pseudonymization",
   "crates/mrr-data-datafusion",
   "crates/mrr-data-graphar",
@@ -49,6 +50,7 @@ mrr-data-asp-rust-build-support = { path = "build-support/mrr-data-asp-rust-proj
 mrr-data-arrow = { path = "crates/mrr-data-arrow", version = "0.1.0" }
 mrr-data-content = { path = "crates/mrr-data-content", version = "0.1.0", default-features = false }
 mrr-data-core = { path = "crates/mrr-data-core", version = "0.1.0", default-features = false }
+mrr-data-security = { path = "crates/mrr-data-security", version = "0.1.0" }
 mrr-data-datafusion = { path = "crates/mrr-data-datafusion", version = "0.1.0" }
 mrr-data-graphar = { path = "crates/mrr-data-graphar", version = "0.1.0" }
 mrr-data-profile = { path = "crates/mrr-data-profile", version = "0.1.0" }

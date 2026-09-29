@@ -332,3 +332,153 @@ fn assert_google_rejections(
         Some(GoogleSelectionMismatch::Claim(ClaimMismatch::Stale))
     );
 }
+
+#[cfg(feature = "google-sdp")]
+#[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "end-to-end cloud selection fixture and rejection matrix"
+)]
+fn cloud_profile_requires_release_and_transformation_decisions() {
+    use crate::{
+        CloudDataProtectionSelection, CurrentGovernance, GoogleSelectionMismatch,
+        prepare_cloud_google_aes_siv_deidentify,
+    };
+    use mrr_data_security::data_protection::{
+        DataProtectionDecisions, DataProtectionMismatch, DataProtectionProfile, ReleaseReceiptClaim,
+    };
+    use sha2::{Digest, Sha256};
+
+    let source = snapshot();
+    let digest: [u8; 32] = Sha256::digest(b"synthetic-customer-1").into();
+    let policy = [31; 32];
+    let input = SelectedTokenInput {
+        field: "customer_id",
+        value_digest: &digest,
+        context: "campaign-a",
+        profile: TokenProfile {
+            mode: Mode::AesSiv,
+            scope: "campaign-a",
+            lineage: TokenLineage {
+                tenant: "customer-a",
+                key_domain: "campaign-key",
+                token_key_version: "dek-a",
+                transform_version: "canonical-v1",
+                wrapping_version: "kek-a",
+            },
+        },
+    }
+    .bind_to(&source);
+    let request = TokenAuthorizationRequest {
+        subject: "data-protection-service",
+        purpose: "customer-campaign",
+        dataset: "customer-campaign",
+        action: TokenAction::Deidentify,
+        input: &input,
+    };
+    let claim = TokenAuthorizationClaim {
+        subject: request.subject,
+        purpose: request.purpose,
+        dataset: request.dataset,
+        action: request.action,
+        root: source.cid(),
+        field: input.field(),
+        value_digest: &digest,
+        context: input.context(),
+        profile: *input.profile(),
+        policy_digest: &policy,
+        governance_epoch: 7,
+        expires_at: 100,
+    };
+    let release = ReleaseReceiptClaim {
+        artifact_digest: "sha256:candidate",
+        source_commit: "commit-a",
+        policy_root: "CustomerDataRelease",
+        epoch: 7,
+    };
+    let profile = DataProtectionProfile::new(&source, request.dataset, release);
+    let both = DataProtectionDecisions {
+        pipeline_release_allowed: true,
+        transformation_allowed: true,
+    };
+    let cloud = CloudDataProtectionSelection {
+        profile: &profile,
+        receipt: release,
+        current_epoch: 7,
+        decisions: both,
+    };
+    let current = CurrentGovernance {
+        policy_digest: &policy,
+        epoch: 7,
+        now: 99,
+    };
+    let mut selected = google_selected("synthetic-customer-1", request.dataset);
+    selected.value_field = "customer_id".into();
+    selected.context_field = "campaign".into();
+    selected.context = "campaign-a".into();
+    selected.key_domain = "campaign-key".into();
+    selected.token_key_version = "dek-a".into();
+    selected.transform_version = "canonical-v1".into();
+    selected.wrapping_version = "kek-a".into();
+    let prepare = |cloud| {
+        prepare_cloud_google_aes_siv_deidentify(
+            cloud,
+            &request,
+            &claim,
+            current,
+            selected.clone(),
+            "projects/p/locations/us".to_owned(),
+            google_key_for_campaign(),
+        )
+    };
+    let plan = prepare(cloud).unwrap();
+    let bound_release = plan.identity().cloud_release().unwrap();
+    assert_eq!(bound_release.artifact_digest, release.artifact_digest);
+    assert_eq!(bound_release.policy_root, release.policy_root);
+    assert_eq!(bound_release.epoch, 7);
+    assert_eq!(
+        prepare(CloudDataProtectionSelection {
+            current_epoch: 8,
+            ..cloud
+        })
+        .err(),
+        Some(GoogleSelectionMismatch::DataProtection(
+            DataProtectionMismatch::ReleaseReceipt
+        ))
+    );
+    assert_eq!(
+        prepare(CloudDataProtectionSelection {
+            decisions: DataProtectionDecisions {
+                pipeline_release_allowed: false,
+                ..both
+            },
+            ..cloud
+        })
+        .err(),
+        Some(GoogleSelectionMismatch::DataProtection(
+            DataProtectionMismatch::PipelineDenied
+        ))
+    );
+    assert_eq!(
+        prepare(CloudDataProtectionSelection {
+            decisions: DataProtectionDecisions {
+                transformation_allowed: false,
+                ..both
+            },
+            ..cloud
+        })
+        .err(),
+        Some(GoogleSelectionMismatch::DataProtection(
+            DataProtectionMismatch::TransformationDenied
+        ))
+    );
+}
+
+#[cfg(feature = "google-sdp")]
+fn google_key_for_campaign() -> cedar_poo_bridge::google_sdp::WrappedKeyBinding {
+    let mut key = google_key();
+    key.key_domain = "campaign-key".into();
+    key.token_key_version = "dek-a".into();
+    key.wrapping_version = "kek-a".into();
+    key
+}

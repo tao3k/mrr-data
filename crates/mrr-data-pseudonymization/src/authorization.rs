@@ -41,7 +41,9 @@ pub struct TokenAuthorizationClaim<'a> {
     pub context: &'a str,
     pub profile: TokenProfile<'a>,
     pub policy_digest: &'a [u8; 32],
-    pub governance_epoch: u64,
+    /// State epoch; it is not a wall-clock timestamp.
+    pub governance_epoch: i64,
+    /// Exclusive Unix timestamp in seconds for this separate scoped claim.
     pub expires_at: u64,
 }
 
@@ -57,7 +59,9 @@ pub enum ClaimMismatch {
 #[derive(Clone, Copy, Debug)]
 pub struct CurrentGovernance<'a> {
     pub policy_digest: &'a [u8; 32],
-    pub epoch: u64,
+    /// State epoch; it is not a wall-clock timestamp.
+    pub epoch: i64,
+    /// Unix timestamp in seconds, supplied by the Host clock.
     pub now: u64,
 }
 
@@ -74,7 +78,7 @@ impl TokenAuthorizationRequest<'_> {
         &self,
         claim: &TokenAuthorizationClaim<'_>,
         current_policy_digest: &[u8; 32],
-        current_governance_epoch: u64,
+        current_governance_epoch: i64,
         now: u64,
     ) -> Result<(), ClaimMismatch> {
         if self.subject.is_empty()

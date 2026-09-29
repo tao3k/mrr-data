@@ -9,7 +9,7 @@ Neither feature enables the official Cedar runtime or a cloud SDK.
 
 | Facade feature | Adds | Cedar dependency |
 |----------------+------+------------------|
-| =pseudonymization= | Snapshot and selected-input binding | None |
+| =data-protection= / =pseudonymization= | Provider-neutral privacy binding | None |
 | =pseudonymization-cedar= | Common Cedar POO token profile | Lightweight bridge only |
 | =google-sdp= | Google SDP wire contract | Lightweight bridge, no =cedar-policy= |
 
@@ -17,6 +17,7 @@ Only Rust capabilities with an actual implementation receive a feature.
 Lean-only controls are published as Cedar artifacts for the deploying Host;
 this package does not create placeholder flags for them.
 
+The provider-neutral binding lives in [[file:../mrr-data-security/README.org][Data Protection]].
 The public =TokenInputBinding= relates a selected value digest and actual
 per-record context to one =mrr-data= snapshot root and a common token
 profile. =compatible_inputs= uses the same recipe/context rule as the Lean
@@ -44,7 +45,7 @@ flowchart LR
 #+end_src
 
 #+begin_src sh
-just test-data-bindings
+just test-data-protection
 just test-pseudonymization-bridge
 just bench-token-catalog
 just bench-google-sdp

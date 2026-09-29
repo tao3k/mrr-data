@@ -9,7 +9,11 @@ format:
 
 [group('test')]
 test-data-bindings:
-    {{ native_env }} {{ cargo }} test -p mrr-data-core --features pseudonymization --lib --locked
+    {{ native_env }} {{ cargo }} test -p mrr-data-core --features content-identity --lib --locked
+
+[group('test')]
+test-data-protection:
+    {{ native_env }} {{ cargo }} test -p mrr-data-security --lib --locked
 
 [group('test')]
 test-pseudonymization-bridge:
@@ -17,7 +21,11 @@ test-pseudonymization-bridge:
 
 [group('bench')]
 bench-data-bindings:
-    {{ native_env }} {{ cargo }} bench -p mrr-data-core --features pseudonymization --bench operation_binding --locked
+    {{ native_env }} {{ cargo }} bench -p mrr-data-core --features content-identity --bench operation_binding --locked
+
+[group('bench')]
+bench-data-protection:
+    {{ native_env }} {{ cargo }} bench -p mrr-data-security --bench input_binding --locked
 
 [group('bench')]
 bench-token-catalog:

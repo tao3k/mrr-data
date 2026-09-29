@@ -1,7 +1,8 @@
 //! Snapshot, selected input, and token-profile composition.
 
 use cedar_poo_bridge::pseudonymization::TokenProfile;
-use mrr_data_core::{PseudonymizationInputBinding, SnapshotBlock};
+use mrr_data_core::SnapshotBlock;
+use mrr_data_security::data_protection::PseudonymizationInputBinding;
 use std::collections::HashMap;
 
 /// A selected value anchored to a snapshot and a Cedar POO token profile.

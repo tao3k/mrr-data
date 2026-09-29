@@ -1,0 +1,23 @@
+[package]
+name = "mrr-data-security"
+description = "Provider-neutral security and privacy bindings for MRR Data"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+mrr-data-core = { workspace = true, features = ["content-identity"] }
+
+[dev-dependencies]
+meta-relational-reasoning.workspace = true
+mrr-data-asp-rust-build-support.workspace = true
+
+[lints]
+workspace = true
+
+[[bench]]
+name = "input_binding"
+path = "benches/input_binding.rs"
+harness = false

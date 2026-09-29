@@ -10,7 +10,6 @@ repository.workspace = true
 [features]
 default = []
 content-identity = ["dep:cid", "dep:multihash-codetable", "dep:serde", "dep:serde_bytes", "dep:serde_ipld_dagcbor"]
-pseudonymization = ["content-identity"]
 
 [dependencies]
 cid = { workspace = true, optional = true }
@@ -32,4 +31,4 @@ workspace = true
 name = "operation_binding"
 path = "benches/operation_binding.rs"
 harness = false
-required-features = ["pseudonymization"]
+required-features = ["content-identity"]

@@ -1,13 +1,13 @@
 //! Snapshot and selected-value binding for an external pseudonymization
 //! profile. This module does not implement encryption or authorize effects.
 
-use crate::{SnapshotBlock, SnapshotOperationBinding};
+use mrr_data_core::{SnapshotBlock, SnapshotOperationBinding};
 
 /// A selected input anchored to one immutable mrr-data snapshot.
 ///
 /// `Profile` is owned by the consumer. It can be a Lean/Cedar-derived token
 /// profile, a local provider recipe, or another application-defined type.
-/// Keeping it generic avoids a policy-language dependency in mrr-data core.
+/// Keeping it generic avoids a policy-language dependency in the data-protection crate.
 #[derive(Clone, Copy, Debug)]
 pub struct PseudonymizationInputBinding<'a, Profile> {
     source: SnapshotOperationBinding<'a>,

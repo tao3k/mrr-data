@@ -9,8 +9,6 @@ mod manifest;
 mod operation_binding;
 #[cfg(feature = "content-identity")]
 mod profile;
-#[cfg(feature = "pseudonymization")]
-mod pseudonymization;
 mod query_binding;
 #[cfg(feature = "content-identity")]
 mod snapshot_descriptors;
@@ -35,8 +33,6 @@ pub use operation_binding::{
 };
 #[cfg(feature = "content-identity")]
 pub use profile::dag_cbor_cid;
-#[cfg(feature = "pseudonymization")]
-pub use pseudonymization::PseudonymizationInputBinding;
 #[cfg(feature = "content-identity")]
 pub use query_binding::{
     BoundDataQuery, DataGraphSourceBindingError, DataQueryOutputError,

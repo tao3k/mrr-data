@@ -13,7 +13,10 @@ After the bridge checks a Host-supplied response, the output retains the same
 identity plus request, response, and token digests. This is a structural
 selection and response check, not encryption or authenticated provider I/O.
 
-The common token profile is independent of provider. Google is selected with
+The [[file:../../mrr-data-security/src/data_protection/profile.org][Cloud profile]]
+additionally requires the exact pipeline release receipt and independent
+transformation decision before Google request construction. The common token
+profile is independent of provider. Google is selected with
 the optional =google-sdp= feature; a local provider can consume the same
 =TokenInputBinding=. Only AES-SIV is accepted by this Google operation because
 the current bridge implements that tabular transformation. AES-GCM and HMAC

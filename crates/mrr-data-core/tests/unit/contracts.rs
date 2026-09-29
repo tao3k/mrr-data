@@ -305,31 +305,6 @@ fn admitted_query_binds_to_exact_physical_snapshot_and_graph_projection() {
     ));
 }
 
-#[cfg(feature = "pseudonymization")]
-#[test]
-fn pseudonymization_input_keeps_snapshot_and_selected_context() {
-    use crate::PseudonymizationInputBinding;
-
-    let snapshot = SnapshotBlock::encode(manifest(false)).unwrap();
-    let value_digest = [9; 32];
-    let input = PseudonymizationInputBinding::new(
-        &snapshot,
-        "patient_id",
-        &value_digest,
-        "tenant-a:study-1",
-        "aes-siv-profile",
-    );
-    assert_eq!(input.source().root(), snapshot.cid());
-    assert_eq!(
-        input.source().generation(),
-        snapshot.manifest().semantic_snapshot().generation()
-    );
-    assert_eq!(input.field(), "patient_id");
-    assert_eq!(input.value_digest(), &value_digest);
-    assert_eq!(input.context(), "tenant-a:study-1");
-    assert_eq!(input.profile(), &"aes-siv-profile");
-}
-
 #[test]
 fn graph_source_must_match_bound_relation_and_projection_manifest() {
     let snapshot = SnapshotBlock::encode(manifest_with_graph(false, true)).unwrap();

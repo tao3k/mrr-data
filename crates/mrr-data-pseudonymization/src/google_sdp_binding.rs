@@ -5,6 +5,9 @@ use cedar_poo_bridge::google_sdp::{
     WrappedKeyBinding,
 };
 use cid::Cid;
+use mrr_data_security::data_protection::{
+    DataProtectionDecisions, DataProtectionMismatch, DataProtectionProfile, ReleaseReceiptClaim,
+};
 use sha2::{Digest, Sha256};
 
 use crate::{
@@ -16,6 +19,8 @@ use crate::{
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum GoogleSelectionMismatch {
     Claim(ClaimMismatch),
+    DataProtection(DataProtectionMismatch),
+    Source,
     WrongAction,
     Dataset,
     Field,
@@ -25,6 +30,25 @@ pub enum GoogleSelectionMismatch {
     ProviderConfiguration,
 }
 
+/// Cloud release identity from the public Cedar POO Pipeline evidence shape.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CloudReleaseIdentity {
+    pub artifact_digest: String,
+    pub source_commit: String,
+    pub policy_root: String,
+    /// State epoch, not a wall-clock timestamp.
+    pub epoch: i64,
+}
+
+/// Host-authenticated Cloud `DataProtection` selection for both Cedar decisions.
+#[derive(Clone, Copy, Debug)]
+pub struct CloudDataProtectionSelection<'a> {
+    pub profile: &'a DataProtectionProfile<'a>,
+    pub receipt: ReleaseReceiptClaim<'a>,
+    pub current_epoch: i64,
+    pub decisions: DataProtectionDecisions,
+}
+
 /// Physical and governance identity retained across provider I/O.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GoogleBoundIdentity {
@@ -32,7 +56,8 @@ pub struct GoogleBoundIdentity {
     dataset: String,
     input_digest: [u8; 32],
     policy_digest: [u8; 32],
-    governance_epoch: u64,
+    governance_epoch: i64,
+    cloud_release: Option<CloudReleaseIdentity>,
 }
 
 impl GoogleBoundIdentity {
@@ -57,8 +82,13 @@ impl GoogleBoundIdentity {
     }
 
     #[must_use]
-    pub const fn governance_epoch(&self) -> u64 {
+    pub const fn governance_epoch(&self) -> i64 {
         self.governance_epoch
+    }
+
+    #[must_use]
+    pub const fn cloud_release(&self) -> Option<&CloudReleaseIdentity> {
+        self.cloud_release.as_ref()
     }
 }
 
@@ -193,7 +223,46 @@ pub fn prepare_google_aes_siv_deidentify(
             input_digest: *bound.value_digest(),
             policy_digest: *current.policy_digest,
             governance_epoch: current.epoch,
+            cloud_release: None,
         },
         plan,
     })
+}
+
+/// Require the Cloud `DataProtection` release profile and both Cedar decisions
+/// before constructing the selected Google request. All evidence must first
+/// be authenticated by the Host; this function only checks exact relations.
+///
+/// # Errors
+///
+/// Returns [`GoogleSelectionMismatch`] for release, source, or row drift.
+pub fn prepare_cloud_google_aes_siv_deidentify(
+    cloud: CloudDataProtectionSelection<'_>,
+    request: &TokenAuthorizationRequest<'_>,
+    claim: &TokenAuthorizationClaim<'_>,
+    current: CurrentGovernance<'_>,
+    selected: SelectedTabularInput,
+    parent: String,
+    key: WrappedKeyBinding,
+) -> Result<BoundGoogleDeidentifyPlan, GoogleSelectionMismatch> {
+    cloud
+        .profile
+        .check(cloud.receipt, cloud.current_epoch, cloud.decisions)
+        .map_err(GoogleSelectionMismatch::DataProtection)?;
+    if cloud.profile.source().root() != request.input.source().root() {
+        return Err(GoogleSelectionMismatch::Source);
+    }
+    if cloud.profile.dataset() != request.dataset {
+        return Err(GoogleSelectionMismatch::Dataset);
+    }
+    let mut plan =
+        prepare_google_aes_siv_deidentify(request, claim, current, selected, parent, key)?;
+    let release = cloud.profile.release();
+    plan.identity.cloud_release = Some(CloudReleaseIdentity {
+        artifact_digest: release.artifact_digest.to_owned(),
+        source_commit: release.source_commit.to_owned(),
+        policy_root: release.policy_root.to_owned(),
+        epoch: release.epoch,
+    });
+    Ok(plan)
 }

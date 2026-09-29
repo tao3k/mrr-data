@@ -14,7 +14,8 @@ google-sdp = ["cedar-poo-bridge/google-sdp", "dep:sha2"]
 [dependencies]
 cedar-poo-bridge = { git = "https://github.com/tao3k/cedar-poo-spec", rev = "ccba5d59c2844df5b6f7f7325d4f094ee6e661a3", default-features = false, features = ["pseudonymization"] }
 cid.workspace = true
-mrr-data-core = { path = "../mrr-data-core", version = "0.1.0", default-features = false, features = ["pseudonymization"] }
+mrr-data-core = { workspace = true, features = ["content-identity"] }
+mrr-data-security.workspace = true
 sha2 = { workspace = true, optional = true }
 
 [dev-dependencies]
