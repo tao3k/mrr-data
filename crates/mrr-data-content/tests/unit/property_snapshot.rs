@@ -2,8 +2,8 @@ use super::{
     PropertyEntityRow, PropertyRelationRow, PropertySnapshotInput, PropertySnapshotLimits,
     PropertySnapshotRows, materialize_property_snapshot,
 };
+use crate::{ContentStore, MemoryContentStore};
 use meta_relational_reasoning as mrr;
-use mrr_data_content::{ContentStore, MemoryContentStore};
 use mrr_data_core::{CoverageDescriptor, CoverageKind, raw_cid};
 use std::collections::BTreeMap;
 

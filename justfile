@@ -29,20 +29,10 @@ bench-google-sdp:
 
 [group('test')]
 test-property-query:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    gerbil_root="$(gerbil -e '(display (path-expand "~~"))')"
-    export GAMBOPT="~~=$gerbil_root,~~bin=$gerbil_root/bin,~~lib=$gerbil_root/lib"
-    export GERBIL_GSC="$gerbil_root/bin/gsc"
-    export GERBIL_GXPKG="$gerbil_root/bin/gxpkg"
-    {{ native_env }} {{ cargo }} test -p mrr-data-poo-flow --features property-query --locked
+    {{ native_env }} {{ cargo }} test -p mrr-data-content --features property-snapshot --locked
+    {{ native_env }} {{ cargo }} test -p mrr-data-datafusion --locked
 
 [group('test')]
 clippy-property-query:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    gerbil_root="$(gerbil -e '(display (path-expand "~~"))')"
-    export GAMBOPT="~~=$gerbil_root,~~bin=$gerbil_root/bin,~~lib=$gerbil_root/lib"
-    export GERBIL_GSC="$gerbil_root/bin/gsc"
-    export GERBIL_GXPKG="$gerbil_root/bin/gxpkg"
-    {{ native_env }} {{ cargo }} clippy -p mrr-data-poo-flow --features property-query --all-targets --locked -- -D warnings
+    {{ native_env }} {{ cargo }} clippy -p mrr-data-content --features property-snapshot --all-targets --locked -- -D warnings
+    {{ native_env }} {{ cargo }} clippy -p mrr-data-datafusion --all-targets --locked -- -D warnings

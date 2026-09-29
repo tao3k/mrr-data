@@ -7,6 +7,8 @@ mod car;
 #[cfg(any(feature = "car", feature = "snapshot"))]
 mod closure;
 mod error;
+#[cfg(feature = "property-snapshot")]
+mod property_snapshot;
 mod protocol;
 #[cfg(feature = "snapshot")]
 mod snapshot;
@@ -18,6 +20,11 @@ pub use car::{CarImportLimits, ImportedSnapshot, encode_snapshot_car, import_sna
 pub use error::ContentError;
 #[cfg(feature = "car")]
 pub use error::ImportResource;
+#[cfg(feature = "property-snapshot")]
+pub use property_snapshot::{
+    MaterializedPropertySnapshot, PropertyEntityRow, PropertyRelationRow, PropertySnapshotInput,
+    PropertySnapshotLimits, PropertySnapshotRows, materialize_property_snapshot,
+};
 pub use protocol::{
     CacheAdmission, ContentProtocolError, ContentRead, ContentSource, PublishReceipt,
     RemoteContentStore, RemoteError, RemoteFuture, publish_content, read_through,

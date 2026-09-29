@@ -1,7 +1,8 @@
 //! Catalog-bound property rows to immutable Arrow/CID snapshot blocks.
-//! POO Flow owns row values; MRR owns type IDs and semantic generations.
-//! This module owns only the physical representation and local materialization.
+//! The caller owns row values; MRR owns type IDs and semantic generations.
+//! This module owns only physical representation and local materialization.
 
+use crate::{AsyncContentStore, ContentBlock, ContentCodec};
 use anyhow::{Context, Result, ensure};
 use arrow_array::{ArrayRef, RecordBatch, StringArray, builder::StringBuilder};
 use arrow_ipc::writer::StreamWriter;
@@ -9,7 +10,6 @@ use arrow_schema::{DataType, Field, Schema};
 use meta_relational_reasoning::{
     EntityCatalog, EntityId, RelationCatalog, RelationId, SemanticSnapshot, ValueSchema,
 };
-use mrr_data_content::{AsyncContentStore, ContentBlock, ContentCodec};
 use mrr_data_core::{
     BatchDescriptor, CoverageDescriptor, EntityDescriptor, RelationDescriptor, SnapshotBlock,
     SnapshotManifest, SnapshotManifestRequest, raw_cid,
@@ -19,7 +19,7 @@ use std::{
     sync::Arc,
 };
 
-/// One POO-owned entity identity and its named string properties.
+/// One caller-owned entity identity and its named string properties.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PropertyEntityRow {
     pub entity_id: EntityId,
@@ -34,7 +34,7 @@ pub struct PropertyRelationRow {
 }
 
 /// Every catalog type must be present, including types with zero rows.
-/// Catalog IDs are supplied by MRR, never derived from POO labels here.
+/// Catalog IDs are supplied by MRR, never derived from caller labels here.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct PropertySnapshotRows {
     pub entities: BTreeMap<EntityId, Vec<PropertyEntityRow>>,
@@ -63,7 +63,7 @@ pub struct PropertySnapshotInput<'a> {
 }
 
 /// Root and measured local closure; remote publication uses the existing
-/// `mrr_data_content::publish_snapshot` admission path.
+/// `publish_snapshot` admission path.
 #[derive(Debug)]
 pub struct MaterializedPropertySnapshot {
     pub snapshot: SnapshotBlock,

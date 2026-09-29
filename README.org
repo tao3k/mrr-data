@@ -16,6 +16,6 @@
 
 * Verify
 
-Run =just test-property-query= for the original Healthcare GQL worker path, and =just clippy-property-query= for its strict lint gate. The [[file:docs/architecture/current-implementation.org][current implementation]] lists broader workspace and optional-provider checks. CI validates Ubuntu and macOS independently.
+Run =just test-property-query= for generic property snapshot and physical-query tests, and =just clippy-property-query= for their strict lint gate. MRR owns source-bound Query orchestration; this repository no longer publishes a property Query entry point through its legacy POO Flow resource. The [[file:docs/architecture/current-implementation.org][current implementation]] lists broader workspace and optional-provider checks. CI validates Ubuntu and macOS independently.
 
 The Lambda/Marlin typed native handoff is a separate acceptance gate; the property-row producer and worker tests alone do not prove an application invocation.

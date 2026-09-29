@@ -251,9 +251,9 @@ an MRR-admitted endpoint query. It plugs into the existing Python Runtime tool
 boundary; it does not execute the Healthcare GQL queries or restore a full plan.
 Build it explicitly with ~cargo build -p mrr-data-poo-flow --features runtime~.
 
-With ~property-query~, the original GQL worker delegates source compilation,
-digest checking, catalog/snapshot binding, and candidate admission to MRR's
-~mrr-property-source~ integration crate. MRR Data keeps verified snapshot restore, bounded
-DataFusion execution, and physical output projection. This Rust boundary does
-not by itself establish a POO Flow property-query invocation; the existing
-Python tool integration remains the static-edge profile.
+The generic ~mrr-data-content/property-snapshot~ feature materializes typed
+Arrow/CID property snapshots. ~mrr-data-datafusion~ restores and executes a
+bounded physical query supplied by MRR. Source compilation, semantic binding,
+execution sequencing, and candidate admission belong to MRR's Query API;
+the POO Flow caller must connect that API to these physical capabilities.
+The existing Python tool integration remains the static-edge profile.
