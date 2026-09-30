@@ -19,11 +19,11 @@ use mrr_data_content::{
 use tempfile::tempdir;
 
 use crate::data_protection::{
-    CurrentStorageStateV1, EntityRef, PreparedProtectedSnapshot, ProtectedEnvelopeKey,
-    ProtectedPublish, ProtectedRestore, ProtectedSnapshotError, ProtectedStage,
-    ProtectedStorageMismatch, ProtectionClaimV1, ProtectionIntentV1, RawStorageDestination,
-    RawStorageTier, SourceLabel, StorageEffectV1, publish_prepared_snapshot,
-    restore_protected_snapshot, stage_protected_snapshot,
+    CurrentStorageStateV1, EntityRef, PreparedProtectedSnapshot, ProtectedCommitDispositionV1,
+    ProtectedCommitReceiptV1, ProtectedEnvelopeKey, ProtectedPublish, ProtectedRestore,
+    ProtectedSnapshotError, ProtectedStage, ProtectedStorageMismatch, ProtectionClaimV1,
+    ProtectionIntentV1, RawStorageDestination, RawStorageTier, SourceLabel, StorageEffectV1,
+    publish_prepared_snapshot, restore_protected_snapshot, stage_protected_snapshot,
 };
 
 struct Remote {
@@ -236,6 +236,12 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
     ));
     assert!(remote.contains(prepared.outer_root()));
     assert_eq!(remote.puts.load(Ordering::Relaxed), 7);
+    let publication = prepared.publication(intent).unwrap();
+    assert!(
+        publication
+            .decide_commit(&claim, current(4), None, None)
+            .is_err()
+    );
     let receipt = publish_prepared_snapshot(publish(), || Ok(current(4)))
         .await
         .unwrap();
@@ -243,6 +249,37 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
     assert!(remote.contains(prepared.outer_root()));
     assert_eq!(remote.puts.load(Ordering::Relaxed), 11);
     assert!(!remote.contains(snapshot.cid()));
+    assert_eq!(
+        publication.decide_commit(&claim, current(4), Some(receipt.as_ack()), None),
+        Ok(ProtectedCommitDispositionV1::Apply)
+    );
+    let committed = ProtectedCommitReceiptV1 {
+        publication,
+        child_count: receipt.child_count,
+        total_outer_bytes: receipt.total_outer_bytes,
+    };
+    assert_eq!(
+        publication.decide_commit(&claim, current(5), None, Some(&committed)),
+        Ok(ProtectedCommitDispositionV1::Replay)
+    );
+    let conflicting = ProtectedCommitReceiptV1 {
+        publication: crate::data_protection::ProtectedPublicationV1 {
+            intent: ProtectionIntentV1 {
+                storage: StorageEffectV1 {
+                    operation_id: "op-conflict",
+                    ..intent.storage
+                },
+                ..intent
+            },
+            ..publication
+        },
+        ..committed
+    };
+    assert!(
+        publication
+            .decide_commit(&claim, current(4), None, Some(&conflicting))
+            .is_err()
+    );
 
     let protected_cache = MemoryContentStore::default();
     let restore_session = session();

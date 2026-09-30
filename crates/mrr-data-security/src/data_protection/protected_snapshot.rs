@@ -19,8 +19,8 @@ use mrr_data_content::{
 use super::envelope::root_binding_digest;
 use super::{
     CurrentStorageStateV1, ProtectedBlockBindingV1, ProtectedBlockRole, ProtectedEnvelopeError,
-    ProtectedEnvelopeKey, ProtectedPublicationV1, ProtectedStorageMismatch, ProtectionClaimV1,
-    ProtectionIntentV1, RawStorageTier, open_block, seal_block,
+    ProtectedEnvelopeKey, ProtectedPhysicalAckV1, ProtectedPublicationV1, ProtectedStorageMismatch,
+    ProtectionClaimV1, ProtectionIntentV1, RawStorageTier, open_block, seal_block,
 };
 
 #[derive(Debug)]
@@ -95,6 +95,23 @@ pub struct ProtectedSnapshotRecordV1 {
 }
 
 impl PreparedProtectedSnapshot {
+    /// Form the pure publication projection after verifying this prepared
+    /// closure belongs to the supplied intent.
+    /// # Errors
+    /// Returns a root or intent-binding mismatch.
+    pub fn publication<'a>(
+        &'a self,
+        intent: ProtectionIntentV1<'a>,
+    ) -> Result<ProtectedPublicationV1<'a>, ProtectedSnapshotError> {
+        check_prepared(intent, self)?;
+        Ok(ProtectedPublicationV1 {
+            intent,
+            outer_root: &self.outer_root,
+            envelope_version: 1,
+            key_version: &self.key_version,
+        })
+    }
+
     /// Export the Host-owned fields needed to resume publish or restore after
     /// process restart. The Host chooses its authenticated storage format.
     #[must_use]
@@ -441,6 +458,18 @@ pub struct ProtectedPhysicalPublication {
     pub total_outer_bytes: usize,
 }
 
+impl ProtectedPhysicalPublication {
+    #[must_use]
+    pub const fn as_ack(&self) -> ProtectedPhysicalAckV1<'_> {
+        ProtectedPhysicalAckV1 {
+            inner_root: &self.inner_root,
+            outer_root: &self.outer_root,
+            child_count: self.child_count,
+            total_outer_bytes: self.total_outer_bytes,
+        }
+    }
+}
+
 async fn load_outer(
     outbox: &dyn AsyncContentStore,
     cid: &Cid,
@@ -499,14 +528,9 @@ where
         publish.max_outer_block_bytes,
     )
     .await?;
-    let publication = ProtectedPublicationV1 {
-        intent: publish.intent,
-        outer_root: &publish.prepared.outer_root,
-        envelope_version: 1,
-        key_version: &publish.prepared.key_version,
-    };
+    let publication = publish.prepared.publication(publish.intent)?;
     publication
-        .check_commit(publish.claim, refresh()?)
+        .check_pre_root(publish.claim, refresh()?)
         .map_err(ProtectedSnapshotError::Admission)?;
     budgeted
         .put(ContentBlock::new(ContentCodec::Raw, &root_bytes))

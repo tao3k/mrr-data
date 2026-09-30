@@ -16,6 +16,7 @@ pub use profile::{
     DataProtectionDecisions, DataProtectionMismatch, DataProtectionProfile, ReleaseReceiptClaim,
 };
 pub use protected::{
+    ProtectedCommitDispositionV1, ProtectedCommitReceiptV1, ProtectedPhysicalAckV1,
     ProtectedPublicationV1, ProtectedStorageMismatch, ProtectionClaimV1, ProtectionIntentV1,
 };
 #[cfg(feature = "protected-publish")]

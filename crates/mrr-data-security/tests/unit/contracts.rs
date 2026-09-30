@@ -157,14 +157,21 @@ fn cloud_profile_requires_exact_release_and_two_decisions() {
 }
 
 use crate::data_protection::{
-    CurrentStorageStateV1, EntityRef, ProtectedPublicationV1, ProtectionClaimV1,
-    ProtectionIntentV1, RawStorageDestination, RawStorageTier, SourceLabel, StorageClaimV1,
-    StorageEffectV1,
+    CurrentStorageStateV1, EntityRef, ProtectedCommitDispositionV1, ProtectedCommitReceiptV1,
+    ProtectedPhysicalAckV1, ProtectedPublicationV1, ProtectionClaimV1, ProtectionIntentV1,
+    RawStorageDestination, RawStorageTier, SourceLabel, StorageClaimV1, StorageEffectV1,
 };
 use serde_json::Value;
 
 fn fixture_str<'a>(value: &'a Value, key: &str) -> &'a str {
     value[key].as_str().unwrap()
+}
+
+fn fixture_cid(value: &Value, key: &str) -> cid::Cid {
+    let text = fixture_str(value, key);
+    let cid = cid::Cid::try_from(text).unwrap();
+    assert_eq!(cid.to_string(), text, "CID wire form must be canonical");
+    cid
 }
 
 fn fixture_entity(value: &Value) -> EntityRef<'_> {
@@ -309,6 +316,12 @@ fn protected_storage_v1_matches_pinned_spec_matrix() {
     let fixture: Value =
         serde_json::from_str(include_str!("../../fixtures/protected-storage-v1.json")).unwrap();
     assert_eq!(fixture["schema"], "cedar-poo-protected-storage-v1");
+    check_protected_intents(&fixture);
+    check_protected_publications(&fixture);
+    check_protected_commits(&fixture);
+}
+
+fn check_protected_intents(fixture: &Value) {
     let intents = fixture["intent_cases"].as_array().unwrap();
     assert_eq!(intents.len(), 14);
     for case in intents {
@@ -330,6 +343,9 @@ fn protected_storage_v1_matches_pinned_spec_matrix() {
             case["name"]
         );
     }
+}
+
+fn check_protected_publications(fixture: &Value) {
     let publications = fixture["publication_cases"].as_array().unwrap();
     assert_eq!(publications.len(), 9);
     for case in publications {
@@ -361,13 +377,108 @@ fn protected_storage_v1_matches_pinned_spec_matrix() {
                     .unwrap(),
                 key_version: fixture_str(value, "key_version"),
             }
-            .check_commit(&claim, fixture_current(&case["current"]))
+            .check_pre_root(&claim, fixture_current(&case["current"]))
             .is_ok()
         });
         assert_eq!(
             admitted,
             case["allow"].as_bool().unwrap(),
             "SPEC publication fixture {}",
+            case["name"]
+        );
+    }
+}
+
+fn check_protected_commits(fixture: &Value) {
+    let commits = fixture["commit_cases"].as_array().unwrap();
+    assert_eq!(commits.len(), 14);
+    for case in commits {
+        let value = &case["publication"];
+        let intent = FixtureIntent::new(&value["intent"]);
+        let claimed = FixtureIntent::new(&case["claim"]["intent"]);
+        let outer = fixture_cid(value, "outer_root_cid");
+        let publication = ProtectedPublicationV1 {
+            intent: intent.projected(),
+            outer_root: &outer,
+            envelope_version: value["envelope_version"]
+                .as_u64()
+                .unwrap()
+                .try_into()
+                .unwrap(),
+            key_version: fixture_str(value, "key_version"),
+        };
+        let claim = ProtectionClaimV1 {
+            intent: claimed.projected(),
+            epoch: case["claim"]["epoch"].as_u64().unwrap(),
+            expires_at: case["claim"]["expires_at"].as_u64().unwrap(),
+            allowed: case["claim"]["allowed"].as_bool().unwrap(),
+        };
+        let physical_value = &case["physical"];
+        let physical_inner =
+            (!physical_value.is_null()).then(|| fixture_cid(physical_value, "inner_root_cid"));
+        let physical_outer =
+            (!physical_value.is_null()).then(|| fixture_cid(physical_value, "outer_root_cid"));
+        let physical =
+            physical_inner
+                .as_ref()
+                .zip(physical_outer.as_ref())
+                .map(|(inner_root, outer_root)| ProtectedPhysicalAckV1 {
+                    inner_root,
+                    outer_root,
+                    child_count: physical_value["child_count"]
+                        .as_u64()
+                        .unwrap()
+                        .try_into()
+                        .unwrap(),
+                    total_outer_bytes: physical_value["total_outer_bytes"]
+                        .as_u64()
+                        .unwrap()
+                        .try_into()
+                        .unwrap(),
+                });
+        let existing_value = &case["existing"];
+        let existing_intent = (!existing_value.is_null())
+            .then(|| FixtureIntent::new(&existing_value["publication"]["intent"]));
+        let existing_outer = (!existing_value.is_null())
+            .then(|| fixture_cid(&existing_value["publication"], "outer_root_cid"));
+        let existing = existing_intent.as_ref().zip(existing_outer.as_ref()).map(
+            |(existing_intent, existing_outer)| ProtectedCommitReceiptV1 {
+                publication: ProtectedPublicationV1 {
+                    intent: existing_intent.projected(),
+                    outer_root: existing_outer,
+                    envelope_version: existing_value["publication"]["envelope_version"]
+                        .as_u64()
+                        .unwrap()
+                        .try_into()
+                        .unwrap(),
+                    key_version: fixture_str(&existing_value["publication"], "key_version"),
+                },
+                child_count: existing_value["child_count"]
+                    .as_u64()
+                    .unwrap()
+                    .try_into()
+                    .unwrap(),
+                total_outer_bytes: existing_value["total_outer_bytes"]
+                    .as_u64()
+                    .unwrap()
+                    .try_into()
+                    .unwrap(),
+            },
+        );
+        let actual = match publication.decide_commit(
+            &claim,
+            fixture_current(&case["current"]),
+            physical,
+            existing.as_ref(),
+        ) {
+            Ok(ProtectedCommitDispositionV1::Apply) => "apply",
+            Ok(ProtectedCommitDispositionV1::Replay) => "replay",
+            Err(_) => "reject",
+        };
+        assert_eq!(
+            actual,
+            fixture_str(case, "disposition"),
+            "SPEC commit fixture {}",
             case["name"]
         );
     }
@@ -383,6 +494,11 @@ fn storage_profile_matrix_matches_pinned_spec_cross_product() {
     let mut raw_allowed = 0;
     let mut protected_allowed = 0;
     for case in cases {
+        assert_eq!(
+            case["profile_composed"], true,
+            "LeanPoo profile {}",
+            case["name"]
+        );
         let effect = FixtureEffect::new(&case["effect"]);
         let storage = effect.projected();
         let protection = &case["protection"];

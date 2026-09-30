@@ -32,7 +32,7 @@ These are separate physical roots with a Host-owned binding between them.
 | Snapshot transfer | Closure preflight, children-before-root upload, bounded cold restore | Streaming large-closure API; current restore owns all child bytes in memory |
 | Data Protection | Exact release receipt and two scoped decisions; Host authenticates them | Host policy engine, atomic approval redemption and output persistence |
 | Raw storage admission | Optional =mrr-data-security/raw-publish= checks Storage Effect V1 and actual snapshot CID before Tokio publication; 17 SPEC cases replay in Rust; restricted raw sources are rejected | Generic byte APIs remain label-blind; real Host must route every sensitive write through an admission boundary |
-| Protected snapshot path | Optional =mrr-data-security/protected-publish= replays SPEC intent/commit and 16 cross-profile cases; verifies a complete inner closure, AES-256-GCM encrypts blocks and an outer manifest with fresh nonces, stages only ciphertext in a local outbox, rechecks before the outer root PUT, and verifies cold/warm restore | Authenticated source/claim/configuration, KMS key lifecycle, durable Host receipt and atomic approval/audit commit, hosted S3 qualification, and plaintext memory discipline |
+| Protected snapshot path | Optional =mrr-data-security/protected-publish= replays SPEC intent/pre-root/commit and 16 cross-profile cases; verifies a complete inner closure, AES-256-GCM encrypts blocks and an outer manifest with fresh nonces, stages only ciphertext in a local outbox, rechecks before the outer root PUT, projects physical ACK and commit disposition, and verifies cold/warm restore | Authenticated source/claim/configuration, KMS key lifecycle, durable Host ledger and atomic approval/audit commit, hosted S3 qualification, and plaintext memory discipline |
 | Google SDP | One selected AES-SIV row, exact recipe/claim/Arrow binding, checked de-identify and separate re-identify effect | Host transport/KMS, batch wire contract, quota governor and Cloud re-identification gate |
 
 The local store writes the supplied bytes verbatim; the S3 key is
@@ -100,7 +100,8 @@ labels and must only receive protected bytes through a trusted Host.
 The Host must authorize a remote publish before the first PUT and recheck
 state before the encrypted manifest root PUT, then atomically commit the
 discoverability pointer and audit. The library performs the second projected
-check, but does not implement a durable Host commit. A failed or revoked publication
+check and returns a physical ACK for the pure commit disposition. The Host owns
+the durable ledger compare-and-set. A failed or revoked publication
 may leave an unreferenced encrypted object; garbage collection and retention
 are Host responsibilities. Presence of an S3 object or cached root never grants
 access or proves that a complete snapshot is authorized.
@@ -195,7 +196,7 @@ microbenchmarks do not estimate Google or S3 throughput.
    raw filesystem/Kache/S3 paths and cross-tenant or changed-owner rejection.
    The raw-publication gate checks the SPEC V1 operation, source custody and
    snapshot CID. SPEC Protected Storage V1 and the Rust replay bind profile,
-   key reference/version, residency, source labels and two decision points.
+   key reference/version, residency, source labels and three decision points.
    A real Host has not yet authenticated those projections or guarded generic
    byte APIs.
 2. Specify a versioned protected envelope and outer-root manifest. Test
