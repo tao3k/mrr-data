@@ -628,7 +628,7 @@ dependencies = [
 [[package]]
 name = "cedar-poo-bridge"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/cedar-poo-spec?rev=89d66fb7e8742f3223ca335eef57fd6b60eaef50#89d66fb7e8742f3223ca335eef57fd6b60eaef50"
+source = "git+https://github.com/tao3k/cedar-poo-spec?rev=6c8c527cc051d229f8e06573343fcb58c086f035#6c8c527cc051d229f8e06573343fcb58c086f035"
 dependencies = [
  "base64 0.23.1",
  "serde",
