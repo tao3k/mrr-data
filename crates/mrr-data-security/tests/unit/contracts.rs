@@ -7,7 +7,7 @@ use mrr_data_core::{
     SnapshotManifest, SnapshotManifestRequest, SnapshotRowBinding, raw_cid,
 };
 
-fn snapshot() -> SnapshotBlock {
+pub(super) fn snapshot() -> SnapshotBlock {
     let generation = GenerationId::from_canonical_bytes("generation:token-fixture").unwrap();
     let revision = RevisionBinding::admit(
         ExternalRevisionIdentity::new("test", "source", "revision").unwrap(),
@@ -157,8 +157,9 @@ fn cloud_profile_requires_exact_release_and_two_decisions() {
 }
 
 use crate::data_protection::{
-    CurrentStorageStateV1, EntityRef, RawStorageDestination, RawStorageTier, SourceLabel,
-    StorageClaimV1, StorageEffectV1,
+    CurrentStorageStateV1, EntityRef, ProtectedPublicationV1, ProtectionClaimV1,
+    ProtectionIntentV1, RawStorageDestination, RawStorageTier, SourceLabel, StorageClaimV1,
+    StorageEffectV1,
 };
 use serde_json::Value;
 
@@ -267,6 +268,238 @@ fn storage_effect_v1_matches_pinned_spec_matrix() {
             case["name"]
         );
     }
+}
+
+struct FixtureIntent<'a> {
+    value: &'a Value,
+    storage: FixtureEffect<'a>,
+}
+
+impl<'a> FixtureIntent<'a> {
+    fn new(value: &'a Value) -> Self {
+        assert_eq!(value["version"], 1);
+        Self {
+            value,
+            storage: FixtureEffect::new(&value["storage"]),
+        }
+    }
+
+    fn projected(&self) -> ProtectionIntentV1<'_> {
+        ProtectionIntentV1 {
+            storage: self.storage.projected(),
+            profile: fixture_str(self.value, "profile"),
+            key_ref: fixture_str(self.value, "key_ref"),
+            key_version: fixture_str(self.value, "key_version"),
+            residency: fixture_str(self.value, "residency"),
+        }
+    }
+}
+
+fn fixture_current(value: &Value) -> CurrentStorageStateV1<'_> {
+    CurrentStorageStateV1 {
+        policy_root: fixture_str(value, "policy_root"),
+        lineage_revision: fixture_str(value, "lineage_revision"),
+        epoch: value["epoch"].as_u64().unwrap(),
+        now: value["now"].as_u64().unwrap(),
+    }
+}
+
+#[test]
+fn protected_storage_v1_matches_pinned_spec_matrix() {
+    let fixture: Value =
+        serde_json::from_str(include_str!("../../fixtures/protected-storage-v1.json")).unwrap();
+    assert_eq!(fixture["schema"], "cedar-poo-protected-storage-v1");
+    let intents = fixture["intent_cases"].as_array().unwrap();
+    assert_eq!(intents.len(), 14);
+    for case in intents {
+        let intent = FixtureIntent::new(&case["intent"]);
+        let claimed = FixtureIntent::new(&case["claim"]["intent"]);
+        let claim = ProtectionClaimV1 {
+            intent: claimed.projected(),
+            epoch: case["claim"]["epoch"].as_u64().unwrap(),
+            expires_at: case["claim"]["expires_at"].as_u64().unwrap(),
+            allowed: case["claim"]["allowed"].as_bool().unwrap(),
+        };
+        assert_eq!(
+            intent
+                .projected()
+                .check_intent(&claim, fixture_current(&case["current"]))
+                .is_ok(),
+            case["allow"].as_bool().unwrap(),
+            "SPEC intent fixture {}",
+            case["name"]
+        );
+    }
+    let publications = fixture["publication_cases"].as_array().unwrap();
+    assert_eq!(publications.len(), 9);
+    for case in publications {
+        let value = &case["publication"];
+        let intent = FixtureIntent::new(&value["intent"]);
+        let claimed = FixtureIntent::new(&case["claim"]["intent"]);
+        let text = fixture_str(value, "outer_root_cid");
+        let outer = if text.is_empty() {
+            None
+        } else {
+            let cid = cid::Cid::try_from(text).unwrap();
+            assert_eq!(cid.to_string(), text, "outer CID must be canonical");
+            Some(cid)
+        };
+        let claim = ProtectionClaimV1 {
+            intent: claimed.projected(),
+            epoch: case["claim"]["epoch"].as_u64().unwrap(),
+            expires_at: case["claim"]["expires_at"].as_u64().unwrap(),
+            allowed: case["claim"]["allowed"].as_bool().unwrap(),
+        };
+        let admitted = outer.is_some_and(|outer| {
+            ProtectedPublicationV1 {
+                intent: intent.projected(),
+                outer_root: &outer,
+                envelope_version: value["envelope_version"]
+                    .as_u64()
+                    .unwrap()
+                    .try_into()
+                    .unwrap(),
+                key_version: fixture_str(value, "key_version"),
+            }
+            .check_commit(&claim, fixture_current(&case["current"]))
+            .is_ok()
+        });
+        assert_eq!(
+            admitted,
+            case["allow"].as_bool().unwrap(),
+            "SPEC publication fixture {}",
+            case["name"]
+        );
+    }
+}
+
+#[test]
+fn storage_profile_matrix_matches_pinned_spec_cross_product() {
+    let fixture: Value =
+        serde_json::from_str(include_str!("../../fixtures/storage-profiles-v1.json")).unwrap();
+    assert_eq!(fixture["schema"], "cedar-poo-storage-profiles-v1");
+    let cases = fixture["cases"].as_array().unwrap();
+    assert_eq!(cases.len(), 16);
+    let mut raw_allowed = 0;
+    let mut protected_allowed = 0;
+    for case in cases {
+        let effect = FixtureEffect::new(&case["effect"]);
+        let storage = effect.projected();
+        let protection = &case["protection"];
+        let intent = ProtectionIntentV1 {
+            storage,
+            profile: fixture_str(protection, "profile"),
+            key_ref: fixture_str(protection, "key_ref"),
+            key_version: fixture_str(protection, "key_version"),
+            residency: fixture_str(protection, "residency"),
+        };
+        let current = fixture_current(&case["current"]);
+        let raw = storage
+            .check_raw(
+                &StorageClaimV1 {
+                    effect: storage,
+                    epoch: 4,
+                    expires_at: 100,
+                    allowed: true,
+                },
+                current,
+            )
+            .is_ok();
+        let protected = intent
+            .check_intent(
+                &ProtectionClaimV1 {
+                    intent,
+                    epoch: 4,
+                    expires_at: 100,
+                    allowed: true,
+                },
+                current,
+            )
+            .is_ok();
+        assert_eq!(
+            raw,
+            case["raw_allow"].as_bool().unwrap(),
+            "{}",
+            case["name"]
+        );
+        assert_eq!(
+            protected,
+            case["protected_allow"].as_bool().unwrap(),
+            "{}",
+            case["name"]
+        );
+        raw_allowed += usize::from(raw);
+        protected_allowed += usize::from(protected);
+    }
+    assert_eq!(raw_allowed, 4);
+    assert_eq!(protected_allowed, 6);
+}
+
+#[cfg(feature = "protected-envelope")]
+#[test]
+fn protected_envelope_randomizes_outer_identity_and_authenticates_binding() {
+    use crate::data_protection::{
+        ProtectedBlockBindingV1, ProtectedBlockRole, ProtectedEnvelopeError, ProtectedEnvelopeKey,
+        open_block, seal_block,
+    };
+    use mrr_data_content::{ContentBlock, ContentCodec};
+
+    let fixture: Value =
+        serde_json::from_str(include_str!("../../fixtures/protected-storage-v1.json")).unwrap();
+    let intent = FixtureIntent::new(&fixture["intent_cases"][0]["intent"]);
+    let projected = intent.projected();
+    let bytes = b"private child bytes";
+    let inner = ContentBlock::new(ContentCodec::Raw, bytes).cid();
+    let binding = ProtectedBlockBindingV1 {
+        intent: projected,
+        inner_cid: &inner,
+        role: ProtectedBlockRole::Child,
+        key_version: "key-version-7",
+    };
+    let key = ProtectedEnvelopeKey::aes_256_gcm(&[7_u8; 32]).unwrap();
+    let first = seal_block(binding, bytes, &key, 1024).unwrap();
+    let second = seal_block(binding, bytes, &key, 1024).unwrap();
+    assert_ne!(first.outer_cid(), second.outer_cid());
+    assert!(
+        !first
+            .bytes()
+            .windows(bytes.len())
+            .any(|window| window == bytes)
+    );
+    assert!(
+        !first
+            .bytes()
+            .windows(inner.to_string().len())
+            .any(|window| window == inner.to_string().as_bytes())
+    );
+    assert_eq!(
+        open_block(binding, first.outer_cid(), first.bytes(), &key, 1024)
+            .unwrap()
+            .as_slice(),
+        bytes
+    );
+    let changed = ProtectedBlockBindingV1 {
+        intent: ProtectionIntentV1 {
+            residency: "other-region",
+            ..projected
+        },
+        ..binding
+    };
+    assert_eq!(
+        open_block(changed, first.outer_cid(), first.bytes(), &key, 1024),
+        Err(ProtectedEnvelopeError::Cryptography)
+    );
+    let mut tampered = first.bytes().to_vec();
+    *tampered.last_mut().unwrap() ^= 1;
+    let tampered_cid = ContentBlock::new(ContentCodec::Raw, &tampered).cid();
+    assert_eq!(
+        open_block(binding, &tampered_cid, &tampered, &key, 1024),
+        Err(ProtectedEnvelopeError::Cryptography)
+    );
+    assert_eq!(
+        seal_block(binding, b"wrong bytes", &key, 1024),
+        Err(ProtectedEnvelopeError::InvalidInner)
+    );
 }
 
 #[cfg(feature = "raw-publish")]

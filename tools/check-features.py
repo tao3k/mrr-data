@@ -9,8 +9,8 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = [None, "", "arrow", "content-identity", "content", "snapshot", "transfer", "car", "filesystem", "cache", "s3",
-         "data-protection", "raw-publish", "datafusion", "graphar", "content-identity,graphar", "cache,s3", "snapshot,cache,s3", "transfer,cache,s3",
-         "arrow,content-identity,content,snapshot,transfer,raw-publish,car,filesystem,cache,s3,datafusion,graphar"]
+         "data-protection", "raw-publish", "protected-envelope", "protected-publish", "datafusion", "graphar", "content-identity,graphar", "cache,s3", "snapshot,cache,s3", "transfer,cache,s3",
+         "arrow,content-identity,content,snapshot,transfer,raw-publish,protected-publish,car,filesystem,cache,s3,datafusion,graphar"]
 
 
 def main():
@@ -24,15 +24,17 @@ def main():
         if selected:
             flags += ["--features", selected]
         enabled = {"arrow", "filesystem"} if selected is None else set(selected.split(","))
-        content = bool(enabled & {"content", "snapshot", "transfer", "raw-publish", "car", "filesystem", "cache", "s3", "datafusion"})
+        content = bool(enabled & {"content", "snapshot", "transfer", "raw-publish", "protected-envelope", "protected-publish", "car", "filesystem", "cache", "s3", "datafusion"})
         identity = content or bool(enabled & {"content-identity", "data-protection"})
         expected = {
             "mrr-data-arrow": bool(enabled & {"arrow", "datafusion"}),
             "mrr-data-core": identity or "datafusion" in enabled,
             "mrr-data-content": content,
-            "mrr-data-cache": bool(enabled & {"cache", "s3", "transfer", "raw-publish"}),
-            "mrr-data-security": bool(enabled & {"data-protection", "raw-publish"}),
-            "tokio": bool(enabled & {"s3", "transfer", "raw-publish", "datafusion"}),
+            "mrr-data-cache": bool(enabled & {"cache", "s3", "transfer", "raw-publish", "protected-publish"}),
+            "mrr-data-security": bool(enabled & {"data-protection", "raw-publish", "protected-envelope", "protected-publish"}),
+            "tokio": bool(enabled & {"s3", "transfer", "raw-publish", "protected-publish", "datafusion"}),
+            "ring": bool(enabled & {"protected-envelope", "protected-publish", "s3"}),
+            "zeroize": bool(enabled & {"protected-envelope", "protected-publish", "s3"}),
             "cid": identity,
             "serde_ipld_dagcbor": identity,
             "fvm_ipld_car": "car" in enabled,

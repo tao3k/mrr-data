@@ -12,7 +12,7 @@ default = []
 google-sdp = ["cedar-poo-bridge/google-sdp", "dep:sha2", "dep:mrr-data-arrow"]
 
 [dependencies]
-cedar-poo-bridge = { git = "https://github.com/tao3k/cedar-poo-spec", rev = "fb977eebba80fef185434d35dd66c73307ddc0dd", default-features = false, features = ["pseudonymization"] }
+cedar-poo-bridge = { git = "https://github.com/tao3k/cedar-poo-spec", rev = "89d66fb7e8742f3223ca335eef57fd6b60eaef50", default-features = false, features = ["pseudonymization"] }
 cid.workspace = true
 meta-relational-reasoning.workspace = true
 mrr-data-core = { workspace = true, features = ["content-identity"] }

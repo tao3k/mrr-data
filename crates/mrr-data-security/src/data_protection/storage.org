@@ -43,3 +43,6 @@ and audited commit as described in
 cargo test -p mrr-data-security --features raw-publish --locked
 cargo clippy -p mrr-data-security --features raw-publish --all-targets --locked -- -D warnings
 #+end_src
+
+[[file:protected.org][Protected Storage V1]] supplies a separate intent and
+commit projection, encrypted envelope and bounded local/remote path.

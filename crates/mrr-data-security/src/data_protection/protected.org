@@ -1,0 +1,44 @@
+#+TITLE: Protected Storage V1 Projection and Envelope
+#+OPTIONS: toc:nil
+
+[[file:protected.rs][The intent and publication checks]] replay
+[[https://github.com/tao3k/cedar-poo-spec/pull/5][SPEC Protected Storage V1]] at the
+Rust boundary. The versioned fixture in =fixtures/protected-storage-v1.json=
+contains fourteen intent cases and nine publication cases. The separate
+=storage-profiles-v1.json= crosses sensitivity, destination acceptance,
+tenant match and storage tier into sixteen composed production cases. These
+fixtures are decision checks, not authenticated Host claims.
+
+The optional =protected-envelope= feature supplies [[file:envelope.rs][AES-256-GCM envelopes]].
+Every block gets a fresh random nonce and a raw outer CID. The AEAD binding
+includes the inner CID, full intent, destination, source labels, profile, key
+reference/version, residency and role. The wire bytes expose only a format
+tag, nonce and ciphertext. The Host supplies and controls key bytes; it must
+enforce a bounded key lifetime and avoid logging plaintext or secrets.
+
+The optional =protected-publish= feature supplies
+[[file:protected_snapshot.rs][bounded staging and transport]]. It verifies the
+inner closure before encryption, stages encrypted children and root into a
+Host-selected local outbox, then stages an encrypted manifest containing the
+outer child map. The private =PreparedProtectedSnapshot= receipt binds inner
+and outer roots and must be durably authenticated by the Host before remote
+publication. The publisher uploads ciphertext children and the encrypted
+inner root, refreshes current governance, then uploads the encrypted manifest
+root. This physical acknowledgement is not a discoverability or audit commit.
+
+Restore reads only outer ciphertext into a protected cache, checks outer CIDs,
+authenticates and decrypts each envelope, checks inner CIDs, then validates the
+complete snapshot closure in a private memory store. A separate current Host
+read authorization is mandatory. The local test reopens a filesystem outbox,
+denies a changed epoch before the outer root PUT, and checks cold restore and
+zero-GET warm restore using a mock remote.
+
+The generic content APIs still accept arbitrary bytes. A deploying Host must
+authenticate the source catalog, lineage, Cedar decision, destination and
+key configuration; prevent bypasses; atomically redeem the operation ID and
+persist the outer-root pointer and audit; manage orphan ciphertext and
+retention; and control plaintext memory. A mock remote is not S3 acceptance.
+
+#+begin_src sh
+cargo test -p mrr-data-security --features protected-publish --locked
+#+end_src

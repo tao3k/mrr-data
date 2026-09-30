@@ -28,16 +28,19 @@ These are separate physical roots with a Host-owned binding between them.
 |----------+-------------+--------------------------------------|
 | Local =ContentStore= | CID-verified bounded reads; temporary file, file sync and directory sync before publication | Sensitivity gate, encryption, tenant isolation and retention policy |
 | Kache cache | CID revalidation, bounded reads, soft quota and explicit maintenance | Sensitivity-aware admission; plaintext avoidance is the caller's duty |
-| S3 adapter | OpenDAL transport, conditional immutable put, total deadline, bounded streamed get and CID verification | Client-side protection, destination policy and hosted-provider qualification |
+| S3 adapter | OpenDAL transport, conditional immutable put, total deadline, bounded streamed get and CID verification | Host destination policy and hosted-provider qualification; generic adapter remains label-blind |
 | Snapshot transfer | Closure preflight, children-before-root upload, bounded cold restore | Streaming large-closure API; current restore owns all child bytes in memory |
 | Data Protection | Exact release receipt and two scoped decisions; Host authenticates them | Host policy engine, atomic approval redemption and output persistence |
-| Raw storage admission | Optional =mrr-data-security/raw-publish= checks versioned Storage Effect V1, current claim, actual snapshot CID and destination before Tokio snapshot publication; 17 SPEC-generated cases replay in Rust; restricted raw sources are rejected | Protected envelope, guarded local-write path and migration of a real sensitive-data Host |
+| Raw storage admission | Optional =mrr-data-security/raw-publish= checks Storage Effect V1 and actual snapshot CID before Tokio publication; 17 SPEC cases replay in Rust; restricted raw sources are rejected | Generic byte APIs remain label-blind; real Host must route every sensitive write through an admission boundary |
+| Protected snapshot path | Optional =mrr-data-security/protected-publish= replays SPEC intent/commit and 16 cross-profile cases; verifies a complete inner closure, AES-256-GCM encrypts blocks and an outer manifest with fresh nonces, stages only ciphertext in a local outbox, rechecks before the outer root PUT, and verifies cold/warm restore | Authenticated source/claim/configuration, KMS key lifecycle, durable Host receipt and atomic approval/audit commit, hosted S3 qualification, and plaintext memory discipline |
 | Google SDP | One selected AES-SIV row, exact recipe/claim/Arrow binding, checked de-identify and separate re-identify effect | Host transport/KMS, batch wire contract, quota governor and Cloud re-identification gate |
 
 The local store writes the supplied bytes verbatim; the S3 key is
 =blocks/{cid}= for the supplied bytes. Neither is a sensitive-data encryption
-boundary. The Kache directory is a disposable cache, while the separate local
-outbox is the durable offline-protection owner. These are current code facts in
+boundary. The Kache directory is a disposable cache; the protected path accepts
+a separate Host-selected outbox and its filesystem test reopens ciphertext
+after staging. The Host must configure a durable outbox distinct from any raw
+source or disposable cache. These are current code facts in
 [[file:../../crates/mrr-data-content/src/store.rs][store.rs]],
 [[file:../../crates/mrr-data-cache/src/local.rs][local.rs]],
 [[file:../../crates/mrr-data-cache/src/s3.rs][s3.rs]] and
@@ -68,8 +71,9 @@ explicit paths:
 1. *Restricted source preservation*: encrypt before durable local staging or
    remote publication. The envelope contains a random nonce and an authenticated
    binding to the inner codec/CID, tenant, protection profile and key version.
-   The outer CID addresses encrypted bytes. A protected root describes outer
-   child CIDs; the Host receipt binds outer root to the inner snapshot root.
+   The outer CID addresses encrypted bytes. An encrypted protected manifest
+   describes outer child CIDs and the separately encrypted inner root block;
+   the private Host receipt binds its outer CID to the inner snapshot root.
    The inner root and its plaintext CIDs remain inside encrypted metadata or
    Host-controlled state. On read, verify the outer CID, authenticate and
    decrypt, then verify the inner CID and full snapshot closure before use.
@@ -89,11 +93,14 @@ storage provider must not see plaintext. AWS distinguishes
 [[https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingClientSideEncryption.html][client-side encryption]]
 from server-side encryption. The current =ContentStore= contract addresses
 logical bytes directly, so this proposal requires a distinct protected
-snapshot transport and receipt; wrapping the existing S3 adapter alone would
-leave the manifest and CID lookup semantics wrong.
+snapshot transport and receipt. The optional protected path now supplies that
+transport for a bounded closure; the generic adapter remains unaware of
+labels and must only receive protected bytes through a trusted Host.
 
 The Host must authorize a remote publish before the first PUT and recheck
-state before making its result discoverable. A failed or revoked publication
+state before the encrypted manifest root PUT, then atomically commit the
+discoverability pointer and audit. The library performs the second projected
+check, but does not implement a durable Host commit. A failed or revoked publication
 may leave an unreferenced encrypted object; garbage collection and retention
 are Host responsibilities. Presence of an S3 object or cached root never grants
 access or proves that a complete snapshot is authorized.
@@ -186,19 +193,25 @@ microbenchmarks do not estimate Google or S3 throughput.
    exact inner root, source labels, tenant, owner, effect, policy root/epoch,
    residency, key profile and storage tier. Test restricted-source denial on
    raw filesystem/Kache/S3 paths and cross-tenant or changed-owner rejection.
-   The first opt-in raw-publication gate now checks the SPEC-aligned V1
-   operation, source custody and snapshot CID and rejects restricted inputs
-   before the Tokio transfer session spends an operation;
-   it does not yet cover the generic byte APIs or implement a protected effect.
+   The raw-publication gate checks the SPEC V1 operation, source custody and
+   snapshot CID. SPEC Protected Storage V1 and the Rust replay bind profile,
+   key reference/version, residency, source labels and two decision points.
+   A real Host has not yet authenticated those projections or guarded generic
+   byte APIs.
 2. Specify a versioned protected envelope and outer-root manifest. Test
    encryption/decryption, randomized outer identity, swapped tenant/key/AAD,
    tampered ciphertext, changed inner CID and complete closure verification.
-   Keep credentials and secret key bytes out of immutable manifests.
+   Keep credentials and secret key bytes out of immutable manifests. The
+   optional AES-256-GCM implementation and encrypted manifest pass a local
+   randomized identity and tamper test; Host key lifecycle remains open.
 3. Add a bounded protected local outbox and S3 publish/restore path using the
    existing transport underneath. Test crash after local sync, interrupted PUT,
    root-last acknowledgement, cold restore and zero-GET warm restore; track
-   orphan ciphertext and retention. Qualify AWS S3 and each chosen compatible
-   provider separately, including TLS and conditional-put behavior.
+   orphan ciphertext and retention. The filesystem outbox reopen, pre-root
+   revocation, an ambiguous root PUT followed by retry, cold restore and
+   zero-GET warm restore pass with a mock remote. Durable Host receipt/retention
+   and hosted-provider runs remain open. Qualify AWS S3 and each chosen compatible provider separately,
+   including TLS and conditional-put behavior.
 4. Add a bounded Google table batch contract only after the single-row binding
    is retained as a regression baseline. Test partial response, row/context
    substitution, request-size admission, quotas, endpoint residency, key
@@ -210,5 +223,6 @@ microbenchmarks do not estimate Google or S3 throughput.
    time separated. A synthetic local fixture qualifies code paths; a hosted
    provider acceptance run is a separate claim.
 
-This is a proposed architecture and a gate list, not an assertion that the
-protected envelope, hosted Google transport, or sensitive-data Host exists.
+This is a staged architecture and gate list. The protected library path is
+locally exercised, but hosted Google transport, a durable sensitive-data Host
+and end-to-end release acceptance do not yet exist.

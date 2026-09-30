@@ -628,7 +628,7 @@ dependencies = [
 [[package]]
 name = "cedar-poo-bridge"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/cedar-poo-spec?rev=fb977eebba80fef185434d35dd66c73307ddc0dd#fb977eebba80fef185434d35dd66c73307ddc0dd"
+source = "git+https://github.com/tao3k/cedar-poo-spec?rev=89d66fb7e8742f3223ca335eef57fd6b60eaef50#89d66fb7e8742f3223ca335eef57fd6b60eaef50"
 dependencies = [
  "base64 0.23.1",
  "serde",
@@ -2979,8 +2979,11 @@ dependencies = [
  "mrr-data-asp-rust-build-support",
  "mrr-data-content",
  "mrr-data-core",
+ "ring",
  "serde_json",
+ "tempfile",
  "tokio",
+ "zeroize",
 ]
 
 [[package]]
