@@ -7,12 +7,20 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+default = []
+raw-publish = ["dep:mrr-data-content", "dep:meta-relational-reasoning"]
+
 [dependencies]
+cid.workspace = true
 mrr-data-core = { workspace = true, features = ["content-identity"] }
+mrr-data-content = { workspace = true, features = ["transfer"], optional = true }
+meta-relational-reasoning = { workspace = true, optional = true }
 
 [dev-dependencies]
 meta-relational-reasoning.workspace = true
 mrr-data-asp-rust-build-support.workspace = true
+tokio = { workspace = true, features = ["macros", "rt"] }
 
 [lints]
 workspace = true

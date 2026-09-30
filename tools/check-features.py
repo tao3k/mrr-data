@@ -9,8 +9,8 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = [None, "", "arrow", "content-identity", "content", "snapshot", "transfer", "car", "filesystem", "cache", "s3",
-         "datafusion", "graphar", "content-identity,graphar", "cache,s3", "snapshot,cache,s3", "transfer,cache,s3",
-         "arrow,content-identity,content,snapshot,transfer,car,filesystem,cache,s3,datafusion,graphar"]
+         "data-protection", "raw-publish", "datafusion", "graphar", "content-identity,graphar", "cache,s3", "snapshot,cache,s3", "transfer,cache,s3",
+         "arrow,content-identity,content,snapshot,transfer,raw-publish,car,filesystem,cache,s3,datafusion,graphar"]
 
 
 def main():
@@ -24,14 +24,15 @@ def main():
         if selected:
             flags += ["--features", selected]
         enabled = {"arrow", "filesystem"} if selected is None else set(selected.split(","))
-        content = bool(enabled & {"content", "snapshot", "transfer", "car", "filesystem", "cache", "s3", "datafusion"})
-        identity = content or "content-identity" in enabled
+        content = bool(enabled & {"content", "snapshot", "transfer", "raw-publish", "car", "filesystem", "cache", "s3", "datafusion"})
+        identity = content or bool(enabled & {"content-identity", "data-protection"})
         expected = {
             "mrr-data-arrow": bool(enabled & {"arrow", "datafusion"}),
             "mrr-data-core": identity or "datafusion" in enabled,
             "mrr-data-content": content,
-            "mrr-data-cache": bool(enabled & {"cache", "s3", "transfer"}),
-            "tokio": bool(enabled & {"s3", "transfer", "datafusion"}),
+            "mrr-data-cache": bool(enabled & {"cache", "s3", "transfer", "raw-publish"}),
+            "mrr-data-security": bool(enabled & {"data-protection", "raw-publish"}),
+            "tokio": bool(enabled & {"s3", "transfer", "raw-publish", "datafusion"}),
             "cid": identity,
             "serde_ipld_dagcbor": identity,
             "fvm_ipld_car": "car" in enabled,

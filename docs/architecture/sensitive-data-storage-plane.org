@@ -31,6 +31,7 @@ These are separate physical roots with a Host-owned binding between them.
 | S3 adapter | OpenDAL transport, conditional immutable put, total deadline, bounded streamed get and CID verification | Client-side protection, destination policy and hosted-provider qualification |
 | Snapshot transfer | Closure preflight, children-before-root upload, bounded cold restore | Streaming large-closure API; current restore owns all child bytes in memory |
 | Data Protection | Exact release receipt and two scoped decisions; Host authenticates them | Host policy engine, atomic approval redemption and output persistence |
+| Raw storage admission | Optional =mrr-data-security/raw-publish= checks source labels, current claim and destination before Tokio snapshot publication; restricted raw sources are rejected | Protected envelope and migration of a real sensitive-data Host |
 | Google SDP | One selected AES-SIV row, exact recipe/claim/Arrow binding, checked de-identify and separate re-identify effect | Host transport/KMS, batch wire contract, quota governor and Cloud re-identification gate |
 
 The local store writes the supplied bytes verbatim; the S3 key is
@@ -185,6 +186,9 @@ microbenchmarks do not estimate Google or S3 throughput.
    exact inner root, source labels, tenant, owner, effect, policy root/epoch,
    residency, key profile and storage tier. Test restricted-source denial on
    raw filesystem/Kache/S3 paths and cross-tenant or changed-owner rejection.
+   The first opt-in raw-publication gate now checks source custody and rejects
+   restricted inputs before the Tokio transfer session spends an operation;
+   it does not yet cover the generic byte APIs or implement a protected effect.
 2. Specify a versioned protected envelope and outer-root manifest. Test
    encryption/decryption, randomized outer identity, swapped tenant/key/AAD,
    tampered ciphertext, changed inner CID and complete closure verification.

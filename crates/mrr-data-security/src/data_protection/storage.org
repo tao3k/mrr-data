@@ -1,0 +1,38 @@
+#+TITLE: Raw Snapshot Storage Admission
+#+OPTIONS: toc:nil
+
+[[file:storage.rs][storage.rs]] projects the pinned Cedar POO source-custody
+relation into a provider-neutral, borrowed check. The Host supplies and
+authenticates every source label, destination, policy claim and current state.
+The claim names the exact snapshot root, source-label sequence, destination,
+subject, purpose, policy digest, governance epoch and expiry. The check
+requires each source tenant and owner to match the destination's authenticated
+custody. It rejects every restricted source for a raw-byte effect. A Google
+token or another transformed value does not silently remove its source label.
+
+With the optional =raw-publish= feature, =publish_raw_snapshot= runs that check
+before it invokes the existing bounded snapshot publisher. It accepts a
+Tokio-backed =TransferSession= from =mrr-data-content=, preserving its total
+deadline, cancellation, operation and retry-byte accounting. It publishes
+children before the root and can cache the same raw bytes locally, so only
+unrestricted inputs may use this entry point. The focused test proves a
+restricted input consumes zero transfer operations and performs zero remote
+PUTs; an unrestricted input publishes the checked three-block fixture.
+
+This is an opt-in Host-facing gate, not a change in authority of the generic
+=ContentStore= or =publish_snapshot= transport APIs. Those APIs receive only
+bytes and CIDs; they cannot infer true source labels. The legacy static-edge
+worker has no authenticated sensitivity or tenant fields and cannot be called
+a sensitive-data Host. A production restricted path still needs the protected
+envelope, local ciphertext outbox, destination-specific authorization and an
+audited commit specified in
+[[file:../../../../docs/architecture/sensitive-data-storage-plane.org][the architecture proposal]].
+
+The check borrows labels and compares at most 64 source labels and 64 accepted
+owners; it allocates no new snapshot buffers. This avoids adding an executor or
+cache mechanism. The Host must recheck mutable governance at effect commit.
+
+#+begin_src sh
+cargo test -p mrr-data-security --features raw-publish --locked
+cargo clippy -p mrr-data-security --features raw-publish --all-targets --locked -- -D warnings
+#+end_src

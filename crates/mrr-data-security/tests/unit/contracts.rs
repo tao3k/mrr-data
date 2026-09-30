@@ -155,3 +155,307 @@ fn cloud_profile_requires_exact_release_and_two_decisions() {
         Err(DataProtectionMismatch::TransformationDenied)
     );
 }
+
+#[test]
+#[expect(clippy::too_many_lines, reason = "raw storage scope rejection matrix")]
+fn raw_storage_requires_exact_current_scope_and_unrestricted_sources() {
+    use crate::data_protection::{
+        CurrentStorageGovernance, RawStorageClaim, RawStorageDestination, RawStorageIntent,
+        RawStorageMismatch, RawStorageTier, SourceLabel,
+    };
+
+    let source = snapshot();
+    let labels = [SourceLabel {
+        resource: "source-a",
+        owner: "owner-a",
+        tenant: "tenant-a",
+        restricted: false,
+    }];
+    let owners = ["owner-a"];
+    let destination = RawStorageDestination {
+        name: "tenant-a-remote",
+        tenant: "tenant-a",
+        accepted_owners: &owners,
+        tier: RawStorageTier::Remote,
+    };
+    let intent = RawStorageIntent {
+        subject: "service-a",
+        purpose: "snapshot-distribution",
+        snapshot: &source,
+        sources: &labels,
+        destination,
+    };
+    let policy = [7; 32];
+    let current = CurrentStorageGovernance {
+        policy_digest: &policy,
+        epoch: 4,
+        now: 99,
+    };
+    let claim = RawStorageClaim {
+        subject: intent.subject,
+        purpose: intent.purpose,
+        root: source.cid(),
+        sources: &labels,
+        destination,
+        policy_digest: &policy,
+        governance_epoch: 4,
+        expires_at: 100,
+        allowed: true,
+    };
+    assert_eq!(intent.check_claim(&claim, current), Ok(()));
+    assert_eq!(
+        intent.check_claim(
+            &RawStorageClaim {
+                allowed: false,
+                ..claim
+            },
+            current
+        ),
+        Err(RawStorageMismatch::Denied)
+    );
+    assert_eq!(
+        intent.check_claim(
+            &claim,
+            CurrentStorageGovernance {
+                epoch: 5,
+                ..current
+            }
+        ),
+        Err(RawStorageMismatch::Stale)
+    );
+    let other_root = raw_cid(b"other-snapshot");
+    assert_eq!(
+        intent.check_claim(
+            &RawStorageClaim {
+                root: &other_root,
+                ..claim
+            },
+            current
+        ),
+        Err(RawStorageMismatch::DifferentEffect)
+    );
+    let altered_labels = [SourceLabel {
+        resource: "source-b",
+        ..labels[0]
+    }];
+    assert_eq!(
+        intent.check_claim(
+            &RawStorageClaim {
+                sources: &altered_labels,
+                ..claim
+            },
+            current
+        ),
+        Err(RawStorageMismatch::DifferentEffect)
+    );
+    let other_destination = RawStorageDestination {
+        name: "other-remote",
+        ..destination
+    };
+    assert_eq!(
+        intent.check_claim(
+            &RawStorageClaim {
+                destination: other_destination,
+                ..claim
+            },
+            current
+        ),
+        Err(RawStorageMismatch::DifferentEffect)
+    );
+    let restricted = [SourceLabel {
+        restricted: true,
+        ..labels[0]
+    }];
+    let restricted_intent = RawStorageIntent {
+        sources: &restricted,
+        ..intent
+    };
+    assert_eq!(
+        restricted_intent.check_claim(
+            &RawStorageClaim {
+                sources: &restricted,
+                ..claim
+            },
+            current
+        ),
+        Err(RawStorageMismatch::RestrictedRequiresProtection)
+    );
+    let wrong_tenant = [SourceLabel {
+        tenant: "tenant-b",
+        ..labels[0]
+    }];
+    assert_eq!(
+        RawStorageIntent {
+            sources: &wrong_tenant,
+            ..intent
+        }
+        .check_claim(
+            &RawStorageClaim {
+                sources: &wrong_tenant,
+                ..claim
+            },
+            current
+        ),
+        Err(RawStorageMismatch::Tenant)
+    );
+    let wrong_owner = [SourceLabel {
+        owner: "owner-b",
+        ..labels[0]
+    }];
+    assert_eq!(
+        RawStorageIntent {
+            sources: &wrong_owner,
+            ..intent
+        }
+        .check_claim(
+            &RawStorageClaim {
+                sources: &wrong_owner,
+                ..claim
+            },
+            current
+        ),
+        Err(RawStorageMismatch::Owner)
+    );
+}
+
+#[cfg(feature = "raw-publish")]
+#[tokio::test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "deny-before-I/O and allowed snapshot transfer fixture"
+)]
+async fn raw_snapshot_gate_precedes_remote_io_and_allows_unrestricted() {
+    use crate::data_protection::{
+        CurrentStorageGovernance, RawSnapshotPublish, RawSnapshotPublishError, RawStorageClaim,
+        RawStorageDestination, RawStorageIntent, RawStorageMismatch, RawStorageTier, SourceLabel,
+        publish_raw_snapshot,
+    };
+    use mrr_data_content::{
+        ContentBlock, ContentCodec, ContentStore, MemoryContentStore, RemoteContentStore,
+        RemoteFuture, RemoteTransferLimits, SnapshotTransferLimits, TransferSession,
+    };
+    use std::{
+        sync::atomic::{AtomicUsize, Ordering},
+        time::Duration,
+    };
+
+    struct Remote(AtomicUsize);
+    impl RemoteContentStore for Remote {
+        fn get<'a>(&'a self, _: &'a cid::Cid, _: usize) -> RemoteFuture<'a, Option<Vec<u8>>> {
+            Box::pin(async { Ok(None) })
+        }
+        fn put<'a>(&'a self, _: ContentBlock<'a>) -> RemoteFuture<'a, ()> {
+            self.0.fetch_add(1, Ordering::Relaxed);
+            Box::pin(async { Ok(()) })
+        }
+    }
+
+    let source = snapshot();
+    let labels = [SourceLabel {
+        resource: "source-a",
+        owner: "owner-a",
+        tenant: "tenant-a",
+        restricted: true,
+    }];
+    let owners = ["owner-a"];
+    let destination = RawStorageDestination {
+        name: "tenant-a-remote",
+        tenant: "tenant-a",
+        accepted_owners: &owners,
+        tier: RawStorageTier::Remote,
+    };
+    let intent = RawStorageIntent {
+        subject: "service-a",
+        purpose: "snapshot-distribution",
+        snapshot: &source,
+        sources: &labels,
+        destination,
+    };
+    let policy = [7; 32];
+    let claim = RawStorageClaim {
+        subject: intent.subject,
+        purpose: intent.purpose,
+        root: source.cid(),
+        sources: &labels,
+        destination,
+        policy_digest: &policy,
+        governance_epoch: 4,
+        expires_at: 100,
+        allowed: true,
+    };
+    let current = CurrentStorageGovernance {
+        policy_digest: &policy,
+        epoch: 4,
+        now: 99,
+    };
+    let local = MemoryContentStore::default();
+    let remote = Remote(AtomicUsize::new(0));
+    let session = TransferSession::new(
+        Duration::from_secs(5),
+        RemoteTransferLimits {
+            operations: 4,
+            bytes: 4096,
+            attempts_per_operation: 1,
+            retry_delay: Duration::ZERO,
+        },
+    )
+    .unwrap();
+    let relation = RelationSchema::new(
+        source.manifest().relations()[0].relation_id(),
+        "TokenFixture",
+        vec![RelationField::new("value", ValueSchema::String, false).unwrap()],
+        vec![],
+    )
+    .unwrap();
+    let relations = RelationCatalog::admit(vec![relation]).unwrap();
+    let entities = EntityCatalog::admit(vec![]).unwrap();
+    let transfer = RawSnapshotPublish {
+        local: &local,
+        remote: &remote,
+        session: &session,
+        relations: &relations,
+        entities: &entities,
+        limits: SnapshotTransferLimits::new(4096, 4, 4096, 8192),
+    };
+    assert_eq!(
+        publish_raw_snapshot(intent, &claim, current, transfer).await,
+        Err(RawSnapshotPublishError::Selection(
+            RawStorageMismatch::RestrictedRequiresProtection
+        ))
+    );
+    assert_eq!(remote.0.load(Ordering::Relaxed), 0);
+    assert_eq!(session.stats().operations, 0);
+
+    local
+        .put(ContentBlock::new(ContentCodec::Raw, b"synthetic-arrow"))
+        .unwrap();
+    local
+        .put(ContentBlock::new(ContentCodec::Raw, b"coverage"))
+        .unwrap();
+    let unrestricted = [SourceLabel {
+        restricted: false,
+        ..labels[0]
+    }];
+    let allowed_intent = RawStorageIntent {
+        sources: &unrestricted,
+        ..intent
+    };
+    let allowed_claim = RawStorageClaim {
+        sources: &unrestricted,
+        ..claim
+    };
+    let transfer = RawSnapshotPublish {
+        local: &local,
+        remote: &remote,
+        session: &session,
+        relations: &relations,
+        entities: &entities,
+        limits: SnapshotTransferLimits::new(4096, 4, 4096, 8192),
+    };
+    let published = publish_raw_snapshot(allowed_intent, &allowed_claim, current, transfer)
+        .await
+        .unwrap();
+    assert_eq!(published.root(), source.cid());
+    assert_eq!(remote.0.load(Ordering::Relaxed), 3);
+    assert_eq!(session.stats().operations, 3);
+}

@@ -2974,9 +2974,12 @@ dependencies = [
 name = "mrr-data-security"
 version = "0.1.0"
 dependencies = [
+ "cid",
  "meta-relational-reasoning",
  "mrr-data-asp-rust-build-support",
+ "mrr-data-content",
  "mrr-data-core",
+ "tokio",
 ]
 
 [[package]]
