@@ -22,7 +22,10 @@ inner closure before encryption, stages encrypted children and root into a
 Host-selected local outbox, then stages an encrypted manifest containing the
 outer child map. The private =PreparedProtectedSnapshot= receipt binds inner
 and outer roots and must be durably authenticated by the Host before remote
-publication. The publisher uploads ciphertext children and the encrypted
+publication. =host_record= exports owned fields for Host-controlled durable
+storage; =from_authenticated_record= resumes from those fields after a restart.
+The caller authenticates that record and its storage format. The publisher
+uploads ciphertext children and the encrypted
 inner root, refreshes current governance, then uploads the encrypted manifest
 root. This physical acknowledgement is not a discoverability or audit commit.
 
@@ -30,7 +33,8 @@ Restore reads only outer ciphertext into a protected cache, checks outer CIDs,
 authenticates and decrypts each envelope, checks inner CIDs, then validates the
 complete snapshot closure in a private memory store. A separate current Host
 read authorization is mandatory. The local test reopens a filesystem outbox,
-denies a changed epoch before the outer root PUT, and checks cold restore and
+rebuilds the prepared handle from a Host record, denies a changed epoch before
+the outer root PUT, and checks cold restore and
 zero-GET warm restore using a mock remote.
 
 The generic content APIs still accept arbitrary bytes. A deploying Host must

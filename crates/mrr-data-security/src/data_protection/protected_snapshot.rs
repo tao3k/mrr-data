@@ -79,7 +79,75 @@ pub struct PreparedProtectedSnapshot {
     total_outer_bytes: usize,
 }
 
+/// Owned receipt fields for Host-controlled durable storage. This record is
+/// sensitive metadata: the caller must authenticate it and keep it outside
+/// shared content caches. Deserializing it does not prove that ciphertext was
+/// staged or that the current operation is authorized.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProtectedSnapshotRecordV1 {
+    pub inner_root: Cid,
+    pub outer_root: Cid,
+    pub root_block_outer: Cid,
+    pub manifest_plain_cid: Cid,
+    pub child_roots: BTreeMap<Cid, Cid>,
+    pub key_version: String,
+    pub total_outer_bytes: usize,
+}
+
 impl PreparedProtectedSnapshot {
+    /// Export the Host-owned fields needed to resume publish or restore after
+    /// process restart. The Host chooses its authenticated storage format.
+    #[must_use]
+    pub fn host_record(&self) -> ProtectedSnapshotRecordV1 {
+        ProtectedSnapshotRecordV1 {
+            inner_root: self.inner_root,
+            outer_root: self.outer_root,
+            root_block_outer: self.root_block_outer,
+            manifest_plain_cid: self.manifest_plain_cid,
+            child_roots: self.child_roots.clone(),
+            key_version: self.key_version.clone(),
+            total_outer_bytes: self.total_outer_bytes,
+        }
+    }
+
+    /// Rebuild an in-memory handle from a Host-authenticated durable record.
+    /// The caller must authenticate the record; publish checks current policy
+    /// and staged outer CIDs, while restore authenticates every envelope.
+    /// # Errors
+    /// Returns an identity, version or malformed-record error.
+    pub fn from_authenticated_record(
+        intent: ProtectionIntentV1<'_>,
+        record: ProtectedSnapshotRecordV1,
+    ) -> Result<Self, ProtectedSnapshotError> {
+        if record.inner_root != *intent.storage.snapshot_root {
+            return Err(ProtectedSnapshotError::WrongRoot);
+        }
+        if record.outer_root == record.inner_root
+            || record.outer_root == record.root_block_outer
+            || record.root_block_outer == record.inner_root
+            || record.child_roots.len() > MAX_MANIFEST_CHILDREN
+            || record.total_outer_bytes == 0
+            || record.child_roots.iter().any(|(inner, outer)| {
+                *inner == record.inner_root
+                    || *outer == record.outer_root
+                    || *outer == record.root_block_outer
+            })
+        {
+            return Err(ProtectedSnapshotError::InvalidManifest);
+        }
+        let root_binding_digest = root_binding_digest(intent, &record.key_version)?;
+        Ok(Self {
+            inner_root: record.inner_root,
+            outer_root: record.outer_root,
+            root_block_outer: record.root_block_outer,
+            manifest_plain_cid: record.manifest_plain_cid,
+            child_roots: record.child_roots,
+            key_version: record.key_version,
+            root_binding_digest,
+            total_outer_bytes: record.total_outer_bytes,
+        })
+    }
+
     #[must_use]
     pub const fn inner_root(&self) -> &Cid {
         &self.inner_root

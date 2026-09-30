@@ -200,8 +200,11 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
     assert_eq!(prepared.inner_root(), snapshot.cid());
     assert_eq!(prepared.child_roots().len(), 2);
     assert!(outbox.get(snapshot.cid()).is_err());
+    let record = prepared.host_record();
+    drop(prepared);
     drop(outbox);
     let outbox = FilesystemContentStore::open(directory.path()).unwrap();
+    let prepared = PreparedProtectedSnapshot::from_authenticated_record(intent, record).unwrap();
     assert!(outbox.get(prepared.outer_root()).is_ok());
 
     let remote = Remote::new();

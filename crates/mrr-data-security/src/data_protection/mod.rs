@@ -21,8 +21,8 @@ pub use protected::{
 #[cfg(feature = "protected-publish")]
 pub use protected_snapshot::{
     PreparedProtectedSnapshot, ProtectedPhysicalPublication, ProtectedPublish, ProtectedRestore,
-    ProtectedSnapshotError, ProtectedStage, publish_prepared_snapshot, restore_protected_snapshot,
-    stage_protected_snapshot,
+    ProtectedSnapshotError, ProtectedSnapshotRecordV1, ProtectedStage, publish_prepared_snapshot,
+    restore_protected_snapshot, stage_protected_snapshot,
 };
 pub use pseudonymization::PseudonymizationInputBinding;
 pub use storage::{

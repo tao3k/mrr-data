@@ -209,8 +209,10 @@ microbenchmarks do not estimate Google or S3 throughput.
    root-last acknowledgement, cold restore and zero-GET warm restore; track
    orphan ciphertext and retention. The filesystem outbox reopen, pre-root
    revocation, an ambiguous root PUT followed by retry, cold restore and
-   zero-GET warm restore pass with a mock remote. Durable Host receipt/retention
-   and hosted-provider runs remain open. Qualify AWS S3 and each chosen compatible provider separately,
+   zero-GET warm restore pass with a mock remote. The library exports and
+   rebuilds an owned receipt across outbox reopen. Authenticated Host storage
+   of that receipt, retention, and hosted-provider runs remain open. Qualify
+   AWS S3 and each chosen compatible provider separately,
    including TLS and conditional-put behavior.
 4. Add a bounded Google table batch contract only after the single-row binding
    is retained as a regression baseline. Test partial response, row/context
