@@ -32,6 +32,7 @@ pub enum GoogleSelectionMismatch {
     ValueDigest,
     Profile,
     ProviderConfiguration,
+    PriorOutput,
 }
 
 /// Cloud release identity from the public Cedar POO Pipeline evidence shape.
@@ -252,6 +253,149 @@ impl BoundGoogleDeidentifyOutput {
     }
 }
 
+/// A separate re-identification effect bound to a checked token and original row.
+pub struct BoundGoogleReidentifyPlan {
+    identity: GoogleBoundIdentity,
+    plan: TabularAesSiv,
+    token: String,
+    token_digest: [u8; 32],
+    deidentify_response_sha256: String,
+}
+
+impl BoundGoogleReidentifyPlan {
+    #[must_use]
+    pub const fn identity(&self) -> &GoogleBoundIdentity {
+        &self.identity
+    }
+
+    /// # Errors
+    /// Returns a bridge error for an invalid endpoint.
+    pub fn endpoint(&self) -> Result<String, String> {
+        self.plan.endpoint(true)
+    }
+
+    /// The Host sends this body through authenticated transport.
+    /// # Errors
+    /// Returns a bridge error for an invalid token or request.
+    pub fn reidentify_body(&self) -> Result<GoogleSdpRequest, String> {
+        self.plan.reidentify_body(&self.token)
+    }
+
+    /// Check the response against the selected original plaintext.
+    /// # Errors
+    /// Returns a bridge error for a malformed or mismatched response.
+    pub fn check_response(
+        self,
+        response: &GoogleSdpResponse,
+    ) -> Result<BoundGoogleReidentifyOutput, String> {
+        let checked = self.plan.check_reidentify_response(&self.token, response)?;
+        Ok(BoundGoogleReidentifyOutput {
+            identity: self.identity,
+            checked,
+            token_digest: self.token_digest,
+            deidentify_response_sha256: self.deidentify_response_sha256,
+        })
+    }
+}
+
+/// Checked plaintext and the source token's provenance digests.
+/// The Host controls plaintext release and authenticates both provider responses.
+pub struct BoundGoogleReidentifyOutput {
+    identity: GoogleBoundIdentity,
+    checked: CheckedTableOutput,
+    token_digest: [u8; 32],
+    deidentify_response_sha256: String,
+}
+
+impl BoundGoogleReidentifyOutput {
+    #[must_use]
+    pub const fn identity(&self) -> &GoogleBoundIdentity {
+        &self.identity
+    }
+
+    /// Sensitive plaintext; the Host must enforce release and audit.
+    #[must_use]
+    pub fn value(&self) -> &str {
+        &self.checked.value
+    }
+
+    #[must_use]
+    pub const fn token_digest(&self) -> &[u8; 32] {
+        &self.token_digest
+    }
+
+    #[must_use]
+    pub fn deidentify_response_sha256(&self) -> &str {
+        &self.deidentify_response_sha256
+    }
+
+    #[must_use]
+    pub fn request_sha256(&self) -> &str {
+        &self.checked.request_sha256
+    }
+
+    #[must_use]
+    pub fn response_sha256(&self) -> &str {
+        &self.checked.response_sha256
+    }
+}
+
+/// Prepare a separately authorized re-identification of a checked token.
+/// The Host authenticates the prior output, original row, current claim, key,
+/// provider transport, and the plaintext release decision.
+/// # Errors
+/// Returns a selection mismatch if the current effect, original input, or
+/// reconstructed provider recipe differs from the token's checked origin.
+pub fn prepare_google_aes_siv_reidentify(
+    request: &TokenAuthorizationRequest<'_>,
+    claim: &TokenAuthorizationClaim<'_>,
+    current: CurrentGovernance<'_>,
+    selected: SelectedTabularInput,
+    parent: String,
+    key: WrappedKeyBinding,
+    prior: &BoundGoogleDeidentifyOutput,
+) -> Result<BoundGoogleReidentifyPlan, GoogleSelectionMismatch> {
+    let bound = prepare_google_aes_siv(
+        request,
+        claim,
+        current,
+        selected,
+        parent,
+        key,
+        TokenAction::Reidentify,
+    )?;
+    let prior_identity = prior.identity();
+    if prior_identity.root != bound.identity.root
+        || prior_identity.dataset != bound.identity.dataset
+        || prior_identity.input_digest != bound.identity.input_digest
+        || prior_identity.row.is_some()
+        || prior_identity.cloud_release.is_some()
+        || request.input.row().is_some()
+    {
+        return Err(GoogleSelectionMismatch::PriorOutput);
+    }
+    let deidentify_bytes = bound
+        .plan
+        .deidentify_body()
+        .and_then(|body| body.to_json_bytes())
+        .map_err(|_| GoogleSelectionMismatch::ProviderConfiguration)?;
+    let deidentify_digest = Sha256::digest(&deidentify_bytes);
+    if format!("{deidentify_digest:x}") != prior.request_sha256() {
+        return Err(GoogleSelectionMismatch::PriorOutput);
+    }
+    bound
+        .plan
+        .reidentify_body(prior.token())
+        .map_err(|_| GoogleSelectionMismatch::PriorOutput)?;
+    Ok(BoundGoogleReidentifyPlan {
+        identity: bound.identity,
+        plan: bound.plan,
+        token: prior.token().to_owned(),
+        token_digest: prior.token_digest(),
+        deidentify_response_sha256: prior.response_sha256().to_owned(),
+    })
+}
+
 /// Construct the Google SDP wire plan after an exact claim and selected-input
 /// match. The Host still authenticates the claim, selected bytes, and key,
 /// runs its policy engine, and controls provider I/O.
@@ -268,7 +412,27 @@ pub fn prepare_google_aes_siv_deidentify(
     parent: String,
     key: WrappedKeyBinding,
 ) -> Result<BoundGoogleDeidentifyPlan, GoogleSelectionMismatch> {
-    if request.action != TokenAction::Deidentify {
+    prepare_google_aes_siv(
+        request,
+        claim,
+        current,
+        selected,
+        parent,
+        key,
+        TokenAction::Deidentify,
+    )
+}
+
+fn prepare_google_aes_siv(
+    request: &TokenAuthorizationRequest<'_>,
+    claim: &TokenAuthorizationClaim<'_>,
+    current: CurrentGovernance<'_>,
+    selected: SelectedTabularInput,
+    parent: String,
+    key: WrappedKeyBinding,
+    action: TokenAction,
+) -> Result<BoundGoogleDeidentifyPlan, GoogleSelectionMismatch> {
+    if request.action != action {
         return Err(GoogleSelectionMismatch::WrongAction);
     }
     request

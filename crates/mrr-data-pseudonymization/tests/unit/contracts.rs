@@ -216,6 +216,10 @@ fn google_key() -> cedar_poo_bridge::google_sdp::WrappedKeyBinding {
 
 #[cfg(feature = "google-sdp")]
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "complete de-identify and re-identify boundary fixture"
+)]
 fn google_request_requires_exact_snapshot_selection() {
     use crate::{CurrentGovernance, prepare_google_aes_siv_deidentify};
     use cedar_poo_bridge::google_sdp::GoogleSdpResponse;
@@ -281,6 +285,112 @@ fn google_request_requires_exact_snapshot_selection() {
     assert_eq!(checked.token(), "c3ludGhldGljLWNpcGhlcnRleHQ=");
     let expected_token_digest: [u8; 32] = Sha256::digest(checked.token().as_bytes()).into();
     assert_eq!(checked.token_digest(), expected_token_digest);
+    let reidentify_request = TokenAuthorizationRequest {
+        action: TokenAction::Reidentify,
+        ..request
+    };
+    let next_policy = [32; 32];
+    let reidentify_claim = TokenAuthorizationClaim {
+        action: TokenAction::Reidentify,
+        policy_digest: &next_policy,
+        governance_epoch: 8,
+        ..claim
+    };
+    let next = CurrentGovernance {
+        policy_digest: &next_policy,
+        epoch: 8,
+        now: 99,
+    };
+    let prepare_reidentify = |request, claim, current, selected, key| {
+        crate::prepare_google_aes_siv_reidentify(
+            request,
+            claim,
+            current,
+            selected,
+            "projects/p/locations/us".to_owned(),
+            key,
+            &checked,
+        )
+    };
+    let reidentify = prepare_reidentify(
+        &reidentify_request,
+        &reidentify_claim,
+        next,
+        google_selected("synthetic-patient-1", "cohort-a"),
+        google_key(),
+    )
+    .unwrap();
+    assert!(reidentify.endpoint().unwrap().ends_with(":reidentify"));
+    let reidentify_body = reidentify
+        .reidentify_body()
+        .unwrap()
+        .to_json_bytes()
+        .unwrap();
+    assert!(
+        String::from_utf8(reidentify_body)
+            .unwrap()
+            .contains(checked.token())
+    );
+    let reidentify_response = GoogleSdpResponse::from_json_bytes(
+        br#"{"item":{"table":{"headers":[{"name":"patient_id"},{"name":"study_context"}],"rows":[{"values":[{"stringValue":"synthetic-patient-1"},{"stringValue":"study-1"}]}]}},"overview":{"transformationSummaries":[{"field":{"name":"patient_id"},"results":[{"count":"1","code":"SUCCESS"}]}]}}"#,
+    )
+    .unwrap();
+    let restored = reidentify.check_response(&reidentify_response).unwrap();
+    assert_eq!(restored.value(), "synthetic-patient-1");
+    assert_eq!(restored.identity().policy_digest(), &next_policy);
+    assert_eq!(restored.token_digest(), &expected_token_digest);
+    assert_eq!(
+        restored.deidentify_response_sha256(),
+        checked.response_sha256()
+    );
+    let wrong_plaintext = GoogleSdpResponse::from_json_bytes(
+        br#"{"item":{"table":{"headers":[{"name":"patient_id"},{"name":"study_context"}],"rows":[{"values":[{"stringValue":"wrong-patient"},{"stringValue":"study-1"}]}]}},"overview":{"transformationSummaries":[{"field":{"name":"patient_id"},"results":[{"count":"1","code":"SUCCESS"}]}]}}"#,
+    )
+    .unwrap();
+    let reidentify_again = prepare_reidentify(
+        &reidentify_request,
+        &reidentify_claim,
+        next,
+        google_selected("synthetic-patient-1", "cohort-a"),
+        google_key(),
+    )
+    .unwrap();
+    assert!(reidentify_again.check_response(&wrong_plaintext).is_err());
+    assert_eq!(
+        prepare_reidentify(
+            &request,
+            &claim,
+            current,
+            google_selected("synthetic-patient-1", "cohort-a"),
+            google_key(),
+        )
+        .err(),
+        Some(crate::GoogleSelectionMismatch::WrongAction)
+    );
+    assert_eq!(
+        prepare_reidentify(
+            &reidentify_request,
+            &reidentify_claim,
+            current,
+            google_selected("synthetic-patient-1", "cohort-a"),
+            google_key(),
+        )
+        .err(),
+        Some(crate::GoogleSelectionMismatch::Claim(ClaimMismatch::Stale))
+    );
+    let mut changed_key = google_key();
+    changed_key.wrapped_key_base64 = "b3RoZXI=".into();
+    assert_eq!(
+        prepare_reidentify(
+            &reidentify_request,
+            &reidentify_claim,
+            next,
+            google_selected("synthetic-patient-1", "cohort-a"),
+            changed_key,
+        )
+        .err(),
+        Some(crate::GoogleSelectionMismatch::PriorOutput)
+    );
     assert_google_rejections(&request, &claim, current);
 }
 

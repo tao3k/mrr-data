@@ -13,6 +13,21 @@ After the bridge checks a Host-supplied response, the output retains the same
 identity plus request, response, and token digests. This is a structural
 selection and response check, not encryption or authenticated provider I/O.
 
+The separate =prepare_google_aes_siv_reidentify= path takes a checked
+de-identification output, the original selected value, and a *current*
+=Reidentify= claim. It compares snapshot root, dataset, and plaintext digest,
+then reconstructs the de-identification request and requires its SHA-256 to
+match the checked token's request. This also fixes the field names, context,
+wrapped key, and Google transformation recipe. The bridge checks that the
+re-identification response equals the selected original value. The returned
+plaintext carries the new governance identity and the source token and
+provider response digests. An old =Deidentify= claim cannot authorize this
+effect; a policy or epoch change needs a separately current claim. The Host
+must authenticate the stored token's origin, current approval and audit state,
+provider transport, and any plaintext release. This entry point accepts the
+projection binding only; Cloud row outputs require a future Cloud-specific
+re-identification gate and are rejected here.
+
 The [[file:../../mrr-data-security/src/data_protection/profile.org][Cloud profile]]
 additionally requires the exact pipeline release receipt and independent
 transformation decision before Google request construction. Both decisions
