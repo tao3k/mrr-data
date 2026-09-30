@@ -323,7 +323,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
             id: "reader",
         },
         purpose: "analysis",
-        publication,
+        receipt: committed,
         reader: ProtectedReadDestination {
             resource: intent.storage.destination.resource,
             tenant: "tenant-a",
@@ -370,6 +370,18 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
     ));
     assert_eq!(remote.gets.load(Ordering::Relaxed), 0);
     assert!(matches!(
+        restore_protected_snapshot(
+            ProtectedRestore {
+                prepared: &altered,
+                ..restore(current(4))
+            },
+            || Ok((current(4), Some(&committed)))
+        )
+        .await,
+        Err(ProtectedSnapshotError::WrongBinding)
+    ));
+    assert_eq!(remote.gets.load(Ordering::Relaxed), 0);
+    assert!(matches!(
         restore_protected_snapshot(restore(current(5)), || Ok((current(4), Some(&committed))))
             .await,
         Err(ProtectedSnapshotError::Read(ProtectedReadMismatch::Stale))
@@ -379,6 +391,20 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
         restore_protected_snapshot(restore(current(4)), || Ok((current(5), Some(&committed))))
             .await,
         Err(ProtectedSnapshotError::Read(ProtectedReadMismatch::Stale))
+    ));
+    assert_eq!(remote.gets.load(Ordering::Relaxed), 4);
+    let changed_count = ProtectedCommitReceiptV1 {
+        child_count: committed.child_count + 1,
+        ..committed
+    };
+    assert!(matches!(
+        restore_protected_snapshot(restore(current(4)), || {
+            Ok((current(4), Some(&changed_count)))
+        })
+        .await,
+        Err(ProtectedSnapshotError::Read(
+            ProtectedReadMismatch::DifferentCommit
+        ))
     ));
     assert_eq!(remote.gets.load(Ordering::Relaxed), 4);
     assert!(matches!(
@@ -560,7 +586,7 @@ async fn protected_s3_tls_conformance() {
             id: "reader",
         },
         purpose: "analysis",
-        publication,
+        receipt: committed,
         reader: ProtectedReadDestination {
             resource: intent.storage.destination.resource,
             tenant: "tenant-a",

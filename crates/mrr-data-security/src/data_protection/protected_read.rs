@@ -1,9 +1,7 @@
 //! Projected authorization for one read of an exact committed protected root.
 //! The Host authenticates the ledger row, current lineage, reader and claim.
 
-use super::protected::{
-    ProtectedCommitReceiptV1, ProtectedPublicationV1, ProtectedStorageMismatch,
-};
+use super::protected::{ProtectedCommitReceiptV1, ProtectedStorageMismatch};
 use super::storage::{CurrentStorageStateV1, EntityRef};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -19,7 +17,7 @@ pub struct ProtectedReadIntentV1<'a> {
     pub operation_id: &'a str,
     pub subject: EntityRef<'a>,
     pub purpose: &'a str,
-    pub publication: ProtectedPublicationV1<'a>,
+    pub receipt: ProtectedCommitReceiptV1<'a>,
     pub reader: ProtectedReadDestination<'a>,
     pub policy_root: &'a str,
     pub lineage_revision: &'a str,
@@ -87,15 +85,16 @@ impl ProtectedReadIntentV1<'_> {
         if self.reader.accepted_owners.len() > 64 {
             return Err(ProtectedReadMismatch::TooManyOwners);
         }
-        self.publication
+        self.receipt
+            .publication
             .check_static()
             .map_err(ProtectedReadMismatch::InvalidPublication)?;
-        let committed = committed.ok_or(ProtectedReadMismatch::MissingCommit)?;
-        if committed.publication != self.publication {
-            return Err(ProtectedReadMismatch::DifferentCommit);
-        }
-        if committed.total_outer_bytes == 0 || committed.child_count > 4096 {
+        if self.receipt.total_outer_bytes == 0 || self.receipt.child_count > 4096 {
             return Err(ProtectedReadMismatch::InvalidCommit);
+        }
+        let committed = committed.ok_or(ProtectedReadMismatch::MissingCommit)?;
+        if *committed != self.receipt {
+            return Err(ProtectedReadMismatch::DifferentCommit);
         }
         if *self != claim.intent {
             return Err(ProtectedReadMismatch::DifferentRead);
@@ -110,7 +109,7 @@ impl ProtectedReadIntentV1<'_> {
         {
             return Err(ProtectedReadMismatch::Stale);
         }
-        for source in self.publication.intent.storage.sources {
+        for source in self.receipt.publication.intent.storage.sources {
             if source.tenant != self.reader.tenant {
                 return Err(ProtectedReadMismatch::Tenant);
             }

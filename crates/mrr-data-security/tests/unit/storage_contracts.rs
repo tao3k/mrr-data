@@ -195,9 +195,39 @@ impl<'a> FixturePublication<'a> {
     }
 }
 
-struct FixtureRead<'a> {
+struct FixtureReceipt<'a> {
     value: &'a Value,
     publication: FixturePublication<'a>,
+}
+
+impl<'a> FixtureReceipt<'a> {
+    fn new(value: &'a Value) -> Self {
+        Self {
+            value,
+            publication: FixturePublication::new(&value["publication"]),
+        }
+    }
+
+    fn projected(&self) -> ProtectedCommitReceiptV1<'_> {
+        ProtectedCommitReceiptV1 {
+            publication: self.publication.projected(),
+            child_count: self.value["child_count"]
+                .as_u64()
+                .unwrap()
+                .try_into()
+                .unwrap(),
+            total_outer_bytes: self.value["total_outer_bytes"]
+                .as_u64()
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        }
+    }
+}
+
+struct FixtureRead<'a> {
+    value: &'a Value,
+    receipt: FixtureReceipt<'a>,
     owners: Vec<EntityRef<'a>>,
 }
 
@@ -206,7 +236,7 @@ impl<'a> FixtureRead<'a> {
         assert_eq!(value["version"], 1);
         Self {
             value,
-            publication: FixturePublication::new(&value["publication"]),
+            receipt: FixtureReceipt::new(&value["receipt"]),
             owners: value["reader"]["accepted_owners"]
                 .as_array()
                 .unwrap()
@@ -222,7 +252,7 @@ impl<'a> FixtureRead<'a> {
             operation_id: fixture_str(self.value, "operation_id"),
             subject: fixture_entity(&self.value["subject"]),
             purpose: fixture_str(self.value, "purpose"),
-            publication: self.publication.projected(),
+            receipt: self.receipt.projected(),
             reader: ProtectedReadDestination {
                 resource: fixture_entity(&reader["resource"]),
                 tenant: fixture_str(reader, "tenant"),
@@ -237,7 +267,7 @@ impl<'a> FixtureRead<'a> {
 
 fn check_protected_reads(fixture: &Value) {
     let cases = fixture["read_cases"].as_array().unwrap();
-    assert_eq!(cases.len(), 15);
+    assert_eq!(cases.len(), 18);
     for case in cases {
         let read = FixtureRead::new(&case["read"]);
         let claimed = FixtureRead::new(&case["claim"]["intent"]);
@@ -248,24 +278,9 @@ fn check_protected_reads(fixture: &Value) {
             allowed: case["claim"]["allowed"].as_bool().unwrap(),
         };
         let committed_value = &case["committed"];
-        let committed_publication = (!committed_value.is_null())
-            .then(|| FixturePublication::new(&committed_value["publication"]));
-        let committed =
-            committed_publication
-                .as_ref()
-                .map(|publication| ProtectedCommitReceiptV1 {
-                    publication: publication.projected(),
-                    child_count: committed_value["child_count"]
-                        .as_u64()
-                        .unwrap()
-                        .try_into()
-                        .unwrap(),
-                    total_outer_bytes: committed_value["total_outer_bytes"]
-                        .as_u64()
-                        .unwrap()
-                        .try_into()
-                        .unwrap(),
-                });
+        let committed_fixture =
+            (!committed_value.is_null()).then(|| FixtureReceipt::new(committed_value));
+        let committed = committed_fixture.as_ref().map(FixtureReceipt::projected);
         assert_eq!(
             read.projected()
                 .check_read(
@@ -283,7 +298,7 @@ fn check_protected_reads(fixture: &Value) {
 
 fn check_protected_read_releases(fixture: &Value) {
     let cases = fixture["read_release_cases"].as_array().unwrap();
-    assert_eq!(cases.len(), 9);
+    assert_eq!(cases.len(), 11);
     for case in cases {
         let read = FixtureRead::new(&case["read"]);
         let claimed = FixtureRead::new(&case["claim"]["intent"]);
@@ -294,43 +309,11 @@ fn check_protected_read_releases(fixture: &Value) {
             allowed: case["claim"]["allowed"].as_bool().unwrap(),
         };
         let before_value = &case["committed_before"];
-        let before_publication = (!before_value.is_null())
-            .then(|| FixturePublication::new(&before_value["publication"]));
-        let before_receipt =
-            before_publication
-                .as_ref()
-                .map(|publication| ProtectedCommitReceiptV1 {
-                    publication: publication.projected(),
-                    child_count: before_value["child_count"]
-                        .as_u64()
-                        .unwrap()
-                        .try_into()
-                        .unwrap(),
-                    total_outer_bytes: before_value["total_outer_bytes"]
-                        .as_u64()
-                        .unwrap()
-                        .try_into()
-                        .unwrap(),
-                });
+        let before_fixture = (!before_value.is_null()).then(|| FixtureReceipt::new(before_value));
+        let before_receipt = before_fixture.as_ref().map(FixtureReceipt::projected);
         let after_value = &case["committed_after"];
-        let after_publication =
-            (!after_value.is_null()).then(|| FixturePublication::new(&after_value["publication"]));
-        let after_receipt =
-            after_publication
-                .as_ref()
-                .map(|publication| ProtectedCommitReceiptV1 {
-                    publication: publication.projected(),
-                    child_count: after_value["child_count"]
-                        .as_u64()
-                        .unwrap()
-                        .try_into()
-                        .unwrap(),
-                    total_outer_bytes: after_value["total_outer_bytes"]
-                        .as_u64()
-                        .unwrap()
-                        .try_into()
-                        .unwrap(),
-                });
+        let after_fixture = (!after_value.is_null()).then(|| FixtureReceipt::new(after_value));
+        let after_receipt = after_fixture.as_ref().map(FixtureReceipt::projected);
         assert_eq!(
             read.projected()
                 .check_release(

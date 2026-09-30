@@ -8,15 +8,19 @@ contains fourteen intent, nine pre-root, and fourteen post-root commit cases. Th
 =storage-profiles-v1.json= crosses sensitivity, destination acceptance,
 tenant match and storage tier into sixteen composed production cases. These
 fixtures are decision checks, not authenticated Host claims.
-The protected fixture also contains fifteen read and nine read-release cases. The Rust
+The protected fixture also contains eighteen read and eleven read-release cases. The Rust
 [[file:protected_read.rs][read projection]] requires a fresh action-specific
-claim and an authenticated exact committed row. The restore API checks it
+claim and an authenticated exact committed receipt. The restore API checks it
 before cache or remote GET, including for a warm cache hit. After it verifies
 the full closure, a required Host refresh supplies current governance and the
 committed row for a second check before plaintext is returned. A changed epoch,
 expired claim, rollback of observed time, or missing/conflicting row returns no plaintext result, on cold
 and warm cache paths. The caller must authenticate both observations and
 serialize the final check with disclosure.
+The read intent binds the receipt's outer root, child count and ciphertext
+byte total. Restore compares those values with the prepared closure before
+any GET, then checks actual bytes and blocks while restoring. A changed
+receipt at the final refresh prevents plaintext release.
 
 The optional =protected-envelope= feature supplies [[file:envelope.rs][AES-256-GCM envelopes]].
 Every block gets a fresh random nonce and a raw outer CID. The AEAD binding

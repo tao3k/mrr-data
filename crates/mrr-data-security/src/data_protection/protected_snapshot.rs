@@ -604,8 +604,15 @@ where
         .read
         .check_read(restore.claim, restore.current, restore.committed)
         .map_err(ProtectedSnapshotError::Read)?;
-    let intent = restore.read.publication.intent;
+    let receipt = restore.read.receipt;
+    let intent = receipt.publication.intent;
     check_prepared(intent, restore.prepared)?;
+    if restore.prepared.outer_root != *receipt.publication.outer_root
+        || restore.prepared.child_roots.len() != receipt.child_count
+        || restore.prepared.total_outer_bytes != receipt.total_outer_bytes
+    {
+        return Err(ProtectedSnapshotError::WrongBinding);
+    }
     let memory = MemoryContentStore::default();
     let budgeted = restore.session.remote(restore.remote);
     let mut total = 0;
