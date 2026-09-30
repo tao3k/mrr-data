@@ -42,3 +42,4 @@ harness = false
 name = "protected_storage"
 path = "benches/protected_storage.rs"
 harness = false
+required-features = ["protected-publish"]
