@@ -11,7 +11,7 @@ Cedar POO expresses policy; the deploying Host authenticates evidence, runs
 policy, redeems approvals, controls provider I/O and audit; MRR Data verifies
 physical identity, selection and transfer. A CID proves bytes, not an allowed
 destination or a reduction in sensitivity. The Cedar POO
-[[https://github.com/tao3k/cedar-poo-spec/blob/main/CedarPooSpec/Data/DerivedArtifact.lean][DerivedArtifact rule]]
+[[https://github.com/tao3k/cedar-poo-spec/blob/ccba5d59c2844df5b6f7f7325d4f094ee6e661a3/CedarPooSpec/Data/DerivedArtifact.lean][DerivedArtifact rule at the pinned Cedar revision]]
 retains every source label across a transformation and checks tenant, owner and
 restricted status at the destination. Tokenization alone does not declassify.
 
@@ -133,7 +133,15 @@ falling back. See
 [[https://docs.cloud.google.com/sensitive-data-protection/docs/api-endpoints][regional endpoint guidance]].
 Re-identification has a distinct current action, approval/audit gate and
 plaintext release decision. The present projection path rejects Cloud row
-outputs until its own Cloud re-identification gate exists.
+outputs until its own Cloud re-identification gate exists. The pinned Google
+bridge also checks a returned plaintext against the original selected value,
+so the current adapter needs that original snapshot row in memory. This is a
+bounded round-trip check, not a scalable token-only lookup. A token-only path
+would need a separately authenticated token-origin receipt, current policy and
+plaintext-release authorization, and an upstream bridge contract that can
+check the returned value without assuming that the original is already loaded.
+Do not obtain a raw snapshot from S3 merely to satisfy a convenience API
+without an explicit authorized read and measured I/O cost.
 
 * Local and S3 performance architecture
 
