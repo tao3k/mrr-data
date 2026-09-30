@@ -1,65 +1,76 @@
-//! Host-projected source labels and a fail-closed raw-storage admission gate.
+//! Versioned Host projection of one physical storage effect.
 //!
-//! A CID authenticates bytes, not sensitivity or destination authority. The
-//! Host authenticates these projections and redeems stateful approval. This
-//! gate refuses restricted raw bytes until a protected envelope exists.
+//! Cedar POO Spec owns the source and destination rule. The Host authenticates
+//! these fields, evaluates policy and redeems approval. A CID authenticates
+//! bytes, not sensitivity or destination authority.
 
-use mrr_data_core::SnapshotBlock;
+/// Cedar `EntityUID` projected as separate type and id fields.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct EntityRef<'a> {
+    pub type_name: &'a str,
+    pub id: &'a str,
+}
 
-/// Source custody projected from the pinned Cedar POO `DerivedArtifact` rule.
+impl EntityRef<'_> {
+    const fn is_empty(self) -> bool {
+        self.type_name.is_empty() || self.id.is_empty()
+    }
+}
+
+/// Source custody projected from `CedarPooSpec.Data.DerivedArtifact`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SourceLabel<'a> {
-    pub resource: &'a str,
-    pub owner: &'a str,
+    pub resource: EntityRef<'a>,
+    pub owner: EntityRef<'a>,
     pub tenant: &'a str,
     pub restricted: bool,
 }
 
-/// Physical destination class; the Host authenticates its actual configuration.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RawStorageTier {
     DurableLocal,
     Remote,
 }
 
-/// Destination custody and sensitivity acceptance projected by the Host.
+/// Destination identity and custody; the Host authenticates its configuration.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RawStorageDestination<'a> {
-    pub name: &'a str,
+    pub resource: EntityRef<'a>,
     pub tenant: &'a str,
-    pub accepted_owners: &'a [&'a str],
+    pub accepted_owners: &'a [EntityRef<'a>],
+    pub accepts_restricted: bool,
     pub tier: RawStorageTier,
 }
 
-/// One requested raw-byte effect on an exact immutable snapshot.
-#[derive(Clone, Copy, Debug)]
-pub struct RawStorageIntent<'a> {
-    pub subject: &'a str,
+/// V1 of one exact raw-storage effect. `snapshot_root` is a parsed CID, whose
+/// wire representation must be canonical lowercase `CIDv1` base32 text.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StorageEffectV1<'a> {
+    pub operation_id: &'a str,
+    pub subject: EntityRef<'a>,
     pub purpose: &'a str,
-    pub snapshot: &'a SnapshotBlock,
+    pub snapshot_root: &'a cid::Cid,
     pub sources: &'a [SourceLabel<'a>],
     pub destination: RawStorageDestination<'a>,
+    pub policy_root: &'a str,
+    pub lineage_revision: &'a str,
 }
 
 /// A Host-authenticated, action-specific decision projection.
 #[derive(Clone, Copy, Debug)]
-pub struct RawStorageClaim<'a> {
-    pub subject: &'a str,
-    pub purpose: &'a str,
-    pub root: &'a cid::Cid,
-    pub sources: &'a [SourceLabel<'a>],
-    pub destination: RawStorageDestination<'a>,
-    pub policy_digest: &'a [u8; 32],
-    pub governance_epoch: i64,
+pub struct StorageClaimV1<'a> {
+    pub effect: StorageEffectV1<'a>,
+    pub epoch: u64,
     pub expires_at: u64,
     pub allowed: bool,
 }
 
 /// Current Host-authenticated state at the effect boundary.
 #[derive(Clone, Copy, Debug)]
-pub struct CurrentStorageGovernance<'a> {
-    pub policy_digest: &'a [u8; 32],
-    pub epoch: i64,
+pub struct CurrentStorageStateV1<'a> {
+    pub policy_root: &'a str,
+    pub lineage_revision: &'a str,
+    pub epoch: u64,
     pub now: u64,
 }
 
@@ -84,22 +95,31 @@ impl std::fmt::Display for RawStorageMismatch {
 
 impl std::error::Error for RawStorageMismatch {}
 
-impl RawStorageIntent<'_> {
-    /// Compare Host-authenticated labels, destination and claim, then reject
-    /// restricted bytes before any local cache admission or remote write.
+impl StorageEffectV1<'_> {
+    /// Compare Host-authenticated scope and current governance, then refuse
+    /// every restricted raw source. This is not Cedar evaluation or approval
+    /// redemption.
     /// # Errors
     /// Returns the first mismatched or unsafe projected condition.
-    pub fn check_claim(
+    pub fn check_raw(
         &self,
-        claim: &RawStorageClaim<'_>,
-        current: CurrentStorageGovernance<'_>,
+        claim: &StorageClaimV1<'_>,
+        current: CurrentStorageStateV1<'_>,
     ) -> Result<(), RawStorageMismatch> {
-        if self.subject.is_empty()
+        if self.operation_id.is_empty()
+            || self.subject.is_empty()
             || self.purpose.is_empty()
-            || self.destination.name.is_empty()
+            || self.policy_root.is_empty()
+            || self.lineage_revision.is_empty()
+            || self.destination.resource.is_empty()
             || self.destination.tenant.is_empty()
             || self.sources.is_empty()
             || self.destination.accepted_owners.is_empty()
+            || self
+                .destination
+                .accepted_owners
+                .iter()
+                .any(|owner| owner.is_empty())
             || self.sources.iter().any(|source| {
                 source.resource.is_empty() || source.owner.is_empty() || source.tenant.is_empty()
             })
@@ -109,18 +129,14 @@ impl RawStorageIntent<'_> {
         if self.sources.len() > 64 || self.destination.accepted_owners.len() > 64 {
             return Err(RawStorageMismatch::TooManyLabels);
         }
-        if claim.policy_digest != current.policy_digest
-            || claim.governance_epoch != current.epoch
+        if current.policy_root != self.policy_root
+            || current.lineage_revision != self.lineage_revision
+            || current.epoch != claim.epoch
             || current.now >= claim.expires_at
         {
             return Err(RawStorageMismatch::Stale);
         }
-        if claim.subject != self.subject
-            || claim.purpose != self.purpose
-            || claim.root != self.snapshot.cid()
-            || claim.sources != self.sources
-            || claim.destination != self.destination
-        {
+        if *self != claim.effect {
             return Err(RawStorageMismatch::DifferentEffect);
         }
         if !claim.allowed {
@@ -147,6 +163,7 @@ pub struct RawSnapshotPublish<'a> {
     pub local: &'a dyn mrr_data_content::AsyncContentStore,
     pub remote: &'a dyn mrr_data_content::RemoteContentStore,
     pub session: &'a mrr_data_content::TransferSession,
+    pub snapshot: &'a mrr_data_core::SnapshotBlock,
     pub relations: &'a meta_relational_reasoning::RelationCatalog,
     pub entities: &'a meta_relational_reasoning::EntityCatalog,
     pub limits: mrr_data_content::SnapshotTransferLimits,
@@ -170,33 +187,38 @@ impl std::fmt::Display for RawSnapshotPublishError {
 impl std::error::Error for RawSnapshotPublishError {}
 
 /// Publish an unrestricted raw snapshot only after exact current admission.
-/// The Host authenticates the inputs and rechecks current state at effect
-/// commit; this function does not run Cedar or encrypt bytes. The underlying
-/// generic content API remains a transport and must not be used as a sensitive
-/// data authorization path.
+/// This wrapper checks once before transfer. The Host must keep governance
+/// stable across the call or use a future pre-root commit protocol; the generic
+/// publisher has no reauthorization hook before root upload. Generic content
+/// transports remain label-blind and must not authorize sensitive I/O.
 /// # Errors
 /// Returns a selection error before remote I/O, or a transfer error afterward.
 #[cfg(feature = "raw-publish")]
 pub async fn publish_raw_snapshot(
-    intent: RawStorageIntent<'_>,
-    claim: &RawStorageClaim<'_>,
-    current: CurrentStorageGovernance<'_>,
+    effect: StorageEffectV1<'_>,
+    claim: &StorageClaimV1<'_>,
+    current: CurrentStorageStateV1<'_>,
     transfer: RawSnapshotPublish<'_>,
 ) -> Result<mrr_data_content::SnapshotPublication, RawSnapshotPublishError> {
-    if intent.destination.tier != RawStorageTier::Remote {
+    if effect.destination.tier != RawStorageTier::Remote {
         return Err(RawSnapshotPublishError::Selection(
             RawStorageMismatch::DestinationTier,
         ));
     }
-    intent
-        .check_claim(claim, current)
+    if effect.snapshot_root != transfer.snapshot.cid() {
+        return Err(RawSnapshotPublishError::Selection(
+            RawStorageMismatch::DifferentEffect,
+        ));
+    }
+    effect
+        .check_raw(claim, current)
         .map_err(RawSnapshotPublishError::Selection)?;
     transfer
         .session
         .publish_snapshot(
             transfer.local,
             transfer.remote,
-            intent.snapshot,
+            transfer.snapshot,
             transfer.relations,
             transfer.entities,
             transfer.limits,

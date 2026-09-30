@@ -7,7 +7,7 @@ snapshot identity and operation contracts.
 
 - [[file:src/data_protection/pseudonymization.org][Selected pseudonymization input]] binds a selected value digest, context, and consumer profile to a snapshot, optionally at a checked relation child and row ordinal.
 - [[file:src/data_protection/profile.org][Cloud data protection profile]] binds a release receipt and two distinct Host-authenticated decisions.
-- [[file:src/data_protection/storage.org][Raw storage admission]] binds authenticated source custody and a current destination claim before the optional Tokio-backed snapshot publication path; restricted raw bytes are rejected.
+- [[file:src/data_protection/storage.org][Storage Effect V1]] binds authenticated source custody, exact CID, policy/lineage state and destination before the optional Tokio-backed raw snapshot publication path; restricted raw bytes are rejected. Its SPEC-generated decision matrix is replayed in Rust.
 
 The crate does not evaluate Cedar, perform cryptography, authenticate evidence,
 or redeem a release receipt. The Host checks current state and executes effects.

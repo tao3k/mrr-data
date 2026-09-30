@@ -1,36 +1,43 @@
-#+TITLE: Raw Snapshot Storage Admission
+#+TITLE: Storage Effect V1 and Raw Snapshot Admission
 #+OPTIONS: toc:nil
 
-[[file:storage.rs][storage.rs]] projects the pinned Cedar POO source-custody
-relation into a provider-neutral, borrowed check. The Host supplies and
-authenticates every source label, destination, policy claim and current state.
-The claim names the exact snapshot root, source-label sequence, destination,
-subject, purpose, policy digest, governance epoch and expiry. The check
-requires each source tenant and owner to match the destination's authenticated
-custody. It rejects every restricted source for a raw-byte effect. A Google
-token or another transformed value does not silently remove its source label.
+[[file:storage.rs][storage.rs]] implements the physical projection of Cedar
+POO Spec's =CedarPooSpec.Data.StorageEffectV1= rule. The checked
+[[file:../../fixtures/storage-effect-v1.json][17-case fixture]] is generated
+by SPEC's =Examples/Data/StorageEffectFixture.lean= and replayed by this
+crate's test. It includes two allowed raw effects and negative cases for
+restricted custody, tenant/owner mismatch, substituted operation, subject,
+purpose, source, destination or CID, changed policy/lineage/epoch, expiry and
+denial. The fixture is test evidence, not an authorization credential.
 
-With the optional =raw-publish= feature, =publish_raw_snapshot= runs that check
-before it invokes the existing bounded snapshot publisher. It accepts a
-Tokio-backed =TransferSession= from =mrr-data-content=, preserving its total
-deadline, cancellation, operation and retry-byte accounting. It publishes
-children before the root and can cache the same raw bytes locally, so only
-unrestricted inputs may use this entry point. The focused test proves a
-restricted input consumes zero transfer operations and performs zero remote
-PUTs; an unrestricted input publishes the checked three-block fixture.
+The V1 projection keeps Cedar entity UIDs as separate =type= and =id= fields.
+Its snapshot root is a parsed CID; the fixture parser requires canonical
+lowercase CIDv1 base32 text. The policy root and lineage revision are exact
+strings, not local hashes of policy source. An operation ID is an opaque
+Host-issued single-use value. All of these fields participate in the exact
+claim comparison. The Host rejects SPEC natural-number epoch and time values
+that do not fit Rust's =u64= instead of truncating them. The Host authenticates
+labels, source-to-snapshot lineage,
+destination configuration, policy root and current state. The Host also
+atomically redeems an approval and records the committed effect. Rust's
+=check_raw= is a borrowed, allocation-free comparison with a 64-label and
+64-owner bound; it does not evaluate Cedar or persist any approval.
 
-This is an opt-in Host-facing gate, not a change in authority of the generic
-=ContentStore= or =publish_snapshot= transport APIs. Those APIs receive only
-bytes and CIDs; they cannot infer true source labels. The legacy static-edge
-worker has no authenticated sensitivity or tenant fields and cannot be called
-a sensitive-data Host. A production restricted path still needs the protected
-envelope, local ciphertext outbox, destination-specific authorization and an
-audited commit specified in
+The optional =raw-publish= feature checks the V1 projection before invoking
+the existing Tokio-backed =TransferSession=. It checks that the projected CID
+is the actual snapshot root and that the tier is remote. Restricted raw bytes
+are rejected before any transfer operation or remote PUT. The focused test
+also publishes an unrestricted three-block fixture. The wrapper checks only
+before the transfer; the generic publisher has no pre-root reauthorization
+hook, so this is not a durable Host commit protocol. =check_raw= supports a
+durable-local projection, but no guarded local-write wrapper exists yet.
+
+Generic =ContentStore= and =publish_snapshot= transports remain label-blind.
+The legacy static-edge worker lacks authenticated sensitivity and tenant
+facts, so it is not a sensitive-data Host. Restricted storage still needs a
+protected envelope, ciphertext outbox, destination-specific authorization
+and audited commit as described in
 [[file:../../../../docs/architecture/sensitive-data-storage-plane.org][the architecture proposal]].
-
-The check borrows labels and compares at most 64 source labels and 64 accepted
-owners; it allocates no new snapshot buffers. This avoids adding an executor or
-cache mechanism. The Host must recheck mutable governance at effect commit.
 
 #+begin_src sh
 cargo test -p mrr-data-security --features raw-publish --locked

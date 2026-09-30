@@ -156,166 +156,117 @@ fn cloud_profile_requires_exact_release_and_two_decisions() {
     );
 }
 
-#[test]
-#[expect(clippy::too_many_lines, reason = "raw storage scope rejection matrix")]
-fn raw_storage_requires_exact_current_scope_and_unrestricted_sources() {
-    use crate::data_protection::{
-        CurrentStorageGovernance, RawStorageClaim, RawStorageDestination, RawStorageIntent,
-        RawStorageMismatch, RawStorageTier, SourceLabel,
-    };
+use crate::data_protection::{
+    CurrentStorageStateV1, EntityRef, RawStorageDestination, RawStorageTier, SourceLabel,
+    StorageClaimV1, StorageEffectV1,
+};
+use serde_json::Value;
 
-    let source = snapshot();
-    let labels = [SourceLabel {
-        resource: "source-a",
-        owner: "owner-a",
-        tenant: "tenant-a",
-        restricted: false,
-    }];
-    let owners = ["owner-a"];
-    let destination = RawStorageDestination {
-        name: "tenant-a-remote",
-        tenant: "tenant-a",
-        accepted_owners: &owners,
-        tier: RawStorageTier::Remote,
-    };
-    let intent = RawStorageIntent {
-        subject: "service-a",
-        purpose: "snapshot-distribution",
-        snapshot: &source,
-        sources: &labels,
-        destination,
-    };
-    let policy = [7; 32];
-    let current = CurrentStorageGovernance {
-        policy_digest: &policy,
-        epoch: 4,
-        now: 99,
-    };
-    let claim = RawStorageClaim {
-        subject: intent.subject,
-        purpose: intent.purpose,
-        root: source.cid(),
-        sources: &labels,
-        destination,
-        policy_digest: &policy,
-        governance_epoch: 4,
-        expires_at: 100,
-        allowed: true,
-    };
-    assert_eq!(intent.check_claim(&claim, current), Ok(()));
-    assert_eq!(
-        intent.check_claim(
-            &RawStorageClaim {
-                allowed: false,
-                ..claim
-            },
-            current
-        ),
-        Err(RawStorageMismatch::Denied)
-    );
-    assert_eq!(
-        intent.check_claim(
-            &claim,
-            CurrentStorageGovernance {
-                epoch: 5,
-                ..current
-            }
-        ),
-        Err(RawStorageMismatch::Stale)
-    );
-    let other_root = raw_cid(b"other-snapshot");
-    assert_eq!(
-        intent.check_claim(
-            &RawStorageClaim {
-                root: &other_root,
-                ..claim
-            },
-            current
-        ),
-        Err(RawStorageMismatch::DifferentEffect)
-    );
-    let altered_labels = [SourceLabel {
-        resource: "source-b",
-        ..labels[0]
-    }];
-    assert_eq!(
-        intent.check_claim(
-            &RawStorageClaim {
-                sources: &altered_labels,
-                ..claim
-            },
-            current
-        ),
-        Err(RawStorageMismatch::DifferentEffect)
-    );
-    let other_destination = RawStorageDestination {
-        name: "other-remote",
-        ..destination
-    };
-    assert_eq!(
-        intent.check_claim(
-            &RawStorageClaim {
-                destination: other_destination,
-                ..claim
-            },
-            current
-        ),
-        Err(RawStorageMismatch::DifferentEffect)
-    );
-    let restricted = [SourceLabel {
-        restricted: true,
-        ..labels[0]
-    }];
-    let restricted_intent = RawStorageIntent {
-        sources: &restricted,
-        ..intent
-    };
-    assert_eq!(
-        restricted_intent.check_claim(
-            &RawStorageClaim {
-                sources: &restricted,
-                ..claim
-            },
-            current
-        ),
-        Err(RawStorageMismatch::RestrictedRequiresProtection)
-    );
-    let wrong_tenant = [SourceLabel {
-        tenant: "tenant-b",
-        ..labels[0]
-    }];
-    assert_eq!(
-        RawStorageIntent {
-            sources: &wrong_tenant,
-            ..intent
+fn fixture_str<'a>(value: &'a Value, key: &str) -> &'a str {
+    value[key].as_str().unwrap()
+}
+
+fn fixture_entity(value: &Value) -> EntityRef<'_> {
+    EntityRef {
+        type_name: fixture_str(value, "type"),
+        id: fixture_str(value, "id"),
+    }
+}
+
+struct FixtureEffect<'a> {
+    value: &'a Value,
+    root: cid::Cid,
+    sources: Vec<SourceLabel<'a>>,
+    owners: Vec<EntityRef<'a>>,
+}
+
+impl<'a> FixtureEffect<'a> {
+    fn new(value: &'a Value) -> Self {
+        assert_eq!(value["version"], 1);
+        let text = fixture_str(value, "snapshot_cid");
+        let root = cid::Cid::try_from(text).unwrap();
+        assert_eq!(root.to_string(), text, "CID wire form must be canonical");
+        let sources = value["sources"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|source| SourceLabel {
+                resource: fixture_entity(&source["resource"]),
+                owner: fixture_entity(&source["owner"]),
+                tenant: fixture_str(source, "tenant"),
+                restricted: source["restricted"].as_bool().unwrap(),
+            })
+            .collect();
+        let owners = value["destination"]["accepted_owners"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(fixture_entity)
+            .collect();
+        Self {
+            value,
+            root,
+            sources,
+            owners,
         }
-        .check_claim(
-            &RawStorageClaim {
-                sources: &wrong_tenant,
-                ..claim
+    }
+
+    fn projected(&self) -> StorageEffectV1<'_> {
+        let value = self.value;
+        let destination = &value["destination"];
+        StorageEffectV1 {
+            operation_id: fixture_str(value, "operation_id"),
+            subject: fixture_entity(&value["subject"]),
+            purpose: fixture_str(value, "purpose"),
+            snapshot_root: &self.root,
+            sources: &self.sources,
+            destination: RawStorageDestination {
+                resource: fixture_entity(&destination["resource"]),
+                tenant: fixture_str(destination, "tenant"),
+                accepted_owners: &self.owners,
+                accepts_restricted: destination["accepts_restricted"].as_bool().unwrap(),
+                tier: match fixture_str(destination, "tier") {
+                    "remote" => RawStorageTier::Remote,
+                    "durable-local" => RawStorageTier::DurableLocal,
+                    other => panic!("unknown tier {other}"),
+                },
             },
-            current
-        ),
-        Err(RawStorageMismatch::Tenant)
-    );
-    let wrong_owner = [SourceLabel {
-        owner: "owner-b",
-        ..labels[0]
-    }];
-    assert_eq!(
-        RawStorageIntent {
-            sources: &wrong_owner,
-            ..intent
+            policy_root: fixture_str(value, "policy_root"),
+            lineage_revision: fixture_str(value, "lineage_revision"),
         }
-        .check_claim(
-            &RawStorageClaim {
-                sources: &wrong_owner,
-                ..claim
-            },
-            current
-        ),
-        Err(RawStorageMismatch::Owner)
-    );
+    }
+}
+
+#[test]
+fn storage_effect_v1_matches_pinned_spec_matrix() {
+    let fixture: Value =
+        serde_json::from_str(include_str!("../../fixtures/storage-effect-v1.json")).unwrap();
+    assert_eq!(fixture["schema"], "cedar-poo-storage-effect-v1");
+    let cases = fixture["cases"].as_array().unwrap();
+    assert_eq!(cases.len(), 17);
+    for case in cases {
+        let effect = FixtureEffect::new(&case["effect"]);
+        let claim_effect = FixtureEffect::new(&case["claim"]["effect"]);
+        let current = &case["current"];
+        let claim = StorageClaimV1 {
+            effect: claim_effect.projected(),
+            epoch: case["claim"]["epoch"].as_u64().unwrap(),
+            expires_at: case["claim"]["expires_at"].as_u64().unwrap(),
+            allowed: case["claim"]["allowed"].as_bool().unwrap(),
+        };
+        let current = CurrentStorageStateV1 {
+            policy_root: fixture_str(current, "policy_root"),
+            lineage_revision: fixture_str(current, "lineage_revision"),
+            epoch: current["epoch"].as_u64().unwrap(),
+            now: current["now"].as_u64().unwrap(),
+        };
+        assert_eq!(
+            effect.projected().check_raw(&claim, current).is_ok(),
+            case["allow"].as_bool().unwrap(),
+            "SPEC fixture {}",
+            case["name"]
+        );
+    }
 }
 
 #[cfg(feature = "raw-publish")]
@@ -326,9 +277,7 @@ fn raw_storage_requires_exact_current_scope_and_unrestricted_sources() {
 )]
 async fn raw_snapshot_gate_precedes_remote_io_and_allows_unrestricted() {
     use crate::data_protection::{
-        CurrentStorageGovernance, RawSnapshotPublish, RawSnapshotPublishError, RawStorageClaim,
-        RawStorageDestination, RawStorageIntent, RawStorageMismatch, RawStorageTier, SourceLabel,
-        publish_raw_snapshot,
+        RawSnapshotPublish, RawSnapshotPublishError, RawStorageMismatch, publish_raw_snapshot,
     };
     use mrr_data_content::{
         ContentBlock, ContentCodec, ContentStore, MemoryContentStore, RemoteContentStore,
@@ -350,41 +299,53 @@ async fn raw_snapshot_gate_precedes_remote_io_and_allows_unrestricted() {
         }
     }
 
-    let source = snapshot();
+    let snapshot = snapshot();
+    let owner = EntityRef {
+        type_name: "Team",
+        id: "analytics",
+    };
     let labels = [SourceLabel {
-        resource: "source-a",
-        owner: "owner-a",
+        resource: EntityRef {
+            type_name: "Dataset",
+            id: "orders",
+        },
+        owner,
         tenant: "tenant-a",
         restricted: true,
     }];
-    let owners = ["owner-a"];
+    let owners = [owner];
     let destination = RawStorageDestination {
-        name: "tenant-a-remote",
+        resource: EntityRef {
+            type_name: "Bucket",
+            id: "archive",
+        },
         tenant: "tenant-a",
         accepted_owners: &owners,
+        accepts_restricted: false,
         tier: RawStorageTier::Remote,
     };
-    let intent = RawStorageIntent {
-        subject: "service-a",
-        purpose: "snapshot-distribution",
-        snapshot: &source,
+    let effect = StorageEffectV1 {
+        operation_id: "op-001",
+        subject: EntityRef {
+            type_name: "Service",
+            id: "publisher",
+        },
+        purpose: "archive",
+        snapshot_root: snapshot.cid(),
         sources: &labels,
         destination,
+        policy_root: "policy-root-1",
+        lineage_revision: "lineage-1",
     };
-    let policy = [7; 32];
-    let claim = RawStorageClaim {
-        subject: intent.subject,
-        purpose: intent.purpose,
-        root: source.cid(),
-        sources: &labels,
-        destination,
-        policy_digest: &policy,
-        governance_epoch: 4,
+    let claim = StorageClaimV1 {
+        effect,
+        epoch: 4,
         expires_at: 100,
         allowed: true,
     };
-    let current = CurrentStorageGovernance {
-        policy_digest: &policy,
+    let current = CurrentStorageStateV1 {
+        policy_root: "policy-root-1",
+        lineage_revision: "lineage-1",
         epoch: 4,
         now: 99,
     };
@@ -401,7 +362,7 @@ async fn raw_snapshot_gate_precedes_remote_io_and_allows_unrestricted() {
     )
     .unwrap();
     let relation = RelationSchema::new(
-        source.manifest().relations()[0].relation_id(),
+        snapshot.manifest().relations()[0].relation_id(),
         "TokenFixture",
         vec![RelationField::new("value", ValueSchema::String, false).unwrap()],
         vec![],
@@ -413,14 +374,47 @@ async fn raw_snapshot_gate_precedes_remote_io_and_allows_unrestricted() {
         local: &local,
         remote: &remote,
         session: &session,
+        snapshot: &snapshot,
         relations: &relations,
         entities: &entities,
         limits: SnapshotTransferLimits::new(4096, 4, 4096, 8192),
     };
     assert_eq!(
-        publish_raw_snapshot(intent, &claim, current, transfer).await,
+        publish_raw_snapshot(effect, &claim, current, transfer).await,
         Err(RawSnapshotPublishError::Selection(
             RawStorageMismatch::RestrictedRequiresProtection
+        ))
+    );
+    assert_eq!(remote.0.load(Ordering::Relaxed), 0);
+    assert_eq!(session.stats().operations, 0);
+
+    let other_root = raw_cid(b"not-this-snapshot");
+    let wrong_root = StorageEffectV1 {
+        snapshot_root: &other_root,
+        ..effect
+    };
+    let transfer = RawSnapshotPublish {
+        local: &local,
+        remote: &remote,
+        session: &session,
+        snapshot: &snapshot,
+        relations: &relations,
+        entities: &entities,
+        limits: SnapshotTransferLimits::new(4096, 4, 4096, 8192),
+    };
+    assert_eq!(
+        publish_raw_snapshot(
+            wrong_root,
+            &StorageClaimV1 {
+                effect: wrong_root,
+                ..claim
+            },
+            current,
+            transfer
+        )
+        .await,
+        Err(RawSnapshotPublishError::Selection(
+            RawStorageMismatch::DifferentEffect
         ))
     );
     assert_eq!(remote.0.load(Ordering::Relaxed), 0);
@@ -436,26 +430,27 @@ async fn raw_snapshot_gate_precedes_remote_io_and_allows_unrestricted() {
         restricted: false,
         ..labels[0]
     }];
-    let allowed_intent = RawStorageIntent {
+    let allowed_effect = StorageEffectV1 {
         sources: &unrestricted,
-        ..intent
+        ..effect
     };
-    let allowed_claim = RawStorageClaim {
-        sources: &unrestricted,
+    let allowed_claim = StorageClaimV1 {
+        effect: allowed_effect,
         ..claim
     };
     let transfer = RawSnapshotPublish {
         local: &local,
         remote: &remote,
         session: &session,
+        snapshot: &snapshot,
         relations: &relations,
         entities: &entities,
         limits: SnapshotTransferLimits::new(4096, 4, 4096, 8192),
     };
-    let published = publish_raw_snapshot(allowed_intent, &allowed_claim, current, transfer)
+    let published = publish_raw_snapshot(allowed_effect, &allowed_claim, current, transfer)
         .await
         .unwrap();
-    assert_eq!(published.root(), source.cid());
+    assert_eq!(published.root(), snapshot.cid());
     assert_eq!(remote.0.load(Ordering::Relaxed), 3);
     assert_eq!(session.stats().operations, 3);
 }

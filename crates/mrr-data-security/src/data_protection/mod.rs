@@ -7,8 +7,8 @@ pub use profile::{
 };
 pub use pseudonymization::PseudonymizationInputBinding;
 pub use storage::{
-    CurrentStorageGovernance, RawStorageClaim, RawStorageDestination, RawStorageIntent,
-    RawStorageMismatch, RawStorageTier, SourceLabel,
+    CurrentStorageStateV1, EntityRef, RawStorageDestination, RawStorageMismatch, RawStorageTier,
+    SourceLabel, StorageClaimV1, StorageEffectV1,
 };
 #[cfg(feature = "raw-publish")]
 pub use storage::{RawSnapshotPublish, RawSnapshotPublishError, publish_raw_snapshot};

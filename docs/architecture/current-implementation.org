@@ -222,7 +222,7 @@ Facade features:
 | ~content~ | yes, through ~filesystem~ | verified blocks, memory store and protocol; implies ~content-identity~ |
 | ~snapshot~ | no | complete Arrow snapshot publication/restore; implies ~content~, not CAR |
 | ~transfer~ | no | Tokio snapshot sessions: deadline, cancellation, retry budgets and blocking local adapter |
-| ~raw-publish~ | no | Host-projected source/destination gate for unrestricted raw snapshot publication over ~transfer~ |
+| ~raw-publish~ | no | SPEC Storage Effect V1 projection and 17-case replay before unrestricted raw snapshot publication over ~transfer~ |
 | ~car~ | no | CARv1 packaging/import; implies ~content~ |
 | ~filesystem~ | yes | local filesystem store; implies ~content~ |
 | ~cache~ | no | content protocol and Kache local cache |
