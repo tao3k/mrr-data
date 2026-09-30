@@ -10,13 +10,92 @@ use mrr_data_core::{DataError, SnapshotRowBinding, raw_cid};
 
 use crate::{
     BoundGoogleDeidentifyPlan, CloudDataProtectionSelection, CurrentGovernance,
-    GoogleSelectionMismatch, TokenAuthorizationClaim, TokenAuthorizationRequest,
-    prepare_cloud_google_aes_siv_deidentify,
+    GoogleSelectionMismatch, Mode, TokenAuthorizationClaim, TokenAuthorizationRequest,
+    TokenProfile, prepare_cloud_google_aes_siv_deidentify,
 };
+
+/// The Host-authenticated tabular recipe corresponding to Lean's
+/// `AesSivTableRecipe`. Provider wire fields are fixed separately from the
+/// selected row value; this metadata does not authenticate a key or grant.
+#[derive(Clone, Copy, Debug)]
+pub struct AesSivTableRecipeBinding<'a> {
+    pub dataset: &'a str,
+    pub value_field: &'a str,
+    pub context_field: &'a str,
+    pub profile: TokenProfile<'a>,
+    pub admitted_context: Option<&'a str>,
+    pub surrogate_info_type: Option<&'a str>,
+}
+
+/// A proposed Google request differs from the admitted table recipe.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TableRecipeMismatch {
+    InvalidRecipe,
+    Dataset,
+    ValueField,
+    ContextField,
+    Profile,
+    AdmittedContext,
+    SurrogateInfoType,
+}
+
+impl AesSivTableRecipeBinding<'_> {
+    /// Check the Lean table recipe's field and context selection plus the
+    /// Google surrogate annotation against one current bound operation.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed mismatch without exposing plaintext.
+    pub fn check(
+        &self,
+        request: &TokenAuthorizationRequest<'_>,
+        selected: &SelectedTabularInput,
+    ) -> Result<(), TableRecipeMismatch> {
+        if self.profile.mode != Mode::AesSiv
+            || self.dataset.is_empty()
+            || self.value_field.is_empty()
+            || self.context_field.is_empty()
+            || self.value_field == self.context_field
+            || self.surrogate_info_type.is_some_and(str::is_empty)
+        {
+            return Err(TableRecipeMismatch::InvalidRecipe);
+        }
+        if self.dataset != request.dataset || self.dataset != selected.dataset {
+            return Err(TableRecipeMismatch::Dataset);
+        }
+        if self.value_field != request.input.field() || self.value_field != selected.value_field {
+            return Err(TableRecipeMismatch::ValueField);
+        }
+        if self.context_field != selected.context_field {
+            return Err(TableRecipeMismatch::ContextField);
+        }
+        if &self.profile != request.input.profile()
+            || self.profile
+                != selected.token_profile(self.profile.lineage.tenant, self.profile.scope)
+        {
+            return Err(TableRecipeMismatch::Profile);
+        }
+        if self.admitted_context.is_some_and(|context| {
+            context != request.input.context() || context != selected.context
+        }) {
+            return Err(TableRecipeMismatch::AdmittedContext);
+        }
+        if self.surrogate_info_type
+            != selected
+                .surrogate_info_type
+                .as_ref()
+                .map(|name| name.0.as_str())
+        {
+            return Err(TableRecipeMismatch::SurrogateInfoType);
+        }
+        Ok(())
+    }
+}
 
 /// A failed physical selection never exposes the selected plaintext in its diagnostic.
 #[derive(Debug)]
 pub enum GoogleArrowSelectionError {
+    Recipe(TableRecipeMismatch),
     Catalog(DataError),
     RelationUnavailable,
     ChildUnavailable,
@@ -199,6 +278,7 @@ pub struct ArrowChildInput<'a> {
 /// physical Arrow source. Consuming this value creates at most one plan.
 pub struct CloudGoogleArrowPreparation<'a> {
     pub cloud: CloudDataProtectionSelection<'a>,
+    pub recipe: AesSivTableRecipeBinding<'a>,
     pub request: &'a TokenAuthorizationRequest<'a>,
     pub claim: &'a TokenAuthorizationClaim<'a>,
     pub current: CurrentGovernance<'a>,
@@ -250,6 +330,9 @@ impl CloudGoogleArrowPreparation<'_> {
             &SelectedTabularInput,
         ) -> Result<(), GoogleArrowSelectionError>,
     ) -> Result<BoundGoogleDeidentifyPlan, GoogleArrowSelectionError> {
+        self.recipe
+            .check(self.request, self.selected)
+            .map_err(GoogleArrowSelectionError::Recipe)?;
         let row = self
             .request
             .input

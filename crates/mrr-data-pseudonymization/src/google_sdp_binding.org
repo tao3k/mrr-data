@@ -53,6 +53,12 @@ For batch operations, =VerifiedGoogleArrowChild::admit= performs the catalog,
 CID, and bounded IPC checks once. =verify_row= then checks the exact row and
 named cells for each request. The cached object owns decoded plaintext Facts
 and belongs in Host-controlled memory; it is not an authorization cache.
+=AesSivTableRecipeBinding= mirrors the Lean table recipe's dataset, value
+column, context column, profile, and optional admitted context. It also fixes
+Google's optional surrogate annotation, because that value changes the
+provider request body. Two physical columns with the same context value are
+still different recipe selections; a request cannot switch columns while
+reusing the same bound operation. The Host authenticates the recipe source.
 =CloudGoogleArrowPreparation.from_verified_child= reruns the current claim,
 Cloud release, and Cedar gate relations on every call. The stable Rust
 benchmark separates full child verification from cached row verification for

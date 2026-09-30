@@ -28,6 +28,7 @@ fn fixture() -> (SnapshotBlock, RelationCatalog, EntityCatalog, Vec<u8>) {
         vec![
             RelationField::new("patient_id", ValueSchema::String, false).unwrap(),
             RelationField::new("study_context", ValueSchema::String, false).unwrap(),
+            RelationField::new("alias_context", ValueSchema::String, false).unwrap(),
         ],
         vec![],
     )
@@ -40,7 +41,11 @@ fn fixture() -> (SnapshotBlock, RelationCatalog, EntityCatalog, Vec<u8>) {
             Fact::new(
                 FactId::from_canonical_bytes(format!("selection-fact-{index}")).unwrap(),
                 relation_id,
-                vec![Value::String(value.into()), Value::String(context.into())],
+                vec![
+                    Value::String(value.into()),
+                    Value::String(context.into()),
+                    Value::String(context.into()),
+                ],
                 RelationContext::new(
                     generation,
                     RelationAuthority::Entity(owner),
@@ -196,16 +201,17 @@ fn arrow_selection_reads_the_child_local_row_and_rejects_drift() {
     reason = "complete cloud authorization and physical Arrow selection fixture"
 )]
 fn cloud_prepare_requires_authorization_then_actual_arrow_cells() {
-    use cedar_poo_bridge::google_sdp::WrappedKeyBinding;
+    use cedar_poo_bridge::google_sdp::{SurrogateInfoType, WrappedKeyBinding};
     use mrr_data_security::data_protection::{
         DataProtectionDecisions, DataProtectionProfile, ReleaseReceiptClaim,
     };
     use sha2::{Digest, Sha256};
 
     use crate::{
-        ArrowChildInput, CloudDataProtectionSelection, CloudGoogleArrowPreparation,
-        CloudPseudonymizationGate, CurrentGovernance, Mode, SelectedTokenInput, TokenAction,
-        TokenAuthorizationClaim, TokenAuthorizationRequest, TokenLineage, TokenProfile,
+        AesSivTableRecipeBinding, ArrowChildInput, CloudDataProtectionSelection,
+        CloudGoogleArrowPreparation, CloudPseudonymizationGate, CurrentGovernance, Mode,
+        SelectedTokenInput, TableRecipeMismatch, TokenAction, TokenAuthorizationClaim,
+        TokenAuthorizationRequest, TokenLineage, TokenProfile,
     };
 
     let (snapshot, relations, entities, bytes) = fixture();
@@ -290,6 +296,14 @@ fn cloud_prepare_requires_authorization_then_actual_arrow_cells() {
         now: 99,
     };
     let selected = selected("patient-2", "study-b");
+    let recipe = AesSivTableRecipeBinding {
+        dataset: "research",
+        value_field: "patient_id",
+        context_field: "study_context",
+        profile,
+        admitted_context: Some("study-b"),
+        surrogate_info_type: None,
+    };
     let key = || WrappedKeyBinding {
         key_domain: "study-key".into(),
         token_key_version: "dek-1".into(),
@@ -299,6 +313,7 @@ fn cloud_prepare_requires_authorization_then_actual_arrow_cells() {
     };
     let preparation = |current| CloudGoogleArrowPreparation {
         cloud,
+        recipe,
         request: &request,
         claim: &claim,
         current,
@@ -340,6 +355,60 @@ fn cloud_prepare_requires_authorization_then_actual_arrow_cells() {
             ..current
         }),
         Err(GoogleArrowSelectionError::Authorization(_))
+    ));
+    let mut alias = selected.clone();
+    alias.context_field = "alias_context".into();
+    assert!(verified.verify_row(row, &alias).is_ok());
+    assert!(matches!(
+        (CloudGoogleArrowPreparation {
+            selected: &alias,
+            ..preparation(current)
+        })
+        .from_verified_child(&verified),
+        Err(GoogleArrowSelectionError::Recipe(
+            TableRecipeMismatch::ContextField
+        ))
+    ));
+    let mut surrogate = selected.clone();
+    surrogate.surrogate_info_type = Some(SurrogateInfoType("other-token".into()));
+    assert!(matches!(
+        (CloudGoogleArrowPreparation {
+            selected: &surrogate,
+            ..preparation(current)
+        })
+        .from_verified_child(&verified),
+        Err(GoogleArrowSelectionError::Recipe(
+            TableRecipeMismatch::SurrogateInfoType
+        ))
+    ));
+    assert!(matches!(
+        (CloudGoogleArrowPreparation {
+            recipe: AesSivTableRecipeBinding {
+                admitted_context: Some("study-a"),
+                ..recipe
+            },
+            ..preparation(current)
+        })
+        .from_verified_child(&verified),
+        Err(GoogleArrowSelectionError::Recipe(
+            TableRecipeMismatch::AdmittedContext
+        ))
+    ));
+    assert!(matches!(
+        (CloudGoogleArrowPreparation {
+            recipe: AesSivTableRecipeBinding {
+                profile: TokenProfile {
+                    scope: "other-study",
+                    ..profile
+                },
+                ..recipe
+            },
+            ..preparation(current)
+        })
+        .from_verified_child(&verified),
+        Err(GoogleArrowSelectionError::Recipe(
+            TableRecipeMismatch::Profile
+        ))
     ));
     assert!(matches!(
         prepare(

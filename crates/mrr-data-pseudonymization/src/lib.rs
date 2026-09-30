@@ -18,8 +18,9 @@ mod google_arrow;
 mod google_sdp_binding;
 #[cfg(feature = "google-sdp")]
 pub use google_arrow::{
-    ArrowChildInput, CloudGoogleArrowPreparation, GoogleArrowSelectionError,
-    VerifiedGoogleArrowChild, verify_google_arrow_row,
+    AesSivTableRecipeBinding, ArrowChildInput, CloudGoogleArrowPreparation,
+    GoogleArrowSelectionError, TableRecipeMismatch, VerifiedGoogleArrowChild,
+    verify_google_arrow_row,
 };
 #[cfg(feature = "google-sdp")]
 pub use google_sdp_binding::{
