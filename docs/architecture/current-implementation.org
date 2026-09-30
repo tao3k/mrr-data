@@ -97,6 +97,9 @@ exposes the provider wire contract. None of these features enables the
 official Cedar runtime unless a downstream Host explicitly selects it.
 [[file:../../crates/mrr-data-core/src/operation_binding.org][Operation bindings]] and
 [[file:../../crates/mrr-data-pseudonymization/README.org][Pseudonymization binding]] document those boundaries next to the code.
+The [[file:sensitive-data-storage-plane.org][sensitive-data storage proposal]]
+separates these implemented bindings from future Host authorization,
+client-side protection, Google batching and protected S3 distribution.
 
 The bounded POO Flow static-edge worker owns a durable local outbox above the
 default filesystem store. A protection receipt follows complete closure

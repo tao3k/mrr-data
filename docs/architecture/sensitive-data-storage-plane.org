@@ -1,0 +1,201 @@
+#+title: Sensitive data across local storage, S3, and Google SDP
+#+status: proposed architecture, 2026-09-30
+#+options: toc:2
+
+* Decision boundary
+
+This proposal separates four operations that happen at different times:
+classifying an admitted source, authorizing an effect, transforming selected
+data, and storing physical bytes. MRR owns source semantics and admission;
+Cedar POO expresses policy; the deploying Host authenticates evidence, runs
+policy, redeems approvals, controls provider I/O and audit; MRR Data verifies
+physical identity, selection and transfer. A CID proves bytes, not an allowed
+destination or a reduction in sensitivity. The Cedar POO
+[[https://github.com/tao3k/cedar-poo-spec/blob/main/CedarPooSpec/Data/DerivedArtifact.lean][DerivedArtifact rule]]
+retains every source label across a transformation and checks tenant, owner and
+restricted status at the destination. Tokenization alone does not declassify.
+
+The default rule for a source marked restricted is therefore: do not pass its
+raw blocks or plaintext-derived CID names to a disposable shared cache or S3
+until the Host has selected and authorized a protection profile. A protected
+local outbox and a protected remote copy may hold ciphertext; an analytical
+derivative may hold tokens under its own lineage and destination decision.
+These are separate physical roots with a Host-owned binding between them.
+
+* What exists at the current PR head
+
+| Boundary | Implemented | Missing for sensitive end-to-end use |
+|----------+-------------+--------------------------------------|
+| Local =ContentStore= | CID-verified bounded reads; temporary file, file sync and directory sync before publication | Sensitivity gate, encryption, tenant isolation and retention policy |
+| Kache cache | CID revalidation, bounded reads, soft quota and explicit maintenance | Sensitivity-aware admission; plaintext avoidance is the caller's duty |
+| S3 adapter | OpenDAL transport, conditional immutable put, total deadline, bounded streamed get and CID verification | Client-side protection, destination policy and hosted-provider qualification |
+| Snapshot transfer | Closure preflight, children-before-root upload, bounded cold restore | Streaming large-closure API; current restore owns all child bytes in memory |
+| Data Protection | Exact release receipt and two scoped decisions; Host authenticates them | Host policy engine, atomic approval redemption and output persistence |
+| Google SDP | One selected AES-SIV row, exact recipe/claim/Arrow binding, checked de-identify and separate re-identify effect | Host transport/KMS, batch wire contract, quota governor and Cloud re-identification gate |
+
+The local store writes the supplied bytes verbatim; the S3 key is
+=blocks/{cid}= for the supplied bytes. Neither is a sensitive-data encryption
+boundary. The Kache directory is a disposable cache, while the separate local
+outbox is the durable offline-protection owner. These are current code facts in
+[[file:../../crates/mrr-data-content/src/store.rs][store.rs]],
+[[file:../../crates/mrr-data-cache/src/local.rs][local.rs]],
+[[file:../../crates/mrr-data-cache/src/s3.rs][s3.rs]] and
+[[file:content-cache-protocol.org][the content protocol]].
+
+* Proposed flow and identities
+
+#+begin_src mermaid
+flowchart LR
+  M[MRR admitted source and labels] --> H[Host policy and destination gate]
+  H --> T[Selected transformation]
+  H --> E[Protected envelope]
+  T --> D[Derived snapshot and retained labels]
+  D --> E
+  E --> L[Durable local outbox]
+  E --> K[Disposable Kache ciphertext cache]
+  E --> S[S3 compatible ciphertext blocks]
+  S --> V[Verify envelope and decrypt]
+  L --> V
+  V --> A[Verify inner CID and snapshot closure]
+  A --> MRR[MRR admission or authorized use]
+#+end_src
+
+The Host first authenticates source labels, snapshot root, tenant, owner,
+destination, purpose, policy root and current epoch. It chooses one of two
+explicit paths:
+
+1. *Restricted source preservation*: encrypt before durable local staging or
+   remote publication. The envelope contains a random nonce and an authenticated
+   binding to the inner codec/CID, tenant, protection profile and key version.
+   The outer CID addresses encrypted bytes. A protected root describes outer
+   child CIDs; the Host receipt binds outer root to the inner snapshot root.
+   The inner root and its plaintext CIDs remain inside encrypted metadata or
+   Host-controlled state. On read, verify the outer CID, authenticate and
+   decrypt, then verify the inner CID and full snapshot closure before use.
+2. *Derived analytical release*: transform only the fields selected by an
+   authenticated recipe, verify the returned table, construct a new immutable
+   MRR Data snapshot, and preserve all source labels. The Host separately
+   authorizes that derivative's destination and records a release receipt.
+   Google AES-SIV changes selected values; it is not whole-snapshot encryption
+   or a sensitivity downgrade.
+
+Randomized envelopes intentionally give repeated plaintext different outer
+CIDs. They forgo global ciphertext deduplication so that object names do not
+advertise plaintext equality. Any tenant-scoped deduplication mode needs an
+explicit leakage analysis and separate approval. Server-side S3 encryption can
+be layered on top, but it does not replace protection before upload when the
+storage provider must not see plaintext. AWS distinguishes
+[[https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingClientSideEncryption.html][client-side encryption]]
+from server-side encryption. The current =ContentStore= contract addresses
+logical bytes directly, so this proposal requires a distinct protected
+snapshot transport and receipt; wrapping the existing S3 adapter alone would
+leave the manifest and CID lookup semantics wrong.
+
+The Host must authorize a remote publish before the first PUT and recheck
+state before making its result discoverable. A failed or revoked publication
+may leave an unreferenced encrypted object; garbage collection and retention
+are Host responsibilities. Presence of an S3 object or cached root never grants
+access or proves that a complete snapshot is authorized.
+
+* Google Sensitive Data Protection lane
+
+Use Google SDP for the selected field transformation, after source and recipe
+admission and before a derived snapshot is published. Keep inspection of
+unknown free text separate from the known-column =RecordTransformation= path.
+The current bridge is deliberately single-row; no caller should loop over it
+without an operation quota and request ledger. AES-SIV requires the same key
+and optional context tweak for reversal; HMAC is one-way and needs a separate
+catalog mode. See Google's
+[[https://docs.cloud.google.com/sensitive-data-protection/docs/pseudonymization][pseudonymization contract]].
+
+For a future batch bridge, group only rows with the same authenticated tenant,
+dataset, field names, recipe, key lineage, surrogate annotation and processing
+location. Admit each request by actual serialized body bytes and cell count;
+keep headroom below Google's current 0.5 MB request and 50,000 table-value
+limits. Match every returned row and context to an input row identity, require
+complete success summaries and reject partial or reordered results unless the
+wire contract explicitly proves a stable mapping. Rate-limit by project and
+endpoint, bound in-flight plaintext bytes, and record request/response digests
+without logging values. The
+[[https://docs.cloud.google.com/sensitive-data-protection/limits][published quotas]]
+are a deployment input, not a hard-coded throughput promise.
+Capacity planning should use the smaller of the endpoint's admitted requests
+per second times rows per request and the resident/in-flight byte budget divided
+by p95 request lifetime and encoded bytes per row. Measure this with actual
+payload distributions; a fast single-row Rust binding does not remove a remote
+quota or KMS bottleneck.
+
+Provider location is a policy field. Google says a global endpoint with a
+regional processing path does not guarantee in-transit residency; a supported
+regional endpoint does. Select the endpoint and KMS locality under the Host's
+destination policy and reject an incompatible region rather than silently
+falling back. See
+[[https://docs.cloud.google.com/sensitive-data-protection/docs/api-endpoints][regional endpoint guidance]].
+Re-identification has a distinct current action, approval/audit gate and
+plaintext release decision. The present projection path rejects Cloud row
+outputs until its own Cloud re-identification gate exists.
+
+* Local and S3 performance architecture
+
+Local disk is the durable offline source; Kache is the soft-quota acceleration
+layer; S3 is a remote immutable block transport. A hot read should avoid S3.
+The existing sync filesystem and Kache calls use
+[[file:../../crates/mrr-data-cache/src/blocking.rs][bounded blocking execution]]
+under async callers. Keep one verification path for CID and byte budgets, with
+physical storage adapters below it. AWS S3 has strong read-after-write
+consistency for its own buckets, but an S3-compatible provider must be
+qualified independently; never infer that all providers share AWS behavior.
+See [[https://docs.aws.amazon.com/AmazonS3/latest/userguide/Welcome.html][AWS S3 consistency]].
+
+Optimize at block and batch granularity, not by removing checks. The current
+snapshot restore owns a =BTreeMap<Cid, Vec<u8>>= for the entire closure; the
+current Google Arrow verifier retains decoded plaintext Facts for one child.
+Snapshot publication is serial. A later bounded parallel child uploader may
+improve cold S3 throughput, but the root still goes last and aggregate byte,
+request, retry and cancellation ledgers remain shared across all workers.
+Many small blocks may make per-object latency dominant; first measure object
+count and request cost, then consider an immutable pack/index transport that
+still verifies each requested CID. A pack is not a second snapshot identity.
+For large restricted datasets, add bounded child-by-child verification and
+transformation with explicit resident-byte and in-flight-request ceilings.
+Keep plaintext buffers in the Host-controlled worker and put only protected
+bytes into a shared cache or remote store. Avoid a second full copy of each
+block where ownership can move, but retain the outer and inner integrity
+checks. Query planning may use admitted column and row selection to reduce
+I/O; no unverified S3 range or Arrow slice may bypass whole-block admission.
+
+Measure separately: local protection latency and fsync, warm cache hit rate,
+cold S3 bytes/requests/latency, CID verification, envelope encryption and
+decryption, Arrow selection, Google API/KMS latency, policy evaluation and
+audit commit. Include p50/p95, peak resident bytes, provider cost and rejected
+requests at the same exact source revision. Existing two/128-row local
+microbenchmarks do not estimate Google or S3 throughput.
+
+* Implementation and acceptance order
+
+1. Define a Host-authenticated =ProtectionIntent= and destination receipt with
+   exact inner root, source labels, tenant, owner, effect, policy root/epoch,
+   residency, key profile and storage tier. Test restricted-source denial on
+   raw filesystem/Kache/S3 paths and cross-tenant or changed-owner rejection.
+2. Specify a versioned protected envelope and outer-root manifest. Test
+   encryption/decryption, randomized outer identity, swapped tenant/key/AAD,
+   tampered ciphertext, changed inner CID and complete closure verification.
+   Keep credentials and secret key bytes out of immutable manifests.
+3. Add a bounded protected local outbox and S3 publish/restore path using the
+   existing transport underneath. Test crash after local sync, interrupted PUT,
+   root-last acknowledgement, cold restore and zero-GET warm restore; track
+   orphan ciphertext and retention. Qualify AWS S3 and each chosen compatible
+   provider separately, including TLS and conditional-put behavior.
+4. Add a bounded Google table batch contract only after the single-row binding
+   is retained as a regression baseline. Test partial response, row/context
+   substitution, request-size admission, quotas, endpoint residency, key
+   rotation and separate re-identification authorization.
+5. Run one realistic restricted Healthcare workload through source selection,
+   protected local, cold S3, warm cache, Google transformation and MRR result
+   admission. Compare independently specified rows and release decisions,
+   record all identity digests, and report performance with storage and Google
+   time separated. A synthetic local fixture qualifies code paths; a hosted
+   provider acceptance run is a separate claim.
+
+This is a proposed architecture and a gate list, not an assertion that the
+protected envelope, hosted Google transport, or sensitive-data Host exists.
