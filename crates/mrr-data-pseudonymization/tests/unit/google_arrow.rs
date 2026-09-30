@@ -11,7 +11,7 @@ use mrr_data_core::{
     SnapshotManifest, SnapshotManifestRequest, SnapshotRowBinding, raw_cid,
 };
 
-use crate::{GoogleArrowSelectionError, verify_google_arrow_row};
+use crate::{GoogleArrowSelectionError, VerifiedGoogleArrowChild, verify_google_arrow_row};
 
 fn fixture() -> (SnapshotBlock, RelationCatalog, EntityCatalog, Vec<u8>) {
     let generation = GenerationId::from_canonical_bytes("generation:arrow-selection").unwrap();
@@ -101,6 +101,48 @@ fn arrow_selection_reads_the_child_local_row_and_rejects_drift() {
     )
     .unwrap();
     let limits = IpcImportLimits::new(bytes.len(), 2, 16);
+    let verified = VerifiedGoogleArrowChild::admit(row, &relations, &entities, &bytes, limits)
+        .expect("admit physical child once");
+    let first_row = SnapshotRowBinding::new(
+        &snapshot,
+        relation.relation_id(),
+        relation.batches()[0].cid(),
+        0,
+    )
+    .unwrap();
+    assert!(
+        verified
+            .verify_row(first_row, &selected("patient-1", "study-a"))
+            .is_ok()
+    );
+    assert!(
+        verified
+            .verify_row(row, &selected("patient-2", "study-b"))
+            .is_ok()
+    );
+    assert!(matches!(
+        verified.verify_row(first_row, &selected("patient-2", "study-b")),
+        Err(GoogleArrowSelectionError::ValueMismatch)
+    ));
+    let other_coverage =
+        CoverageDescriptor::new(CoverageKind::Unknown, raw_cid(b"other-coverage")).unwrap();
+    let same_child = BatchDescriptor::new(*row.child_cid(), 2, bytes.len() as u64).unwrap();
+    let other_relation = RelationDescriptor::new(row.relation_id(), 2, vec![same_child]).unwrap();
+    let other_manifest = SnapshotManifest::admit(SnapshotManifestRequest::new(
+        snapshot.manifest().semantic_snapshot().clone(),
+        &relations,
+        &entities,
+        vec![other_relation],
+        other_coverage,
+    ))
+    .unwrap();
+    let other_snapshot = SnapshotBlock::encode(other_manifest).unwrap();
+    let other_row =
+        SnapshotRowBinding::new(&other_snapshot, row.relation_id(), row.child_cid(), 1).unwrap();
+    assert!(matches!(
+        verified.verify_row(other_row, &selected("patient-2", "study-b")),
+        Err(GoogleArrowSelectionError::RowSource)
+    ));
     let verify = |bytes: &[u8], selected: &SelectedTabularInput, limits| {
         verify_google_arrow_row(row, &relations, &entities, bytes, limits, selected)
     };
@@ -161,9 +203,9 @@ fn cloud_prepare_requires_authorization_then_actual_arrow_cells() {
     use sha2::{Digest, Sha256};
 
     use crate::{
-        CloudDataProtectionSelection, CloudPseudonymizationGate, CurrentGovernance, Mode,
-        SelectedTokenInput, TokenAction, TokenAuthorizationClaim, TokenAuthorizationRequest,
-        TokenLineage, TokenProfile, prepare_cloud_google_aes_siv_from_arrow,
+        ArrowChildInput, CloudDataProtectionSelection, CloudGoogleArrowPreparation,
+        CloudPseudonymizationGate, CurrentGovernance, Mode, SelectedTokenInput, TokenAction,
+        TokenAuthorizationClaim, TokenAuthorizationRequest, TokenLineage, TokenProfile,
     };
 
     let (snapshot, relations, entities, bytes) = fixture();
@@ -248,29 +290,57 @@ fn cloud_prepare_requires_authorization_then_actual_arrow_cells() {
         now: 99,
     };
     let selected = selected("patient-2", "study-b");
+    let key = || WrappedKeyBinding {
+        key_domain: "study-key".into(),
+        token_key_version: "dek-1".into(),
+        wrapping_version: "kek-1".into(),
+        kms_key_name: "projects/p/locations/us/keyRings/r/cryptoKeys/k".into(),
+        wrapped_key_base64: "a2V5".into(),
+    };
+    let preparation = |current| CloudGoogleArrowPreparation {
+        cloud,
+        request: &request,
+        claim: &claim,
+        current,
+        selected: &selected,
+        parent: "projects/p/locations/us".into(),
+        key: key(),
+    };
     let prepare = |bytes: &[u8], current| {
-        prepare_cloud_google_aes_siv_from_arrow(
-            cloud,
-            &request,
-            &claim,
-            current,
-            &relations,
-            &entities,
+        preparation(current).from_arrow(&ArrowChildInput {
+            relations: &relations,
+            entities: &entities,
             bytes,
-            IpcImportLimits::new(bytes.len(), 2, 16),
-            &selected,
-            "projects/p/locations/us".into(),
-            WrappedKeyBinding {
-                key_domain: "study-key".into(),
-                token_key_version: "dek-1".into(),
-                wrapping_version: "kek-1".into(),
-                kms_key_name: "projects/p/locations/us/keyRings/r/cryptoKeys/k".into(),
-                wrapped_key_base64: "a2V5".into(),
-            },
-        )
+            limits: IpcImportLimits::new(bytes.len(), 2, 16),
+        })
     };
     let plan = prepare(&bytes, current).unwrap();
     assert_eq!(plan.identity().row().unwrap().row_index, 1);
+    let verified = VerifiedGoogleArrowChild::admit(
+        row,
+        &relations,
+        &entities,
+        &bytes,
+        IpcImportLimits::new(bytes.len(), 2, 16),
+    )
+    .unwrap();
+    let cached_prepare = |current| preparation(current).from_verified_child(&verified);
+    assert_eq!(
+        cached_prepare(current)
+            .unwrap()
+            .identity()
+            .row()
+            .unwrap()
+            .row_index,
+        1
+    );
+    assert!(matches!(
+        cached_prepare(CurrentGovernance {
+            epoch: 8,
+            ..current
+        }),
+        Err(GoogleArrowSelectionError::Authorization(_))
+    ));
     assert!(matches!(
         prepare(
             &[],

@@ -61,5 +61,7 @@ borrowed-key hash index at deployment time. The Google benchmark separates
 claim matching, Cloud gate and release checks, SHA-256 selected-value
 checking, and request construction. Cloud preparation and the baseline Google
 preparation run in alternating order by round to reduce timing drift.
+It also reports full Arrow child verification and per-row checks from an
+already verified child as separate measurements.
 Measurements are batch averages under release optimization; they do not
 measure Cedar authorization, network, KMS, or provider execution.

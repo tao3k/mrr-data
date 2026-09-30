@@ -8,9 +8,12 @@ use cedar_poo_bridge::google_sdp::{
     GoogleSdpResponse, SelectedTabularInput, TabularAesSiv, WrappedKeyBinding,
 };
 use meta_relational_reasoning::{
-    EntityCatalog, ExternalRevisionIdentity, GenerationId, RelationCatalog, RelationField,
-    RelationId, RelationSchema, RevisionBinding, SemanticSnapshot, ValueSchema,
+    EntityCatalog, EntityId, EvidenceCompleteness, ExternalRevisionIdentity, Fact, FactId,
+    FactProvenance, FactValidity, GenerationId, RelationAuthority, RelationCatalog,
+    RelationContext, RelationField, RelationId, RelationSchema, RevisionBinding, SemanticSnapshot,
+    Value, ValueSchema,
 };
+use mrr_data_arrow::{IpcImportLimits, facts_to_ipc};
 use mrr_data_core::{
     BatchDescriptor, CoverageDescriptor, CoverageKind, RelationDescriptor, SnapshotBlock,
     SnapshotManifest, SnapshotManifestRequest, SnapshotRowBinding, raw_cid,
@@ -18,8 +21,9 @@ use mrr_data_core::{
 use mrr_data_pseudonymization::{
     CloudDataProtectionSelection, CloudPseudonymizationGate, CurrentGovernance, Mode,
     SelectedTokenInput, TokenAction, TokenAuthorizationClaim, TokenAuthorizationRequest,
-    TokenInputBinding, TokenLineage, TokenProfile, prepare_cloud_google_aes_siv_deidentify,
-    prepare_google_aes_siv_deidentify,
+    TokenInputBinding, TokenLineage, TokenProfile, VerifiedGoogleArrowChild,
+    prepare_cloud_google_aes_siv_deidentify, prepare_google_aes_siv_deidentify,
+    verify_google_arrow_row,
 };
 use mrr_data_security::data_protection::{
     DataProtectionDecisions, DataProtectionProfile, ReleaseReceiptClaim,
@@ -29,6 +33,7 @@ use sha2::{Digest, Sha256};
 const ROUNDS: usize = 25;
 const CLAIM_ITERATIONS: usize = 100_000;
 const GOOGLE_ITERATIONS: usize = 1_000;
+const ARROW_ITERATIONS: usize = 40;
 const PARENT: &str = "projects/p/locations/us";
 const RESPONSE: &[u8] = br#"{"item":{"table":{"headers":[{"name":"patient_id"},{"name":"study_context"}],"rows":[{"values":[{"stringValue":"c3ludGhldGljLWNpcGhlcnRleHQ="},{"stringValue":"study-1"}]}]}},"overview":{"transformationSummaries":[{"field":{"name":"patient_id"},"results":[{"count":"1","code":"SUCCESS"}]}]}}"#;
 
@@ -56,6 +61,101 @@ fn snapshot() -> SnapshotBlock {
     let request =
         SnapshotManifestRequest::new(semantic, &relations, &entities, vec![descriptor], coverage);
     SnapshotBlock::encode(SnapshotManifest::admit(request).unwrap()).unwrap()
+}
+
+fn arrow_fixture(rows: usize) -> (SnapshotBlock, RelationCatalog, EntityCatalog, Vec<u8>) {
+    let generation = GenerationId::from_canonical_bytes("generation:google-arrow-bench").unwrap();
+    let revision = RevisionBinding::admit(
+        ExternalRevisionIdentity::new("benchmark", "source", "arrow").unwrap(),
+        generation,
+    )
+    .unwrap();
+    let semantic = SemanticSnapshot::admit(generation, vec![revision]).unwrap();
+    let relation_id = RelationId::from_canonical_bytes("relation:google-arrow-bench").unwrap();
+    let relation = RelationSchema::new(
+        relation_id,
+        "Benchmark",
+        vec![
+            RelationField::new("patient_id", ValueSchema::String, false).unwrap(),
+            RelationField::new("study_context", ValueSchema::String, false).unwrap(),
+        ],
+        vec![],
+    )
+    .unwrap();
+    let owner = EntityId::from_canonical_bytes("benchmark-owner").unwrap();
+    let facts = (0..rows)
+        .map(|index| {
+            Fact::new(
+                FactId::from_canonical_bytes(format!("benchmark-fact-{index}")).unwrap(),
+                relation_id,
+                vec![
+                    Value::String(format!("patient-id-{index}")),
+                    Value::String("study-1".into()),
+                ],
+                RelationContext::new(
+                    generation,
+                    RelationAuthority::Entity(owner),
+                    FactProvenance::Source(owner),
+                    EvidenceCompleteness::Complete,
+                    FactValidity::Valid,
+                )
+                .unwrap(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let bytes = facts_to_ipc(&relation, &facts).unwrap();
+    let relations = RelationCatalog::admit(vec![relation]).unwrap();
+    let entities = EntityCatalog::admit(vec![]).unwrap();
+    let child = BatchDescriptor::new(raw_cid(&bytes), rows as u64, bytes.len() as u64).unwrap();
+    let descriptor = RelationDescriptor::new(relation_id, rows as u64, vec![child]).unwrap();
+    let coverage = CoverageDescriptor::new(CoverageKind::Unknown, raw_cid(b"coverage")).unwrap();
+    let manifest = SnapshotManifest::admit(SnapshotManifestRequest::new(
+        semantic,
+        &relations,
+        &entities,
+        vec![descriptor],
+        coverage,
+    ))
+    .unwrap();
+    (
+        SnapshotBlock::encode(manifest).unwrap(),
+        relations,
+        entities,
+        bytes,
+    )
+}
+
+fn bench_arrow_selection() {
+    for rows in [2, 128] {
+        let (source, relations, entities, bytes) = arrow_fixture(rows);
+        let relation = &source.manifest().relations()[0];
+        let row = SnapshotRowBinding::new(
+            &source,
+            relation.relation_id(),
+            relation.batches()[0].cid(),
+            1,
+        )
+        .unwrap();
+        let limits = IpcImportLimits::new(bytes.len(), rows, 16);
+        let selection = selected("patient-id-1");
+        let verified =
+            VerifiedGoogleArrowChild::admit(row, &relations, &entities, &bytes, limits).unwrap();
+        println!("arrow_rows={rows} arrow_bytes={}", bytes.len());
+        bench("arrow_full_verify", ARROW_ITERATIONS, || {
+            black_box(verify_google_arrow_row(
+                black_box(row),
+                black_box(&relations),
+                black_box(&entities),
+                black_box(&bytes),
+                limits,
+                black_box(&selection),
+            ))
+            .unwrap();
+        });
+        bench("arrow_cached_row_verify", CLAIM_ITERATIONS, || {
+            black_box(verified.verify_row(black_box(row), black_box(&selection))).unwrap();
+        });
+    }
 }
 
 fn selected(value: &str) -> SelectedTabularInput {
@@ -330,4 +430,5 @@ fn main() {
         println!("selected_value_bytes={value_bytes}");
         run(value_bytes, &source, &response);
     }
+    bench_arrow_selection();
 }

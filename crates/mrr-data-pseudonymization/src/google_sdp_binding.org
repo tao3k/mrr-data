@@ -49,6 +49,16 @@ The Arrow-backed fixture contains actual MRR IPC child bytes and checks the
 second row, altered value or context, missing fields, tampered content,
 truncated content, and decode limits.
 
+For batch operations, =VerifiedGoogleArrowChild::admit= performs the catalog,
+CID, and bounded IPC checks once. =verify_row= then checks the exact row and
+named cells for each request. The cached object owns decoded plaintext Facts
+and belongs in Host-controlled memory; it is not an authorization cache.
+=CloudGoogleArrowPreparation.from_verified_child= reruns the current claim,
+Cloud release, and Cedar gate relations on every call. The stable Rust
+benchmark separates full child verification from cached row verification for
+two-row and 128-row synthetic children. These local measurements exclude
+storage fetch, Cedar evaluation, KMS, provider I/O, and Host persistence.
+
 The common token profile is independent of provider. Google is selected with
 the optional =google-sdp= feature; a local provider can consume the same
 =TokenInputBinding=. Only AES-SIV is accepted by this Google operation because
