@@ -13,6 +13,136 @@ use mrr_data_core::{
 
 use crate::{GoogleArrowSelectionError, VerifiedGoogleArrowChild, verify_google_arrow_row};
 
+#[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "replay all SPEC table batch cases with exact outputs"
+)]
+fn spec_google_table_batch_v1_replay() {
+    use crate::{
+        AesSivTableRecipeBinding, GoogleTableBatchMismatch, GoogleTableBatchRow, Mode,
+        TokenLineage, TokenProfile,
+    };
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("../fixtures/google-table-batch-v1.json")).unwrap();
+    assert_eq!(fixture["version"], "google-table-batch-v1");
+    let mut admitted = 0;
+    for case in fixture["cases"].as_array().unwrap() {
+        let profile = TokenProfile {
+            mode: if case["mode"] == "aes-siv" {
+                Mode::AesSiv
+            } else {
+                Mode::HmacSha256
+            },
+            scope: "study",
+            lineage: TokenLineage {
+                tenant: "tenant-a",
+                key_domain: "study-key",
+                token_key_version: "dek-1",
+                transform_version: "recipe-1",
+                wrapping_version: "kek-1",
+            },
+        };
+        let recipe = AesSivTableRecipeBinding {
+            dataset: "research",
+            value_field: "patient_id",
+            context_field: "study_context",
+            profile,
+            admitted_context: case["admitted_context"].as_str(),
+            surrogate_info_type: None,
+        };
+        let owned: Vec<Vec<(String, String)>> = case["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| {
+                row["fields"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|field| {
+                        (
+                            field["name"].as_str().unwrap().to_owned(),
+                            field["value"].as_str().unwrap().to_owned(),
+                        )
+                    })
+                    .collect()
+            })
+            .collect();
+        let borrowed: Vec<Vec<(&str, &str)>> = owned
+            .iter()
+            .map(|fields| {
+                fields
+                    .iter()
+                    .map(|(name, value)| (name.as_str(), value.as_str()))
+                    .collect()
+            })
+            .collect();
+        let rows: Vec<_> = case["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .zip(&borrowed)
+            .map(|(row, fields)| GoogleTableBatchRow {
+                ordinal: row["ordinal"].as_u64().unwrap(),
+                fields,
+            })
+            .collect();
+        let result = recipe.select_batch(
+            &rows,
+            usize::try_from(case["max_rows"].as_u64().unwrap()).unwrap(),
+            usize::try_from(case["max_utf8_bytes"].as_u64().unwrap()).unwrap(),
+        );
+        if case["result"]["allow"] == true {
+            let selected = result.unwrap();
+            admitted += 1;
+            assert_eq!(
+                selected.iter().map(|row| row.ordinal).collect::<Vec<_>>(),
+                case["result"]["ordinals"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|value| value.as_u64().unwrap())
+                    .collect::<Vec<_>>()
+            );
+            assert_eq!(
+                selected.iter().map(|row| row.value).collect::<Vec<_>>(),
+                case["result"]["values"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|value| value.as_str().unwrap())
+                    .collect::<Vec<_>>()
+            );
+            assert_eq!(
+                selected.iter().map(|row| row.context).collect::<Vec<_>>(),
+                case["result"]["contexts"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|value| value.as_str().unwrap())
+                    .collect::<Vec<_>>()
+            );
+        } else {
+            let expected = match case["result"]["error"].as_str().unwrap() {
+                "empty" => GoogleTableBatchMismatch::Empty,
+                "invalid-budget" => GoogleTableBatchMismatch::InvalidBudget,
+                "too-many-rows" => GoogleTableBatchMismatch::TooManyRows,
+                "ordinal-order" => GoogleTableBatchMismatch::OrdinalOrder,
+                "invalid-recipe" => GoogleTableBatchMismatch::InvalidRecipe,
+                "value-field" => GoogleTableBatchMismatch::ValueField,
+                "context-field" => GoogleTableBatchMismatch::ContextField,
+                "context-not-admitted" => GoogleTableBatchMismatch::ContextNotAdmitted,
+                "too-many-bytes" => GoogleTableBatchMismatch::TooManyBytes,
+                other => panic!("unexpected SPEC error {other}"),
+            };
+            assert_eq!(result.unwrap_err(), expected, "{}", case["name"]);
+        }
+    }
+    assert_eq!(admitted, 2);
+    assert_eq!(fixture["cases"].as_array().unwrap().len(), 13);
+}
+
 fn fixture() -> (SnapshotBlock, RelationCatalog, EntityCatalog, Vec<u8>) {
     let generation = GenerationId::from_canonical_bytes("generation:arrow-selection").unwrap();
     let revision = RevisionBinding::admit(
@@ -209,9 +339,10 @@ fn cloud_prepare_requires_authorization_then_actual_arrow_cells() {
 
     use crate::{
         AesSivTableRecipeBinding, ArrowChildInput, CloudDataProtectionSelection,
-        CloudGoogleArrowPreparation, CloudPseudonymizationGate, CurrentGovernance, Mode,
-        SelectedTokenInput, TableRecipeMismatch, TokenAction, TokenAuthorizationClaim,
-        TokenAuthorizationRequest, TokenLineage, TokenProfile,
+        CloudGoogleArrowPreparation, CloudPseudonymizationGate, CurrentGovernance,
+        GoogleArrowBatchError, GoogleTableBatchMismatch, Mode, SelectedTokenInput,
+        TableRecipeMismatch, TokenAction, TokenAuthorizationClaim, TokenAuthorizationRequest,
+        TokenLineage, TokenProfile, prepare_cloud_google_arrow_batch,
     };
 
     let (snapshot, relations, entities, bytes) = fixture();
@@ -349,6 +480,144 @@ fn cloud_prepare_requires_authorization_then_actual_arrow_cells() {
             .row_index,
         1
     );
+    let first_row = SnapshotRowBinding::new(
+        &snapshot,
+        relation.relation_id(),
+        relation.batches()[0].cid(),
+        0,
+    )
+    .unwrap();
+    let first_digest: [u8; 32] = Sha256::digest(b"patient-1").into();
+    let first_input = SelectedTokenInput {
+        field: "patient_id",
+        value_digest: &first_digest,
+        context: "study-a",
+        profile,
+    }
+    .bind_to_row(first_row);
+    let first_request = TokenAuthorizationRequest {
+        input: &first_input,
+        ..request
+    };
+    let first_claim = TokenAuthorizationClaim {
+        value_digest: &first_digest,
+        context: "study-a",
+        ..claim
+    };
+    let first_selected = SelectedTabularInput {
+        value: "patient-1".into(),
+        context: "study-a".into(),
+        ..selected.clone()
+    };
+    let first_cloud = CloudDataProtectionSelection {
+        gate: CloudPseudonymizationGate {
+            admitted_context: "study-a",
+            ..cloud.gate
+        },
+        ..cloud
+    };
+    let batch_recipe = AesSivTableRecipeBinding {
+        admitted_context: None,
+        ..recipe
+    };
+    let first_preparation = || CloudGoogleArrowPreparation {
+        cloud: first_cloud,
+        recipe: batch_recipe,
+        request: &first_request,
+        claim: &first_claim,
+        current,
+        selected: &first_selected,
+        parent: "projects/p/locations/us".into(),
+        key: key(),
+    };
+    let second_preparation = || CloudGoogleArrowPreparation {
+        recipe: batch_recipe,
+        ..preparation(current)
+    };
+    let batch = prepare_cloud_google_arrow_batch(
+        vec![first_preparation(), second_preparation()],
+        &verified,
+        2,
+        100,
+    )
+    .unwrap();
+    assert_eq!(
+        batch
+            .iter()
+            .map(|plan| plan.identity().row().unwrap().row_index)
+            .collect::<Vec<_>>(),
+        vec![0, 1]
+    );
+    assert!(matches!(
+        prepare_cloud_google_arrow_batch(
+            vec![second_preparation(), second_preparation()],
+            &verified,
+            2,
+            100
+        ),
+        Err(GoogleArrowBatchError::Selection(
+            GoogleTableBatchMismatch::OrdinalOrder
+        ))
+    ));
+    assert!(matches!(
+        prepare_cloud_google_arrow_batch(
+            vec![
+                first_preparation(),
+                CloudGoogleArrowPreparation {
+                    current: CurrentGovernance {
+                        epoch: 8,
+                        ..current
+                    },
+                    ..second_preparation()
+                }
+            ],
+            &verified,
+            2,
+            100
+        ),
+        Err(GoogleArrowBatchError::MixedScope)
+    ));
+    assert!(matches!(
+        prepare_cloud_google_arrow_batch(
+            vec![first_preparation(), second_preparation()],
+            &verified,
+            2,
+            10
+        ),
+        Err(GoogleArrowBatchError::Selection(
+            GoogleTableBatchMismatch::TooManyBytes
+        ))
+    ));
+    assert!(matches!(
+        prepare_cloud_google_arrow_batch(
+            vec![first_preparation(), second_preparation()],
+            &verified,
+            1,
+            100
+        ),
+        Err(GoogleArrowBatchError::Selection(
+            GoogleTableBatchMismatch::TooManyRows
+        ))
+    ));
+    let wrong_second = SelectedTabularInput {
+        value: "different-patient".into(),
+        ..selected.clone()
+    };
+    assert!(matches!(
+        prepare_cloud_google_arrow_batch(
+            vec![
+                first_preparation(),
+                CloudGoogleArrowPreparation {
+                    selected: &wrong_second,
+                    ..second_preparation()
+                }
+            ],
+            &verified,
+            2,
+            100
+        ),
+        Err(GoogleArrowBatchError::Row(_))
+    ));
     assert!(matches!(
         cached_prepare(CurrentGovernance {
             epoch: 8,

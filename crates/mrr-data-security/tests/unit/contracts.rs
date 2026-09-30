@@ -158,8 +158,9 @@ fn cloud_profile_requires_exact_release_and_two_decisions() {
 
 use crate::data_protection::{
     CurrentStorageStateV1, EntityRef, ProtectedCommitDispositionV1, ProtectedCommitReceiptV1,
-    ProtectedPhysicalAckV1, ProtectedPublicationV1, ProtectionClaimV1, ProtectionIntentV1,
-    RawStorageDestination, RawStorageTier, SourceLabel, StorageClaimV1, StorageEffectV1,
+    ProtectedPhysicalAckV1, ProtectedPublicationV1, ProtectedReadClaimV1, ProtectedReadDestination,
+    ProtectedReadIntentV1, ProtectionClaimV1, ProtectionIntentV1, RawStorageDestination,
+    RawStorageTier, SourceLabel, StorageClaimV1, StorageEffectV1,
 };
 use serde_json::Value;
 
@@ -319,6 +320,122 @@ fn protected_storage_v1_matches_pinned_spec_matrix() {
     check_protected_intents(&fixture);
     check_protected_publications(&fixture);
     check_protected_commits(&fixture);
+    check_protected_reads(&fixture);
+}
+
+struct FixturePublication<'a> {
+    value: &'a Value,
+    intent: FixtureIntent<'a>,
+    outer: cid::Cid,
+}
+
+impl<'a> FixturePublication<'a> {
+    fn new(value: &'a Value) -> Self {
+        Self {
+            value,
+            intent: FixtureIntent::new(&value["intent"]),
+            outer: fixture_cid(value, "outer_root_cid"),
+        }
+    }
+
+    fn projected(&self) -> ProtectedPublicationV1<'_> {
+        ProtectedPublicationV1 {
+            intent: self.intent.projected(),
+            outer_root: &self.outer,
+            envelope_version: self.value["envelope_version"]
+                .as_u64()
+                .unwrap()
+                .try_into()
+                .unwrap(),
+            key_version: fixture_str(self.value, "key_version"),
+        }
+    }
+}
+
+struct FixtureRead<'a> {
+    value: &'a Value,
+    publication: FixturePublication<'a>,
+    owners: Vec<EntityRef<'a>>,
+}
+
+impl<'a> FixtureRead<'a> {
+    fn new(value: &'a Value) -> Self {
+        assert_eq!(value["version"], 1);
+        Self {
+            value,
+            publication: FixturePublication::new(&value["publication"]),
+            owners: value["reader"]["accepted_owners"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(fixture_entity)
+                .collect(),
+        }
+    }
+
+    fn projected(&self) -> ProtectedReadIntentV1<'_> {
+        let reader = &self.value["reader"];
+        ProtectedReadIntentV1 {
+            operation_id: fixture_str(self.value, "operation_id"),
+            subject: fixture_entity(&self.value["subject"]),
+            purpose: fixture_str(self.value, "purpose"),
+            publication: self.publication.projected(),
+            reader: ProtectedReadDestination {
+                resource: fixture_entity(&reader["resource"]),
+                tenant: fixture_str(reader, "tenant"),
+                accepted_owners: &self.owners,
+                accepts_restricted: reader["accepts_restricted"].as_bool().unwrap(),
+            },
+            policy_root: fixture_str(self.value, "policy_root"),
+            lineage_revision: fixture_str(self.value, "lineage_revision"),
+        }
+    }
+}
+
+fn check_protected_reads(fixture: &Value) {
+    let cases = fixture["read_cases"].as_array().unwrap();
+    assert_eq!(cases.len(), 15);
+    for case in cases {
+        let read = FixtureRead::new(&case["read"]);
+        let claimed = FixtureRead::new(&case["claim"]["intent"]);
+        let claim = ProtectedReadClaimV1 {
+            intent: claimed.projected(),
+            epoch: case["claim"]["epoch"].as_u64().unwrap(),
+            expires_at: case["claim"]["expires_at"].as_u64().unwrap(),
+            allowed: case["claim"]["allowed"].as_bool().unwrap(),
+        };
+        let committed_value = &case["committed"];
+        let committed_publication = (!committed_value.is_null())
+            .then(|| FixturePublication::new(&committed_value["publication"]));
+        let committed =
+            committed_publication
+                .as_ref()
+                .map(|publication| ProtectedCommitReceiptV1 {
+                    publication: publication.projected(),
+                    child_count: committed_value["child_count"]
+                        .as_u64()
+                        .unwrap()
+                        .try_into()
+                        .unwrap(),
+                    total_outer_bytes: committed_value["total_outer_bytes"]
+                        .as_u64()
+                        .unwrap()
+                        .try_into()
+                        .unwrap(),
+                });
+        assert_eq!(
+            read.projected()
+                .check_read(
+                    &claim,
+                    fixture_current(&case["current"]),
+                    committed.as_ref()
+                )
+                .is_ok(),
+            case["allow"].as_bool().unwrap(),
+            "SPEC read fixture {}",
+            case["name"]
+        );
+    }
 }
 
 fn check_protected_intents(fixture: &Value) {
@@ -553,6 +670,10 @@ fn storage_profile_matrix_matches_pinned_spec_cross_product() {
 
 #[cfg(feature = "protected-envelope")]
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one envelope fixture checks every authenticated binding substitution"
+)]
 fn protected_envelope_randomizes_outer_identity_and_authenticates_binding() {
     use crate::data_protection::{
         ProtectedBlockBindingV1, ProtectedBlockRole, ProtectedEnvelopeError, ProtectedEnvelopeKey,
@@ -594,15 +715,89 @@ fn protected_envelope_randomizes_outer_identity_and_authenticates_binding() {
             .as_slice(),
         bytes
     );
-    let changed = ProtectedBlockBindingV1 {
+    let changed_residency = ProtectedBlockBindingV1 {
         intent: ProtectionIntentV1 {
             residency: "other-region",
             ..projected
         },
         ..binding
     };
+    let changed_tenant = ProtectedBlockBindingV1 {
+        intent: ProtectionIntentV1 {
+            storage: StorageEffectV1 {
+                destination: RawStorageDestination {
+                    tenant: "tenant-b",
+                    ..projected.storage.destination
+                },
+                ..projected.storage
+            },
+            ..projected
+        },
+        ..binding
+    };
+    let other_sources = [SourceLabel {
+        owner: EntityRef {
+            type_name: "Team",
+            id: "other",
+        },
+        ..projected.storage.sources[0]
+    }];
+    let changed_owner = ProtectedBlockBindingV1 {
+        intent: ProtectionIntentV1 {
+            storage: StorageEffectV1 {
+                sources: &other_sources,
+                ..projected.storage
+            },
+            ..projected
+        },
+        ..binding
+    };
+    let changed_key_ref = ProtectedBlockBindingV1 {
+        intent: ProtectionIntentV1 {
+            key_ref: "other-key",
+            ..projected
+        },
+        ..binding
+    };
+    let changed_key_version = ProtectedBlockBindingV1 {
+        key_version: "key-version-8",
+        ..binding
+    };
+    let changed_role = ProtectedBlockBindingV1 {
+        role: ProtectedBlockRole::Root,
+        ..binding
+    };
+    let other_inner = ContentBlock::new(ContentCodec::Raw, b"other").cid();
+    let changed_inner = ProtectedBlockBindingV1 {
+        inner_cid: &other_inner,
+        ..binding
+    };
+    for changed in [
+        changed_residency,
+        changed_tenant,
+        changed_owner,
+        changed_key_ref,
+        changed_role,
+        changed_inner,
+    ] {
+        assert_eq!(
+            open_block(changed, first.outer_cid(), first.bytes(), &key, 1024),
+            Err(ProtectedEnvelopeError::Cryptography)
+        );
+    }
     assert_eq!(
-        open_block(changed, first.outer_cid(), first.bytes(), &key, 1024),
+        open_block(
+            changed_key_version,
+            first.outer_cid(),
+            first.bytes(),
+            &key,
+            1024
+        ),
+        Err(ProtectedEnvelopeError::InvalidProfile)
+    );
+    let other_key = ProtectedEnvelopeKey::aes_256_gcm(&[8_u8; 32]).unwrap();
+    assert_eq!(
+        open_block(binding, first.outer_cid(), first.bytes(), &other_key, 1024),
         Err(ProtectedEnvelopeError::Cryptography)
     );
     let mut tampered = first.bytes().to_vec();

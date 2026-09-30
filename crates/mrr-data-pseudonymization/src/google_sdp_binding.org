@@ -80,6 +80,18 @@ benchmark separates full child verification from cached row verification for
 two-row and 128-row synthetic children. These local measurements exclude
 storage fetch, Cedar evaluation, KMS, provider I/O, and Host persistence.
 
+The [[file:google_arrow.rs][Google table batch V1]] mirrors the checked SPEC
+fixture for ordered row selection, positive budgets capped at 256 rows and
+1 MiB of selected UTF-8 cells, and all-or-none errors. After a Host has
+authenticated one physical Arrow child, =prepare_cloud_google_arrow_batch=
+requires one common recipe, release, current governance scope, subject,
+purpose and provider parent. It applies the existing per-row claim, Cloud
+gate, recipe and physical cell checks to every row before returning the
+vector of plans. A failure returns no plans. This is library planning for
+separate row requests; it does not create or check a Google multi-row wire
+request or response. The Host still controls request dispatch, provider
+authentication, quota and audit.
+
 The common token profile is independent of provider. Google is selected with
 the optional =google-sdp= feature; a local provider can consume the same
 =TokenInputBinding=. Only AES-SIV is accepted by this Google operation because

@@ -2967,6 +2967,7 @@ dependencies = [
  "mrr-data-asp-rust-build-support",
  "mrr-data-core",
  "mrr-data-security",
+ "serde_json",
  "sha2 0.10.9",
 ]
 
@@ -2977,8 +2978,10 @@ dependencies = [
  "cid",
  "meta-relational-reasoning",
  "mrr-data-asp-rust-build-support",
+ "mrr-data-cache",
  "mrr-data-content",
  "mrr-data-core",
+ "reqwest",
  "ring",
  "serde_json",
  "tempfile",

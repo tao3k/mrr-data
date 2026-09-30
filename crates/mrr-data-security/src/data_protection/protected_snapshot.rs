@@ -19,13 +19,15 @@ use mrr_data_content::{
 use super::envelope::root_binding_digest;
 use super::{
     CurrentStorageStateV1, ProtectedBlockBindingV1, ProtectedBlockRole, ProtectedEnvelopeError,
-    ProtectedEnvelopeKey, ProtectedPhysicalAckV1, ProtectedPublicationV1, ProtectedStorageMismatch,
-    ProtectionClaimV1, ProtectionIntentV1, RawStorageTier, open_block, seal_block,
+    ProtectedEnvelopeKey, ProtectedPhysicalAckV1, ProtectedPublicationV1, ProtectedReadClaimV1,
+    ProtectedReadIntentV1, ProtectedReadMismatch, ProtectedStorageMismatch, ProtectionClaimV1,
+    ProtectionIntentV1, RawStorageTier, open_block, seal_block,
 };
 
 #[derive(Debug)]
 pub enum ProtectedSnapshotError {
     Admission(ProtectedStorageMismatch),
+    Read(ProtectedReadMismatch),
     Envelope(ProtectedEnvelopeError),
     Inner(SnapshotTransferError),
     Local(ContentError),
@@ -138,6 +140,9 @@ impl PreparedProtectedSnapshot {
     ) -> Result<Self, ProtectedSnapshotError> {
         if record.inner_root != *intent.storage.snapshot_root {
             return Err(ProtectedSnapshotError::WrongRoot);
+        }
+        if record.key_version != intent.key_version {
+            return Err(ProtectedSnapshotError::WrongBinding);
         }
         if record.outer_root == record.inner_root
             || record.outer_root == record.root_block_outer
@@ -505,8 +510,12 @@ where
         .map_err(ProtectedSnapshotError::Admission)?;
     check_prepared(publish.intent, publish.prepared)?;
     let budgeted = publish.session.remote(publish.remote);
+    let mut actual_total = 0_usize;
     for outer in publish.prepared.child_roots.values() {
         let bytes = load_outer(publish.outbox, outer, publish.max_outer_block_bytes).await?;
+        actual_total = actual_total
+            .checked_add(bytes.len())
+            .ok_or(ProtectedSnapshotError::TooLarge)?;
         budgeted
             .put(ContentBlock::new(ContentCodec::Raw, &bytes))
             .await
@@ -518,6 +527,9 @@ where
         publish.max_outer_block_bytes,
     )
     .await?;
+    actual_total = actual_total
+        .checked_add(root_block_bytes.len())
+        .ok_or(ProtectedSnapshotError::TooLarge)?;
     budgeted
         .put(ContentBlock::new(ContentCodec::Raw, &root_block_bytes))
         .await
@@ -528,6 +540,12 @@ where
         publish.max_outer_block_bytes,
     )
     .await?;
+    actual_total = actual_total
+        .checked_add(root_bytes.len())
+        .ok_or(ProtectedSnapshotError::TooLarge)?;
+    if actual_total != publish.prepared.total_outer_bytes {
+        return Err(ProtectedSnapshotError::WrongBinding);
+    }
     let publication = publish.prepared.publication(publish.intent)?;
     publication
         .check_pre_root(publish.claim, refresh()?)
@@ -545,7 +563,10 @@ where
 }
 
 pub struct ProtectedRestore<'a> {
-    pub intent: ProtectionIntentV1<'a>,
+    pub read: ProtectedReadIntentV1<'a>,
+    pub claim: &'a ProtectedReadClaimV1<'a>,
+    pub current: CurrentStorageStateV1<'a>,
+    pub committed: Option<&'a super::ProtectedCommitReceiptV1<'a>>,
     pub prepared: &'a PreparedProtectedSnapshot,
     pub protected_cache: &'a dyn AsyncContentStore,
     pub remote: &'a dyn RemoteContentStore,
@@ -560,13 +581,19 @@ pub struct ProtectedRestore<'a> {
 
 /// Restore ciphertext through a cache of outer bytes only, authenticate and
 /// decrypt into a private in-memory store, then verify the complete original
-/// snapshot closure. A separate current Host read authorization is required.
+/// snapshot closure. The caller supplies an authenticated committed row and
+/// current read claim; their projected check runs before cache or provider GET.
 /// # Errors
 /// Returns missing, tampered, oversized or invalid closure errors.
 pub async fn restore_protected_snapshot(
     restore: ProtectedRestore<'_>,
 ) -> Result<RestoredSnapshot, ProtectedSnapshotError> {
-    check_prepared(restore.intent, restore.prepared)?;
+    restore
+        .read
+        .check_read(restore.claim, restore.current, restore.committed)
+        .map_err(ProtectedSnapshotError::Read)?;
+    let intent = restore.read.publication.intent;
+    check_prepared(intent, restore.prepared)?;
     let memory = MemoryContentStore::default();
     let budgeted = restore.session.remote(restore.remote);
     let mut total = 0;
@@ -587,7 +614,7 @@ pub async fn restore_protected_snapshot(
     )?;
     let manifest_plaintext = open_block(
         ProtectedBlockBindingV1 {
-            intent: restore.intent,
+            intent,
             inner_cid: &restore.prepared.manifest_plain_cid,
             role: ProtectedBlockRole::Manifest,
             key_version: &restore.prepared.key_version,
@@ -628,7 +655,7 @@ pub async fn restore_protected_snapshot(
         add_outer(&mut total, read.bytes.len(), restore.max_outer_total_bytes)?;
         let plaintext = open_block(
             ProtectedBlockBindingV1 {
-                intent: restore.intent,
+                intent,
                 inner_cid: &inner,
                 role,
                 key_version: &restore.prepared.key_version,
@@ -643,6 +670,9 @@ pub async fn restore_protected_snapshot(
         if actual != inner {
             return Err(ProtectedSnapshotError::WrongRoot);
         }
+    }
+    if total != restore.prepared.total_outer_bytes {
+        return Err(ProtectedSnapshotError::WrongBinding);
     }
     restore_snapshot_local(
         &memory,

@@ -12,7 +12,7 @@ pub struct EntityRef<'a> {
 }
 
 impl EntityRef<'_> {
-    const fn is_empty(self) -> bool {
+    pub(super) const fn is_empty(self) -> bool {
         self.type_name.is_empty() || self.id.is_empty()
     }
 }

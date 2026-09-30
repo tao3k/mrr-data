@@ -29,9 +29,11 @@ def run(args, **kwargs):
 
 def build(cache):
     source = cache / REVISION
-    if not source.exists():
+    if not (source / ".git").exists():
         source.mkdir(parents=True)
         run(["git", "init", source], capture_output=True)
+    if subprocess.run(["git", "-C", source, "rev-parse", "--verify", "HEAD"],
+                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
         run(["git", "-C", source, "fetch", "--depth=1", REPOSITORY, REVISION])
         run(["git", "-C", source, "checkout", "--detach", "FETCH_HEAD"], capture_output=True)
     actual = subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"], text=True).strip()
@@ -221,6 +223,15 @@ def main():
                     result.check_returncode()
                     if "test result: ok. 1 passed;" not in result.stdout:
                         raise RuntimeError("conformance test did not execute exactly once")
+                    protected = subprocess.run(
+                        ["cargo", "test", "-p", "mrr-data-security", "--features", "protected-publish",
+                         "--locked", "protected_s3_tls_conformance", "--", "--ignored", "--nocapture"],
+                        cwd=ROOT, env=environment, timeout=600, text=True,
+                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                    print(protected.stdout, flush=True)
+                    protected.check_returncode()
+                    if "test result: ok. 1 passed;" not in protected.stdout:
+                        raise RuntimeError("protected S3 conformance test did not execute exactly once")
                     consumer_receipt = example_smoke(root, endpoint, ca, poo_source)
                 finally:
                     proxy.shutdown()
@@ -242,7 +253,8 @@ def main():
                "workspace_rustc": subprocess.check_output(["rustc", "--version"], text=True).strip(),
                "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
                "transport": "loopback TLS proxy; ephemeral CA; SigV4 verified by s3s",
-               "examples": ["s3_cache", "s3_snapshot", "s3_cache oversized rejection"],
+               "examples": ["s3_cache", "s3_snapshot", "s3_cache oversized rejection",
+                            "protected snapshot SigV4/TLS publish and restore"],
                "result": "passed"}
     if consumer_receipt is not None:
         receipt["poo_flow"] = consumer_receipt

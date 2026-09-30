@@ -88,7 +88,7 @@ impl std::fmt::Display for ProtectedStorageMismatch {
 impl std::error::Error for ProtectedStorageMismatch {}
 
 impl ProtectionIntentV1<'_> {
-    fn check_scope(&self) -> Result<(), ProtectedStorageMismatch> {
+    pub(super) fn check_scope(&self) -> Result<(), ProtectedStorageMismatch> {
         let effect = self.storage;
         if effect.operation_id.is_empty()
             || effect.subject.type_name.is_empty()
@@ -166,7 +166,7 @@ impl ProtectionIntentV1<'_> {
 }
 
 impl ProtectedPublicationV1<'_> {
-    fn check_static(&self) -> Result<(), ProtectedStorageMismatch> {
+    pub(super) fn check_static(&self) -> Result<(), ProtectedStorageMismatch> {
         self.intent.check_scope()?;
         if self.outer_root == self.intent.storage.snapshot_root {
             return Err(ProtectedStorageMismatch::InnerAsOuter);

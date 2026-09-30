@@ -8,6 +8,11 @@ contains fourteen intent, nine pre-root, and fourteen post-root commit cases. Th
 =storage-profiles-v1.json= crosses sensitivity, destination acceptance,
 tenant match and storage tier into sixteen composed production cases. These
 fixtures are decision checks, not authenticated Host claims.
+The protected fixture also contains fifteen read cases. The Rust
+[[file:protected_read.rs][read projection]] requires a fresh action-specific
+claim and an authenticated exact committed row. The restore API checks it
+before cache or remote GET, including for a warm cache hit; the caller must
+authenticate the claim, ledger row and current state.
 
 The optional =protected-envelope= feature supplies [[file:envelope.rs][AES-256-GCM envelopes]].
 Every block gets a fresh random nonce and a raw outer CID. The AEAD binding
@@ -34,13 +39,25 @@ PUT that returned an error has no acknowledgement from this API, including
 when the remote retained its bytes. The Host performs atomic ledger compare-and-set,
 pointer publication, approval redemption and audit; replay grants no read access.
 
-Restore reads only outer ciphertext into a protected cache, checks outer CIDs,
+After that read gate, restore reads only outer ciphertext into a protected cache, checks outer CIDs,
 authenticates and decrypts each envelope, checks inner CIDs, then validates the
-complete snapshot closure in a private memory store. A separate current Host
-read authorization is mandatory. The local test reopens a filesystem outbox,
+complete snapshot closure in a private memory store. The local test reopens a filesystem outbox,
 rebuilds the prepared handle from a Host record, denies a changed epoch before
-the outer root PUT, checks the commit disposition, and checks cold restore and
-zero-GET warm restore using a mock remote.
+the outer root PUT, checks the commit disposition, denies missing/stale read
+authority before I/O, and checks cold restore and zero-GET warm restore using
+a mock remote. The independent loopback SigV4/TLS conformance runner also
+publishes and restores the protected closure through the production S3 adapter
+and confirms that the raw inner root is absent remotely.
+
+* Reflection: local S3 composition and LeanPoo
+
+This iteration uses the SPEC's existing LeanPoo profile composition to name
+the admitted destination and key version. The S3 adapter then moves opaque
+ciphertext blocks; it has no independent policy owners, inherited slots or
+proof dependency graph. Applying LeanPoo dispatch to each PUT/GET would not
+strengthen SigV4, TLS, CID verification or the fresh read gate. The local
+s3s server tests the real adapter and wire protocol on loopback. It is not
+evidence of AWS deployment or a Host's atomic ledger and audit behavior.
 
 The generic content APIs still accept arbitrary bytes. A deploying Host must
 authenticate the source catalog, lineage, Cedar decision, destination and

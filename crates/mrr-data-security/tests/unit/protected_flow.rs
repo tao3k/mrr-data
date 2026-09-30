@@ -11,6 +11,7 @@ use cid::Cid;
 use meta_relational_reasoning::{
     EntityCatalog, RelationCatalog, RelationField, RelationSchema, ValueSchema,
 };
+use mrr_data_cache::{S3Config, S3ContentStore, http_client_builder};
 use mrr_data_content::{
     ContentBlock, ContentCodec, ContentStore, FilesystemContentStore, MemoryContentStore,
     RemoteContentStore, RemoteError, RemoteFuture, RemoteTransferLimits, SnapshotTransferLimits,
@@ -20,7 +21,8 @@ use tempfile::tempdir;
 
 use crate::data_protection::{
     CurrentStorageStateV1, EntityRef, PreparedProtectedSnapshot, ProtectedCommitDispositionV1,
-    ProtectedCommitReceiptV1, ProtectedEnvelopeKey, ProtectedPublish, ProtectedRestore,
+    ProtectedCommitReceiptV1, ProtectedEnvelopeKey, ProtectedPublish, ProtectedReadClaimV1,
+    ProtectedReadDestination, ProtectedReadIntentV1, ProtectedReadMismatch, ProtectedRestore,
     ProtectedSnapshotError, ProtectedStage, ProtectedStorageMismatch, ProtectionClaimV1,
     ProtectionIntentV1, RawStorageDestination, RawStorageTier, SourceLabel, StorageEffectV1,
     publish_prepared_snapshot, restore_protected_snapshot, stage_protected_snapshot,
@@ -201,11 +203,42 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
     assert_eq!(prepared.child_roots().len(), 2);
     assert!(outbox.get(snapshot.cid()).is_err());
     let record = prepared.host_record();
+    let mut wrong_key = record.clone();
+    wrong_key.key_version = "key-version-8".to_owned();
+    assert!(matches!(
+        PreparedProtectedSnapshot::from_authenticated_record(intent, wrong_key),
+        Err(ProtectedSnapshotError::WrongBinding)
+    ));
+    let mut wrong_total = record.clone();
+    wrong_total.total_outer_bytes += 1;
     drop(prepared);
     drop(outbox);
     let outbox = FilesystemContentStore::open(directory.path()).unwrap();
     let prepared = PreparedProtectedSnapshot::from_authenticated_record(intent, record).unwrap();
     assert!(outbox.get(prepared.outer_root()).is_ok());
+
+    let altered =
+        PreparedProtectedSnapshot::from_authenticated_record(intent, wrong_total).unwrap();
+    let altered_remote = Remote::new();
+    let altered_session = session();
+    assert!(matches!(
+        publish_prepared_snapshot(
+            ProtectedPublish {
+                intent,
+                claim: &claim,
+                current: current(4),
+                prepared: &altered,
+                outbox: &outbox,
+                remote: &altered_remote,
+                session: &altered_session,
+                max_outer_block_bytes: 4096,
+            },
+            || Ok(current(4)),
+        )
+        .await,
+        Err(ProtectedSnapshotError::WrongBinding)
+    ));
+    assert!(!altered_remote.contains(prepared.outer_root()));
 
     let remote = Remote::new();
     let publish_session = session();
@@ -283,8 +316,34 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
 
     let protected_cache = MemoryContentStore::default();
     let restore_session = session();
-    let restore = || ProtectedRestore {
-        intent,
+    let read = ProtectedReadIntentV1 {
+        operation_id: "read-001",
+        subject: EntityRef {
+            type_name: "Service",
+            id: "reader",
+        },
+        purpose: "analysis",
+        publication,
+        reader: ProtectedReadDestination {
+            resource: intent.storage.destination.resource,
+            tenant: "tenant-a",
+            accepted_owners: &owners,
+            accepts_restricted: true,
+        },
+        policy_root: "policy-root-1",
+        lineage_revision: "lineage-1",
+    };
+    let read_claim = ProtectedReadClaimV1 {
+        intent: read,
+        epoch: 4,
+        expires_at: 100,
+        allowed: true,
+    };
+    let restore = |state| ProtectedRestore {
+        read,
+        claim: &read_claim,
+        current: state,
+        committed: Some(&committed),
         prepared: &prepared,
         protected_cache: &protected_cache,
         remote: &remote,
@@ -296,10 +355,216 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
         max_outer_block_bytes: 4096,
         max_outer_total_bytes: 8192,
     };
-    let cold = restore_protected_snapshot(restore()).await.unwrap();
+    assert!(matches!(
+        restore_protected_snapshot(ProtectedRestore {
+            committed: None,
+            ..restore(current(4))
+        })
+        .await,
+        Err(ProtectedSnapshotError::Read(
+            ProtectedReadMismatch::MissingCommit
+        ))
+    ));
+    assert_eq!(remote.gets.load(Ordering::Relaxed), 0);
+    assert!(matches!(
+        restore_protected_snapshot(restore(current(5))).await,
+        Err(ProtectedSnapshotError::Read(ProtectedReadMismatch::Stale))
+    ));
+    assert_eq!(remote.gets.load(Ordering::Relaxed), 0);
+    let cold = restore_protected_snapshot(restore(current(4)))
+        .await
+        .unwrap();
     assert_eq!(cold.snapshot().cid(), snapshot.cid());
     assert_eq!(remote.gets.load(Ordering::Relaxed), 4);
-    let warm = restore_protected_snapshot(restore()).await.unwrap();
+    let warm = restore_protected_snapshot(restore(current(4)))
+        .await
+        .unwrap();
     assert_eq!(warm.snapshot().cid(), snapshot.cid());
     assert_eq!(remote.gets.load(Ordering::Relaxed), 4);
+    assert!(matches!(
+        restore_protected_snapshot(restore(current(5))).await,
+        Err(ProtectedSnapshotError::Read(ProtectedReadMismatch::Stale))
+    ));
+    assert_eq!(remote.gets.load(Ordering::Relaxed), 4);
+}
+
+#[tokio::test]
+#[ignore = "requires tools/s3-conformance/run.py SigV4/TLS server"]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one TLS/SigV4 flow exercises stage, publish, commit, and gated restore"
+)]
+async fn protected_s3_tls_conformance() {
+    let endpoint = std::env::var("MRR_S3_CONFORMANCE_ENDPOINT").unwrap();
+    assert!(endpoint.starts_with("https://127.0.0.1:"));
+    let ca = std::fs::read(std::env::var("MRR_S3_CONFORMANCE_CA").unwrap()).unwrap();
+    let client = http_client_builder()
+        .no_proxy()
+        .add_root_certificate(reqwest::Certificate::from_pem(&ca).unwrap())
+        .build()
+        .unwrap();
+    let remote = S3ContentStore::new(
+        S3Config::default()
+            .bucket("conformance")
+            .region("us-east-1")
+            .endpoint(&endpoint)
+            .root("protected/agent-a")
+            .access_key_id("local-conformance-key")
+            .secret_access_key("local-conformance-secret")
+            .disable_config_load()
+            .disable_ec2_metadata(),
+        client,
+        Duration::from_secs(5),
+    )
+    .unwrap();
+    let snapshot = super::contracts::snapshot();
+    let source = MemoryContentStore::default();
+    source
+        .put(ContentBlock::new(ContentCodec::Raw, b"synthetic-arrow"))
+        .unwrap();
+    source
+        .put(ContentBlock::new(ContentCodec::Raw, b"coverage"))
+        .unwrap();
+    source
+        .put(ContentBlock::new(ContentCodec::DagCbor, snapshot.bytes()))
+        .unwrap();
+    let outbox_dir = tempdir().unwrap();
+    let outbox = FilesystemContentStore::open(outbox_dir.path()).unwrap();
+    let relation_catalog = relations(&snapshot);
+    let entity_catalog = EntityCatalog::admit(vec![]).unwrap();
+    let owner = EntityRef {
+        type_name: "Team",
+        id: "analytics",
+    };
+    let labels = [SourceLabel {
+        resource: EntityRef {
+            type_name: "Dataset",
+            id: "orders",
+        },
+        owner,
+        tenant: "tenant-a",
+        restricted: true,
+    }];
+    let owners = [owner];
+    let intent = ProtectionIntentV1 {
+        storage: StorageEffectV1 {
+            operation_id: "op-s3-protected",
+            subject: EntityRef {
+                type_name: "Service",
+                id: "publisher",
+            },
+            purpose: "archive",
+            snapshot_root: snapshot.cid(),
+            sources: &labels,
+            destination: RawStorageDestination {
+                resource: EntityRef {
+                    type_name: "Bucket",
+                    id: "archive",
+                },
+                tenant: "tenant-a",
+                accepted_owners: &owners,
+                accepts_restricted: true,
+                tier: RawStorageTier::Remote,
+            },
+            policy_root: "policy-root-1",
+            lineage_revision: "lineage-1",
+        },
+        profile: "aes-256-gcm-v1",
+        key_ref: "key-tenant-a",
+        key_version: "key-version-7",
+        residency: "us-east-1",
+    };
+    let claim = ProtectionClaimV1 {
+        intent,
+        epoch: 4,
+        expires_at: 100,
+        allowed: true,
+    };
+    let key = ProtectedEnvelopeKey::aes_256_gcm(&[7_u8; 32]).unwrap();
+    let prepared = stage_protected_snapshot(ProtectedStage {
+        intent,
+        claim: &claim,
+        current: current(4),
+        source: &source,
+        outbox: &outbox,
+        relations: &relation_catalog,
+        entities: &entity_catalog,
+        inner_limits: limits(),
+        max_outer_block_bytes: 4096,
+        max_outer_total_bytes: 8192,
+        key: &key,
+    })
+    .await
+    .unwrap();
+    let publish_session = session();
+    let physical = publish_prepared_snapshot(
+        ProtectedPublish {
+            intent,
+            claim: &claim,
+            current: current(4),
+            prepared: &prepared,
+            outbox: &outbox,
+            remote: &remote,
+            session: &publish_session,
+            max_outer_block_bytes: 4096,
+        },
+        || Ok(current(4)),
+    )
+    .await
+    .unwrap();
+    let publication = prepared.publication(intent).unwrap();
+    assert_eq!(
+        publication.decide_commit(&claim, current(4), Some(physical.as_ack()), None),
+        Ok(ProtectedCommitDispositionV1::Apply)
+    );
+    let committed = ProtectedCommitReceiptV1 {
+        publication,
+        child_count: physical.child_count,
+        total_outer_bytes: physical.total_outer_bytes,
+    };
+    assert!(remote.get(snapshot.cid(), 4096).await.unwrap().is_none());
+    let protected_cache = MemoryContentStore::default();
+    let restore_session = session();
+    let read = ProtectedReadIntentV1 {
+        operation_id: "read-s3-protected",
+        subject: EntityRef {
+            type_name: "Service",
+            id: "reader",
+        },
+        purpose: "analysis",
+        publication,
+        reader: ProtectedReadDestination {
+            resource: intent.storage.destination.resource,
+            tenant: "tenant-a",
+            accepted_owners: &owners,
+            accepts_restricted: true,
+        },
+        policy_root: "policy-root-1",
+        lineage_revision: "lineage-1",
+    };
+    let read_claim = ProtectedReadClaimV1 {
+        intent: read,
+        epoch: 4,
+        expires_at: 100,
+        allowed: true,
+    };
+    let restored = restore_protected_snapshot(ProtectedRestore {
+        read,
+        claim: &read_claim,
+        current: current(4),
+        committed: Some(&committed),
+        prepared: &prepared,
+        protected_cache: &protected_cache,
+        remote: &remote,
+        session: &restore_session,
+        key: &key,
+        relations: &relation_catalog,
+        entities: &entity_catalog,
+        inner_limits: limits(),
+        max_outer_block_bytes: 4096,
+        max_outer_total_bytes: 8192,
+    })
+    .await
+    .unwrap();
+    assert_eq!(restored.snapshot().cid(), snapshot.cid());
 }

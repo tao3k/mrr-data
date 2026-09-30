@@ -2,6 +2,7 @@
 mod envelope;
 mod profile;
 mod protected;
+mod protected_read;
 #[cfg(feature = "protected-publish")]
 mod protected_snapshot;
 mod pseudonymization;
@@ -18,6 +19,9 @@ pub use profile::{
 pub use protected::{
     ProtectedCommitDispositionV1, ProtectedCommitReceiptV1, ProtectedPhysicalAckV1,
     ProtectedPublicationV1, ProtectedStorageMismatch, ProtectionClaimV1, ProtectionIntentV1,
+};
+pub use protected_read::{
+    ProtectedReadClaimV1, ProtectedReadDestination, ProtectedReadIntentV1, ProtectedReadMismatch,
 };
 #[cfg(feature = "protected-publish")]
 pub use protected_snapshot::{
