@@ -583,11 +583,23 @@ pub struct ProtectedRestore<'a> {
 /// decrypt into a private in-memory store, then verify the complete original
 /// snapshot closure. The caller supplies an authenticated committed row and
 /// current read claim; their projected check runs before cache or provider GET.
+/// `refresh` must independently obtain current authority and the committed
+/// row after verification. Plaintext is returned only if both checks pass.
 /// # Errors
-/// Returns missing, tampered, oversized or invalid closure errors.
-pub async fn restore_protected_snapshot(
-    restore: ProtectedRestore<'_>,
-) -> Result<RestoredSnapshot, ProtectedSnapshotError> {
+/// Returns missing, tampered, oversized, stale or invalid closure errors.
+pub async fn restore_protected_snapshot<'a, F>(
+    restore: ProtectedRestore<'a>,
+    refresh: F,
+) -> Result<RestoredSnapshot, ProtectedSnapshotError>
+where
+    F: FnOnce() -> Result<
+        (
+            CurrentStorageStateV1<'a>,
+            Option<&'a super::ProtectedCommitReceiptV1<'a>>,
+        ),
+        ProtectedSnapshotError,
+    >,
+{
     restore
         .read
         .check_read(restore.claim, restore.current, restore.committed)
@@ -674,13 +686,40 @@ pub async fn restore_protected_snapshot(
     if total != restore.prepared.total_outer_bytes {
         return Err(ProtectedSnapshotError::WrongBinding);
     }
-    restore_snapshot_local(
-        &memory,
+    verify_and_release(&memory, &restore, refresh).await
+}
+
+async fn verify_and_release<'a, F>(
+    memory: &MemoryContentStore,
+    restore: &ProtectedRestore<'a>,
+    refresh: F,
+) -> Result<RestoredSnapshot, ProtectedSnapshotError>
+where
+    F: FnOnce() -> Result<
+        (
+            CurrentStorageStateV1<'a>,
+            Option<&'a super::ProtectedCommitReceiptV1<'a>>,
+        ),
+        ProtectedSnapshotError,
+    >,
+{
+    let restored = restore_snapshot_local(
+        memory,
         &restore.prepared.inner_root,
         restore.relations,
         restore.entities,
         restore.inner_limits,
     )
     .await
-    .map_err(ProtectedSnapshotError::Inner)
+    .map_err(ProtectedSnapshotError::Inner)?;
+    let (current, committed) = refresh()?;
+    restore
+        .read
+        .check_release(
+            restore.claim,
+            (restore.current, restore.committed),
+            (current, committed),
+        )
+        .map_err(ProtectedSnapshotError::Read)?;
+    Ok(restored)
 }

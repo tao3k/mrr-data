@@ -123,4 +123,27 @@ impl ProtectedReadIntentV1<'_> {
         }
         Ok(())
     }
+
+    /// Check both the admission observation and a fresh observation before
+    /// releasing verified plaintext. The Host authenticates both observations.
+    /// # Errors
+    /// Returns the first rejected observation.
+    pub fn check_release(
+        &self,
+        claim: &ProtectedReadClaimV1<'_>,
+        before: (
+            CurrentStorageStateV1<'_>,
+            Option<&ProtectedCommitReceiptV1<'_>>,
+        ),
+        after: (
+            CurrentStorageStateV1<'_>,
+            Option<&ProtectedCommitReceiptV1<'_>>,
+        ),
+    ) -> Result<(), ProtectedReadMismatch> {
+        self.check_read(claim, before.0, before.1)?;
+        if after.0.now < before.0.now {
+            return Err(ProtectedReadMismatch::Stale);
+        }
+        self.check_read(claim, after.0, after.1)
+    }
 }

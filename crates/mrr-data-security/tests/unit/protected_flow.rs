@@ -356,10 +356,13 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
         max_outer_total_bytes: 8192,
     };
     assert!(matches!(
-        restore_protected_snapshot(ProtectedRestore {
-            committed: None,
-            ..restore(current(4))
-        })
+        restore_protected_snapshot(
+            ProtectedRestore {
+                committed: None,
+                ..restore(current(4))
+            },
+            || Ok((current(4), Some(&committed)))
+        )
         .await,
         Err(ProtectedSnapshotError::Read(
             ProtectedReadMismatch::MissingCommit
@@ -367,22 +370,47 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
     ));
     assert_eq!(remote.gets.load(Ordering::Relaxed), 0);
     assert!(matches!(
-        restore_protected_snapshot(restore(current(5))).await,
+        restore_protected_snapshot(restore(current(5)), || Ok((current(4), Some(&committed))))
+            .await,
         Err(ProtectedSnapshotError::Read(ProtectedReadMismatch::Stale))
     ));
     assert_eq!(remote.gets.load(Ordering::Relaxed), 0);
-    let cold = restore_protected_snapshot(restore(current(4)))
-        .await
-        .unwrap();
-    assert_eq!(cold.snapshot().cid(), snapshot.cid());
+    assert!(matches!(
+        restore_protected_snapshot(restore(current(4)), || Ok((current(5), Some(&committed))))
+            .await,
+        Err(ProtectedSnapshotError::Read(ProtectedReadMismatch::Stale))
+    ));
     assert_eq!(remote.gets.load(Ordering::Relaxed), 4);
-    let warm = restore_protected_snapshot(restore(current(4)))
-        .await
-        .unwrap();
+    assert!(matches!(
+        restore_protected_snapshot(restore(current(4)), || Ok((current(4), None))).await,
+        Err(ProtectedSnapshotError::Read(
+            ProtectedReadMismatch::MissingCommit
+        ))
+    ));
+    assert_eq!(remote.gets.load(Ordering::Relaxed), 4);
+    assert!(matches!(
+        restore_protected_snapshot(restore(current(4)), || {
+            Ok((
+                CurrentStorageStateV1 {
+                    now: 98,
+                    ..current(4)
+                },
+                Some(&committed),
+            ))
+        })
+        .await,
+        Err(ProtectedSnapshotError::Read(ProtectedReadMismatch::Stale))
+    ));
+    assert_eq!(remote.gets.load(Ordering::Relaxed), 4);
+    let warm =
+        restore_protected_snapshot(restore(current(4)), || Ok((current(4), Some(&committed))))
+            .await
+            .unwrap();
     assert_eq!(warm.snapshot().cid(), snapshot.cid());
     assert_eq!(remote.gets.load(Ordering::Relaxed), 4);
     assert!(matches!(
-        restore_protected_snapshot(restore(current(5))).await,
+        restore_protected_snapshot(restore(current(5)), || Ok((current(4), Some(&committed))))
+            .await,
         Err(ProtectedSnapshotError::Read(ProtectedReadMismatch::Stale))
     ));
     assert_eq!(remote.gets.load(Ordering::Relaxed), 4);
@@ -548,22 +576,25 @@ async fn protected_s3_tls_conformance() {
         expires_at: 100,
         allowed: true,
     };
-    let restored = restore_protected_snapshot(ProtectedRestore {
-        read,
-        claim: &read_claim,
-        current: current(4),
-        committed: Some(&committed),
-        prepared: &prepared,
-        protected_cache: &protected_cache,
-        remote: &remote,
-        session: &restore_session,
-        key: &key,
-        relations: &relation_catalog,
-        entities: &entity_catalog,
-        inner_limits: limits(),
-        max_outer_block_bytes: 4096,
-        max_outer_total_bytes: 8192,
-    })
+    let restored = restore_protected_snapshot(
+        ProtectedRestore {
+            read,
+            claim: &read_claim,
+            current: current(4),
+            committed: Some(&committed),
+            prepared: &prepared,
+            protected_cache: &protected_cache,
+            remote: &remote,
+            session: &restore_session,
+            key: &key,
+            relations: &relation_catalog,
+            entities: &entity_catalog,
+            inner_limits: limits(),
+            max_outer_block_bytes: 4096,
+            max_outer_total_bytes: 8192,
+        },
+        || Ok((current(4), Some(&committed))),
+    )
     .await
     .unwrap();
     assert_eq!(restored.snapshot().cid(), snapshot.cid());

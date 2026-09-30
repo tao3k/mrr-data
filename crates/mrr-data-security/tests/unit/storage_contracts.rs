@@ -163,6 +163,7 @@ fn protected_storage_v1_matches_pinned_spec_matrix() {
     check_protected_publications(&fixture);
     check_protected_commits(&fixture);
     check_protected_reads(&fixture);
+    check_protected_read_releases(&fixture);
 }
 
 struct FixturePublication<'a> {
@@ -275,6 +276,71 @@ fn check_protected_reads(fixture: &Value) {
                 .is_ok(),
             case["allow"].as_bool().unwrap(),
             "SPEC read fixture {}",
+            case["name"]
+        );
+    }
+}
+
+fn check_protected_read_releases(fixture: &Value) {
+    let cases = fixture["read_release_cases"].as_array().unwrap();
+    assert_eq!(cases.len(), 9);
+    for case in cases {
+        let read = FixtureRead::new(&case["read"]);
+        let claimed = FixtureRead::new(&case["claim"]["intent"]);
+        let claim = ProtectedReadClaimV1 {
+            intent: claimed.projected(),
+            epoch: case["claim"]["epoch"].as_u64().unwrap(),
+            expires_at: case["claim"]["expires_at"].as_u64().unwrap(),
+            allowed: case["claim"]["allowed"].as_bool().unwrap(),
+        };
+        let before_value = &case["committed_before"];
+        let before_publication = (!before_value.is_null())
+            .then(|| FixturePublication::new(&before_value["publication"]));
+        let before_receipt =
+            before_publication
+                .as_ref()
+                .map(|publication| ProtectedCommitReceiptV1 {
+                    publication: publication.projected(),
+                    child_count: before_value["child_count"]
+                        .as_u64()
+                        .unwrap()
+                        .try_into()
+                        .unwrap(),
+                    total_outer_bytes: before_value["total_outer_bytes"]
+                        .as_u64()
+                        .unwrap()
+                        .try_into()
+                        .unwrap(),
+                });
+        let after_value = &case["committed_after"];
+        let after_publication =
+            (!after_value.is_null()).then(|| FixturePublication::new(&after_value["publication"]));
+        let after_receipt =
+            after_publication
+                .as_ref()
+                .map(|publication| ProtectedCommitReceiptV1 {
+                    publication: publication.projected(),
+                    child_count: after_value["child_count"]
+                        .as_u64()
+                        .unwrap()
+                        .try_into()
+                        .unwrap(),
+                    total_outer_bytes: after_value["total_outer_bytes"]
+                        .as_u64()
+                        .unwrap()
+                        .try_into()
+                        .unwrap(),
+                });
+        assert_eq!(
+            read.projected()
+                .check_release(
+                    &claim,
+                    (fixture_current(&case["before"]), before_receipt.as_ref()),
+                    (fixture_current(&case["after"]), after_receipt.as_ref()),
+                )
+                .is_ok(),
+            case["allow"].as_bool().unwrap(),
+            "SPEC read release fixture {}",
             case["name"]
         );
     }
