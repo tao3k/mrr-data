@@ -270,14 +270,65 @@ fn google_request_requires_exact_snapshot_selection() {
         google_key(),
     )
     .unwrap();
-    let body = String::from_utf8(plan.deidentify_body().unwrap().to_json_bytes().unwrap()).unwrap();
+    assert!(
+        plan.deidentify_body(CurrentGovernance {
+            now: 100,
+            ..current
+        })
+        .is_err()
+    );
+    assert!(
+        plan.deidentify_body(CurrentGovernance { now: 98, ..current })
+            .is_err()
+    );
+    assert!(
+        plan.deidentify_body(CurrentGovernance {
+            policy_digest: &[99; 32],
+            ..current
+        })
+        .is_err()
+    );
+    assert!(
+        plan.deidentify_body(CurrentGovernance {
+            epoch: 8,
+            ..current
+        })
+        .is_err()
+    );
+    let body = String::from_utf8(
+        plan.deidentify_body(current)
+            .unwrap()
+            .to_json_bytes()
+            .unwrap(),
+    )
+    .unwrap();
     assert!(body.contains("cryptoDeterministicConfig"));
     assert_eq!(plan.identity().root(), source.cid());
     let response = GoogleSdpResponse::from_json_bytes(
         br#"{"item":{"table":{"headers":[{"name":"patient_id"},{"name":"study_context"}],"rows":[{"values":[{"stringValue":"c3ludGhldGljLWNpcGhlcnRleHQ="},{"stringValue":"study-1"}]}]}},"overview":{"transformationSummaries":[{"field":{"name":"patient_id"},"results":[{"count":"1","code":"SUCCESS"}]}]}}"#,
     )
     .unwrap();
-    let checked = plan.check_response(&response).unwrap();
+    let checked = plan.check_response(&response, current).unwrap();
+    let stale_plan = prepare_google_aes_siv_deidentify(
+        &request,
+        &claim,
+        current,
+        google_selected("synthetic-patient-1", "cohort-a"),
+        "projects/p/locations/us".to_owned(),
+        google_key(),
+    )
+    .unwrap();
+    assert!(
+        stale_plan
+            .check_response(
+                &response,
+                CurrentGovernance {
+                    now: 100,
+                    ..current
+                }
+            )
+            .is_err()
+    );
     assert_eq!(checked.identity().policy_digest(), &policy);
     assert_eq!(checked.identity().governance_epoch(), 7);
     assert_eq!(checked.identity().dataset(), "cohort-a");
@@ -321,8 +372,26 @@ fn google_request_requires_exact_snapshot_selection() {
     )
     .unwrap();
     assert!(reidentify.endpoint().unwrap().ends_with(":reidentify"));
+    assert!(
+        reidentify
+            .reidentify_body(CurrentGovernance { now: 100, ..next })
+            .is_err()
+    );
+    assert!(
+        reidentify
+            .reidentify_body(CurrentGovernance { now: 98, ..next })
+            .is_err()
+    );
+    assert!(
+        reidentify
+            .reidentify_body(CurrentGovernance {
+                policy_digest: &policy,
+                ..next
+            })
+            .is_err()
+    );
     let reidentify_body = reidentify
-        .reidentify_body()
+        .reidentify_body(next)
         .unwrap()
         .to_json_bytes()
         .unwrap();
@@ -335,7 +404,22 @@ fn google_request_requires_exact_snapshot_selection() {
         br#"{"item":{"table":{"headers":[{"name":"patient_id"},{"name":"study_context"}],"rows":[{"values":[{"stringValue":"synthetic-patient-1"},{"stringValue":"study-1"}]}]}},"overview":{"transformationSummaries":[{"field":{"name":"patient_id"},"results":[{"count":"1","code":"SUCCESS"}]}]}}"#,
     )
     .unwrap();
-    let restored = reidentify.check_response(&reidentify_response).unwrap();
+    let restored = reidentify
+        .check_response(&reidentify_response, next)
+        .unwrap();
+    let stale_reidentify = prepare_reidentify(
+        &reidentify_request,
+        &reidentify_claim,
+        next,
+        google_selected("synthetic-patient-1", "cohort-a"),
+        google_key(),
+    )
+    .unwrap();
+    assert!(
+        stale_reidentify
+            .check_response(&reidentify_response, CurrentGovernance { now: 100, ..next })
+            .is_err()
+    );
     assert_eq!(restored.value(), "synthetic-patient-1");
     assert_eq!(restored.identity().policy_digest(), &next_policy);
     assert_eq!(restored.token_digest(), &expected_token_digest);
@@ -355,7 +439,11 @@ fn google_request_requires_exact_snapshot_selection() {
         google_key(),
     )
     .unwrap();
-    assert!(reidentify_again.check_response(&wrong_plaintext).is_err());
+    assert!(
+        reidentify_again
+            .check_response(&wrong_plaintext, next)
+            .is_err()
+    );
     assert_eq!(
         prepare_reidentify(
             &request,
@@ -575,7 +663,7 @@ fn cloud_profile_requires_release_and_transformation_decisions() {
         br#"{"item":{"table":{"headers":[{"name":"customer_id"},{"name":"campaign"}],"rows":[{"values":[{"stringValue":"c3ludGhldGljLWNpcGhlcnRleHQ="},{"stringValue":"campaign-a"}]}]}},"overview":{"transformationSummaries":[{"field":{"name":"customer_id"},"results":[{"count":"1","code":"SUCCESS"}]}]}}"#,
     )
     .unwrap();
-    let checked = plan.check_response(&response).unwrap();
+    let checked = plan.check_response(&response, current).unwrap();
     assert_eq!(checked.identity().row().unwrap(), &bound_row);
     assert_eq!(checked.identity().cloud_release().unwrap(), &bound_release);
     let unbound = SelectedTokenInput {

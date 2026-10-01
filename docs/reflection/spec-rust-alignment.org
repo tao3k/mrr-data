@@ -56,3 +56,15 @@ and every expiry are rechecked before request formation and checked output.
 These are dynamic Host projections rather than inherited object behavior;
 LeanPoo's typed-slot composition remains useful for the existing protection
 profile, but a cached object result would not establish fresh authority.
+
+* Reflection: single-row and re-identification current state
+
+The batch path exposed a mismatch: its request and checked output rechecked
+current governance, while the public single-row and re-identification plans
+only checked it when prepared. All three now use the retained policy digest,
+epoch, observation time and claim expiry at both effect boundaries. Tests
+reject an expired claim, a changed policy or epoch, and clock rollback before
+request formation or checked output. LeanPoo remains in use for the SPEC
+protection profile's typed slots and inheritance; these time-dependent
+MRR checks are direct Rust value checks because no object composition can
+authenticate a fresh Host state. SPEC's pure TableBatch contract is unchanged.

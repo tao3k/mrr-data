@@ -9,7 +9,10 @@ selected dataset, field, actual context, complete token profile, and SHA-256
 of the exact UTF-8 selected value must agree. The bridge then checks the
 wrapped-key lineage and Google request configuration. The returned plan retains
 the snapshot root, dataset, input digest, policy digest, and governance epoch.
-After the bridge checks a Host-supplied response, the output retains the same
+The single-row request body and checked output each require a new
+Host-authenticated current projection with the same policy digest and epoch,
+no clock rollback, and an unexpired claim. After the bridge checks a
+Host-supplied response, the output retains the same
 identity plus request, response, and token digests. This is a structural
 selection and response check, not encryption or authenticated provider I/O.
 
@@ -22,7 +25,9 @@ wrapped key, and Google transformation recipe. The bridge checks that the
 re-identification response equals the selected original value. The returned
 plaintext carries the new governance identity and the source token and
 provider response digests. An old =Deidentify= claim cannot authorize this
-effect; a policy or epoch change needs a separately current claim. The Host
+effect; a policy or epoch change needs a separately current claim. The
+re-identification request body and checked plaintext also require a fresh
+matching current projection before their respective boundaries. The Host
 must authenticate the stored token's origin, current approval and audit state,
 provider transport, and any plaintext release. This entry point accepts the
 projection binding only; Cloud row outputs require a future Cloud-specific
@@ -105,6 +110,9 @@ and checked output each require a fresh Host projection matching the policy
 digest and epoch, without clock rollback or any expired row claim. This
 projection check cannot authenticate the Host facts or discover revocation
 within an unchanged epoch; the Host remains responsible for both. The
+single-row and re-identification plans now apply the same current-state rule
+at request formation and checked output. No plan caches authority across
+provider I/O. The
 [[file:../../../docs/reflection/spec-rust-alignment.org][iteration Reflection]]
 records why this request/response check remains a pure value rule.
 

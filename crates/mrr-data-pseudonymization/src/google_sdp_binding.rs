@@ -188,6 +188,17 @@ pub struct GoogleBoundIdentity {
 }
 
 impl GoogleBoundIdentity {
+    fn check_current(&self, current: CurrentGovernance<'_>) -> Result<(), String> {
+        if *current.policy_digest != self.policy_digest
+            || current.epoch != self.governance_epoch
+            || current.now < self.authorization_scope.observed_at
+            || current.now >= self.claim_expires_at
+        {
+            return Err("Google plan authorization is stale".to_owned());
+        }
+        Ok(())
+    }
+
     #[must_use]
     pub const fn root(&self) -> &Cid {
         &self.root
@@ -260,7 +271,11 @@ impl BoundGoogleDeidentifyPlan {
     /// # Errors
     ///
     /// Returns the bridge validation error for an invalid request.
-    pub fn deidentify_body(&self) -> Result<GoogleSdpRequest, String> {
+    pub fn deidentify_body(
+        &self,
+        current: CurrentGovernance<'_>,
+    ) -> Result<GoogleSdpRequest, String> {
+        self.identity.check_current(current)?;
         self.plan.deidentify_body()
     }
 
@@ -273,7 +288,9 @@ impl BoundGoogleDeidentifyPlan {
     pub fn check_response(
         self,
         response: &GoogleSdpResponse,
+        current: CurrentGovernance<'_>,
     ) -> Result<BoundGoogleDeidentifyOutput, String> {
+        self.identity.check_current(current)?;
         let checked = self.plan.check_deidentify_response(response)?;
         Ok(BoundGoogleDeidentifyOutput {
             identity: self.identity,
@@ -362,14 +379,10 @@ impl BoundGoogleDeidentifyBatchPlan {
         &self,
         current: CurrentGovernance<'_>,
     ) -> Result<(), GoogleBatchWireMismatch> {
-        let first = &self.identities[0];
-        if *current.policy_digest != first.policy_digest
-            || current.epoch != first.governance_epoch
-            || current.now < first.authorization_scope.observed_at
-            || self
-                .identities
-                .iter()
-                .any(|identity| current.now >= identity.claim_expires_at)
+        if self
+            .identities
+            .iter()
+            .any(|identity| identity.check_current(current).is_err())
         {
             return Err(GoogleBatchWireMismatch::Stale);
         }
@@ -473,7 +486,11 @@ impl BoundGoogleReidentifyPlan {
     /// The Host sends this body through authenticated transport.
     /// # Errors
     /// Returns a bridge error for an invalid token or request.
-    pub fn reidentify_body(&self) -> Result<GoogleSdpRequest, String> {
+    pub fn reidentify_body(
+        &self,
+        current: CurrentGovernance<'_>,
+    ) -> Result<GoogleSdpRequest, String> {
+        self.identity.check_current(current)?;
         self.plan.reidentify_body(&self.token)
     }
 
@@ -483,7 +500,9 @@ impl BoundGoogleReidentifyPlan {
     pub fn check_response(
         self,
         response: &GoogleSdpResponse,
+        current: CurrentGovernance<'_>,
     ) -> Result<BoundGoogleReidentifyOutput, String> {
+        self.identity.check_current(current)?;
         let checked = self.plan.check_reidentify_response(&self.token, response)?;
         Ok(BoundGoogleReidentifyOutput {
             identity: self.identity,
