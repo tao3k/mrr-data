@@ -447,6 +447,7 @@ pub struct ProtectedPublish<'a> {
     pub claim: &'a ProtectionClaimV1<'a>,
     pub current: CurrentStorageStateV1<'a>,
     pub prepared: &'a PreparedProtectedSnapshot,
+    pub key: &'a ProtectedEnvelopeKey,
     pub outbox: &'a dyn AsyncContentStore,
     pub remote: &'a dyn RemoteContentStore,
     pub session: &'a TransferSession,
@@ -545,6 +546,25 @@ where
         .ok_or(ProtectedSnapshotError::TooLarge)?;
     if actual_total != publish.prepared.total_outer_bytes {
         return Err(ProtectedSnapshotError::WrongBinding);
+    }
+    let manifest_plaintext = open_block(
+        ProtectedBlockBindingV1 {
+            intent: publish.intent,
+            inner_cid: &publish.prepared.manifest_plain_cid,
+            role: ProtectedBlockRole::Manifest,
+            key_version: &publish.prepared.key_version,
+        },
+        &publish.prepared.outer_root,
+        &root_bytes,
+        publish.key,
+        publish.max_outer_block_bytes,
+    )?;
+    let (inner_root, root_block_outer, child_roots) = decode_manifest(&manifest_plaintext)?;
+    if inner_root != publish.prepared.inner_root
+        || root_block_outer != publish.prepared.root_block_outer
+        || child_roots != publish.prepared.child_roots
+    {
+        return Err(ProtectedSnapshotError::InvalidManifest);
     }
     let publication = publish.prepared.publication(publish.intent)?;
     publication

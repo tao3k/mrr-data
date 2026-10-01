@@ -49,6 +49,9 @@ jobs:
         run: python3 tools/check-docs.py
       - name: Check formatting
         run: cargo fmt --all -- --check
+      - name: Check fixtures against exact SPEC pin
+        if: runner.os == 'Linux'
+        run: python3 tools/check-spec-fixtures.py
       - name: Test workspace
         run: cargo test --workspace --features mrr-data/transfer,mrr-data/car,mrr-data/filesystem,mrr-data/cache,mrr-data/s3 --locked
       - name: Check optional feature dependency isolation

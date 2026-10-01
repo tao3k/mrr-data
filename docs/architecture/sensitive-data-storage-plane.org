@@ -11,7 +11,7 @@ Cedar POO expresses policy; the deploying Host authenticates evidence, runs
 policy, redeems approvals, controls provider I/O and audit; MRR Data verifies
 physical identity, selection and transfer. A CID proves bytes, not an allowed
 destination or a reduction in sensitivity. The Cedar POO
-[[https://github.com/tao3k/cedar-poo-spec/blob/5e7e43b433378742ae27179a5ee688fe11444e2b/CedarPooSpec/Data/DerivedArtifact.lean][DerivedArtifact rule at the pinned Cedar revision]]
+[[https://github.com/tao3k/cedar-poo-spec/blob/0f72eec42d59e1398d69a1d52c183d4b12439a03/CedarPooSpec/Data/DerivedArtifact.lean][DerivedArtifact rule at the pinned Cedar revision]]
 retains every source label across a transformation and checks tenant, owner and
 restricted status at the destination. Tokenization alone does not declassify.
 
@@ -220,13 +220,14 @@ children before any optimization of this path.
    hosted-provider runs remain open. Qualify
    AWS S3 and each chosen compatible provider separately,
    including TLS and conditional-put behavior.
-4. The bounded Google table batch selection now replays the SPEC's thirteen
+4. The bounded Google table batch selection replays the SPEC's thirteen
    cases, and the library planner checks one verified Arrow child plus each
    row's current claim, Cloud gate and actual cells before returning any
-   per-row plans. The single-row baseline remains. A combined Google
-   multi-row request/response, partial-response checks, quotas, endpoint
-   residency, key rotation and separate batch re-identification authority
-   require a future provider wire contract and Host integration.
+   per-row plans. Table Batch Wire V1 adds one combined Google Table request
+   and checked ordered response; malformed or partial responses return no
+   local row outputs. The single-row baseline remains. Provider transport,
+   quotas, endpoint residency, key rotation and separate batch
+   re-identification authority still require Host integration.
 5. Run one realistic restricted Healthcare workload through source selection,
    protected local, cold S3, warm cache, Google transformation and MRR result
    admission. Compare independently specified rows and release decisions,

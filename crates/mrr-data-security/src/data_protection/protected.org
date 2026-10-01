@@ -38,9 +38,11 @@ and outer roots and must be durably authenticated by the Host before remote
 publication. =host_record= exports owned fields for Host-controlled durable
 storage; =from_authenticated_record= resumes from those fields after a restart.
 The caller authenticates that record and its storage format. The publisher
-uploads ciphertext children and the encrypted
-inner root, refreshes current governance, then uploads the encrypted manifest
-root. The returned physical acknowledgement can feed =decide_commit=. A fresh
+uploads ciphertext children and the encrypted inner root, then authenticates
+and decrypts the staged manifest with the supplied key. It requires the inner
+root and complete child map to match the recovered record before refreshing
+current governance and uploading the encrypted manifest root. The returned
+physical acknowledgement can feed =decide_commit=. A fresh
 commit requires that exact acknowledgement and current authority; a matching
 authenticated prior ledger receipt yields =Replay= even after expiry. A root
 PUT that returned an error has no acknowledgement from this API, including
@@ -56,6 +58,12 @@ authority before I/O and after verification, and checks cold restore and zero-GE
 a mock remote. The independent loopback SigV4/TLS conformance runner also
 publishes and restores the protected closure through the production S3 adapter
 and confirms that the raw inner root is absent remotely.
+Recovery negatives additionally reopen a Host record against a missing
+outbox, an outbox that returns corrupted manifest bytes, and a recovered record
+whose child map disagrees with the authenticated manifest. None of these paths
+returns a physical acknowledgement or publishes the discoverable outer root;
+the existing SPEC commit rule rejects a missing acknowledgement. This checks
+the library's failure boundary without claiming durable Host ledger behavior.
 
 * Reflection: local S3 composition and LeanPoo
 

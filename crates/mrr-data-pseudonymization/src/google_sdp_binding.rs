@@ -2,7 +2,7 @@
 
 use cedar_poo_bridge::google_sdp::{
     CheckedTableOutput, GoogleSdpRequest, GoogleSdpResponse, SelectedTabularInput, TabularAesSiv,
-    WrappedKeyBinding,
+    TabularAesSivBatch, WrappedKeyBinding,
 };
 use cid::Cid;
 use meta_relational_reasoning::RelationId;
@@ -215,6 +215,100 @@ impl BoundGoogleDeidentifyPlan {
             identity: self.identity,
             checked,
         })
+    }
+}
+
+/// A combined Table request over one ordered, independently authorized child.
+/// The provider does not return MRR row ordinals; positions are bound here.
+pub struct BoundGoogleDeidentifyBatchPlan {
+    identities: Vec<GoogleBoundIdentity>,
+    batch: TabularAesSivBatch,
+}
+
+/// A set of row plans cannot be sent as one bounded Table request.
+#[derive(Debug)]
+pub enum GoogleBatchWireMismatch {
+    Empty,
+    MixedScope,
+    RowUnbound,
+    OrdinalOrder,
+    Bridge(String),
+}
+
+impl BoundGoogleDeidentifyBatchPlan {
+    /// Consume ordered plans only when every row retains one source, current
+    /// governance scope and physical Arrow child. No provider call occurs.
+    /// # Errors
+    /// Rejects a missing row, changed scope, ordering or provider recipe.
+    pub fn from_plans(
+        plans: Vec<BoundGoogleDeidentifyPlan>,
+    ) -> Result<Self, GoogleBatchWireMismatch> {
+        let first = plans.first().ok_or(GoogleBatchWireMismatch::Empty)?;
+        let first_identity = &first.identity;
+        let first_row = first_identity
+            .row
+            .as_ref()
+            .ok_or(GoogleBatchWireMismatch::RowUnbound)?;
+        let mut previous = None;
+        for plan in &plans {
+            let identity = &plan.identity;
+            if identity.root != first_identity.root
+                || identity.dataset != first_identity.dataset
+                || identity.policy_digest != first_identity.policy_digest
+                || identity.governance_epoch != first_identity.governance_epoch
+                || identity.cloud_release != first_identity.cloud_release
+            {
+                return Err(GoogleBatchWireMismatch::MixedScope);
+            }
+            let row = identity
+                .row
+                .as_ref()
+                .ok_or(GoogleBatchWireMismatch::RowUnbound)?;
+            if row.relation_id != first_row.relation_id || row.child_cid != first_row.child_cid {
+                return Err(GoogleBatchWireMismatch::MixedScope);
+            }
+            if previous.is_some_and(|ordinal| ordinal >= row.row_index) {
+                return Err(GoogleBatchWireMismatch::OrdinalOrder);
+            }
+            previous = Some(row.row_index);
+        }
+        let (identities, rows): (Vec<_>, Vec<_>) = plans
+            .into_iter()
+            .map(|plan| (plan.identity, plan.plan))
+            .unzip();
+        let batch = TabularAesSivBatch::new(rows).map_err(GoogleBatchWireMismatch::Bridge)?;
+        Ok(Self { identities, batch })
+    }
+
+    /// The exact de-identification endpoint for the combined request.
+    /// # Errors
+    /// Returns bridge validation failures.
+    pub fn endpoint(&self) -> Result<String, String> {
+        self.batch.endpoint()
+    }
+
+    /// One Google Table request containing the ordered selected rows.
+    /// # Errors
+    /// Returns bridge validation failures.
+    pub fn deidentify_body(&self) -> Result<GoogleSdpRequest, String> {
+        self.batch.deidentify_body()
+    }
+
+    /// Retain no checked row output if any row or the aggregate provider
+    /// summary is malformed. The Host authenticates and bounds response bytes.
+    /// # Errors
+    /// Returns a bridge shape, context, token or summary mismatch.
+    pub fn check_response(
+        self,
+        response: &GoogleSdpResponse,
+    ) -> Result<Vec<BoundGoogleDeidentifyOutput>, String> {
+        let checked = self.batch.check_deidentify_response(response)?;
+        Ok(self
+            .identities
+            .into_iter()
+            .zip(checked)
+            .map(|(identity, checked)| BoundGoogleDeidentifyOutput { identity, checked })
+            .collect())
     }
 }
 

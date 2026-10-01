@@ -13,9 +13,9 @@ use meta_relational_reasoning::{
 };
 use mrr_data_cache::{S3Config, S3ContentStore, http_client_builder};
 use mrr_data_content::{
-    ContentBlock, ContentCodec, ContentStore, FilesystemContentStore, MemoryContentStore,
-    RemoteContentStore, RemoteError, RemoteFuture, RemoteTransferLimits, SnapshotTransferLimits,
-    TransferSession,
+    ContentBlock, ContentCodec, ContentError, ContentStore, FilesystemContentStore,
+    MemoryContentStore, RemoteContentStore, RemoteError, RemoteFuture, RemoteTransferLimits,
+    SnapshotTransferLimits, TransferSession,
 };
 use tempfile::tempdir;
 
@@ -74,6 +74,25 @@ impl RemoteContentStore for Remote {
                 Ok(())
             }
         })
+    }
+}
+
+struct CorruptOutbox<'a> {
+    inner: &'a FilesystemContentStore,
+    corrupted: Cid,
+}
+
+impl ContentStore for CorruptOutbox<'_> {
+    fn put(&self, block: ContentBlock<'_>) -> Result<Cid, ContentError> {
+        self.inner.put(block)
+    }
+
+    fn get_bounded(&self, cid: &Cid, max_bytes: usize) -> Result<Vec<u8>, ContentError> {
+        if *cid == self.corrupted {
+            Ok(b"tampered-manifest".to_vec())
+        } else {
+            self.inner.get_bounded(cid, max_bytes)
+        }
     }
 }
 
@@ -217,6 +236,97 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
     let prepared = PreparedProtectedSnapshot::from_authenticated_record(intent, record).unwrap();
     assert!(outbox.get(prepared.outer_root()).is_ok());
 
+    let missing_outbox = MemoryContentStore::default();
+    let missing_remote = Remote::new();
+    assert!(matches!(
+        publish_prepared_snapshot(
+            ProtectedPublish {
+                intent,
+                claim: &claim,
+                current: current(4),
+                prepared: &prepared,
+                key: &key,
+                outbox: &missing_outbox,
+                remote: &missing_remote,
+                session: &session(),
+                max_outer_block_bytes: 4096,
+            },
+            || Ok(current(4)),
+        )
+        .await,
+        Err(ProtectedSnapshotError::Local(_))
+    ));
+    assert_eq!(missing_remote.puts.load(Ordering::Relaxed), 0);
+    let corrupt_outbox = CorruptOutbox {
+        inner: &outbox,
+        corrupted: *prepared.outer_root(),
+    };
+    let corrupt_remote = Remote::new();
+    let refreshes = AtomicUsize::new(0);
+    assert!(matches!(
+        publish_prepared_snapshot(
+            ProtectedPublish {
+                intent,
+                claim: &claim,
+                current: current(4),
+                prepared: &prepared,
+                key: &key,
+                outbox: &corrupt_outbox,
+                remote: &corrupt_remote,
+                session: &session(),
+                max_outer_block_bytes: 4096,
+            },
+            || {
+                refreshes.fetch_add(1, Ordering::Relaxed);
+                Ok(current(4))
+            },
+        )
+        .await,
+        Err(ProtectedSnapshotError::WrongRoot)
+    ));
+    assert_eq!(corrupt_remote.puts.load(Ordering::Relaxed), 3);
+    assert!(!corrupt_remote.contains(prepared.outer_root()));
+    assert_eq!(refreshes.load(Ordering::Relaxed), 0);
+
+    let mut swapped_record = prepared.host_record();
+    let outer_values = swapped_record
+        .child_roots
+        .values()
+        .copied()
+        .collect::<Vec<_>>();
+    assert_eq!(outer_values.len(), 2);
+    assert_ne!(outer_values[0], outer_values[1]);
+    for (outer, replacement) in swapped_record
+        .child_roots
+        .values_mut()
+        .zip(outer_values.into_iter().rev())
+    {
+        *outer = replacement;
+    }
+    let swapped =
+        PreparedProtectedSnapshot::from_authenticated_record(intent, swapped_record).unwrap();
+    let swapped_remote = Remote::new();
+    assert!(matches!(
+        publish_prepared_snapshot(
+            ProtectedPublish {
+                intent,
+                claim: &claim,
+                current: current(4),
+                prepared: &swapped,
+                key: &key,
+                outbox: &outbox,
+                remote: &swapped_remote,
+                session: &session(),
+                max_outer_block_bytes: 4096,
+            },
+            || Ok(current(4)),
+        )
+        .await,
+        Err(ProtectedSnapshotError::InvalidManifest)
+    ));
+    assert_eq!(swapped_remote.puts.load(Ordering::Relaxed), 3);
+    assert!(!swapped_remote.contains(prepared.outer_root()));
+
     let altered =
         PreparedProtectedSnapshot::from_authenticated_record(intent, wrong_total).unwrap();
     let altered_remote = Remote::new();
@@ -228,6 +338,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
                 claim: &claim,
                 current: current(4),
                 prepared: &altered,
+                key: &key,
                 outbox: &outbox,
                 remote: &altered_remote,
                 session: &altered_session,
@@ -247,6 +358,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
         claim: &claim,
         current: current(4),
         prepared: &prepared,
+        key: &key,
         outbox: &outbox,
         remote: &remote,
         session: &publish_session,
@@ -557,6 +669,7 @@ async fn protected_s3_tls_conformance() {
             claim: &claim,
             current: current(4),
             prepared: &prepared,
+            key: &key,
             outbox: &outbox,
             remote: &remote,
             session: &publish_session,

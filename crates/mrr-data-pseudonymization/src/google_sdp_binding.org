@@ -87,10 +87,16 @@ authenticated one physical Arrow child, =prepare_cloud_google_arrow_batch=
 requires one common recipe, release, current governance scope, subject,
 purpose and provider parent. It applies the existing per-row claim, Cloud
 gate, recipe and physical cell checks to every row before returning the
-vector of plans. A failure returns no plans. This is library planning for
-separate row requests; it does not create or check a Google multi-row wire
-request or response. The Host still controls request dispatch, provider
-authentication, quota and audit.
+vector of plans. A failure returns no plans. The SPEC Rust bridge's
+=TabularAesSivBatch= combines matching provider recipes into one Table request;
+=BoundGoogleDeidentifyBatchPlan= retains each MRR row identity in order and
+rejects an altered row count, context, token or aggregate success report
+without returning any checked row output. Google returns no MRR row ordinal;
+the mapping depends on the preserved request/response order. A malformed
+response cannot undo provider work. The Host still bounds response bytes and
+controls request dispatch, provider authentication, quota and audit. The
+[[file:../../../docs/reflection/spec-rust-alignment.org][iteration Reflection]]
+records why this request/response check remains a pure value rule.
 
 The common token profile is independent of provider. Google is selected with
 the optional =google-sdp= feature; a local provider can consume the same

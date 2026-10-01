@@ -331,18 +331,18 @@ fn arrow_selection_reads_the_child_local_row_and_rejects_drift() {
     reason = "complete cloud authorization and physical Arrow selection fixture"
 )]
 fn cloud_prepare_requires_authorization_then_actual_arrow_cells() {
-    use cedar_poo_bridge::google_sdp::{SurrogateInfoType, WrappedKeyBinding};
+    use cedar_poo_bridge::google_sdp::{GoogleSdpResponse, SurrogateInfoType, WrappedKeyBinding};
     use mrr_data_security::data_protection::{
         DataProtectionDecisions, DataProtectionProfile, ReleaseReceiptClaim,
     };
     use sha2::{Digest, Sha256};
 
     use crate::{
-        AesSivTableRecipeBinding, ArrowChildInput, CloudDataProtectionSelection,
-        CloudGoogleArrowPreparation, CloudPseudonymizationGate, CurrentGovernance,
-        GoogleArrowBatchError, GoogleTableBatchMismatch, Mode, SelectedTokenInput,
-        TableRecipeMismatch, TokenAction, TokenAuthorizationClaim, TokenAuthorizationRequest,
-        TokenLineage, TokenProfile, prepare_cloud_google_arrow_batch,
+        AesSivTableRecipeBinding, ArrowChildInput, BoundGoogleDeidentifyBatchPlan,
+        CloudDataProtectionSelection, CloudGoogleArrowPreparation, CloudPseudonymizationGate,
+        CurrentGovernance, GoogleArrowBatchError, GoogleTableBatchMismatch, Mode,
+        SelectedTokenInput, TableRecipeMismatch, TokenAction, TokenAuthorizationClaim,
+        TokenAuthorizationRequest, TokenLineage, TokenProfile, prepare_cloud_google_arrow_batch,
     };
 
     let (snapshot, relations, entities, bytes) = fixture();
@@ -548,6 +548,61 @@ fn cloud_prepare_requires_authorization_then_actual_arrow_cells() {
             .collect::<Vec<_>>(),
         vec![0, 1]
     );
+    let wire = BoundGoogleDeidentifyBatchPlan::from_plans(batch).unwrap();
+    let request_body: serde_json::Value =
+        serde_json::from_slice(&wire.deidentify_body().unwrap().to_json_bytes().unwrap()).unwrap();
+    assert_eq!(
+        request_body["item"]["table"]["rows"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        request_body["item"]["table"]["rows"][1]["values"][1]["stringValue"],
+        "study-b"
+    );
+    let response_body = serde_json::json!({
+        "item": {"table": {
+            "headers": [{"name": "patient_id"}, {"name": "study_context"}],
+            "rows": [
+                {"values": [
+                    {"stringValue": "c3ludGhldGljLWNpcGhlcnRleHQtMQ=="},
+                    {"stringValue": "study-a"}
+                ]},
+                {"values": [
+                    {"stringValue": "c3ludGhldGljLWNpcGhlcnRleHQtMg=="},
+                    {"stringValue": "study-b"}
+                ]}
+            ]
+        }},
+        "overview": {"transformationSummaries": [{
+            "field": {"name": "patient_id"},
+            "results": [{"code": "SUCCESS", "count": "2"}]
+        }]}
+    });
+    let response =
+        GoogleSdpResponse::from_json_bytes(&serde_json::to_vec(&response_body).unwrap()).unwrap();
+    let outputs = wire.check_response(&response).unwrap();
+    assert_eq!(outputs.len(), 2);
+    assert_eq!(outputs[0].identity().row().unwrap().row_index, 0);
+    assert_eq!(outputs[1].identity().row().unwrap().row_index, 1);
+    let mut partial = response_body;
+    partial["overview"]["transformationSummaries"][0]["results"][0]["count"] =
+        serde_json::json!("1");
+    let partial =
+        GoogleSdpResponse::from_json_bytes(&serde_json::to_vec(&partial).unwrap()).unwrap();
+    let wire = BoundGoogleDeidentifyBatchPlan::from_plans(
+        prepare_cloud_google_arrow_batch(
+            vec![first_preparation(), second_preparation()],
+            &verified,
+            2,
+            100,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(wire.check_response(&partial).is_err());
     assert!(matches!(
         prepare_cloud_google_arrow_batch(
             vec![second_preparation(), second_preparation()],

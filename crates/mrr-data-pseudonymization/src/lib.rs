@@ -25,11 +25,12 @@ pub use google_arrow::{
 };
 #[cfg(feature = "google-sdp")]
 pub use google_sdp_binding::{
-    BoundGoogleDeidentifyOutput, BoundGoogleDeidentifyPlan, BoundGoogleReidentifyOutput,
-    BoundGoogleReidentifyPlan, CloudDataProtectionSelection, CloudGateMismatch,
-    CloudPseudonymizationGate, CloudReleaseIdentity, CloudRowIdentity, GoogleBoundIdentity,
-    GoogleSelectionMismatch, prepare_cloud_google_aes_siv_deidentify,
-    prepare_google_aes_siv_deidentify, prepare_google_aes_siv_reidentify,
+    BoundGoogleDeidentifyBatchPlan, BoundGoogleDeidentifyOutput, BoundGoogleDeidentifyPlan,
+    BoundGoogleReidentifyOutput, BoundGoogleReidentifyPlan, CloudDataProtectionSelection,
+    CloudGateMismatch, CloudPseudonymizationGate, CloudReleaseIdentity, CloudRowIdentity,
+    GoogleBatchWireMismatch, GoogleBoundIdentity, GoogleSelectionMismatch,
+    prepare_cloud_google_aes_siv_deidentify, prepare_google_aes_siv_deidentify,
+    prepare_google_aes_siv_reidentify,
 };
 
 /// Optional Google Sensitive Data Protection wire contract, without a cloud
