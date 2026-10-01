@@ -417,7 +417,13 @@ fn run(value_bytes: usize, source: &SnapshotBlock, response: &GoogleSdpResponse)
                 key(),
             )
             .unwrap();
-            black_box(plan.check_response(black_box(response), current).unwrap());
+            black_box(
+                plan.check_response(
+                    black_box(response),
+                    &mrr_data_pseudonymization::GoogleCurrentAuthority::token(current),
+                )
+                .unwrap(),
+            );
         },
     );
 }

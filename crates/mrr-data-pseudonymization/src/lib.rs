@@ -28,7 +28,7 @@ pub use google_sdp_binding::{
     BoundGoogleDeidentifyBatchPlan, BoundGoogleDeidentifyOutput, BoundGoogleDeidentifyPlan,
     BoundGoogleReidentifyOutput, BoundGoogleReidentifyPlan, CloudDataProtectionSelection,
     CloudGateMismatch, CloudPseudonymizationGate, CloudReleaseIdentity, CloudRowIdentity,
-    GoogleAuthorizationScope, GoogleBatchWireMismatch, GoogleBoundIdentity,
+    GoogleAuthorizationScope, GoogleBatchWireMismatch, GoogleBoundIdentity, GoogleCurrentAuthority,
     GoogleSelectionMismatch, prepare_cloud_google_aes_siv_deidentify,
     prepare_google_aes_siv_deidentify, prepare_google_aes_siv_reidentify,
 };

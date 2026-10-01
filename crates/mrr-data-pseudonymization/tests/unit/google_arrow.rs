@@ -340,7 +340,7 @@ fn cloud_prepare_requires_authorization_then_actual_arrow_cells() {
     use crate::{
         AesSivTableRecipeBinding, ArrowChildInput, BoundGoogleDeidentifyBatchPlan,
         CloudDataProtectionSelection, CloudGoogleArrowPreparation, CloudPseudonymizationGate,
-        CurrentGovernance, GoogleArrowBatchError, GoogleBatchWireMismatch,
+        CurrentGovernance, GoogleArrowBatchError, GoogleBatchWireMismatch, GoogleCurrentAuthority,
         GoogleTableBatchMismatch, Mode, SelectedTokenInput, TableRecipeMismatch, TokenAction,
         TokenAuthorizationClaim, TokenAuthorizationRequest, TokenLineage, TokenProfile,
         prepare_cloud_google_arrow_batch,
@@ -654,28 +654,47 @@ fn cloud_prepare_requires_authorization_then_actual_arrow_cells() {
         Err(GoogleBatchWireMismatch::MixedScope)
     ));
     let wire = BoundGoogleDeidentifyBatchPlan::from_plans(batch).unwrap();
+    let current_cloud = |state| GoogleCurrentAuthority::cloud(state, vec![first_cloud, cloud]);
+    let revoked_second = CloudDataProtectionSelection {
+        decisions: DataProtectionDecisions {
+            transformation_allowed: false,
+            ..cloud.decisions
+        },
+        ..cloud
+    };
     assert!(matches!(
-        wire.deidentify_body(CurrentGovernance {
-            now: 100,
-            ..current
-        }),
+        wire.deidentify_body(&GoogleCurrentAuthority::cloud(current, vec![first_cloud])),
         Err(GoogleBatchWireMismatch::Stale)
     ));
     assert!(matches!(
-        wire.deidentify_body(CurrentGovernance { now: 98, ..current }),
+        wire.deidentify_body(&GoogleCurrentAuthority::cloud(
+            current,
+            vec![first_cloud, revoked_second]
+        )),
+        Err(GoogleBatchWireMismatch::Stale)
+    ));
+    assert!(matches!(
+        wire.deidentify_body(&current_cloud(CurrentGovernance {
+            now: 100,
+            ..current
+        })),
+        Err(GoogleBatchWireMismatch::Stale)
+    ));
+    assert!(matches!(
+        wire.deidentify_body(&current_cloud(CurrentGovernance { now: 98, ..current })),
         Err(GoogleBatchWireMismatch::Stale)
     ));
     let changed_policy = [8; 32];
     assert!(matches!(
-        wire.deidentify_body(CurrentGovernance {
+        wire.deidentify_body(&current_cloud(CurrentGovernance {
             policy_digest: &changed_policy,
             ..current
-        }),
+        })),
         Err(GoogleBatchWireMismatch::Stale)
     ));
     let request_body: serde_json::Value = serde_json::from_slice(
         &wire
-            .deidentify_body(current)
+            .deidentify_body(&current_cloud(current))
             .unwrap()
             .to_json_bytes()
             .unwrap(),
@@ -720,7 +739,26 @@ fn cloud_prepare_requires_authorization_then_actual_arrow_cells() {
     });
     let response =
         GoogleSdpResponse::from_json_bytes(&serde_json::to_vec(&response_body).unwrap()).unwrap();
-    let outputs = wire.check_response(&response, current).unwrap();
+    let revoked_wire = BoundGoogleDeidentifyBatchPlan::from_plans(
+        prepare_cloud_google_arrow_batch(
+            vec![first_preparation(), second_preparation()],
+            &verified,
+            2,
+            100,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(matches!(
+        revoked_wire.check_response(
+            &response,
+            &GoogleCurrentAuthority::cloud(current, vec![first_cloud, revoked_second])
+        ),
+        Err(GoogleBatchWireMismatch::Stale)
+    ));
+    let outputs = wire
+        .check_response(&response, &current_cloud(current))
+        .unwrap();
     assert_eq!(outputs.len(), 2);
     assert_eq!(outputs[0].identity().row().unwrap().row_index, 0);
     assert_eq!(outputs[1].identity().row().unwrap().row_index, 1);
@@ -737,10 +775,10 @@ fn cloud_prepare_requires_authorization_then_actual_arrow_cells() {
     assert!(matches!(
         stale_wire.check_response(
             &response,
-            CurrentGovernance {
+            &current_cloud(CurrentGovernance {
                 now: 100,
                 ..current
-            }
+            })
         ),
         Err(GoogleBatchWireMismatch::Stale)
     ));
@@ -759,7 +797,10 @@ fn cloud_prepare_requires_authorization_then_actual_arrow_cells() {
         .unwrap(),
     )
     .unwrap();
-    assert!(wire.check_response(&partial, current).is_err());
+    assert!(
+        wire.check_response(&partial, &current_cloud(current))
+            .is_err()
+    );
     let mut duplicate_marker = response_body.clone();
     duplicate_marker["item"]["table"]["rows"][1]["values"][2]["stringValue"] =
         serde_json::json!("r0");
@@ -776,7 +817,10 @@ fn cloud_prepare_requires_authorization_then_actual_arrow_cells() {
         .unwrap(),
     )
     .unwrap();
-    assert!(wire.check_response(&duplicate_marker, current).is_err());
+    assert!(
+        wire.check_response(&duplicate_marker, &current_cloud(current))
+            .is_err()
+    );
     assert!(matches!(
         prepare_cloud_google_arrow_batch(
             vec![second_preparation(), second_preparation()],

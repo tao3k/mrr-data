@@ -126,7 +126,9 @@ fresh Host policy/epoch/time with every retained claim expiry. Admit each
 request by actual serialized body bytes and cell count;
 the single-row de-identification and separate re-identification plans also
 require that fresh projection before request formation and checked output.
-keep headroom below Google's current 0.5 MB request and 50,000 table-value
+Cloud de-identification requires a fresh release, decision pair and key-grant
+projection for every selected row at both boundaries. Keep headroom below
+Google's current 0.5 MB request and 50,000 table-value
 limits. The bridge adds a unique untransformed marker column, checks it
 against each response row, and rejects partial, reordered or duplicate-marker
 results before assigning tokens to row identities. Rate-limit by project and

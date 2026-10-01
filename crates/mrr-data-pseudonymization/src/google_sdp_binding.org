@@ -40,6 +40,13 @@ must be bound to the same root, dataset, artifact digest, and state epoch as
 the selected release; the token claim and release must share the current epoch.
 The Cloud path requires a checked =SnapshotRowBinding= and retains its
 relation, child CID, and row ordinal with the output. The
+public =GoogleCurrentAuthority= requires a new Cloud selection for every
+Cloud row at request formation and again before checked output. It compares
+the current profile's source root and dataset, complete release receipt,
+both allow decisions, target token lineage, admitted row context and key
+grant with the retained plan. An absent row projection or a changed release
+is rejected. The Host authenticates the refreshed facts and controls atomic
+effect admission; the library only compares supplied values. The
 [[file:google_arrow.rs][Arrow-backed preparation API]] verifies the complete
 MRR catalog digest, child byte length and CID, relation-specific Arrow IPC
 schema, batch row count, and selected row's named UTF-8 value and context.
@@ -112,7 +119,8 @@ projection check cannot authenticate the Host facts or discover revocation
 within an unchanged epoch; the Host remains responsible for both. The
 single-row and re-identification plans now apply the same current-state rule
 at request formation and checked output. No plan caches authority across
-provider I/O. The
+provider I/O. Cloud de-identification additionally checks every fresh
+release/decision/gate projection; generic token plans require none. The
 [[file:../../../docs/reflection/spec-rust-alignment.org][iteration Reflection]]
 records why this request/response check remains a pure value rule.
 

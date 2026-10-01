@@ -221,7 +221,7 @@ fn google_key() -> cedar_poo_bridge::google_sdp::WrappedKeyBinding {
     reason = "complete de-identify and re-identify boundary fixture"
 )]
 fn google_request_requires_exact_snapshot_selection() {
-    use crate::{CurrentGovernance, prepare_google_aes_siv_deidentify};
+    use crate::{CurrentGovernance, GoogleCurrentAuthority, prepare_google_aes_siv_deidentify};
     use cedar_poo_bridge::google_sdp::GoogleSdpResponse;
     use sha2::{Digest, Sha256};
 
@@ -261,6 +261,7 @@ fn google_request_requires_exact_snapshot_selection() {
         epoch: 7,
         now: 99,
     };
+    let token = GoogleCurrentAuthority::token;
     let plan = prepare_google_aes_siv_deidentify(
         &request,
         &claim,
@@ -271,32 +272,32 @@ fn google_request_requires_exact_snapshot_selection() {
     )
     .unwrap();
     assert!(
-        plan.deidentify_body(CurrentGovernance {
+        plan.deidentify_body(&token(CurrentGovernance {
             now: 100,
             ..current
-        })
+        }))
         .is_err()
     );
     assert!(
-        plan.deidentify_body(CurrentGovernance { now: 98, ..current })
+        plan.deidentify_body(&token(CurrentGovernance { now: 98, ..current }))
             .is_err()
     );
     assert!(
-        plan.deidentify_body(CurrentGovernance {
+        plan.deidentify_body(&token(CurrentGovernance {
             policy_digest: &[99; 32],
             ..current
-        })
+        }))
         .is_err()
     );
     assert!(
-        plan.deidentify_body(CurrentGovernance {
+        plan.deidentify_body(&token(CurrentGovernance {
             epoch: 8,
             ..current
-        })
+        }))
         .is_err()
     );
     let body = String::from_utf8(
-        plan.deidentify_body(current)
+        plan.deidentify_body(&token(current))
             .unwrap()
             .to_json_bytes()
             .unwrap(),
@@ -308,7 +309,7 @@ fn google_request_requires_exact_snapshot_selection() {
         br#"{"item":{"table":{"headers":[{"name":"patient_id"},{"name":"study_context"}],"rows":[{"values":[{"stringValue":"c3ludGhldGljLWNpcGhlcnRleHQ="},{"stringValue":"study-1"}]}]}},"overview":{"transformationSummaries":[{"field":{"name":"patient_id"},"results":[{"count":"1","code":"SUCCESS"}]}]}}"#,
     )
     .unwrap();
-    let checked = plan.check_response(&response, current).unwrap();
+    let checked = plan.check_response(&response, &token(current)).unwrap();
     let stale_plan = prepare_google_aes_siv_deidentify(
         &request,
         &claim,
@@ -322,10 +323,10 @@ fn google_request_requires_exact_snapshot_selection() {
         stale_plan
             .check_response(
                 &response,
-                CurrentGovernance {
+                &token(CurrentGovernance {
                     now: 100,
                     ..current
-                }
+                })
             )
             .is_err()
     );
@@ -374,24 +375,24 @@ fn google_request_requires_exact_snapshot_selection() {
     assert!(reidentify.endpoint().unwrap().ends_with(":reidentify"));
     assert!(
         reidentify
-            .reidentify_body(CurrentGovernance { now: 100, ..next })
+            .reidentify_body(&token(CurrentGovernance { now: 100, ..next }))
             .is_err()
     );
     assert!(
         reidentify
-            .reidentify_body(CurrentGovernance { now: 98, ..next })
+            .reidentify_body(&token(CurrentGovernance { now: 98, ..next }))
             .is_err()
     );
     assert!(
         reidentify
-            .reidentify_body(CurrentGovernance {
+            .reidentify_body(&token(CurrentGovernance {
                 policy_digest: &policy,
                 ..next
-            })
+            }))
             .is_err()
     );
     let reidentify_body = reidentify
-        .reidentify_body(next)
+        .reidentify_body(&token(next))
         .unwrap()
         .to_json_bytes()
         .unwrap();
@@ -405,7 +406,7 @@ fn google_request_requires_exact_snapshot_selection() {
     )
     .unwrap();
     let restored = reidentify
-        .check_response(&reidentify_response, next)
+        .check_response(&reidentify_response, &token(next))
         .unwrap();
     let stale_reidentify = prepare_reidentify(
         &reidentify_request,
@@ -417,7 +418,10 @@ fn google_request_requires_exact_snapshot_selection() {
     .unwrap();
     assert!(
         stale_reidentify
-            .check_response(&reidentify_response, CurrentGovernance { now: 100, ..next })
+            .check_response(
+                &reidentify_response,
+                &token(CurrentGovernance { now: 100, ..next }),
+            )
             .is_err()
     );
     assert_eq!(restored.value(), "synthetic-patient-1");
@@ -441,7 +445,7 @@ fn google_request_requires_exact_snapshot_selection() {
     .unwrap();
     assert!(
         reidentify_again
-            .check_response(&wrong_plaintext, next)
+            .check_response(&wrong_plaintext, &token(next))
             .is_err()
     );
     assert_eq!(
@@ -540,7 +544,8 @@ fn assert_google_rejections(
 fn cloud_profile_requires_release_and_transformation_decisions() {
     use crate::{
         CloudDataProtectionSelection, CloudGateMismatch, CloudPseudonymizationGate,
-        CurrentGovernance, GoogleSelectionMismatch, prepare_cloud_google_aes_siv_deidentify,
+        CurrentGovernance, GoogleCurrentAuthority, GoogleSelectionMismatch,
+        prepare_cloud_google_aes_siv_deidentify,
     };
     use cedar_poo_bridge::google_sdp::GoogleSdpResponse;
     use mrr_data_core::SnapshotRowBinding;
@@ -659,11 +664,67 @@ fn cloud_profile_requires_release_and_transformation_decisions() {
     assert_eq!(bound_row.relation_id, relation.relation_id());
     assert_eq!(bound_row.child_cid, *relation.batches()[0].cid());
     assert_eq!(bound_row.row_index, 0);
+    assert!(
+        plan.deidentify_body(&GoogleCurrentAuthority::token(current))
+            .is_err()
+    );
+    let revoked = CloudDataProtectionSelection {
+        decisions: DataProtectionDecisions {
+            transformation_allowed: false,
+            ..both
+        },
+        ..cloud
+    };
+    assert!(
+        plan.deidentify_body(&GoogleCurrentAuthority::cloud(current, vec![revoked]))
+            .is_err()
+    );
+    let lost_grant = CloudDataProtectionSelection {
+        gate: CloudPseudonymizationGate {
+            key_authorized: false,
+            ..gate
+        },
+        ..cloud
+    };
+    assert!(
+        plan.deidentify_body(&GoogleCurrentAuthority::cloud(current, vec![lost_grant]))
+            .is_err()
+    );
+    let other_release = ReleaseReceiptClaim {
+        source_commit: "commit-b",
+        ..release
+    };
+    let other_profile = DataProtectionProfile::new(&source, request.dataset, other_release);
+    assert!(
+        plan.deidentify_body(&GoogleCurrentAuthority::cloud(
+            current,
+            vec![CloudDataProtectionSelection {
+                profile: &other_profile,
+                receipt: other_release,
+                ..cloud
+            }],
+        ))
+        .is_err()
+    );
     let response = GoogleSdpResponse::from_json_bytes(
         br#"{"item":{"table":{"headers":[{"name":"customer_id"},{"name":"campaign"}],"rows":[{"values":[{"stringValue":"c3ludGhldGljLWNpcGhlcnRleHQ="},{"stringValue":"campaign-a"}]}]}},"overview":{"transformationSummaries":[{"field":{"name":"customer_id"},"results":[{"count":"1","code":"SUCCESS"}]}]}}"#,
     )
     .unwrap();
-    let checked = plan.check_response(&response, current).unwrap();
+    let checked = plan
+        .check_response(
+            &response,
+            &GoogleCurrentAuthority::cloud(current, vec![cloud]),
+        )
+        .unwrap();
+    assert!(
+        prepare(cloud)
+            .unwrap()
+            .check_response(
+                &response,
+                &GoogleCurrentAuthority::cloud(current, vec![revoked]),
+            )
+            .is_err()
+    );
     assert_eq!(checked.identity().row().unwrap(), &bound_row);
     assert_eq!(checked.identity().cloud_release().unwrap(), &bound_release);
     let unbound = SelectedTokenInput {

@@ -68,3 +68,17 @@ request formation or checked output. LeanPoo remains in use for the SPEC
 protection profile's typed slots and inheritance; these time-dependent
 MRR checks are direct Rust value checks because no object composition can
 authenticate a fresh Host state. SPEC's pure TableBatch contract is unchanged.
+
+* Reflection: Cloud release at both effect boundaries
+
+The prior request and checked-output rules refreshed token policy, epoch and
+expiry but accepted the Cloud release and two Cedar decisions only at plan
+creation. The library now requires one new Host projection for each Cloud row
+at both boundaries and compares its source, release receipt, decisions,
+profile, context and key grant with the retained plan. Missing or revoked
+projections yield no provider request or checked output. LeanPoo still
+composes the existing SPEC protection profile through typed slots and
+inheritance. This Cloud current-state rule depends on fresh Host evidence,
+so Rust performs exact comparisons; LeanPoo object inheritance cannot
+authenticate a current decision or make an effect atomic. SPEC's pure batch
+wire fixture remains pinned without a new object rule.

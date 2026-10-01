@@ -112,6 +112,42 @@ pub struct CloudDataProtectionSelection<'a> {
     pub gate: CloudPseudonymizationGate<'a>,
 }
 
+/// Fresh Host projection at a Google request or checked-output boundary.
+/// Cloud plans require one independently refreshed selection per row.
+#[derive(Clone, Debug)]
+pub struct GoogleCurrentAuthority<'a> {
+    governance: CurrentGovernance<'a>,
+    cloud_rows: Vec<CloudDataProtectionSelection<'a>>,
+}
+
+impl<'a> GoogleCurrentAuthority<'a> {
+    #[must_use]
+    pub const fn token(governance: CurrentGovernance<'a>) -> Self {
+        Self {
+            governance,
+            cloud_rows: Vec::new(),
+        }
+    }
+
+    #[must_use]
+    pub const fn cloud(
+        governance: CurrentGovernance<'a>,
+        cloud_rows: Vec<CloudDataProtectionSelection<'a>>,
+    ) -> Self {
+        Self {
+            governance,
+            cloud_rows,
+        }
+    }
+
+    fn single_cloud(&self) -> Result<Option<&CloudDataProtectionSelection<'a>>, String> {
+        if self.cloud_rows.len() > 1 {
+            return Err("Google Cloud release projection has extra rows".to_owned());
+        }
+        Ok(self.cloud_rows.first())
+    }
+}
+
 /// Owned location of the selected row within an MRR Data snapshot.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CloudRowIdentity {
@@ -152,6 +188,16 @@ impl GoogleAuthorizationScope {
         }
     }
 
+    fn matches_profile(&self, profile: TokenProfile<'_>) -> bool {
+        profile.mode == Mode::AesSiv
+            && profile.scope == self.token_scope
+            && profile.lineage.tenant == self.tenant
+            && profile.lineage.key_domain == self.key_domain
+            && profile.lineage.token_key_version == self.token_key_version
+            && profile.lineage.transform_version == self.transform_version
+            && profile.lineage.wrapping_version == self.wrapping_version
+    }
+
     #[must_use]
     pub fn subject(&self) -> &str {
         &self.subject
@@ -182,19 +228,51 @@ pub struct GoogleBoundIdentity {
     policy_digest: [u8; 32],
     governance_epoch: i64,
     authorization_scope: GoogleAuthorizationScope,
+    selected_context: String,
     claim_expires_at: u64,
     row: Option<CloudRowIdentity>,
     cloud_release: Option<CloudReleaseIdentity>,
 }
 
 impl GoogleBoundIdentity {
-    fn check_current(&self, current: CurrentGovernance<'_>) -> Result<(), String> {
+    fn check_current(
+        &self,
+        current: CurrentGovernance<'_>,
+        cloud: Option<&CloudDataProtectionSelection<'_>>,
+    ) -> Result<(), String> {
         if *current.policy_digest != self.policy_digest
             || current.epoch != self.governance_epoch
             || current.now < self.authorization_scope.observed_at
             || current.now >= self.claim_expires_at
         {
             return Err("Google plan authorization is stale".to_owned());
+        }
+        match (&self.cloud_release, cloud) {
+            (None, None) => {}
+            (Some(expected), Some(cloud)) => {
+                let release = cloud.profile.release();
+                if cloud.current_epoch != current.epoch
+                    || cloud.profile.source().root() != &self.root
+                    || cloud.profile.dataset() != self.dataset
+                    || release.artifact_digest != expected.artifact_digest
+                    || release.source_commit != expected.source_commit
+                    || release.policy_root != expected.policy_root
+                    || release.epoch != expected.epoch
+                    || cloud
+                        .profile
+                        .check(cloud.receipt, cloud.current_epoch, cloud.decisions)
+                        .is_err()
+                    || !self
+                        .authorization_scope
+                        .matches_profile(cloud.gate.target_profile)
+                    || cloud.gate.admitted_context != self.selected_context
+                    || cloud.gate.artifact_digest != expected.artifact_digest
+                    || !cloud.gate.key_authorized
+                {
+                    return Err("Google Cloud release is stale".to_owned());
+                }
+            }
+            _ => return Err("Google Cloud release projection is missing or unexpected".to_owned()),
         }
         Ok(())
     }
@@ -273,9 +351,10 @@ impl BoundGoogleDeidentifyPlan {
     /// Returns the bridge validation error for an invalid request.
     pub fn deidentify_body(
         &self,
-        current: CurrentGovernance<'_>,
+        current: &GoogleCurrentAuthority<'_>,
     ) -> Result<GoogleSdpRequest, String> {
-        self.identity.check_current(current)?;
+        self.identity
+            .check_current(current.governance, current.single_cloud()?)?;
         self.plan.deidentify_body()
     }
 
@@ -288,9 +367,10 @@ impl BoundGoogleDeidentifyPlan {
     pub fn check_response(
         self,
         response: &GoogleSdpResponse,
-        current: CurrentGovernance<'_>,
+        current: &GoogleCurrentAuthority<'_>,
     ) -> Result<BoundGoogleDeidentifyOutput, String> {
-        self.identity.check_current(current)?;
+        self.identity
+            .check_current(current.governance, current.single_cloud()?)?;
         let checked = self.plan.check_deidentify_response(response)?;
         Ok(BoundGoogleDeidentifyOutput {
             identity: self.identity,
@@ -377,13 +457,16 @@ impl BoundGoogleDeidentifyBatchPlan {
     /// Rejects policy drift, clock rollback, or any expired row claim.
     pub fn check_current(
         &self,
-        current: CurrentGovernance<'_>,
+        current: &GoogleCurrentAuthority<'_>,
     ) -> Result<(), GoogleBatchWireMismatch> {
-        if self
-            .identities
-            .iter()
-            .any(|identity| identity.check_current(current).is_err())
-        {
+        if !current.cloud_rows.is_empty() && current.cloud_rows.len() != self.identities.len() {
+            return Err(GoogleBatchWireMismatch::Stale);
+        }
+        if self.identities.iter().enumerate().any(|(index, identity)| {
+            identity
+                .check_current(current.governance, current.cloud_rows.get(index))
+                .is_err()
+        }) {
             return Err(GoogleBatchWireMismatch::Stale);
         }
         Ok(())
@@ -395,7 +478,7 @@ impl BoundGoogleDeidentifyBatchPlan {
     /// Rejects stale authorization projections or bridge validation failures.
     pub fn deidentify_body(
         &self,
-        current: CurrentGovernance<'_>,
+        current: &GoogleCurrentAuthority<'_>,
     ) -> Result<GoogleSdpRequest, GoogleBatchWireMismatch> {
         self.check_current(current)?;
         self.batch
@@ -411,7 +494,7 @@ impl BoundGoogleDeidentifyBatchPlan {
     pub fn check_response(
         self,
         response: &GoogleSdpResponse,
-        current: CurrentGovernance<'_>,
+        current: &GoogleCurrentAuthority<'_>,
     ) -> Result<Vec<BoundGoogleDeidentifyOutput>, GoogleBatchWireMismatch> {
         self.check_current(current)?;
         let checked = self
@@ -488,9 +571,10 @@ impl BoundGoogleReidentifyPlan {
     /// Returns a bridge error for an invalid token or request.
     pub fn reidentify_body(
         &self,
-        current: CurrentGovernance<'_>,
+        current: &GoogleCurrentAuthority<'_>,
     ) -> Result<GoogleSdpRequest, String> {
-        self.identity.check_current(current)?;
+        self.identity
+            .check_current(current.governance, current.single_cloud()?)?;
         self.plan.reidentify_body(&self.token)
     }
 
@@ -500,9 +584,10 @@ impl BoundGoogleReidentifyPlan {
     pub fn check_response(
         self,
         response: &GoogleSdpResponse,
-        current: CurrentGovernance<'_>,
+        current: &GoogleCurrentAuthority<'_>,
     ) -> Result<BoundGoogleReidentifyOutput, String> {
-        self.identity.check_current(current)?;
+        self.identity
+            .check_current(current.governance, current.single_cloud()?)?;
         let checked = self.plan.check_reidentify_response(&self.token, response)?;
         Ok(BoundGoogleReidentifyOutput {
             identity: self.identity,
@@ -680,6 +765,7 @@ fn prepare_google_aes_siv(
             policy_digest: *current.policy_digest,
             governance_epoch: current.epoch,
             authorization_scope: GoogleAuthorizationScope::from_request(request, current.now),
+            selected_context: request.input.context().to_owned(),
             claim_expires_at: claim.expires_at,
             row: None,
             cloud_release: None,
