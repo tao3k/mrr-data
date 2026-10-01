@@ -98,6 +98,13 @@ It also bounds the exact serialized request body to 400 KB, below Google's
 currently documented 0.5 MB limit. A malformed
 response cannot undo provider work. The Host still bounds response bytes and
 controls request dispatch, provider authentication, quota and audit. The
+public batch constructor also compares retained subject, purpose, token
+profile lineage and authorization observation time, so callers cannot combine
+separately prepared plans with a different effect scope. Request formation
+and checked output each require a fresh Host projection matching the policy
+digest and epoch, without clock rollback or any expired row claim. This
+projection check cannot authenticate the Host facts or discover revocation
+within an unchanged epoch; the Host remains responsible for both. The
 [[file:../../../docs/reflection/spec-rust-alignment.org][iteration Reflection]]
 records why this request/response check remains a pure value rule.
 

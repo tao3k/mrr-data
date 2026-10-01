@@ -44,3 +44,15 @@ value checks; they do not use inherited methods or proof dependencies. The
 SPEC fixture and Rust bridge reject reordered or duplicate markers, and MRR
 retains its selected Arrow row identity only after the whole response passes.
 The Host must still authenticate transport and authorize each selected row.
+
+* Reflection: independently prepared batch plans
+
+SPEC TableBatch V1 is a pure ordered selection contract and deliberately does
+not aggregate authorization. MRR's public batch constructor can also receive
+single-row plans made at different times, so this iteration retains subject,
+purpose, complete token profile lineage, observation time and claim expiry in
+the plan identity. Cross-scope plans are rejected, and current policy, epoch
+and every expiry are rechecked before request formation and checked output.
+These are dynamic Host projections rather than inherited object behavior;
+LeanPoo's typed-slot composition remains useful for the existing protection
+profile, but a cached object result would not establish fresh authority.

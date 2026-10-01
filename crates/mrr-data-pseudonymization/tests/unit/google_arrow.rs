@@ -340,9 +340,10 @@ fn cloud_prepare_requires_authorization_then_actual_arrow_cells() {
     use crate::{
         AesSivTableRecipeBinding, ArrowChildInput, BoundGoogleDeidentifyBatchPlan,
         CloudDataProtectionSelection, CloudGoogleArrowPreparation, CloudPseudonymizationGate,
-        CurrentGovernance, GoogleArrowBatchError, GoogleTableBatchMismatch, Mode,
-        SelectedTokenInput, TableRecipeMismatch, TokenAction, TokenAuthorizationClaim,
-        TokenAuthorizationRequest, TokenLineage, TokenProfile, prepare_cloud_google_arrow_batch,
+        CurrentGovernance, GoogleArrowBatchError, GoogleBatchWireMismatch,
+        GoogleTableBatchMismatch, Mode, SelectedTokenInput, TableRecipeMismatch, TokenAction,
+        TokenAuthorizationClaim, TokenAuthorizationRequest, TokenLineage, TokenProfile,
+        prepare_cloud_google_arrow_batch,
     };
 
     let (snapshot, relations, entities, bytes) = fixture();
@@ -548,9 +549,138 @@ fn cloud_prepare_requires_authorization_then_actual_arrow_cells() {
             .collect::<Vec<_>>(),
         vec![0, 1]
     );
+    let other_request = TokenAuthorizationRequest {
+        subject: "another-service",
+        ..request
+    };
+    let other_claim = TokenAuthorizationClaim {
+        subject: other_request.subject,
+        ..claim
+    };
+    let other_subject = CloudGoogleArrowPreparation {
+        request: &other_request,
+        claim: &other_claim,
+        ..second_preparation()
+    }
+    .from_verified_child(&verified)
+    .unwrap();
+    assert!(matches!(
+        BoundGoogleDeidentifyBatchPlan::from_plans(vec![
+            first_preparation().from_verified_child(&verified).unwrap(),
+            other_subject,
+        ]),
+        Err(GoogleBatchWireMismatch::MixedScope)
+    ));
+    let other_purpose_request = TokenAuthorizationRequest {
+        purpose: "clinical-care",
+        ..request
+    };
+    let other_purpose_claim = TokenAuthorizationClaim {
+        purpose: other_purpose_request.purpose,
+        ..claim
+    };
+    let other_purpose = CloudGoogleArrowPreparation {
+        request: &other_purpose_request,
+        claim: &other_purpose_claim,
+        ..second_preparation()
+    }
+    .from_verified_child(&verified)
+    .unwrap();
+    assert!(matches!(
+        BoundGoogleDeidentifyBatchPlan::from_plans(vec![
+            first_preparation().from_verified_child(&verified).unwrap(),
+            other_purpose,
+        ]),
+        Err(GoogleBatchWireMismatch::MixedScope)
+    ));
+    let other_profile = TokenProfile {
+        scope: "another-scope",
+        ..profile
+    };
+    let other_input = SelectedTokenInput {
+        profile: other_profile,
+        ..SelectedTokenInput {
+            field: "patient_id",
+            value_digest: &digest,
+            context: "study-b",
+            profile,
+        }
+    }
+    .bind_to_row(row);
+    let other_profile_request = TokenAuthorizationRequest {
+        input: &other_input,
+        ..request
+    };
+    let other_profile_claim = TokenAuthorizationClaim {
+        profile: other_profile,
+        ..claim
+    };
+    let other_profile_plan = CloudGoogleArrowPreparation {
+        request: &other_profile_request,
+        claim: &other_profile_claim,
+        recipe: AesSivTableRecipeBinding {
+            profile: other_profile,
+            ..batch_recipe
+        },
+        cloud: CloudDataProtectionSelection {
+            gate: CloudPseudonymizationGate {
+                target_profile: other_profile,
+                ..cloud.gate
+            },
+            ..cloud
+        },
+        ..second_preparation()
+    }
+    .from_verified_child(&verified)
+    .unwrap();
+    assert!(matches!(
+        BoundGoogleDeidentifyBatchPlan::from_plans(vec![
+            first_preparation().from_verified_child(&verified).unwrap(),
+            other_profile_plan,
+        ]),
+        Err(GoogleBatchWireMismatch::MixedScope)
+    ));
+    let other_time = CloudGoogleArrowPreparation {
+        current: CurrentGovernance { now: 98, ..current },
+        ..second_preparation()
+    }
+    .from_verified_child(&verified)
+    .unwrap();
+    assert!(matches!(
+        BoundGoogleDeidentifyBatchPlan::from_plans(vec![
+            first_preparation().from_verified_child(&verified).unwrap(),
+            other_time,
+        ]),
+        Err(GoogleBatchWireMismatch::MixedScope)
+    ));
     let wire = BoundGoogleDeidentifyBatchPlan::from_plans(batch).unwrap();
-    let request_body: serde_json::Value =
-        serde_json::from_slice(&wire.deidentify_body().unwrap().to_json_bytes().unwrap()).unwrap();
+    assert!(matches!(
+        wire.deidentify_body(CurrentGovernance {
+            now: 100,
+            ..current
+        }),
+        Err(GoogleBatchWireMismatch::Stale)
+    ));
+    assert!(matches!(
+        wire.deidentify_body(CurrentGovernance { now: 98, ..current }),
+        Err(GoogleBatchWireMismatch::Stale)
+    ));
+    let changed_policy = [8; 32];
+    assert!(matches!(
+        wire.deidentify_body(CurrentGovernance {
+            policy_digest: &changed_policy,
+            ..current
+        }),
+        Err(GoogleBatchWireMismatch::Stale)
+    ));
+    let request_body: serde_json::Value = serde_json::from_slice(
+        &wire
+            .deidentify_body(current)
+            .unwrap()
+            .to_json_bytes()
+            .unwrap(),
+    )
+    .unwrap();
     assert_eq!(
         request_body["item"]["table"]["rows"]
             .as_array()
@@ -590,10 +720,30 @@ fn cloud_prepare_requires_authorization_then_actual_arrow_cells() {
     });
     let response =
         GoogleSdpResponse::from_json_bytes(&serde_json::to_vec(&response_body).unwrap()).unwrap();
-    let outputs = wire.check_response(&response).unwrap();
+    let outputs = wire.check_response(&response, current).unwrap();
     assert_eq!(outputs.len(), 2);
     assert_eq!(outputs[0].identity().row().unwrap().row_index, 0);
     assert_eq!(outputs[1].identity().row().unwrap().row_index, 1);
+    let stale_wire = BoundGoogleDeidentifyBatchPlan::from_plans(
+        prepare_cloud_google_arrow_batch(
+            vec![first_preparation(), second_preparation()],
+            &verified,
+            2,
+            100,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(matches!(
+        stale_wire.check_response(
+            &response,
+            CurrentGovernance {
+                now: 100,
+                ..current
+            }
+        ),
+        Err(GoogleBatchWireMismatch::Stale)
+    ));
     let mut partial = response_body.clone();
     partial["overview"]["transformationSummaries"][0]["results"][0]["count"] =
         serde_json::json!("1");
@@ -609,7 +759,7 @@ fn cloud_prepare_requires_authorization_then_actual_arrow_cells() {
         .unwrap(),
     )
     .unwrap();
-    assert!(wire.check_response(&partial).is_err());
+    assert!(wire.check_response(&partial, current).is_err());
     let mut duplicate_marker = response_body.clone();
     duplicate_marker["item"]["table"]["rows"][1]["values"][2]["stringValue"] =
         serde_json::json!("r0");
@@ -626,7 +776,7 @@ fn cloud_prepare_requires_authorization_then_actual_arrow_cells() {
         .unwrap(),
     )
     .unwrap();
-    assert!(wire.check_response(&duplicate_marker).is_err());
+    assert!(wire.check_response(&duplicate_marker, current).is_err());
     assert!(matches!(
         prepare_cloud_google_arrow_batch(
             vec![second_preparation(), second_preparation()],

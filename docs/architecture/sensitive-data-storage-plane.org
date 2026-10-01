@@ -118,8 +118,12 @@ catalog mode. See Google's
 [[https://docs.cloud.google.com/sensitive-data-protection/docs/pseudonymization][pseudonymization contract]].
 
 For the current batch bridge, group only rows with the same authenticated tenant,
-dataset, field names, recipe, key lineage, surrogate annotation and processing
-location. Admit each request by actual serialized body bytes and cell count;
+subject, purpose, dataset, field names, recipe, key lineage, surrogate
+annotation, governance projection, observation time and processing location.
+The public constructor checks these even when its row plans were prepared
+separately. Before request formation and again before checked output, compare
+fresh Host policy/epoch/time with every retained claim expiry. Admit each
+request by actual serialized body bytes and cell count;
 keep headroom below Google's current 0.5 MB request and 50,000 table-value
 limits. The bridge adds a unique untransformed marker column, checks it
 against each response row, and rejects partial, reordered or duplicate-marker

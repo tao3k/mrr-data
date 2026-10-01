@@ -121,6 +121,58 @@ pub struct CloudRowIdentity {
     pub row_index: u64,
 }
 
+/// Owned authorization scope retained when independently admitted rows are
+/// later combined into one provider request.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GoogleAuthorizationScope {
+    subject: String,
+    purpose: String,
+    token_scope: String,
+    tenant: String,
+    key_domain: String,
+    token_key_version: String,
+    transform_version: String,
+    wrapping_version: String,
+    observed_at: u64,
+}
+
+impl GoogleAuthorizationScope {
+    fn from_request(request: &TokenAuthorizationRequest<'_>, observed_at: u64) -> Self {
+        let profile = request.input.profile();
+        Self {
+            subject: request.subject.to_owned(),
+            purpose: request.purpose.to_owned(),
+            token_scope: profile.scope.to_owned(),
+            tenant: profile.lineage.tenant.to_owned(),
+            key_domain: profile.lineage.key_domain.to_owned(),
+            token_key_version: profile.lineage.token_key_version.to_owned(),
+            transform_version: profile.lineage.transform_version.to_owned(),
+            wrapping_version: profile.lineage.wrapping_version.to_owned(),
+            observed_at,
+        }
+    }
+
+    #[must_use]
+    pub fn subject(&self) -> &str {
+        &self.subject
+    }
+
+    #[must_use]
+    pub fn purpose(&self) -> &str {
+        &self.purpose
+    }
+
+    #[must_use]
+    pub fn tenant(&self) -> &str {
+        &self.tenant
+    }
+
+    #[must_use]
+    pub const fn observed_at(&self) -> u64 {
+        self.observed_at
+    }
+}
+
 /// Physical and governance identity retained across provider I/O.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GoogleBoundIdentity {
@@ -129,6 +181,8 @@ pub struct GoogleBoundIdentity {
     input_digest: [u8; 32],
     policy_digest: [u8; 32],
     governance_epoch: i64,
+    authorization_scope: GoogleAuthorizationScope,
+    claim_expires_at: u64,
     row: Option<CloudRowIdentity>,
     cloud_release: Option<CloudReleaseIdentity>,
 }
@@ -157,6 +211,16 @@ impl GoogleBoundIdentity {
     #[must_use]
     pub const fn governance_epoch(&self) -> i64 {
         self.governance_epoch
+    }
+
+    #[must_use]
+    pub const fn authorization_scope(&self) -> &GoogleAuthorizationScope {
+        &self.authorization_scope
+    }
+
+    #[must_use]
+    pub const fn claim_expires_at(&self) -> u64 {
+        self.claim_expires_at
     }
 
     #[must_use]
@@ -219,7 +283,7 @@ impl BoundGoogleDeidentifyPlan {
 }
 
 /// A combined Table request over one ordered, independently authorized child.
-/// The provider does not return MRR row ordinals; positions are bound here.
+/// Generated response markers bind provider positions to retained MRR rows.
 pub struct BoundGoogleDeidentifyBatchPlan {
     identities: Vec<GoogleBoundIdentity>,
     batch: TabularAesSivBatch,
@@ -232,12 +296,14 @@ pub enum GoogleBatchWireMismatch {
     MixedScope,
     RowUnbound,
     OrdinalOrder,
+    Stale,
     Bridge(String),
 }
 
 impl BoundGoogleDeidentifyBatchPlan {
-    /// Consume ordered plans only when every row retains one source, current
-    /// governance scope and physical Arrow child. No provider call occurs.
+    /// Consume ordered plans only when every row retains one authorization
+    /// scope, observation time, source and physical Arrow child. This also
+    /// checks plans produced separately from the bulk Arrow planner.
     /// # Errors
     /// Rejects a missing row, changed scope, ordering or provider recipe.
     pub fn from_plans(
@@ -256,6 +322,7 @@ impl BoundGoogleDeidentifyBatchPlan {
                 || identity.dataset != first_identity.dataset
                 || identity.policy_digest != first_identity.policy_digest
                 || identity.governance_epoch != first_identity.governance_epoch
+                || identity.authorization_scope != first_identity.authorization_scope
                 || identity.cloud_release != first_identity.cloud_release
             {
                 return Err(GoogleBatchWireMismatch::MixedScope);
@@ -287,22 +354,57 @@ impl BoundGoogleDeidentifyBatchPlan {
         self.batch.endpoint()
     }
 
-    /// One Google Table request containing the ordered selected rows.
+    /// Recheck all retained claim expiries and the common policy projection
+    /// against a newly obtained Host state before dispatch or local output.
     /// # Errors
-    /// Returns bridge validation failures.
-    pub fn deidentify_body(&self) -> Result<GoogleSdpRequest, String> {
-        self.batch.deidentify_body()
+    /// Rejects policy drift, clock rollback, or any expired row claim.
+    pub fn check_current(
+        &self,
+        current: CurrentGovernance<'_>,
+    ) -> Result<(), GoogleBatchWireMismatch> {
+        let first = &self.identities[0];
+        if *current.policy_digest != first.policy_digest
+            || current.epoch != first.governance_epoch
+            || current.now < first.authorization_scope.observed_at
+            || self
+                .identities
+                .iter()
+                .any(|identity| current.now >= identity.claim_expires_at)
+        {
+            return Err(GoogleBatchWireMismatch::Stale);
+        }
+        Ok(())
     }
 
-    /// Retain no checked row output if any row or the aggregate provider
-    /// summary is malformed. The Host authenticates and bounds response bytes.
+    /// One Google Table request containing the ordered selected rows. The Host
+    /// supplies a freshly authenticated current projection before dispatch.
+    /// # Errors
+    /// Rejects stale authorization projections or bridge validation failures.
+    pub fn deidentify_body(
+        &self,
+        current: CurrentGovernance<'_>,
+    ) -> Result<GoogleSdpRequest, GoogleBatchWireMismatch> {
+        self.check_current(current)?;
+        self.batch
+            .deidentify_body()
+            .map_err(GoogleBatchWireMismatch::Bridge)
+    }
+
+    /// Retain no checked row output if authority expired, policy drifted, or
+    /// any row or aggregate provider summary is malformed. The Host obtains
+    /// current state again and authenticates and bounds response bytes.
     /// # Errors
     /// Returns a bridge shape, context, token or summary mismatch.
     pub fn check_response(
         self,
         response: &GoogleSdpResponse,
-    ) -> Result<Vec<BoundGoogleDeidentifyOutput>, String> {
-        let checked = self.batch.check_deidentify_response(response)?;
+        current: CurrentGovernance<'_>,
+    ) -> Result<Vec<BoundGoogleDeidentifyOutput>, GoogleBatchWireMismatch> {
+        self.check_current(current)?;
+        let checked = self
+            .batch
+            .check_deidentify_response(response)
+            .map_err(GoogleBatchWireMismatch::Bridge)?;
         Ok(self
             .identities
             .into_iter()
@@ -558,6 +660,8 @@ fn prepare_google_aes_siv(
             input_digest: *bound.value_digest(),
             policy_digest: *current.policy_digest,
             governance_epoch: current.epoch,
+            authorization_scope: GoogleAuthorizationScope::from_request(request, current.now),
+            claim_expires_at: claim.expires_at,
             row: None,
             cloud_release: None,
         },
