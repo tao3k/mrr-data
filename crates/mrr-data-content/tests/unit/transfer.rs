@@ -31,17 +31,29 @@ impl Drop for Active<'_> {
     }
 }
 impl Remote {
+    fn take_failure(&self) -> bool {
+        let mut remaining = self.failures.load(Ordering::SeqCst);
+        while remaining > 0 {
+            match self.failures.compare_exchange_weak(
+                remaining,
+                remaining - 1,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            ) {
+                Ok(_) => return true,
+                Err(actual) => remaining = actual,
+            }
+        }
+        false
+    }
+
     async fn step(&self) -> Result<(), RemoteError> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         let active = self.active.fetch_add(1, Ordering::SeqCst) + 1;
         self.peak.fetch_max(active, Ordering::SeqCst);
         let _active = Active(&self.active);
         tokio::time::sleep(self.delay).await;
-        if self
-            .failures
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
-            .is_ok()
-        {
+        if self.take_failure() {
             return Err(self.error.unwrap_or(RemoteError::Unavailable));
         }
         Ok(())

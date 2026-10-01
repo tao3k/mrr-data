@@ -199,7 +199,6 @@ impl PhysicalVertexIndex {
     }
 
     /// Iterates semantic entities in their physical vertex-ID order.
-    #[must_use]
     pub fn entities(&self) -> impl ExactSizeIterator<Item = EntityId> + '_ {
         self.entities.iter().copied()
     }
