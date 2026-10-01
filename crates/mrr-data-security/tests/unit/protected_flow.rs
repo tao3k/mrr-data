@@ -351,6 +351,30 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
     ));
     assert!(!altered_remote.contains(prepared.outer_root()));
 
+    let mut tiny_record = prepared.host_record();
+    tiny_record.total_outer_bytes = 1;
+    let tiny = PreparedProtectedSnapshot::from_authenticated_record(intent, tiny_record).unwrap();
+    let tiny_remote = Remote::new();
+    assert!(matches!(
+        publish_prepared_snapshot(
+            ProtectedPublish {
+                intent,
+                claim: &claim,
+                current: current(4),
+                prepared: &tiny,
+                key: &key,
+                outbox: &outbox,
+                remote: &tiny_remote,
+                session: &session(),
+                max_outer_block_bytes: 4096,
+            },
+            || Ok(current(4)),
+        )
+        .await,
+        Err(ProtectedSnapshotError::WrongBinding)
+    ));
+    assert_eq!(tiny_remote.puts.load(Ordering::Relaxed), 0);
+
     let remote = Remote::new();
     let publish_session = session();
     let publish = || ProtectedPublish {
@@ -467,6 +491,39 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
         max_outer_block_bytes: 4096,
         max_outer_total_bytes: 8192,
     };
+    let tiny_committed = ProtectedCommitReceiptV1 {
+        total_outer_bytes: 1,
+        ..committed
+    };
+    let tiny_read = ProtectedReadIntentV1 {
+        receipt: tiny_committed,
+        ..read
+    };
+    let tiny_read_claim = ProtectedReadClaimV1 {
+        intent: tiny_read,
+        ..read_claim
+    };
+    let tiny_read_remote = Remote::new();
+    *tiny_read_remote.blocks.lock().unwrap() = remote.blocks.lock().unwrap().clone();
+    let tiny_cache = MemoryContentStore::default();
+    assert!(matches!(
+        restore_protected_snapshot(
+            ProtectedRestore {
+                read: tiny_read,
+                claim: &tiny_read_claim,
+                committed: Some(&tiny_committed),
+                prepared: &tiny,
+                protected_cache: &tiny_cache,
+                remote: &tiny_read_remote,
+                session: &session(),
+                ..restore(current(4))
+            },
+            || Ok((current(4), Some(&tiny_committed))),
+        )
+        .await,
+        Err(ProtectedSnapshotError::WrongBinding)
+    ));
+    assert_eq!(tiny_read_remote.gets.load(Ordering::Relaxed), 1);
     assert!(matches!(
         restore_protected_snapshot(
             ProtectedRestore {

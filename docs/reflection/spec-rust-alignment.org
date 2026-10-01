@@ -82,3 +82,16 @@ inheritance. This Cloud current-state rule depends on fresh Host evidence,
 so Rust performs exact comparisons; LeanPoo object inheritance cannot
 authenticate a current decision or make an effect atomic. SPEC's pure batch
 wire fixture remains pinned without a new object rule.
+
+* Reflection: protected closure byte total
+
+The existing SPEC LeanPoo profile composition selects the storage destination
+and key version through inherited typed slots. This iteration checks a
+different value: the actual cumulative ciphertext bytes against an
+authenticated Host record during publication and a committed receipt during
+restore. The publisher checks before each PUT, and restore checks immediately
+after each GET and before decrypting that block. An undersized receipt is
+rejected at the first overrun; the test records zero publication PUTs and one
+restore GET for its one-byte receipt. This is a dynamic property of physical
+bytes, so it remains a direct bounded check in Rust rather than a LeanPoo
+method or cached proof. The Host still authenticates the record and receipt.

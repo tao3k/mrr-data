@@ -19,7 +19,9 @@ and warm cache paths. The caller must authenticate both observations and
 serialize the final check with disclosure.
 The read intent binds the receipt's outer root, child count and ciphertext
 byte total. Restore compares those values with the prepared closure before
-any GET, then checks actual bytes and blocks while restoring. A changed
+any GET, then rejects cumulative ciphertext bytes above the committed total
+as each GET completes, before decrypting that block. The caller's independent
+size limit still applies. A changed
 receipt at the final refresh prevents plaintext release.
 
 The optional =protected-envelope= feature supplies [[file:envelope.rs][AES-256-GCM envelopes]].
@@ -41,7 +43,9 @@ The caller authenticates that record and its storage format. The publisher
 uploads ciphertext children and the encrypted inner root, then authenticates
 and decrypts the staged manifest with the supplied key. It requires the inner
 root and complete child map to match the recovered record before refreshing
-current governance and uploading the encrypted manifest root. The returned
+current governance and uploading the encrypted manifest root. It checks the
+cumulative ciphertext bytes against the authenticated record before each
+remote PUT, so an undersized record cannot cause excess publication. The returned
 physical acknowledgement can feed =decide_commit=. A fresh
 commit requires that exact acknowledgement and current authority; a matching
 authenticated prior ledger receipt yields =Replay= even after expiry. A root
@@ -76,6 +80,10 @@ s3s server tests the real adapter and wire protocol on loopback. It is not
 evidence of AWS deployment or a Host's atomic ledger and audit behavior.
 The release refresh also compares dynamic Host facts, so it does not create a
 new LeanPoo composition point or a safe authorization cache.
+The exact ciphertext total is likewise an observed property of the staged
+closure and authenticated commit receipt. LeanPoo's existing profile
+composition still supplies static destination and key choices, while these
+per-block bounds remain direct Rust checks at the I/O boundary.
 
 The generic content APIs still accept arbitrary bytes. A deploying Host must
 authenticate the source catalog, lineage, Cedar decision, destination and

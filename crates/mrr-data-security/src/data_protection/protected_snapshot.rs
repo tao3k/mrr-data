@@ -222,6 +222,19 @@ fn add_outer(total: &mut usize, bytes: usize, limit: usize) -> Result<(), Protec
     Ok(())
 }
 
+fn add_restored_outer(
+    total: &mut usize,
+    bytes: usize,
+    caller_limit: usize,
+    committed_total: usize,
+) -> Result<(), ProtectedSnapshotError> {
+    add_outer(total, bytes, caller_limit)?;
+    if *total > committed_total {
+        return Err(ProtectedSnapshotError::WrongBinding);
+    }
+    Ok(())
+}
+
 const MANIFEST_MAGIC: &[u8; 6] = b"MRRPM1";
 const MAX_MANIFEST_CHILDREN: usize = 4096;
 
@@ -514,9 +527,12 @@ where
     let mut actual_total = 0_usize;
     for outer in publish.prepared.child_roots.values() {
         let bytes = load_outer(publish.outbox, outer, publish.max_outer_block_bytes).await?;
-        actual_total = actual_total
-            .checked_add(bytes.len())
-            .ok_or(ProtectedSnapshotError::TooLarge)?;
+        add_outer(
+            &mut actual_total,
+            bytes.len(),
+            publish.prepared.total_outer_bytes,
+        )
+        .map_err(|_| ProtectedSnapshotError::WrongBinding)?;
         budgeted
             .put(ContentBlock::new(ContentCodec::Raw, &bytes))
             .await
@@ -528,9 +544,12 @@ where
         publish.max_outer_block_bytes,
     )
     .await?;
-    actual_total = actual_total
-        .checked_add(root_block_bytes.len())
-        .ok_or(ProtectedSnapshotError::TooLarge)?;
+    add_outer(
+        &mut actual_total,
+        root_block_bytes.len(),
+        publish.prepared.total_outer_bytes,
+    )
+    .map_err(|_| ProtectedSnapshotError::WrongBinding)?;
     budgeted
         .put(ContentBlock::new(ContentCodec::Raw, &root_block_bytes))
         .await
@@ -541,9 +560,12 @@ where
         publish.max_outer_block_bytes,
     )
     .await?;
-    actual_total = actual_total
-        .checked_add(root_bytes.len())
-        .ok_or(ProtectedSnapshotError::TooLarge)?;
+    add_outer(
+        &mut actual_total,
+        root_bytes.len(),
+        publish.prepared.total_outer_bytes,
+    )
+    .map_err(|_| ProtectedSnapshotError::WrongBinding)?;
     if actual_total != publish.prepared.total_outer_bytes {
         return Err(ProtectedSnapshotError::WrongBinding);
     }
@@ -599,6 +621,24 @@ pub struct ProtectedRestore<'a> {
     pub max_outer_total_bytes: usize,
 }
 
+fn check_restore_binding<'a>(
+    restore: &ProtectedRestore<'a>,
+) -> Result<super::ProtectedCommitReceiptV1<'a>, ProtectedSnapshotError> {
+    restore
+        .read
+        .check_read(restore.claim, restore.current, restore.committed)
+        .map_err(ProtectedSnapshotError::Read)?;
+    let receipt = restore.read.receipt;
+    check_prepared(receipt.publication.intent, restore.prepared)?;
+    if restore.prepared.outer_root != *receipt.publication.outer_root
+        || restore.prepared.child_roots.len() != receipt.child_count
+        || restore.prepared.total_outer_bytes != receipt.total_outer_bytes
+    {
+        return Err(ProtectedSnapshotError::WrongBinding);
+    }
+    Ok(receipt)
+}
+
 /// Restore ciphertext through a cache of outer bytes only, authenticate and
 /// decrypt into a private in-memory store, then verify the complete original
 /// snapshot closure. The caller supplies an authenticated committed row and
@@ -620,19 +660,8 @@ where
         ProtectedSnapshotError,
     >,
 {
-    restore
-        .read
-        .check_read(restore.claim, restore.current, restore.committed)
-        .map_err(ProtectedSnapshotError::Read)?;
-    let receipt = restore.read.receipt;
+    let receipt = check_restore_binding(&restore)?;
     let intent = receipt.publication.intent;
-    check_prepared(intent, restore.prepared)?;
-    if restore.prepared.outer_root != *receipt.publication.outer_root
-        || restore.prepared.child_roots.len() != receipt.child_count
-        || restore.prepared.total_outer_bytes != receipt.total_outer_bytes
-    {
-        return Err(ProtectedSnapshotError::WrongBinding);
-    }
     let memory = MemoryContentStore::default();
     let budgeted = restore.session.remote(restore.remote);
     let mut total = 0;
@@ -646,10 +675,11 @@ where
     .ok_or(ProtectedSnapshotError::MissingBlock(
         restore.prepared.outer_root,
     ))?;
-    add_outer(
+    add_restored_outer(
         &mut total,
         manifest_read.bytes.len(),
         restore.max_outer_total_bytes,
+        receipt.total_outer_bytes,
     )?;
     let manifest_plaintext = open_block(
         ProtectedBlockBindingV1 {
@@ -691,7 +721,12 @@ where
         )
         .await?
         .ok_or(ProtectedSnapshotError::MissingBlock(outer))?;
-        add_outer(&mut total, read.bytes.len(), restore.max_outer_total_bytes)?;
+        add_restored_outer(
+            &mut total,
+            read.bytes.len(),
+            restore.max_outer_total_bytes,
+            receipt.total_outer_bytes,
+        )?;
         let plaintext = open_block(
             ProtectedBlockBindingV1 {
                 intent,

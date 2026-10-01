@@ -224,7 +224,9 @@ children before any optimization of this path.
    zero-GET warm restore pass with a mock remote. The library exports and
    rebuilds an owned receipt across outbox reopen. The local SigV4/TLS runner
    now exercises protected publish and restore through the production S3
-   adapter. Authenticated Host storage of that receipt, retention, and
+   adapter. Publication checks the exact receipt byte total before every
+   remote PUT; restore checks the committed total after every GET and before
+   decrypting the fetched block. Authenticated Host storage of that receipt, retention, and
    hosted-provider runs remain open. Qualify
    AWS S3 and each chosen compatible provider separately,
    including TLS and conditional-put behavior.
