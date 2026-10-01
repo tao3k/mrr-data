@@ -562,17 +562,24 @@ fn cloud_prepare_requires_authorization_then_actual_arrow_cells() {
         request_body["item"]["table"]["rows"][1]["values"][1]["stringValue"],
         "study-b"
     );
+    assert_eq!(
+        request_body["item"]["table"]["rows"][1]["values"][2]["stringValue"],
+        "r1"
+    );
     let response_body = serde_json::json!({
         "item": {"table": {
-            "headers": [{"name": "patient_id"}, {"name": "study_context"}],
+            "headers": [{"name": "patient_id"}, {"name": "study_context"},
+                {"name": "__mrr_row_v1"}],
             "rows": [
                 {"values": [
                     {"stringValue": "c3ludGhldGljLWNpcGhlcnRleHQtMQ=="},
-                    {"stringValue": "study-a"}
+                    {"stringValue": "study-a"},
+                    {"stringValue": "r0"}
                 ]},
                 {"values": [
                     {"stringValue": "c3ludGhldGljLWNpcGhlcnRleHQtMg=="},
-                    {"stringValue": "study-b"}
+                    {"stringValue": "study-b"},
+                    {"stringValue": "r1"}
                 ]}
             ]
         }},
@@ -587,7 +594,7 @@ fn cloud_prepare_requires_authorization_then_actual_arrow_cells() {
     assert_eq!(outputs.len(), 2);
     assert_eq!(outputs[0].identity().row().unwrap().row_index, 0);
     assert_eq!(outputs[1].identity().row().unwrap().row_index, 1);
-    let mut partial = response_body;
+    let mut partial = response_body.clone();
     partial["overview"]["transformationSummaries"][0]["results"][0]["count"] =
         serde_json::json!("1");
     let partial =
@@ -603,6 +610,23 @@ fn cloud_prepare_requires_authorization_then_actual_arrow_cells() {
     )
     .unwrap();
     assert!(wire.check_response(&partial).is_err());
+    let mut duplicate_marker = response_body.clone();
+    duplicate_marker["item"]["table"]["rows"][1]["values"][2]["stringValue"] =
+        serde_json::json!("r0");
+    let duplicate_marker =
+        GoogleSdpResponse::from_json_bytes(&serde_json::to_vec(&duplicate_marker).unwrap())
+            .unwrap();
+    let wire = BoundGoogleDeidentifyBatchPlan::from_plans(
+        prepare_cloud_google_arrow_batch(
+            vec![first_preparation(), second_preparation()],
+            &verified,
+            2,
+            100,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(wire.check_response(&duplicate_marker).is_err());
     assert!(matches!(
         prepare_cloud_google_arrow_batch(
             vec![second_preparation(), second_preparation()],

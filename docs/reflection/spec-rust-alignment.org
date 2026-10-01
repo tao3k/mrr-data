@@ -33,3 +33,14 @@ If separate owners begin contributing inherited table recipes or protection
 profiles, compose those declared rules with LeanPoo and test owner order and
 deny preservation. Keep byte provenance, physical I/O and current authority
 checks at their existing boundaries.
+
+* Reflection: equal-context row association
+
+The existing LeanPoo protection profile still composes independently owned
+storage and key choices. This iteration adds a generated marker to one Google
+Table request because two rows can share the same context while carrying
+different MRR identities. Marker equality and serialized wire size are direct
+value checks; they do not use inherited methods or proof dependencies. The
+SPEC fixture and Rust bridge reject reordered or duplicate markers, and MRR
+retains its selected Arrow row identity only after the whole response passes.
+The Host must still authenticate transport and authorize each selected row.

@@ -90,9 +90,12 @@ gate, recipe and physical cell checks to every row before returning the
 vector of plans. A failure returns no plans. The SPEC Rust bridge's
 =TabularAesSivBatch= combines matching provider recipes into one Table request;
 =BoundGoogleDeidentifyBatchPlan= retains each MRR row identity in order and
-rejects an altered row count, context, token or aggregate success report
-without returning any checked row output. Google returns no MRR row ordinal;
-the mapping depends on the preserved request/response order. A malformed
+rejects an altered row count, context, marker, token or aggregate success report
+without returning any checked row output. The bridge adds an untransformed
+=__mrr_row_v1= column with a unique request-position marker and rejects
+reordered or duplicated markers, including when two contexts are identical.
+It also bounds the exact serialized request body to 400 KB, below Google's
+currently documented 0.5 MB limit. A malformed
 response cannot undo provider work. The Host still bounds response bytes and
 controls request dispatch, provider authentication, quota and audit. The
 [[file:../../../docs/reflection/spec-rust-alignment.org][iteration Reflection]]
