@@ -11,7 +11,7 @@ Cedar POO expresses policy; the deploying Host authenticates evidence, runs
 policy, redeems approvals, controls provider I/O and audit; MRR Data verifies
 physical identity, selection and transfer. A CID proves bytes, not an allowed
 destination or a reduction in sensitivity. The Cedar POO
-[[https://github.com/tao3k/cedar-poo-spec/blob/1d2008694d4b916502b9cc996cf80d5ec21041a4/CedarPooSpec/Data/DerivedArtifact.lean][DerivedArtifact rule at the pinned Cedar revision]]
+[[https://github.com/tao3k/cedar-poo-spec/blob/5e7e43b433378742ae27179a5ee688fe11444e2b/CedarPooSpec/Data/DerivedArtifact.lean][DerivedArtifact rule at the pinned Cedar revision]]
 retains every source label across a transformation and checks tenant, owner and
 restricted status at the destination. Tokenization alone does not declassify.
 
