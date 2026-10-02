@@ -50,6 +50,37 @@ provider's contract. Publication of a block is not publication of an entire
 snapshot: children must be uploaded before its root or discovery pointer becomes
 visible. There is no multi-object transaction in this interface.
 
+* Conditional head commit protocol
+
+=ConditionalContentWrite= describes a provider-neutral replacement of one
+authenticated content head. It binds a Host scope, stable operation ID, exact
+expected revision and CID, and replacement CID. =decide_commit= requires the
+replacement block's publication acknowledgement before returning =Apply=.
+Revision and CID are both compared, so returning to earlier bytes cannot reopen
+an earlier revision. Existing revisions are positive and increments cannot wrap.
+
+The Host authenticates the current head and operation receipt. It must compare
+the head, enforce operation uniqueness, and persist the new head and exact receipt
+in one backend transaction. =Apply= is a pure protocol decision, not evidence that
+the transaction occurred. MRR Data adds no database or head-storage implementation
+through this interface. A caller-created receipt projection is not provider evidence.
+
+An exact authenticated receipt returns =Replay= even after the head advances and
+without a new publication ACK; this is a status lookup and grants no new write.
+The same operation ID with different scope, expected state, or replacement CID
+is a conflict. An uncertain backend response is resolved by looking up that exact
+operation receipt. A missing or unreadable receipt does not establish failure or
+permit retrying the effect under a new ID.
+
+Domain-specific admission, such as Cedar POO ancestor budgets and revocation,
+belongs to the calling semantic layer. Its current authority must be rechecked
+within the backend transaction according to that domain's protocol. A block CID
+and a successful publication alone establish neither budget authority nor commit.
+
+The conditional protocol tests exercise malformed receipts, ABA, replay after a
+later revision, and two concurrent writers in a test-only serialized transaction.
+They provide no DB, crash-recovery or durability guarantee.
+
 * Adapter responsibilities and status
 
 The protocol does not implement eviction, cross-process locks, retry scheduling,

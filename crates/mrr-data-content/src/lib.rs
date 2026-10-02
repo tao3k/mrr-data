@@ -6,6 +6,7 @@ mod async_store;
 mod car;
 #[cfg(any(feature = "car", feature = "snapshot"))]
 mod closure;
+mod conditional;
 mod error;
 #[cfg(feature = "property-snapshot")]
 mod property_snapshot;
@@ -17,6 +18,10 @@ mod store;
 pub use async_store::{AsyncContentStore, LocalFuture};
 #[cfg(feature = "car")]
 pub use car::{CarImportLimits, ImportedSnapshot, encode_snapshot_car, import_snapshot_car};
+pub use conditional::{
+    ConditionalCommitDisposition, ConditionalCommitError, ConditionalContentReceipt,
+    ConditionalContentWrite, ContentRevision,
+};
 pub use error::ContentError;
 #[cfg(feature = "car")]
 pub use error::ImportResource;

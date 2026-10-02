@@ -1,4 +1,5 @@
 mod asp_rust_gate;
+mod conditional;
 #[cfg(feature = "car")]
 mod contracts;
 #[cfg(feature = "filesystem")]
