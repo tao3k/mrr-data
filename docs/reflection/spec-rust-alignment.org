@@ -157,3 +157,16 @@ unchanged. No new independently owned policy rule or profile override exists
 to compose with LeanPoo here. Raw child bytes sent before revocation can
 remain remotely accessible, and Host authentication and atomic ledger commit
 remain separate acceptance obligations.
+
+* Reflection: asynchronous current authority at physical boundaries
+
+The existing LeanPoo profile still composes static protection configuration
+through typed slots and inheritance. Current policy and ledger observations
+may require asynchronous Host I/O, so the raw and protected root gates and
+the final protected read release now await callbacks. The raw gate runs inside
+the transfer session's operation deadline; protected refreshes run under that
+session's deadline and cancellation control. Suspended callbacks in local
+tests still deny a revoked root or read before the corresponding release.
+This is an effect-timing contract, not a new independently owned policy rule
+for LeanPoo. The Host must authenticate each returned observation and perform
+its own atomic approval and audit transaction.

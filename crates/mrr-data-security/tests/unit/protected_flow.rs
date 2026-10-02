@@ -15,7 +15,7 @@ use mrr_data_cache::{S3Config, S3ContentStore, http_client_builder};
 use mrr_data_content::{
     ContentBlock, ContentCodec, ContentError, ContentStore, FilesystemContentStore,
     MemoryContentStore, RemoteContentStore, RemoteError, RemoteFuture, RemoteTransferLimits,
-    SnapshotTransferLimits, TransferSession,
+    SnapshotTransferError, SnapshotTransferLimits, TransferSession,
 };
 use tempfile::tempdir;
 
@@ -228,7 +228,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
                 entities: &entity_catalog,
                 limits: limits(),
             },
-            || panic!("restricted raw path must not refresh"),
+            || async { panic!("restricted raw path must not refresh") },
         )
         .await,
         Err(RawSnapshotPublishError::Selection(
@@ -286,7 +286,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
                 session: &session(),
                 max_outer_block_bytes: 4096,
             },
-            || Ok(current(4)),
+            || async { Ok(current(4)) },
         )
         .await,
         Err(ProtectedSnapshotError::Local(_))
@@ -311,7 +311,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
                 session: &session(),
                 max_outer_block_bytes: 4096,
             },
-            || {
+            || async {
                 refreshes.fetch_add(1, Ordering::Relaxed);
                 Ok(current(4))
             },
@@ -354,7 +354,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
                 session: &session(),
                 max_outer_block_bytes: 4096,
             },
-            || Ok(current(4)),
+            || async { Ok(current(4)) },
         )
         .await,
         Err(ProtectedSnapshotError::InvalidManifest)
@@ -379,7 +379,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
                 session: &altered_session,
                 max_outer_block_bytes: 4096,
             },
-            || Ok(current(4)),
+            || async { Ok(current(4)) },
         )
         .await,
         Err(ProtectedSnapshotError::WrongBinding)
@@ -403,12 +403,41 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
                 session: &session(),
                 max_outer_block_bytes: 4096,
             },
-            || Ok(current(4)),
+            || async { Ok(current(4)) },
         )
         .await,
         Err(ProtectedSnapshotError::WrongBinding)
     ));
     assert_eq!(tiny_remote.puts.load(Ordering::Relaxed), 0);
+
+    let cancelled_remote = Remote::new();
+    let cancelled_session = session();
+    let cancelled = publish_prepared_snapshot(
+        ProtectedPublish {
+            intent,
+            claim: &claim,
+            current: current(4),
+            prepared: &prepared,
+            key: &key,
+            outbox: &outbox,
+            remote: &cancelled_remote,
+            session: &cancelled_session,
+            max_outer_block_bytes: 4096,
+        },
+        || async {
+            cancelled_session.cancel();
+            std::future::pending().await
+        },
+    )
+    .await;
+    assert!(matches!(
+        cancelled,
+        Err(ProtectedSnapshotError::Transfer(
+            SnapshotTransferError::Cancelled
+        ))
+    ));
+    assert_eq!(cancelled_remote.puts.load(Ordering::Relaxed), 3);
+    assert!(!cancelled_remote.contains(prepared.outer_root()));
 
     let remote = Remote::new();
     let publish_session = session_with_attempts(2);
@@ -423,7 +452,11 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
         session: &publish_session,
         max_outer_block_bytes: 4096,
     };
-    let denied = publish_prepared_snapshot(publish(), || Ok(current(5))).await;
+    let denied = publish_prepared_snapshot(publish(), || async {
+        tokio::task::yield_now().await;
+        Ok(current(5))
+    })
+    .await;
     assert!(matches!(
         denied,
         Err(ProtectedSnapshotError::Admission(
@@ -433,7 +466,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
     assert!(!remote.contains(prepared.outer_root()));
     assert_eq!(remote.puts.load(Ordering::Relaxed), 3);
     remote.fail_after_store_at.store(7, Ordering::Relaxed);
-    let interrupted = publish_prepared_snapshot(publish(), || Ok(current(4))).await;
+    let interrupted = publish_prepared_snapshot(publish(), || async { Ok(current(4)) }).await;
     assert!(matches!(
         interrupted,
         Err(ProtectedSnapshotError::Remote(RemoteError::Unavailable))
@@ -442,7 +475,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
     assert_eq!(remote.puts.load(Ordering::Relaxed), 7);
     assert_eq!(publish_session.stats().retries, 0);
     assert!(matches!(
-        publish_prepared_snapshot(publish(), || Ok(current(5))).await,
+        publish_prepared_snapshot(publish(), || async { Ok(current(5)) }).await,
         Err(ProtectedSnapshotError::Admission(
             ProtectedStorageMismatch::Stale
         ))
@@ -454,7 +487,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
             .decide_commit(&claim, current(4), None, None)
             .is_err()
     );
-    let receipt = publish_prepared_snapshot(publish(), || Ok(current(4)))
+    let receipt = publish_prepared_snapshot(publish(), || async { Ok(current(4)) })
         .await
         .unwrap();
     assert_eq!(receipt.outer_root, *prepared.outer_root());
@@ -561,7 +594,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
                 session: &session(),
                 ..restore(current(4))
             },
-            || Ok((current(4), Some(&tiny_committed))),
+            || async { Ok((current(4), Some(&tiny_committed))) },
         )
         .await,
         Err(ProtectedSnapshotError::WrongBinding)
@@ -573,7 +606,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
                 committed: None,
                 ..restore(current(4))
             },
-            || Ok((current(4), Some(&committed)))
+            || async { Ok((current(4), Some(&committed))) }
         )
         .await,
         Err(ProtectedSnapshotError::Read(
@@ -587,21 +620,25 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
                 prepared: &altered,
                 ..restore(current(4))
             },
-            || Ok((current(4), Some(&committed)))
+            || async { Ok((current(4), Some(&committed))) }
         )
         .await,
         Err(ProtectedSnapshotError::WrongBinding)
     ));
     assert_eq!(remote.gets.load(Ordering::Relaxed), 0);
     assert!(matches!(
-        restore_protected_snapshot(restore(current(5)), || Ok((current(4), Some(&committed))))
-            .await,
+        restore_protected_snapshot(restore(current(5)), || async {
+            Ok((current(4), Some(&committed)))
+        })
+        .await,
         Err(ProtectedSnapshotError::Read(ProtectedReadMismatch::Stale))
     ));
     assert_eq!(remote.gets.load(Ordering::Relaxed), 0);
     assert!(matches!(
-        restore_protected_snapshot(restore(current(4)), || Ok((current(5), Some(&committed))))
-            .await,
+        restore_protected_snapshot(restore(current(4)), || async {
+            Ok((current(5), Some(&committed)))
+        })
+        .await,
         Err(ProtectedSnapshotError::Read(ProtectedReadMismatch::Stale))
     ));
     assert_eq!(remote.gets.load(Ordering::Relaxed), 4);
@@ -610,7 +647,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
         ..committed
     };
     assert!(matches!(
-        restore_protected_snapshot(restore(current(4)), || {
+        restore_protected_snapshot(restore(current(4)), || async {
             Ok((current(4), Some(&changed_count)))
         })
         .await,
@@ -620,14 +657,15 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
     ));
     assert_eq!(remote.gets.load(Ordering::Relaxed), 4);
     assert!(matches!(
-        restore_protected_snapshot(restore(current(4)), || Ok((current(4), None))).await,
+        restore_protected_snapshot(restore(current(4)), || async { Ok((current(4), None)) }).await,
         Err(ProtectedSnapshotError::Read(
             ProtectedReadMismatch::MissingCommit
         ))
     ));
     assert_eq!(remote.gets.load(Ordering::Relaxed), 4);
     assert!(matches!(
-        restore_protected_snapshot(restore(current(4)), || {
+        restore_protected_snapshot(restore(current(4)), || async {
+            tokio::task::yield_now().await;
             Ok((
                 CurrentStorageState {
                     now: 98,
@@ -640,18 +678,40 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
         Err(ProtectedSnapshotError::Read(ProtectedReadMismatch::Stale))
     ));
     assert_eq!(remote.gets.load(Ordering::Relaxed), 4);
-    let warm =
-        restore_protected_snapshot(restore(current(4)), || Ok((current(4), Some(&committed))))
-            .await
-            .unwrap();
+    let warm = restore_protected_snapshot(restore(current(4)), || async {
+        Ok((current(4), Some(&committed)))
+    })
+    .await
+    .unwrap();
     assert_eq!(warm.snapshot().cid(), snapshot.cid());
     assert_eq!(remote.gets.load(Ordering::Relaxed), 4);
     assert!(matches!(
-        restore_protected_snapshot(restore(current(5)), || Ok((current(4), Some(&committed))))
-            .await,
+        restore_protected_snapshot(restore(current(5)), || async {
+            Ok((current(4), Some(&committed)))
+        })
+        .await,
         Err(ProtectedSnapshotError::Read(ProtectedReadMismatch::Stale))
     ));
     assert_eq!(remote.gets.load(Ordering::Relaxed), 4);
+
+    let cancelled_read_session = session();
+    let cancelled_read = restore_protected_snapshot(
+        ProtectedRestore {
+            session: &cancelled_read_session,
+            ..restore(current(4))
+        },
+        || async {
+            cancelled_read_session.cancel();
+            std::future::pending().await
+        },
+    )
+    .await;
+    assert!(matches!(
+        cancelled_read,
+        Err(ProtectedSnapshotError::Transfer(
+            SnapshotTransferError::Cancelled
+        ))
+    ));
 }
 
 #[tokio::test]
@@ -775,7 +835,7 @@ async fn protected_s3_tls_conformance() {
             session: &publish_session,
             max_outer_block_bytes: 4096,
         },
-        || Ok(current(4)),
+        || async { Ok(current(4)) },
     )
     .await
     .unwrap();
@@ -832,7 +892,7 @@ async fn protected_s3_tls_conformance() {
             max_outer_block_bytes: 4096,
             max_outer_total_bytes: 8192,
         },
-        || Ok((current(4), Some(&committed))),
+        || async { Ok((current(4), Some(&committed))) },
     )
     .await
     .unwrap();

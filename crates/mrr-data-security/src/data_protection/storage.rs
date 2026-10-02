@@ -201,7 +201,7 @@ impl std::error::Error for RawSnapshotPublishError {}
 /// # Errors
 /// Returns a selection error before root I/O, or a transfer error.
 #[cfg(feature = "raw-publish")]
-pub async fn publish_raw_snapshot<'a, F>(
+pub async fn publish_raw_snapshot<'a, F, Fut>(
     effect: StorageEffect<'a>,
     claim: &StorageClaim<'a>,
     current: CurrentStorageState<'a>,
@@ -209,7 +209,8 @@ pub async fn publish_raw_snapshot<'a, F>(
     refresh: F,
 ) -> Result<mrr_data_content::SnapshotPublication, RawSnapshotPublishError>
 where
-    F: FnOnce() -> Result<CurrentStorageState<'a>, RawSnapshotPublishError>,
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Result<CurrentStorageState<'a>, RawSnapshotPublishError>>,
 {
     if effect.destination.tier != RawStorageTier::Remote {
         return Err(RawSnapshotPublishError::Selection(
@@ -235,9 +236,9 @@ where
                 entities: transfer.entities,
                 limits: transfer.limits,
             },
-            || {
+            || async {
                 effect
-                    .check_raw(claim, refresh()?)
+                    .check_raw(claim, refresh().await?)
                     .map_err(RawSnapshotPublishError::Selection)
             },
         )

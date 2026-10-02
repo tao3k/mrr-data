@@ -128,14 +128,15 @@ impl TransferSession {
     /// retry must re-enter this method and its gate.
     /// # Errors
     /// Returns a snapshot failure or the caller's root-gate error.
-    pub async fn publish_snapshot_with_root_gate<E, F>(
+    pub async fn publish_snapshot_with_root_gate<E, F, Fut>(
         &self,
         inputs: crate::SnapshotPublishInputs<'_>,
         before_root: F,
     ) -> Result<crate::SnapshotPublication, E>
     where
         E: From<SnapshotTransferError>,
-        F: FnOnce() -> Result<(), E>,
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<(), E>>,
     {
         let budgeted = self.remote(inputs.remote);
         let root_once = self.remote_once(inputs.remote);

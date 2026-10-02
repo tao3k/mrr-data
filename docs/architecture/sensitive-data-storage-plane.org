@@ -48,8 +48,8 @@ These are separate physical roots with a Host-owned binding between them.
 | S3 adapter | OpenDAL transport, conditional immutable put, total deadline, bounded streamed get and CID verification | Host destination policy and hosted-provider qualification; generic adapter remains label-blind |
 | Snapshot transfer | Closure preflight, children-before-root upload, bounded cold restore | Streaming large-closure API; current restore owns all child bytes in memory |
 | Data Protection | Exact release receipt and two scoped decisions; Host authenticates them | Host policy engine, atomic approval redemption and output persistence |
-| Raw storage admission | Optional =mrr-data-security/raw-publish= checks the Storage Effect and actual snapshot CID before Tokio publication, then requires a fresh current-state check before a one-attempt root PUT; 17 SPEC cases replay in Rust; restricted raw sources are rejected | Generic byte APIs remain label-blind; real Host must route every sensitive write through an admission boundary; prior raw child PUTs may persist after revocation |
-| Protected snapshot path | Optional =mrr-data-security/protected-publish= replays SPEC intent/pre-root/commit/read and 16 cross-profile cases; verifies a complete inner closure, AES-256-GCM encrypts blocks and an outer manifest with fresh nonces, stages only ciphertext in a local outbox, rechecks before the outer root PUT, projects physical ACK and commit disposition, gates restore before GET, and verifies cold/warm restore | Authenticated source/claim/configuration, KMS key lifecycle, durable Host ledger and atomic approval/audit commit, hosted S3 qualification, and plaintext memory discipline |
+| Raw storage admission | Optional =mrr-data-security/raw-publish= checks the Storage Effect and actual snapshot CID before Tokio publication, then awaits a fresh current-state check before a one-attempt root PUT; 17 SPEC cases replay in Rust; restricted raw sources are rejected | Generic byte APIs remain label-blind; real Host must route every sensitive write through an admission boundary; prior raw child PUTs may persist after revocation |
+| Protected snapshot path | Optional =mrr-data-security/protected-publish= replays SPEC intent/pre-root/commit/read and 16 cross-profile cases; verifies a complete inner closure, AES-256-GCM encrypts blocks and an outer manifest with fresh nonces, stages only ciphertext in a local outbox, awaits a fresh check before the outer root PUT and plaintext release, projects physical ACK and commit disposition, gates restore before GET, and verifies cold/warm restore | Authenticated source/claim/configuration, KMS key lifecycle, durable Host ledger and atomic approval/audit commit, hosted S3 qualification, and plaintext memory discipline |
 | Google SDP | Verified Arrow row selection, exact recipe/claim binding, bounded multi-row Table wire and checked de-identify output; a separate checked re-identify effect for token-only plans | Host transport/KMS, quota governor and Cloud re-identification gate |
 
 The local store writes the supplied bytes verbatim; the S3 key is
@@ -137,7 +137,7 @@ labels and must only receive protected bytes through a trusted Host.
 The Host must authorize a remote publish before the first PUT and recheck
 state before the encrypted manifest root PUT, then atomically commit the
 discoverability pointer and audit. The library performs the second projected
-check; the root PUT has no =TransferSession= automatic retry, so a caller retry must
+check through an awaited callback under the session deadline; the root PUT has no =TransferSession= automatic retry, so a caller retry must
 repeat that check. An acknowledged root yields a physical ACK for the pure
 commit disposition. The Host owns
 the durable ledger compare-and-set. A failed or revoked publication

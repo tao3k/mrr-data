@@ -30,6 +30,7 @@ pub enum ProtectedSnapshotError {
     Read(ProtectedReadMismatch),
     Envelope(ProtectedEnvelopeError),
     Inner(SnapshotTransferError),
+    Transfer(SnapshotTransferError),
     Local(ContentError),
     Content(ContentProtocolError),
     Remote(RemoteError),
@@ -64,6 +65,12 @@ impl From<ContentError> for ProtectedSnapshotError {
 impl From<ContentProtocolError> for ProtectedSnapshotError {
     fn from(value: ContentProtocolError) -> Self {
         Self::Content(value)
+    }
+}
+
+impl From<SnapshotTransferError> for ProtectedSnapshotError {
+    fn from(value: SnapshotTransferError) -> Self {
+        Self::Transfer(value)
     }
 }
 
@@ -508,12 +515,13 @@ async fn load_outer(
 /// # Errors
 /// Returns an admission, transport or stale-state error. Uploaded children
 /// may remain as undiscoverable ciphertext after an error.
-pub async fn publish_prepared_snapshot<'a, F>(
+pub async fn publish_prepared_snapshot<'a, F, Fut>(
     publish: ProtectedPublish<'a>,
     refresh: F,
 ) -> Result<ProtectedPhysicalPublication, ProtectedSnapshotError>
 where
-    F: FnOnce() -> Result<CurrentStorageState<'a>, ProtectedSnapshotError>,
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Result<CurrentStorageState<'a>, ProtectedSnapshotError>>,
 {
     if publish.intent.storage.destination.tier != RawStorageTier::Remote {
         return Err(ProtectedSnapshotError::WrongTier);
@@ -589,8 +597,9 @@ where
         return Err(ProtectedSnapshotError::InvalidManifest);
     }
     let publication = publish.prepared.publication(publish.intent)?;
+    let refreshed = publish.session.run(async { refresh().await }).await?;
     publication
-        .check_pre_root(publish.claim, refresh()?)
+        .check_pre_root(publish.claim, refreshed)
         .map_err(ProtectedSnapshotError::Admission)?;
     publish
         .session
@@ -649,18 +658,21 @@ fn check_restore_binding<'a>(
 /// row after verification. Plaintext is returned only if both checks pass.
 /// # Errors
 /// Returns missing, tampered, oversized, stale or invalid closure errors.
-pub async fn restore_protected_snapshot<'a, F>(
+pub async fn restore_protected_snapshot<'a, F, Fut>(
     restore: ProtectedRestore<'a>,
     refresh: F,
 ) -> Result<RestoredSnapshot, ProtectedSnapshotError>
 where
-    F: FnOnce() -> Result<
-        (
-            CurrentStorageState<'a>,
-            Option<&'a super::ProtectedCommitReceipt<'a>>,
-        ),
-        ProtectedSnapshotError,
-    >,
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<
+            Output = Result<
+                (
+                    CurrentStorageState<'a>,
+                    Option<&'a super::ProtectedCommitReceipt<'a>>,
+                ),
+                ProtectedSnapshotError,
+            >,
+        >,
 {
     let receipt = check_restore_binding(&restore)?;
     let intent = receipt.publication.intent;
@@ -753,19 +765,22 @@ where
     verify_and_release(&memory, &restore, refresh).await
 }
 
-async fn verify_and_release<'a, F>(
+async fn verify_and_release<'a, F, Fut>(
     memory: &MemoryContentStore,
     restore: &ProtectedRestore<'a>,
     refresh: F,
 ) -> Result<RestoredSnapshot, ProtectedSnapshotError>
 where
-    F: FnOnce() -> Result<
-        (
-            CurrentStorageState<'a>,
-            Option<&'a super::ProtectedCommitReceipt<'a>>,
-        ),
-        ProtectedSnapshotError,
-    >,
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<
+            Output = Result<
+                (
+                    CurrentStorageState<'a>,
+                    Option<&'a super::ProtectedCommitReceipt<'a>>,
+                ),
+                ProtectedSnapshotError,
+            >,
+        >,
 {
     let restored = restore_snapshot_local(
         memory,
@@ -776,7 +791,7 @@ where
     )
     .await
     .map_err(ProtectedSnapshotError::Inner)?;
-    let (current, committed) = refresh()?;
+    let (current, committed) = restore.session.run(async { refresh().await }).await?;
     restore
         .read
         .check_release(

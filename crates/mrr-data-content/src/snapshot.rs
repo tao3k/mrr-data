@@ -8,6 +8,7 @@ use cid::Cid;
 use meta_relational_reasoning::{EntityCatalog, RelationCatalog};
 use mrr_data_core::{SnapshotBlock, SnapshotManifest};
 use std::collections::BTreeMap;
+use std::future::Future;
 
 /// Logical resident payload limits. Count and total include the root, while
 /// `block_bytes` applies to children. Execution is serial; there are no retries.
@@ -231,7 +232,7 @@ pub async fn publish_snapshot(
             limits,
         },
         remote,
-        || Ok(()),
+        || async { Ok(()) },
     )
     .await
 }
@@ -242,14 +243,15 @@ pub async fn publish_snapshot(
 /// Failed attempts may leave children or an unacknowledged root remotely.
 /// # Errors
 /// Returns a snapshot failure or the caller's root-gate error.
-pub(crate) async fn publish_snapshot_with_root_gate<E, F>(
+pub(crate) async fn publish_snapshot_with_root_gate<E, F, Fut>(
     inputs: SnapshotPublishInputs<'_>,
     root_remote: &(impl RemoteContentStore + ?Sized),
     before_root: F,
 ) -> Result<SnapshotPublication, E>
 where
     E: From<SnapshotTransferError>,
-    F: FnOnce() -> Result<(), E>,
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = Result<(), E>>,
 {
     let SnapshotPublishInputs {
         local,
@@ -293,7 +295,7 @@ where
             .map_err(|e| transfer(*cid, e))?;
         cache.insert(*cid, receipt.cache);
     }
-    before_root()?;
+    before_root().await?;
     let receipt = publish_content(
         local,
         root_remote,

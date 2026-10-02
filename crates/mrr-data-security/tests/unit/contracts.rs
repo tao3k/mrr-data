@@ -273,9 +273,9 @@ async fn raw_snapshot_gate_precedes_remote_io_and_allows_unrestricted() {
         limits: SnapshotTransferLimits::new(4096, 4, 4096, 8192),
     };
     assert_eq!(
-        publish_raw_snapshot(effect, &claim, current, transfer, || panic!(
-            "early refresh"
-        ))
+        publish_raw_snapshot(effect, &claim, current, transfer, || async {
+            panic!("early refresh")
+        })
         .await,
         Err(RawSnapshotPublishError::Selection(
             RawStorageMismatch::RestrictedRequiresProtection
@@ -307,7 +307,7 @@ async fn raw_snapshot_gate_precedes_remote_io_and_allows_unrestricted() {
             },
             current,
             transfer,
-            || panic!("early refresh")
+            || async { panic!("early refresh") }
         )
         .await,
         Err(RawSnapshotPublishError::Selection(
@@ -345,12 +345,19 @@ async fn raw_snapshot_gate_precedes_remote_io_and_allows_unrestricted() {
         limits: SnapshotTransferLimits::new(4096, 4, 4096, 8192),
     };
     assert_eq!(
-        publish_raw_snapshot(allowed_effect, &allowed_claim, current, transfer, || {
-            Ok(CurrentStorageState {
-                epoch: 5,
-                ..current
-            })
-        })
+        publish_raw_snapshot(
+            allowed_effect,
+            &allowed_claim,
+            current,
+            transfer,
+            || async {
+                tokio::task::yield_now().await;
+                Ok(CurrentStorageState {
+                    epoch: 5,
+                    ..current
+                })
+            }
+        )
         .await,
         Err(RawSnapshotPublishError::Selection(
             RawStorageMismatch::Stale
@@ -367,9 +374,13 @@ async fn raw_snapshot_gate_precedes_remote_io_and_allows_unrestricted() {
         entities: &entities,
         limits: SnapshotTransferLimits::new(4096, 4, 4096, 8192),
     };
-    let published = publish_raw_snapshot(allowed_effect, &allowed_claim, current, transfer, || {
-        Ok(current)
-    })
+    let published = publish_raw_snapshot(
+        allowed_effect,
+        &allowed_claim,
+        current,
+        transfer,
+        || async { Ok(current) },
+    )
     .await
     .unwrap();
     assert_eq!(published.root(), snapshot.cid());
