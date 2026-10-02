@@ -285,6 +285,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
                 remote: &missing_remote,
                 session: &session(),
                 max_outer_block_bytes: 4096,
+                max_outer_total_bytes: 8192,
             },
             || async { Ok(current(4)) },
         )
@@ -310,6 +311,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
                 remote: &corrupt_remote,
                 session: &session(),
                 max_outer_block_bytes: 4096,
+                max_outer_total_bytes: 8192,
             },
             || async {
                 refreshes.fetch_add(1, Ordering::Relaxed);
@@ -319,8 +321,34 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
         .await,
         Err(ProtectedSnapshotError::WrongRoot)
     ));
-    assert_eq!(corrupt_remote.puts.load(Ordering::Relaxed), 3);
+    assert_eq!(corrupt_remote.puts.load(Ordering::Relaxed), 0);
     assert!(!corrupt_remote.contains(prepared.outer_root()));
+
+    let corrupt_child_outbox = CorruptOutbox {
+        inner: &outbox,
+        corrupted: *prepared.child_roots().values().last().unwrap(),
+    };
+    let corrupt_child_remote = Remote::new();
+    assert!(matches!(
+        publish_prepared_snapshot(
+            ProtectedPublish {
+                intent,
+                claim: &claim,
+                current: current(4),
+                prepared: &prepared,
+                key: &key,
+                outbox: &corrupt_child_outbox,
+                remote: &corrupt_child_remote,
+                session: &session(),
+                max_outer_block_bytes: 4096,
+                max_outer_total_bytes: 8192,
+            },
+            || async { Ok(current(4)) },
+        )
+        .await,
+        Err(ProtectedSnapshotError::WrongRoot)
+    ));
+    assert_eq!(corrupt_child_remote.puts.load(Ordering::Relaxed), 0);
     assert_eq!(refreshes.load(Ordering::Relaxed), 0);
 
     let mut swapped_record = prepared.host_record();
@@ -353,13 +381,14 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
                 remote: &swapped_remote,
                 session: &session(),
                 max_outer_block_bytes: 4096,
+                max_outer_total_bytes: 8192,
             },
             || async { Ok(current(4)) },
         )
         .await,
         Err(ProtectedSnapshotError::InvalidManifest)
     ));
-    assert_eq!(swapped_remote.puts.load(Ordering::Relaxed), 3);
+    assert_eq!(swapped_remote.puts.load(Ordering::Relaxed), 0);
     assert!(!swapped_remote.contains(prepared.outer_root()));
 
     let altered =
@@ -378,13 +407,37 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
                 remote: &altered_remote,
                 session: &altered_session,
                 max_outer_block_bytes: 4096,
+                max_outer_total_bytes: 8192,
             },
             || async { Ok(current(4)) },
         )
         .await,
         Err(ProtectedSnapshotError::WrongBinding)
     ));
+    assert_eq!(altered_remote.puts.load(Ordering::Relaxed), 0);
     assert!(!altered_remote.contains(prepared.outer_root()));
+
+    let capped_remote = Remote::new();
+    assert!(matches!(
+        publish_prepared_snapshot(
+            ProtectedPublish {
+                intent,
+                claim: &claim,
+                current: current(4),
+                prepared: &prepared,
+                key: &key,
+                outbox: &outbox,
+                remote: &capped_remote,
+                session: &session(),
+                max_outer_block_bytes: 4096,
+                max_outer_total_bytes: prepared.total_outer_bytes() - 1,
+            },
+            || async { Ok(current(4)) },
+        )
+        .await,
+        Err(ProtectedSnapshotError::TooLarge)
+    ));
+    assert_eq!(capped_remote.puts.load(Ordering::Relaxed), 0);
 
     let mut tiny_record = prepared.host_record();
     tiny_record.total_outer_bytes = 1;
@@ -402,6 +455,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
                 remote: &tiny_remote,
                 session: &session(),
                 max_outer_block_bytes: 4096,
+                max_outer_total_bytes: 8192,
             },
             || async { Ok(current(4)) },
         )
@@ -423,6 +477,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
             remote: &cancelled_remote,
             session: &cancelled_session,
             max_outer_block_bytes: 4096,
+            max_outer_total_bytes: 8192,
         },
         || async {
             cancelled_session.cancel();
@@ -451,6 +506,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
         remote: &remote,
         session: &publish_session,
         max_outer_block_bytes: 4096,
+        max_outer_total_bytes: 8192,
     };
     let denied = publish_prepared_snapshot(publish(), || async {
         tokio::task::yield_now().await;
@@ -834,6 +890,7 @@ async fn protected_s3_tls_conformance() {
             remote: &remote,
             session: &publish_session,
             max_outer_block_bytes: 4096,
+            max_outer_total_bytes: 8192,
         },
         || async { Ok(current(4)) },
     )

@@ -229,7 +229,7 @@ fn add_outer(total: &mut usize, bytes: usize, limit: usize) -> Result<(), Protec
     Ok(())
 }
 
-fn add_restored_outer(
+fn add_recorded_outer(
     total: &mut usize,
     bytes: usize,
     caller_limit: usize,
@@ -472,6 +472,7 @@ pub struct ProtectedPublish<'a> {
     pub remote: &'a dyn RemoteContentStore,
     pub session: &'a TransferSession,
     pub max_outer_block_bytes: usize,
+    pub max_outer_total_bytes: usize,
 }
 
 /// Physical acknowledgement only. The Host must atomically redeem the
@@ -508,13 +509,94 @@ async fn load_outer(
     Ok(bytes)
 }
 
-/// Upload staged ciphertext children, recheck current authority immediately
+struct CapturedProtectedClosure {
+    children: Vec<Vec<u8>>,
+    root_block: Vec<u8>,
+    manifest: Vec<u8>,
+}
+
+/// Freeze and verify every staged ciphertext block before the first remote
+/// effect. The caller's total limit applies independently of the Host record.
+async fn capture_prepared(
+    publish: &ProtectedPublish<'_>,
+) -> Result<CapturedProtectedClosure, ProtectedSnapshotError> {
+    if publish.prepared.total_outer_bytes > publish.max_outer_total_bytes {
+        return Err(ProtectedSnapshotError::TooLarge);
+    }
+    let mut actual_total = 0_usize;
+    let manifest = load_outer(
+        publish.outbox,
+        &publish.prepared.outer_root,
+        publish.max_outer_block_bytes,
+    )
+    .await?;
+    add_recorded_outer(
+        &mut actual_total,
+        manifest.len(),
+        publish.max_outer_total_bytes,
+        publish.prepared.total_outer_bytes,
+    )?;
+    let manifest_plaintext = open_block(
+        ProtectedBlockBinding {
+            intent: publish.intent,
+            inner_cid: &publish.prepared.manifest_plain_cid,
+            role: ProtectedBlockRole::Manifest,
+            key_version: &publish.prepared.key_version,
+        },
+        &publish.prepared.outer_root,
+        &manifest,
+        publish.key,
+        publish.max_outer_block_bytes,
+    )?;
+    let (inner_root, root_block_outer, child_roots) = decode_manifest(&manifest_plaintext)?;
+    if inner_root != publish.prepared.inner_root
+        || root_block_outer != publish.prepared.root_block_outer
+        || child_roots != publish.prepared.child_roots
+    {
+        return Err(ProtectedSnapshotError::InvalidManifest);
+    }
+    let mut children = Vec::with_capacity(publish.prepared.child_roots.len());
+    for outer in publish.prepared.child_roots.values() {
+        let bytes = load_outer(publish.outbox, outer, publish.max_outer_block_bytes).await?;
+        add_recorded_outer(
+            &mut actual_total,
+            bytes.len(),
+            publish.max_outer_total_bytes,
+            publish.prepared.total_outer_bytes,
+        )?;
+        children.push(bytes);
+    }
+    let root_block = load_outer(
+        publish.outbox,
+        &publish.prepared.root_block_outer,
+        publish.max_outer_block_bytes,
+    )
+    .await?;
+    add_recorded_outer(
+        &mut actual_total,
+        root_block.len(),
+        publish.max_outer_total_bytes,
+        publish.prepared.total_outer_bytes,
+    )?;
+    if actual_total != publish.prepared.total_outer_bytes {
+        return Err(ProtectedSnapshotError::WrongBinding);
+    }
+    Ok(CapturedProtectedClosure {
+        children,
+        root_block,
+        manifest,
+    })
+}
+
+/// Capture and verify the complete staged ciphertext closure before any PUT,
+/// upload children, recheck current authority immediately
 /// before the protected root, then upload that root. The `refresh` callback is
 /// Host-owned and must read current governance rather than reuse the first
 /// projection. The returned physical receipt is not a durable Host commit.
 /// # Errors
-/// Returns an admission, transport or stale-state error. Uploaded children
-/// may remain as undiscoverable ciphertext after an error.
+/// Returns an admission, transport or stale-state error. A local closure error
+/// causes no remote PUT; transport or stale-state errors may leave ciphertext
+/// children undiscoverable remotely.
 pub async fn publish_prepared_snapshot<'a, F, Fut>(
     publish: ProtectedPublish<'a>,
     refresh: F,
@@ -531,71 +613,18 @@ where
         .check_intent(publish.claim, publish.current)
         .map_err(ProtectedSnapshotError::Admission)?;
     check_prepared(publish.intent, publish.prepared)?;
+    let captured = publish.session.run(capture_prepared(&publish)).await?;
     let budgeted = publish.session.remote(publish.remote);
-    let mut actual_total = 0_usize;
-    for outer in publish.prepared.child_roots.values() {
-        let bytes = load_outer(publish.outbox, outer, publish.max_outer_block_bytes).await?;
-        add_outer(
-            &mut actual_total,
-            bytes.len(),
-            publish.prepared.total_outer_bytes,
-        )
-        .map_err(|_| ProtectedSnapshotError::WrongBinding)?;
+    for bytes in &captured.children {
         budgeted
-            .put(ContentBlock::new(ContentCodec::Raw, &bytes))
+            .put(ContentBlock::new(ContentCodec::Raw, bytes))
             .await
             .map_err(ProtectedSnapshotError::Remote)?;
     }
-    let root_block_bytes = load_outer(
-        publish.outbox,
-        &publish.prepared.root_block_outer,
-        publish.max_outer_block_bytes,
-    )
-    .await?;
-    add_outer(
-        &mut actual_total,
-        root_block_bytes.len(),
-        publish.prepared.total_outer_bytes,
-    )
-    .map_err(|_| ProtectedSnapshotError::WrongBinding)?;
     budgeted
-        .put(ContentBlock::new(ContentCodec::Raw, &root_block_bytes))
+        .put(ContentBlock::new(ContentCodec::Raw, &captured.root_block))
         .await
         .map_err(ProtectedSnapshotError::Remote)?;
-    let root_bytes = load_outer(
-        publish.outbox,
-        &publish.prepared.outer_root,
-        publish.max_outer_block_bytes,
-    )
-    .await?;
-    add_outer(
-        &mut actual_total,
-        root_bytes.len(),
-        publish.prepared.total_outer_bytes,
-    )
-    .map_err(|_| ProtectedSnapshotError::WrongBinding)?;
-    if actual_total != publish.prepared.total_outer_bytes {
-        return Err(ProtectedSnapshotError::WrongBinding);
-    }
-    let manifest_plaintext = open_block(
-        ProtectedBlockBinding {
-            intent: publish.intent,
-            inner_cid: &publish.prepared.manifest_plain_cid,
-            role: ProtectedBlockRole::Manifest,
-            key_version: &publish.prepared.key_version,
-        },
-        &publish.prepared.outer_root,
-        &root_bytes,
-        publish.key,
-        publish.max_outer_block_bytes,
-    )?;
-    let (inner_root, root_block_outer, child_roots) = decode_manifest(&manifest_plaintext)?;
-    if inner_root != publish.prepared.inner_root
-        || root_block_outer != publish.prepared.root_block_outer
-        || child_roots != publish.prepared.child_roots
-    {
-        return Err(ProtectedSnapshotError::InvalidManifest);
-    }
     let publication = publish.prepared.publication(publish.intent)?;
     let refreshed = publish.session.run(async { refresh().await }).await?;
     publication
@@ -604,7 +633,7 @@ where
     publish
         .session
         .remote_once(publish.remote)
-        .put(ContentBlock::new(ContentCodec::Raw, &root_bytes))
+        .put(ContentBlock::new(ContentCodec::Raw, &captured.manifest))
         .await
         .map_err(ProtectedSnapshotError::Remote)?;
     Ok(ProtectedPhysicalPublication {
@@ -689,7 +718,7 @@ where
     .ok_or(ProtectedSnapshotError::MissingBlock(
         restore.prepared.outer_root,
     ))?;
-    add_restored_outer(
+    add_recorded_outer(
         &mut total,
         manifest_read.bytes.len(),
         restore.max_outer_total_bytes,
@@ -735,7 +764,7 @@ where
         )
         .await?
         .ok_or(ProtectedSnapshotError::MissingBlock(outer))?;
-        add_restored_outer(
+        add_recorded_outer(
             &mut total,
             read.bytes.len(),
             restore.max_outer_total_bytes,

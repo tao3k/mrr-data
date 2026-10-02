@@ -170,3 +170,15 @@ tests still deny a revoked root or read before the corresponding release.
 This is an effect-timing contract, not a new independently owned policy rule
 for LeanPoo. The Host must authenticate each returned observation and perform
 its own atomic approval and audit transaction.
+
+* Reflection: complete ciphertext closure before provider I/O
+
+The existing SPEC LeanPoo profile composes static destination and key choices;
+it does not own the state of an outbox. Protected publication now captures
+every ciphertext child, root block and authenticated manifest under a caller
+byte ceiling before the first remote PUT. A corrupt or missing staged block,
+or a mismatched private record, produces no provider write. This is a
+physical snapshot invariant and a resource bound, so it remains a direct Rust
+preflight rather than a new LeanPoo inheritance rule. The Host still
+authenticates the record, selects the ceiling and handles orphan ciphertext
+after transport failures or later revocation.

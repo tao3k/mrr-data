@@ -49,7 +49,7 @@ These are separate physical roots with a Host-owned binding between them.
 | Snapshot transfer | Closure preflight, children-before-root upload, bounded cold restore | Streaming large-closure API; current restore owns all child bytes in memory |
 | Data Protection | Exact release receipt and two scoped decisions; Host authenticates them | Host policy engine, atomic approval redemption and output persistence |
 | Raw storage admission | Optional =mrr-data-security/raw-publish= checks the Storage Effect and actual snapshot CID before Tokio publication, then awaits a fresh current-state check before a one-attempt root PUT; 17 SPEC cases replay in Rust; restricted raw sources are rejected | Generic byte APIs remain label-blind; real Host must route every sensitive write through an admission boundary; prior raw child PUTs may persist after revocation |
-| Protected snapshot path | Optional =mrr-data-security/protected-publish= replays SPEC intent/pre-root/commit/read and 16 cross-profile cases; verifies a complete inner closure, AES-256-GCM encrypts blocks and an outer manifest with fresh nonces, stages only ciphertext in a local outbox, awaits a fresh check before the outer root PUT and plaintext release, projects physical ACK and commit disposition, gates restore before GET, and verifies cold/warm restore | Authenticated source/claim/configuration, KMS key lifecycle, durable Host ledger and atomic approval/audit commit, hosted S3 qualification, and plaintext memory discipline |
+| Protected snapshot path | Optional =mrr-data-security/protected-publish= replays SPEC intent/pre-root/commit/read and 16 cross-profile cases; verifies a complete inner closure, AES-256-GCM encrypts blocks and an outer manifest with fresh nonces, stages only ciphertext in a local outbox, captures and verifies the full bounded staged ciphertext closure before any remote PUT, awaits a fresh check before the outer root PUT and plaintext release, projects physical ACK and commit disposition, gates restore before GET, and verifies cold/warm restore | Authenticated source/claim/configuration, KMS key lifecycle, durable Host ledger and atomic approval/audit commit, hosted S3 qualification, and plaintext memory discipline |
 | Google SDP | Verified Arrow row selection, exact recipe/claim binding, bounded multi-row Table wire and checked de-identify output; a separate checked re-identify effect for token-only plans | Host transport/KMS, quota governor and Cloud re-identification gate |
 
 The local store writes the supplied bytes verbatim; the S3 key is
@@ -72,6 +72,15 @@ rejects raw publication of the same restricted source before any remote PUT,
 then exercises protected publication, commit disposition, revocation and
 cold/warm restore. Those are local contract
 and transport receipts, not a complete customer-data protection claim.
+
+Publication now captures the complete staged ciphertext closure under a
+caller-supplied total-byte ceiling and the transfer-session deadline before
+the first provider PUT. A missing or tampered child, invalid manifest, or
+inconsistent Host record causes zero remote writes. The upload uses those
+captured bytes, so later outbox eviction cannot change a verified publication
+mid-flight. The bound counts ciphertext logical bytes; transient container and
+provider buffers add memory overhead. A remote failure or a revocation after
+child PUTs can still leave orphan ciphertext remotely.
 
 The highest-priority remaining gate is a Host-owned integration case that
 starts with an authenticated restricted source and label lineage, prevents
