@@ -592,7 +592,9 @@ where
     publication
         .check_pre_root(publish.claim, refresh()?)
         .map_err(ProtectedSnapshotError::Admission)?;
-    budgeted
+    publish
+        .session
+        .remote_once(publish.remote)
         .put(ContentBlock::new(ContentCodec::Raw, &root_bytes))
         .await
         .map_err(ProtectedSnapshotError::Remote)?;

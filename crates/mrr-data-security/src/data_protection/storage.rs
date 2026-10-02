@@ -177,6 +177,13 @@ pub enum RawSnapshotPublishError {
 }
 
 #[cfg(feature = "raw-publish")]
+impl From<mrr_data_content::SnapshotTransferError> for RawSnapshotPublishError {
+    fn from(error: mrr_data_content::SnapshotTransferError) -> Self {
+        Self::Transfer(error)
+    }
+}
+
+#[cfg(feature = "raw-publish")]
 impl std::fmt::Display for RawSnapshotPublishError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "raw snapshot publication: {self:?}")
@@ -186,20 +193,24 @@ impl std::fmt::Display for RawSnapshotPublishError {
 #[cfg(feature = "raw-publish")]
 impl std::error::Error for RawSnapshotPublishError {}
 
-/// Publish an unrestricted raw snapshot only after exact current admission.
-/// This wrapper checks once before transfer. The Host must keep governance
-/// stable across the call or use a future pre-root commit protocol; the generic
-/// publisher has no reauthorization hook before root upload. Generic content
+/// Publish an unrestricted raw snapshot after initial admission and a fresh
+/// Host projection immediately before the root PUT. The session invokes the
+/// root remote once; an explicit retry must obtain current authority again. The Host
+/// authenticates `refresh` and owns any durable commit. Generic content
 /// transports remain label-blind and must not authorize sensitive I/O.
 /// # Errors
-/// Returns a selection error before remote I/O, or a transfer error afterward.
+/// Returns a selection error before root I/O, or a transfer error.
 #[cfg(feature = "raw-publish")]
-pub async fn publish_raw_snapshot(
-    effect: StorageEffect<'_>,
-    claim: &StorageClaim<'_>,
-    current: CurrentStorageState<'_>,
+pub async fn publish_raw_snapshot<'a, F>(
+    effect: StorageEffect<'a>,
+    claim: &StorageClaim<'a>,
+    current: CurrentStorageState<'a>,
     transfer: RawSnapshotPublish<'_>,
-) -> Result<mrr_data_content::SnapshotPublication, RawSnapshotPublishError> {
+    refresh: F,
+) -> Result<mrr_data_content::SnapshotPublication, RawSnapshotPublishError>
+where
+    F: FnOnce() -> Result<CurrentStorageState<'a>, RawSnapshotPublishError>,
+{
     if effect.destination.tier != RawStorageTier::Remote {
         return Err(RawSnapshotPublishError::Selection(
             RawStorageMismatch::DestinationTier,
@@ -215,14 +226,20 @@ pub async fn publish_raw_snapshot(
         .map_err(RawSnapshotPublishError::Selection)?;
     transfer
         .session
-        .publish_snapshot(
-            transfer.local,
-            transfer.remote,
-            transfer.snapshot,
-            transfer.relations,
-            transfer.entities,
-            transfer.limits,
+        .publish_snapshot_with_root_gate(
+            mrr_data_content::SnapshotPublishInputs {
+                local: transfer.local,
+                remote: transfer.remote,
+                snapshot: transfer.snapshot,
+                relations: transfer.relations,
+                entities: transfer.entities,
+                limits: transfer.limits,
+            },
+            || {
+                effect
+                    .check_raw(claim, refresh()?)
+                    .map_err(RawSnapshotPublishError::Selection)
+            },
         )
         .await
-        .map_err(RawSnapshotPublishError::Transfer)
 }

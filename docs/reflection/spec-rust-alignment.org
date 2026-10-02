@@ -132,3 +132,28 @@ This naming and projection change adds no independently owned profile rule or
 incremental dependency, so additional LeanPoo composition would have no
 semantic work to perform. Fresh Host authority and physical effects still
 require their existing explicit checks.
+
+* Reflection: root publication retry and current authority
+
+The SPEC LeanPoo profile continues to compose static destination and key
+choices through typed slots and inheritance. This iteration changes transport
+attempt policy at one physical effect boundary: after the Host refreshes
+authority, the protected root PUT makes one =TransferSession= call. An ambiguous failure requires a
+new publisher call and another refresh, even if child PUTs use automatic
+retries. A revoked retry returns no physical acknowledgement. There is no new
+independently owned profile rule or reusable proof dependency for LeanPoo to
+compose; the session budget and Host's current-state projection remain direct
+Rust checks. The test demonstrates the library boundary, while the Host still
+authenticates refresh results and commits the ledger atomically.
+
+* Reflection: raw root publication after revocation
+
+The existing LeanPoo protection profile still composes protected destination
+and key choices. This iteration adds a required current-state callback to the
+raw publisher between verified child publication and its root PUT. A revoked
+claim prevents the root PUT; the root uses one transport attempt, so a retry
+must revisit the callback. The checked SPEC raw admission rule is reused
+unchanged. No new independently owned policy rule or profile override exists
+to compose with LeanPoo here. Raw child bytes sent before revocation can
+remain remotely accessible, and Host authentication and atomic ledger commit
+remain separate acceptance obligations.

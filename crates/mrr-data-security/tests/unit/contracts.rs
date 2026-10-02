@@ -247,7 +247,7 @@ async fn raw_snapshot_gate_precedes_remote_io_and_allows_unrestricted() {
     let session = TransferSession::new(
         Duration::from_secs(5),
         RemoteTransferLimits {
-            operations: 4,
+            operations: 6,
             bytes: 4096,
             attempts_per_operation: 1,
             retry_delay: Duration::ZERO,
@@ -273,7 +273,10 @@ async fn raw_snapshot_gate_precedes_remote_io_and_allows_unrestricted() {
         limits: SnapshotTransferLimits::new(4096, 4, 4096, 8192),
     };
     assert_eq!(
-        publish_raw_snapshot(effect, &claim, current, transfer).await,
+        publish_raw_snapshot(effect, &claim, current, transfer, || panic!(
+            "early refresh"
+        ))
+        .await,
         Err(RawSnapshotPublishError::Selection(
             RawStorageMismatch::RestrictedRequiresProtection
         ))
@@ -303,7 +306,8 @@ async fn raw_snapshot_gate_precedes_remote_io_and_allows_unrestricted() {
                 ..claim
             },
             current,
-            transfer
+            transfer,
+            || panic!("early refresh")
         )
         .await,
         Err(RawSnapshotPublishError::Selection(
@@ -340,10 +344,35 @@ async fn raw_snapshot_gate_precedes_remote_io_and_allows_unrestricted() {
         entities: &entities,
         limits: SnapshotTransferLimits::new(4096, 4, 4096, 8192),
     };
-    let published = publish_raw_snapshot(allowed_effect, &allowed_claim, current, transfer)
-        .await
-        .unwrap();
+    assert_eq!(
+        publish_raw_snapshot(allowed_effect, &allowed_claim, current, transfer, || {
+            Ok(CurrentStorageState {
+                epoch: 5,
+                ..current
+            })
+        })
+        .await,
+        Err(RawSnapshotPublishError::Selection(
+            RawStorageMismatch::Stale
+        ))
+    );
+    assert_eq!(remote.0.load(Ordering::Relaxed), 2);
+    assert_eq!(session.stats().operations, 2);
+    let transfer = RawSnapshotPublish {
+        local: &local,
+        remote: &remote,
+        session: &session,
+        snapshot: &snapshot,
+        relations: &relations,
+        entities: &entities,
+        limits: SnapshotTransferLimits::new(4096, 4, 4096, 8192),
+    };
+    let published = publish_raw_snapshot(allowed_effect, &allowed_claim, current, transfer, || {
+        Ok(current)
+    })
+    .await
+    .unwrap();
     assert_eq!(published.root(), snapshot.cid());
-    assert_eq!(remote.0.load(Ordering::Relaxed), 3);
-    assert_eq!(session.stats().operations, 3);
+    assert_eq!(remote.0.load(Ordering::Relaxed), 5);
+    assert_eq!(session.stats().operations, 5);
 }

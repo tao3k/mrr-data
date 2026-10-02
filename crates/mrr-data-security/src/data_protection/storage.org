@@ -4,7 +4,7 @@
 [[file:storage.rs][storage.rs]] implements the physical projection of Cedar
 POO Spec's =CedarPooSpec.Data.StorageEffect= rule. The checked
 [[file:../../fixtures/storage-effect-v1.json][17-case fixture]] is generated
-by SPEC's =Examples/Data/StorageEffectFixture.lean= and replayed by this
+by SPEC's =Productions/Data/StorageEffectFixture.lean= and replayed by this
 crate's test. It includes two allowed raw effects and negative cases for
 restricted custody, tenant/owner mismatch, substituted operation, subject,
 purpose, source, destination or CID, changed policy/lineage/epoch, expiry and
@@ -27,9 +27,13 @@ The optional =raw-publish= feature checks this projection before invoking
 the existing Tokio-backed =TransferSession=. It checks that the projected CID
 is the actual snapshot root and that the tier is remote. Restricted raw bytes
 are rejected before any transfer operation or remote PUT. The focused test
-also publishes an unrestricted three-block fixture. The wrapper checks only
-before the transfer; the generic publisher has no pre-root reauthorization
-hook, so this is not a durable Host commit protocol. =check_raw= supports a
+also publishes an unrestricted three-block fixture. The wrapper requires a
+fresh Host projection after child publication and before the root PUT. The
+root PUT makes one =TransferSession= call; an explicit retry must repeat both
+checks. The provider adapter must document any internal retries.
+A revoked pre-root check leaves already uploaded raw child bytes remotely, so
+the Host must admit raw remote storage only when that exposure is acceptable.
+This is not a durable Host commit protocol. =check_raw= supports a
 durable-local projection, but no guarded local-write wrapper exists yet.
 
 Generic =ContentStore= and =publish_snapshot= transports remain label-blind.

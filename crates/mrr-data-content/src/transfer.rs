@@ -87,6 +87,21 @@ impl TransferSession {
         BudgetedRemote {
             session: self,
             remote,
+            attempts_per_operation: self.state.limits.attempts_per_operation,
+        }
+    }
+    /// Decorates one remote operation with this session's deadline and budget,
+    /// but never retries it automatically. Use for an effect whose retry must
+    /// first re-enter a caller-owned authorization check.
+    #[must_use]
+    pub fn remote_once<'a, R: RemoteContentStore + ?Sized>(
+        &'a self,
+        remote: &'a R,
+    ) -> BudgetedRemote<'a, R> {
+        BudgetedRemote {
+            session: self,
+            remote,
+            attempts_per_operation: 1,
         }
     }
     /// Publishes with both whole-operation control and remote retry accounting.
@@ -94,8 +109,8 @@ impl TransferSession {
     /// Returns snapshot validation/transport errors, cancellation or expiry.
     pub async fn publish_snapshot(
         &self,
-        local: &(impl crate::AsyncContentStore + ?Sized),
-        remote: &(impl RemoteContentStore + ?Sized),
+        local: &dyn crate::AsyncContentStore,
+        remote: &dyn RemoteContentStore,
         snapshot: &mrr_data_core::SnapshotBlock,
         relations: &meta_relational_reasoning::RelationCatalog,
         entities: &meta_relational_reasoning::EntityCatalog,
@@ -104,6 +119,37 @@ impl TransferSession {
         let budgeted = self.remote(remote);
         self.run(crate::publish_snapshot(
             local, &budgeted, snapshot, relations, entities, limits,
+        ))
+        .await
+    }
+
+    /// Publishes children with session retries, checks a caller-owned gate,
+    /// then attempts the root once under the same deadline and budget. A root
+    /// retry must re-enter this method and its gate.
+    /// # Errors
+    /// Returns a snapshot failure or the caller's root-gate error.
+    pub async fn publish_snapshot_with_root_gate<E, F>(
+        &self,
+        inputs: crate::SnapshotPublishInputs<'_>,
+        before_root: F,
+    ) -> Result<crate::SnapshotPublication, E>
+    where
+        E: From<SnapshotTransferError>,
+        F: FnOnce() -> Result<(), E>,
+    {
+        let budgeted = self.remote(inputs.remote);
+        let root_once = self.remote_once(inputs.remote);
+        self.run(crate::snapshot::publish_snapshot_with_root_gate(
+            crate::SnapshotPublishInputs {
+                local: inputs.local,
+                remote: &budgeted,
+                snapshot: inputs.snapshot,
+                relations: inputs.relations,
+                entities: inputs.entities,
+                limits: inputs.limits,
+            },
+            &root_once,
+            before_root,
         ))
         .await
     }
@@ -157,16 +203,16 @@ impl TransferSession {
     /// local adapter for disk I/O; synchronous code cannot be forcibly preempted.
     /// # Errors
     /// Returns the operation error, cancellation or whole-operation expiry.
-    pub async fn run<T>(
-        &self,
-        work: impl Future<Output = Result<T, SnapshotTransferError>>,
-    ) -> Result<T, SnapshotTransferError> {
+    pub async fn run<T, E>(&self, work: impl Future<Output = Result<T, E>>) -> Result<T, E>
+    where
+        E: From<SnapshotTransferError>,
+    {
         // Keep the operation's typed error instead of reducing it to transport failure.
         let result = self.guard(async { Ok(work.await) }).await;
         match result {
             Ok(result) => result,
-            Err(RemoteError::Cancelled) => Err(SnapshotTransferError::Cancelled),
-            Err(_) => Err(SnapshotTransferError::DeadlineExceeded),
+            Err(RemoteError::Cancelled) => Err(SnapshotTransferError::Cancelled.into()),
+            Err(_) => Err(SnapshotTransferError::DeadlineExceeded.into()),
         }
     }
     fn charge(&self, bytes: usize, retry: bool) -> Result<(), RemoteError> {
@@ -192,6 +238,7 @@ impl TransferSession {
     async fn attempts<T, F, Fut>(
         &self,
         reserved: usize,
+        attempts_per_operation: usize,
         mut operation: F,
         actual: impl Fn(&T) -> usize,
     ) -> Result<T, RemoteError>
@@ -207,7 +254,7 @@ impl TransferSession {
                 .acquire()
                 .await
                 .map_err(|_| RemoteError::Unavailable)?;
-            for attempt in 0..self.state.limits.attempts_per_operation {
+            for attempt in 0..attempts_per_operation {
                 self.charge(reserved, attempt > 0)?;
                 match operation().await {
                     Ok(result) => {
@@ -226,7 +273,7 @@ impl TransferSession {
                         if matches!(
                             error,
                             RemoteError::Unavailable | RemoteError::DeadlineExceeded
-                        ) && attempt + 1 < self.state.limits.attempts_per_operation =>
+                        ) && attempt + 1 < attempts_per_operation =>
                     {
                         tokio::time::sleep(self.state.limits.retry_delay).await;
                     }
@@ -244,6 +291,7 @@ impl TransferSession {
 pub struct BudgetedRemote<'a, R: ?Sized> {
     session: &'a TransferSession,
     remote: &'a R,
+    attempts_per_operation: usize,
 }
 impl<R: RemoteContentStore + ?Sized> RemoteContentStore for BudgetedRemote<'_, R> {
     fn get<'a>(&'a self, cid: &'a Cid, max_bytes: usize) -> RemoteFuture<'a, Option<Vec<u8>>> {
@@ -251,6 +299,7 @@ impl<R: RemoteContentStore + ?Sized> RemoteContentStore for BudgetedRemote<'_, R
             self.session
                 .attempts(
                     max_bytes,
+                    self.attempts_per_operation,
                     || self.remote.get(cid, max_bytes),
                     |bytes| bytes.as_ref().map_or(0, Vec::len),
                 )
@@ -262,6 +311,7 @@ impl<R: RemoteContentStore + ?Sized> RemoteContentStore for BudgetedRemote<'_, R
             self.session
                 .attempts(
                     block.bytes().len(),
+                    self.attempts_per_operation,
                     || self.remote.put(block),
                     |()| block.bytes().len(),
                 )

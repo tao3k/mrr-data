@@ -99,12 +99,16 @@ impl ContentStore for CorruptOutbox<'_> {
 }
 
 fn session() -> TransferSession {
+    session_with_attempts(1)
+}
+
+fn session_with_attempts(attempts_per_operation: usize) -> TransferSession {
     TransferSession::new(
         Duration::from_secs(5),
         RemoteTransferLimits {
             operations: 20,
             bytes: 65_536,
-            attempts_per_operation: 1,
+            attempts_per_operation,
             retry_delay: Duration::ZERO,
         },
     )
@@ -224,6 +228,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
                 entities: &entity_catalog,
                 limits: limits(),
             },
+            || panic!("restricted raw path must not refresh"),
         )
         .await,
         Err(RawSnapshotPublishError::Selection(
@@ -406,7 +411,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
     assert_eq!(tiny_remote.puts.load(Ordering::Relaxed), 0);
 
     let remote = Remote::new();
-    let publish_session = session();
+    let publish_session = session_with_attempts(2);
     let publish = || ProtectedPublish {
         intent,
         claim: &claim,
@@ -435,6 +440,14 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
     ));
     assert!(remote.contains(prepared.outer_root()));
     assert_eq!(remote.puts.load(Ordering::Relaxed), 7);
+    assert_eq!(publish_session.stats().retries, 0);
+    assert!(matches!(
+        publish_prepared_snapshot(publish(), || Ok(current(5))).await,
+        Err(ProtectedSnapshotError::Admission(
+            ProtectedStorageMismatch::Stale
+        ))
+    ));
+    assert_eq!(remote.puts.load(Ordering::Relaxed), 10);
     let publication = prepared.publication(intent).unwrap();
     assert!(
         publication
@@ -446,7 +459,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
         .unwrap();
     assert_eq!(receipt.outer_root, *prepared.outer_root());
     assert!(remote.contains(prepared.outer_root()));
-    assert_eq!(remote.puts.load(Ordering::Relaxed), 11);
+    assert_eq!(remote.puts.load(Ordering::Relaxed), 14);
     assert!(!remote.contains(snapshot.cid()));
     assert_eq!(
         publication.decide_commit(&claim, current(4), Some(receipt.as_ack()), None),

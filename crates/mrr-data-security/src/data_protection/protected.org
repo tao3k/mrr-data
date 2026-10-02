@@ -45,7 +45,11 @@ and decrypts the staged manifest with the supplied key. It requires the inner
 root and complete child map to match the recovered record before refreshing
 current governance and uploading the encrypted manifest root. It checks the
 cumulative ciphertext bytes against the authenticated record before each
-remote PUT, so an undersized record cannot cause excess publication. The returned
+remote PUT, so an undersized record cannot cause excess publication. The final
+root PUT makes one =TransferSession= call even when the session retries child PUTs;
+an ambiguous failure must re-enter this publisher and obtain fresh Host state
+before another root attempt. The provider adapter's internal behavior remains
+its own contract. The returned
 physical acknowledgement can feed =decide_commit=. A fresh
 commit requires that exact acknowledgement and current authority; a matching
 authenticated prior ledger receipt yields =Replay= even after expiry. A root
@@ -59,7 +63,9 @@ complete snapshot closure in a private memory store. The local test reopens a fi
 rebuilds the prepared handle from a Host record, denies a changed epoch before
 the outer root PUT, checks the commit disposition, denies missing/stale read
 authority before I/O and after verification, and checks cold restore and zero-GET warm restore using
-a mock remote. The independent loopback SigV4/TLS conformance runner also
+a mock remote. It also injects a stored-but-unacknowledged root ambiguity in a
+retry-enabled session and verifies that revoked authority prevents a second
+root attempt. The independent loopback SigV4/TLS conformance runner also
 publishes and restores the protected closure through the production S3 adapter
 and confirms that the raw inner root is absent remotely.
 The same restricted source is first offered to the raw-publication wrapper,

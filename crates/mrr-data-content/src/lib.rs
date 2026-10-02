@@ -40,8 +40,9 @@ mod tests;
 
 #[cfg(feature = "snapshot")]
 pub use snapshot::{
-    RestoredSnapshot, SnapshotPublication, SnapshotResource, SnapshotTransferError,
-    SnapshotTransferLimits, publish_snapshot, restore_snapshot, restore_snapshot_local,
+    RestoredSnapshot, SnapshotPublication, SnapshotPublishInputs, SnapshotResource,
+    SnapshotTransferError, SnapshotTransferLimits, publish_snapshot, restore_snapshot,
+    restore_snapshot_local,
 };
 
 #[cfg(feature = "transfer")]
