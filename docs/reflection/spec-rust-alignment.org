@@ -108,3 +108,15 @@ composition opportunity is an independently owned protection profile at the
 SPEC boundary, with executable deny-preservation cases. Host authentication,
 atomic approval use, physical bytes and provider effects still require their
 own checks.
+
+* Reflection: one restricted source across raw and protected routes
+
+The SPEC LeanPoo protection profile still composes static destination and key
+choices for the protected route. This iteration reuses the existing raw and
+protected projections for one restricted source: raw publication is denied
+before remote I/O, then the protected flow proceeds through its separate
+claim and physical receipt. No new independently owned profile or inherited
+slot is introduced, so there is no additional LeanPoo object to define.
+This composition test cannot authenticate Host-supplied labels or stop a
+caller from invoking generic content transports directly; those remain the
+next Host acceptance obligations.

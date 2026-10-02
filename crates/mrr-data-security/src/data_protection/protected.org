@@ -62,6 +62,11 @@ authority before I/O and after verification, and checks cold restore and zero-GE
 a mock remote. The independent loopback SigV4/TLS conformance runner also
 publishes and restores the protected closure through the production S3 adapter
 and confirms that the raw inner root is absent remotely.
+The same restricted source is first offered to the raw-publication wrapper,
+which rejects it before any remote PUT even when the destination accepts
+restricted protected data. This links the negative raw route to the positive
+protected route in one executable case; generic content APIs remain
+label-blind and still require a trusted Host to prevent bypass.
 Recovery negatives additionally reopen a Host record against a missing
 outbox, an outbox that returns corrupted manifest bytes, and a recovered record
 whose child map disagrees with the authenticated manifest. None of these paths

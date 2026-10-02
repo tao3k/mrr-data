@@ -67,7 +67,10 @@ source or disposable cache. These are current code facts in
 
 The protected library path has SPEC fixture replay, a staged
 ciphertext outbox, an authenticated-manifest check before root publication,
-and a read gate before either cache or remote access. Those are local contract
+and a read gate before either cache or remote access. One composite local case
+rejects raw publication of the same restricted source before any remote PUT,
+then exercises protected publication, commit disposition, revocation and
+cold/warm restore. Those are local contract
 and transport receipts, not a complete customer-data protection claim.
 
 The highest-priority remaining gate is a Host-owned integration case that

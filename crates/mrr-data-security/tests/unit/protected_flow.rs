@@ -24,8 +24,10 @@ use crate::data_protection::{
     ProtectedCommitReceiptV1, ProtectedEnvelopeKey, ProtectedPublish, ProtectedReadClaimV1,
     ProtectedReadDestination, ProtectedReadIntentV1, ProtectedReadMismatch, ProtectedRestore,
     ProtectedSnapshotError, ProtectedStage, ProtectedStorageMismatch, ProtectionClaimV1,
-    ProtectionIntentV1, RawStorageDestination, RawStorageTier, SourceLabel, StorageEffectV1,
-    publish_prepared_snapshot, restore_protected_snapshot, stage_protected_snapshot,
+    ProtectionIntentV1, RawSnapshotPublish, RawSnapshotPublishError, RawStorageDestination,
+    RawStorageMismatch, RawStorageTier, SourceLabel, StorageClaimV1, StorageEffectV1,
+    publish_prepared_snapshot, publish_raw_snapshot, restore_protected_snapshot,
+    stage_protected_snapshot,
 };
 
 struct Remote {
@@ -202,6 +204,34 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
         expires_at: 100,
         allowed: true,
     };
+    let raw_remote = Remote::new();
+    assert!(matches!(
+        publish_raw_snapshot(
+            intent.storage,
+            &StorageClaimV1 {
+                effect: intent.storage,
+                epoch: 4,
+                expires_at: 100,
+                allowed: true,
+            },
+            current(4),
+            RawSnapshotPublish {
+                local: &source,
+                remote: &raw_remote,
+                session: &session(),
+                snapshot: &snapshot,
+                relations: &relation_catalog,
+                entities: &entity_catalog,
+                limits: limits(),
+            },
+        )
+        .await,
+        Err(RawSnapshotPublishError::Selection(
+            RawStorageMismatch::RestrictedRequiresProtection
+        ))
+    ));
+    assert_eq!(raw_remote.puts.load(Ordering::Relaxed), 0);
+
     let key = ProtectedEnvelopeKey::aes_256_gcm(&[7_u8; 32]).unwrap();
     let prepared: PreparedProtectedSnapshot = stage_protected_snapshot(ProtectedStage {
         intent,
