@@ -81,6 +81,30 @@ The conditional protocol tests exercise malformed receipts, ABA, replay after a
 later revision, and two concurrent writers in a test-only serialized transaction.
 They provide no DB, crash-recovery or durability guarantee.
 
+* Atomic commit adapter port
+
+=ConditionalContentCommitPort= is an async interface for a Host-supplied backend.
+=commit= returns an exact =Committed= or =Replayed= receipt; =recover= looks up
+that same scope, operation ID, expected head and replacement CID. The port derives
+its checks from =decide_commit= and =recover_receipt=. No DB adapter is supplied.
+
+The backend runs fresh domain validation only for a new Apply, inside the same
+protected transaction that persists the head and operation receipt. It must
+serialize authority changes or compare their versions atomically. Merely calling
+a validation callback and then doing an unprotected write fails this contract.
+Replay is a status result that skips validation and creates no new reservation.
+
+=Protocol= and =Validation= are known refusals. =BeforeCommit= records a backend
+failure known to have made no new commit. =Unknown= records an ambiguous result:
+query the original exact operation and never assign a new ID for that uncertain
+effect. A successful lookup with no row is distinct from an unavailable ledger.
+Recovery itself grants no new effect; any new Apply repeats fresh validation.
+
+The test-only serialized provider exercises racing clients, validation refusal,
+lost commit acknowledgement, exact recovery after later head changes, changed
+operation rejection, and unavailable-ledger handling. These are protocol checks,
+not deployed transaction, crash or durability acceptance.
+
 * Adapter responsibilities and status
 
 The protocol does not implement eviction, cross-process locks, retry scheduling,

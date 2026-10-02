@@ -7,6 +7,7 @@ mod car;
 #[cfg(any(feature = "car", feature = "snapshot"))]
 mod closure;
 mod conditional;
+mod conditional_port;
 mod error;
 #[cfg(feature = "property-snapshot")]
 mod property_snapshot;
@@ -21,6 +22,10 @@ pub use car::{CarImportLimits, ImportedSnapshot, encode_snapshot_car, import_sna
 pub use conditional::{
     ConditionalCommitDisposition, ConditionalCommitError, ConditionalContentReceipt,
     ConditionalContentWrite, ContentRevision,
+};
+pub use conditional_port::{
+    ConditionalCommitFuture, ConditionalCommitPortError, ConditionalContentCommitOutcome,
+    ConditionalContentCommitPort,
 };
 pub use error::ContentError;
 #[cfg(feature = "car")]

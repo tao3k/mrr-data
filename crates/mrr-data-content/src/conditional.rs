@@ -43,6 +43,7 @@ pub enum ConditionalCommitDisposition {
     Replay,
 }
 
+/// Malformed identity, conflicting state, or missing exact publication evidence.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ConditionalCommitError {
     EmptyScope,
@@ -73,7 +74,7 @@ fn check_revision(state: ContentRevision) -> Result<(), ConditionalCommitError> 
     Ok(())
 }
 
-impl ConditionalContentWrite<'_> {
+impl<'a> ConditionalContentWrite<'a> {
     fn next(&self) -> Result<ContentRevision, ConditionalCommitError> {
         if self.scope.is_empty() {
             return Err(ConditionalCommitError::EmptyScope);
@@ -94,6 +95,26 @@ impl ConditionalContentWrite<'_> {
             revision,
             root: self.replacement,
         })
+    }
+
+    /// Recover an exact operation from an authenticated ledger observation.
+    /// Absence means a successful lookup found no row; a transport failure must
+    /// be returned by the port instead. Recovery grants no new write or effect.
+    /// # Errors
+    /// Returns malformed identity, operation conflict, or invalid receipt.
+    pub fn recover_receipt(
+        &self,
+        existing: Option<&ConditionalContentReceipt<'_>>,
+    ) -> Result<Option<ConditionalContentReceipt<'a>>, ConditionalCommitError> {
+        self.next()?;
+        let Some(receipt) = existing else {
+            return Ok(None);
+        };
+        self.decide_commit(None, None, Some(receipt))?;
+        Ok(Some(ConditionalContentReceipt {
+            write: *self,
+            committed: receipt.committed,
+        }))
     }
 
     /// Validate a proposed conditional Host transaction. Compare both revision
