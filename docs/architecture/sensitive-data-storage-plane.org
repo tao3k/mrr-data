@@ -1,6 +1,23 @@
 #+title: Sensitive data across local storage, S3, and Google SDP
-#+status: proposed architecture, 2026-09-30
+#+status: library architecture and boundary audit, 2026-10-02
 #+options: toc:2
+
+* Data property objective
+
+Customer records and a company's accumulated context are durable data
+property. Their value in AI workflows depends on controlled reuse over time:
+the organization must be able to identify the source, preserve its lineage,
+authorize each new use, and recover the original bytes without exposing them
+to an unintended storage or model boundary. A transformed token or a content
+hash is not proof of permission or a change in ownership.
+
+This design therefore treats confidentiality, source provenance, exact
+physical identity, and action-specific authorization as separate obligations.
+The library can verify bytes and replay versioned SPEC decisions. A deploying
+Host must authenticate the data owner and policy evidence, control every
+plaintext and provider effect, retain the private root mapping and keys, and
+atomically record approval use and audit. The current library checks do not
+establish those Host guarantees.
 
 * Decision boundary
 
@@ -33,7 +50,7 @@ These are separate physical roots with a Host-owned binding between them.
 | Data Protection | Exact release receipt and two scoped decisions; Host authenticates them | Host policy engine, atomic approval redemption and output persistence |
 | Raw storage admission | Optional =mrr-data-security/raw-publish= checks Storage Effect V1 and actual snapshot CID before Tokio publication; 17 SPEC cases replay in Rust; restricted raw sources are rejected | Generic byte APIs remain label-blind; real Host must route every sensitive write through an admission boundary |
 | Protected snapshot path | Optional =mrr-data-security/protected-publish= replays SPEC intent/pre-root/commit/read and 16 cross-profile cases; verifies a complete inner closure, AES-256-GCM encrypts blocks and an outer manifest with fresh nonces, stages only ciphertext in a local outbox, rechecks before the outer root PUT, projects physical ACK and commit disposition, gates restore before GET, and verifies cold/warm restore | Authenticated source/claim/configuration, KMS key lifecycle, durable Host ledger and atomic approval/audit commit, hosted S3 qualification, and plaintext memory discipline |
-| Google SDP | One selected AES-SIV row, exact recipe/claim/Arrow binding, checked de-identify and separate re-identify effect | Host transport/KMS, batch wire contract, quota governor and Cloud re-identification gate |
+| Google SDP | Verified Arrow row selection, exact recipe/claim binding, bounded multi-row Table wire and checked de-identify output; a separate checked re-identify effect for token-only plans | Host transport/KMS, quota governor and Cloud re-identification gate |
 
 The local store writes the supplied bytes verbatim; the S3 key is
 =blocks/{cid}= for the supplied bytes. Neither is a sensitive-data encryption
@@ -45,6 +62,23 @@ source or disposable cache. These are current code facts in
 [[file:../../crates/mrr-data-cache/src/local.rs][local.rs]],
 [[file:../../crates/mrr-data-cache/src/s3.rs][s3.rs]] and
 [[file:content-cache-protocol.org][the content protocol]].
+
+* Audit result and next acceptance gate
+
+The protected library path has SPEC fixture replay, a staged
+ciphertext outbox, an authenticated-manifest check before root publication,
+and a read gate before either cache or remote access. Those are local contract
+and transport receipts, not a complete customer-data protection claim.
+
+The highest-priority remaining gate is a Host-owned integration case that
+starts with an authenticated restricted source and label lineage, prevents
+generic raw-store bypass, commits the protected root and approval atomically,
+then tests revocation before a cold and warm read. It must prove that no raw
+CID or plaintext block reached the shared cache or provider and that every
+released derivative retains source lineage. Key rotation, retention and
+hosted-provider qualification remain separate acceptance cases after that
+boundary exists. Until then, the generic content APIs are suitable only
+behind a trusted caller that enforces these obligations.
 
 * Proposed flow and identities
 

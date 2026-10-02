@@ -95,3 +95,16 @@ rejected at the first overrun; the test records zero publication PUTs and one
 restore GET for its one-byte receipt. This is a dynamic property of physical
 bytes, so it remains a direct bounded check in Rust rather than a LeanPoo
 method or cached proof. The Host still authenticates the record and receipt.
+
+* Reflection: branch consolidation and data property audit
+
+The current SPEC protection profile already uses LeanPoo typed-slot
+inheritance to compose destination and key choices. This iteration changes
+Git ancestry, CI runtime allowance, and the documented Host acceptance gate;
+it introduces no new policy owner, inherited value, or proof dependency.
+Adding a LeanPoo object for branch identity or CI timing would not strengthen
+the protection decision. For long-lived customer data, the next legitimate
+composition opportunity is an independently owned protection profile at the
+SPEC boundary, with executable deny-preservation cases. Host authentication,
+atomic approval use, physical bytes and provider effects still require their
+own checks.
