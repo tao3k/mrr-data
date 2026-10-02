@@ -1,8 +1,8 @@
 use crate::data_protection::{
-    CurrentStorageStateV1, EntityRef, ProtectedCommitDispositionV1, ProtectedCommitReceiptV1,
-    ProtectedPhysicalAckV1, ProtectedPublicationV1, ProtectedReadClaimV1, ProtectedReadDestination,
-    ProtectedReadIntentV1, ProtectionClaimV1, ProtectionIntentV1, RawStorageDestination,
-    RawStorageTier, SourceLabel, StorageClaimV1, StorageEffectV1,
+    CurrentStorageState, EntityRef, ProtectedCommitDisposition, ProtectedCommitReceipt,
+    ProtectedPhysicalAck, ProtectedPublication, ProtectedReadClaim, ProtectedReadDestination,
+    ProtectedReadIntent, ProtectionClaim, ProtectionIntent, RawStorageDestination, RawStorageTier,
+    SourceLabel, StorageClaim, StorageEffect,
 };
 use serde_json::Value;
 
@@ -33,7 +33,7 @@ struct FixtureEffect<'a> {
 
 impl<'a> FixtureEffect<'a> {
     fn new(value: &'a Value) -> Self {
-        assert_eq!(value["version"], 1);
+        assert!(value.get("version").is_none());
         let text = fixture_str(value, "snapshot_cid");
         let root = cid::Cid::try_from(text).unwrap();
         assert_eq!(root.to_string(), text, "CID wire form must be canonical");
@@ -62,10 +62,10 @@ impl<'a> FixtureEffect<'a> {
         }
     }
 
-    fn projected(&self) -> StorageEffectV1<'_> {
+    fn projected(&self) -> StorageEffect<'_> {
         let value = self.value;
         let destination = &value["destination"];
-        StorageEffectV1 {
+        StorageEffect {
             operation_id: fixture_str(value, "operation_id"),
             subject: fixture_entity(&value["subject"]),
             purpose: fixture_str(value, "purpose"),
@@ -89,7 +89,7 @@ impl<'a> FixtureEffect<'a> {
 }
 
 #[test]
-fn storage_effect_v1_matches_pinned_spec_matrix() {
+fn storage_effect_matches_pinned_spec_matrix() {
     let fixture: Value =
         serde_json::from_str(include_str!("../../fixtures/storage-effect-v1.json")).unwrap();
     assert_eq!(fixture["schema"], "cedar-poo-storage-effect-v1");
@@ -99,13 +99,13 @@ fn storage_effect_v1_matches_pinned_spec_matrix() {
         let effect = FixtureEffect::new(&case["effect"]);
         let claim_effect = FixtureEffect::new(&case["claim"]["effect"]);
         let current = &case["current"];
-        let claim = StorageClaimV1 {
+        let claim = StorageClaim {
             effect: claim_effect.projected(),
             epoch: case["claim"]["epoch"].as_u64().unwrap(),
             expires_at: case["claim"]["expires_at"].as_u64().unwrap(),
             allowed: case["claim"]["allowed"].as_bool().unwrap(),
         };
-        let current = CurrentStorageStateV1 {
+        let current = CurrentStorageState {
             policy_root: fixture_str(current, "policy_root"),
             lineage_revision: fixture_str(current, "lineage_revision"),
             epoch: current["epoch"].as_u64().unwrap(),
@@ -127,15 +127,15 @@ struct FixtureIntent<'a> {
 
 impl<'a> FixtureIntent<'a> {
     fn new(value: &'a Value) -> Self {
-        assert_eq!(value["version"], 1);
+        assert!(value.get("version").is_none());
         Self {
             value,
             storage: FixtureEffect::new(&value["storage"]),
         }
     }
 
-    fn projected(&self) -> ProtectionIntentV1<'_> {
-        ProtectionIntentV1 {
+    fn projected(&self) -> ProtectionIntent<'_> {
+        ProtectionIntent {
             storage: self.storage.projected(),
             profile: fixture_str(self.value, "profile"),
             key_ref: fixture_str(self.value, "key_ref"),
@@ -145,8 +145,8 @@ impl<'a> FixtureIntent<'a> {
     }
 }
 
-fn fixture_current(value: &Value) -> CurrentStorageStateV1<'_> {
-    CurrentStorageStateV1 {
+fn fixture_current(value: &Value) -> CurrentStorageState<'_> {
+    CurrentStorageState {
         policy_root: fixture_str(value, "policy_root"),
         lineage_revision: fixture_str(value, "lineage_revision"),
         epoch: value["epoch"].as_u64().unwrap(),
@@ -155,7 +155,7 @@ fn fixture_current(value: &Value) -> CurrentStorageStateV1<'_> {
 }
 
 #[test]
-fn protected_storage_v1_matches_pinned_spec_matrix() {
+fn protected_storage_matches_pinned_spec_matrix() {
     let fixture: Value =
         serde_json::from_str(include_str!("../../fixtures/protected-storage-v1.json")).unwrap();
     assert_eq!(fixture["schema"], "cedar-poo-protected-storage-v1");
@@ -181,8 +181,8 @@ impl<'a> FixturePublication<'a> {
         }
     }
 
-    fn projected(&self) -> ProtectedPublicationV1<'_> {
-        ProtectedPublicationV1 {
+    fn projected(&self) -> ProtectedPublication<'_> {
+        ProtectedPublication {
             intent: self.intent.projected(),
             outer_root: &self.outer,
             envelope_version: self.value["envelope_version"]
@@ -208,8 +208,8 @@ impl<'a> FixtureReceipt<'a> {
         }
     }
 
-    fn projected(&self) -> ProtectedCommitReceiptV1<'_> {
-        ProtectedCommitReceiptV1 {
+    fn projected(&self) -> ProtectedCommitReceipt<'_> {
+        ProtectedCommitReceipt {
             publication: self.publication.projected(),
             child_count: self.value["child_count"]
                 .as_u64()
@@ -233,7 +233,7 @@ struct FixtureRead<'a> {
 
 impl<'a> FixtureRead<'a> {
     fn new(value: &'a Value) -> Self {
-        assert_eq!(value["version"], 1);
+        assert!(value.get("version").is_none());
         Self {
             value,
             receipt: FixtureReceipt::new(&value["receipt"]),
@@ -246,9 +246,9 @@ impl<'a> FixtureRead<'a> {
         }
     }
 
-    fn projected(&self) -> ProtectedReadIntentV1<'_> {
+    fn projected(&self) -> ProtectedReadIntent<'_> {
         let reader = &self.value["reader"];
-        ProtectedReadIntentV1 {
+        ProtectedReadIntent {
             operation_id: fixture_str(self.value, "operation_id"),
             subject: fixture_entity(&self.value["subject"]),
             purpose: fixture_str(self.value, "purpose"),
@@ -271,7 +271,7 @@ fn check_protected_reads(fixture: &Value) {
     for case in cases {
         let read = FixtureRead::new(&case["read"]);
         let claimed = FixtureRead::new(&case["claim"]["intent"]);
-        let claim = ProtectedReadClaimV1 {
+        let claim = ProtectedReadClaim {
             intent: claimed.projected(),
             epoch: case["claim"]["epoch"].as_u64().unwrap(),
             expires_at: case["claim"]["expires_at"].as_u64().unwrap(),
@@ -302,7 +302,7 @@ fn check_protected_read_releases(fixture: &Value) {
     for case in cases {
         let read = FixtureRead::new(&case["read"]);
         let claimed = FixtureRead::new(&case["claim"]["intent"]);
-        let claim = ProtectedReadClaimV1 {
+        let claim = ProtectedReadClaim {
             intent: claimed.projected(),
             epoch: case["claim"]["epoch"].as_u64().unwrap(),
             expires_at: case["claim"]["expires_at"].as_u64().unwrap(),
@@ -335,7 +335,7 @@ fn check_protected_intents(fixture: &Value) {
     for case in intents {
         let intent = FixtureIntent::new(&case["intent"]);
         let claimed = FixtureIntent::new(&case["claim"]["intent"]);
-        let claim = ProtectionClaimV1 {
+        let claim = ProtectionClaim {
             intent: claimed.projected(),
             epoch: case["claim"]["epoch"].as_u64().unwrap(),
             expires_at: case["claim"]["expires_at"].as_u64().unwrap(),
@@ -368,14 +368,14 @@ fn check_protected_publications(fixture: &Value) {
             assert_eq!(cid.to_string(), text, "outer CID must be canonical");
             Some(cid)
         };
-        let claim = ProtectionClaimV1 {
+        let claim = ProtectionClaim {
             intent: claimed.projected(),
             epoch: case["claim"]["epoch"].as_u64().unwrap(),
             expires_at: case["claim"]["expires_at"].as_u64().unwrap(),
             allowed: case["claim"]["allowed"].as_bool().unwrap(),
         };
         let admitted = outer.is_some_and(|outer| {
-            ProtectedPublicationV1 {
+            ProtectedPublication {
                 intent: intent.projected(),
                 outer_root: &outer,
                 envelope_version: value["envelope_version"]
@@ -405,7 +405,7 @@ fn check_protected_commits(fixture: &Value) {
         let intent = FixtureIntent::new(&value["intent"]);
         let claimed = FixtureIntent::new(&case["claim"]["intent"]);
         let outer = fixture_cid(value, "outer_root_cid");
-        let publication = ProtectedPublicationV1 {
+        let publication = ProtectedPublication {
             intent: intent.projected(),
             outer_root: &outer,
             envelope_version: value["envelope_version"]
@@ -415,7 +415,7 @@ fn check_protected_commits(fixture: &Value) {
                 .unwrap(),
             key_version: fixture_str(value, "key_version"),
         };
-        let claim = ProtectionClaimV1 {
+        let claim = ProtectionClaim {
             intent: claimed.projected(),
             epoch: case["claim"]["epoch"].as_u64().unwrap(),
             expires_at: case["claim"]["expires_at"].as_u64().unwrap(),
@@ -430,7 +430,7 @@ fn check_protected_commits(fixture: &Value) {
             physical_inner
                 .as_ref()
                 .zip(physical_outer.as_ref())
-                .map(|(inner_root, outer_root)| ProtectedPhysicalAckV1 {
+                .map(|(inner_root, outer_root)| ProtectedPhysicalAck {
                     inner_root,
                     outer_root,
                     child_count: physical_value["child_count"]
@@ -450,8 +450,8 @@ fn check_protected_commits(fixture: &Value) {
         let existing_outer = (!existing_value.is_null())
             .then(|| fixture_cid(&existing_value["publication"], "outer_root_cid"));
         let existing = existing_intent.as_ref().zip(existing_outer.as_ref()).map(
-            |(existing_intent, existing_outer)| ProtectedCommitReceiptV1 {
-                publication: ProtectedPublicationV1 {
+            |(existing_intent, existing_outer)| ProtectedCommitReceipt {
+                publication: ProtectedPublication {
                     intent: existing_intent.projected(),
                     outer_root: existing_outer,
                     envelope_version: existing_value["publication"]["envelope_version"]
@@ -479,8 +479,8 @@ fn check_protected_commits(fixture: &Value) {
             physical,
             existing.as_ref(),
         ) {
-            Ok(ProtectedCommitDispositionV1::Apply) => "apply",
-            Ok(ProtectedCommitDispositionV1::Replay) => "replay",
+            Ok(ProtectedCommitDisposition::Apply) => "apply",
+            Ok(ProtectedCommitDisposition::Replay) => "replay",
             Err(_) => "reject",
         };
         assert_eq!(
@@ -510,7 +510,7 @@ fn storage_profile_matrix_matches_pinned_spec_cross_product() {
         let effect = FixtureEffect::new(&case["effect"]);
         let storage = effect.projected();
         let protection = &case["protection"];
-        let intent = ProtectionIntentV1 {
+        let intent = ProtectionIntent {
             storage,
             profile: fixture_str(protection, "profile"),
             key_ref: fixture_str(protection, "key_ref"),
@@ -520,7 +520,7 @@ fn storage_profile_matrix_matches_pinned_spec_cross_product() {
         let current = fixture_current(&case["current"]);
         let raw = storage
             .check_raw(
-                &StorageClaimV1 {
+                &StorageClaim {
                     effect: storage,
                     epoch: 4,
                     expires_at: 100,
@@ -531,7 +531,7 @@ fn storage_profile_matrix_matches_pinned_spec_cross_product() {
             .is_ok();
         let protected = intent
             .check_intent(
-                &ProtectionClaimV1 {
+                &ProtectionClaim {
                     intent,
                     epoch: 4,
                     expires_at: 100,
@@ -567,7 +567,7 @@ fn storage_profile_matrix_matches_pinned_spec_cross_product() {
 )]
 fn protected_envelope_randomizes_outer_identity_and_authenticates_binding() {
     use crate::data_protection::{
-        ProtectedBlockBindingV1, ProtectedBlockRole, ProtectedEnvelopeError, ProtectedEnvelopeKey,
+        ProtectedBlockBinding, ProtectedBlockRole, ProtectedEnvelopeError, ProtectedEnvelopeKey,
         open_block, seal_block,
     };
     use mrr_data_content::{ContentBlock, ContentCodec};
@@ -578,7 +578,7 @@ fn protected_envelope_randomizes_outer_identity_and_authenticates_binding() {
     let projected = intent.projected();
     let bytes = b"private child bytes";
     let inner = ContentBlock::new(ContentCodec::Raw, bytes).cid();
-    let binding = ProtectedBlockBindingV1 {
+    let binding = ProtectedBlockBinding {
         intent: projected,
         inner_cid: &inner,
         role: ProtectedBlockRole::Child,
@@ -606,16 +606,16 @@ fn protected_envelope_randomizes_outer_identity_and_authenticates_binding() {
             .as_slice(),
         bytes
     );
-    let changed_residency = ProtectedBlockBindingV1 {
-        intent: ProtectionIntentV1 {
+    let changed_residency = ProtectedBlockBinding {
+        intent: ProtectionIntent {
             residency: "other-region",
             ..projected
         },
         ..binding
     };
-    let changed_tenant = ProtectedBlockBindingV1 {
-        intent: ProtectionIntentV1 {
-            storage: StorageEffectV1 {
+    let changed_tenant = ProtectedBlockBinding {
+        intent: ProtectionIntent {
+            storage: StorageEffect {
                 destination: RawStorageDestination {
                     tenant: "tenant-b",
                     ..projected.storage.destination
@@ -633,9 +633,9 @@ fn protected_envelope_randomizes_outer_identity_and_authenticates_binding() {
         },
         ..projected.storage.sources[0]
     }];
-    let changed_owner = ProtectedBlockBindingV1 {
-        intent: ProtectionIntentV1 {
-            storage: StorageEffectV1 {
+    let changed_owner = ProtectedBlockBinding {
+        intent: ProtectionIntent {
+            storage: StorageEffect {
                 sources: &other_sources,
                 ..projected.storage
             },
@@ -643,23 +643,23 @@ fn protected_envelope_randomizes_outer_identity_and_authenticates_binding() {
         },
         ..binding
     };
-    let changed_key_ref = ProtectedBlockBindingV1 {
-        intent: ProtectionIntentV1 {
+    let changed_key_ref = ProtectedBlockBinding {
+        intent: ProtectionIntent {
             key_ref: "other-key",
             ..projected
         },
         ..binding
     };
-    let changed_key_version = ProtectedBlockBindingV1 {
+    let changed_key_version = ProtectedBlockBinding {
         key_version: "key-version-8",
         ..binding
     };
-    let changed_role = ProtectedBlockBindingV1 {
+    let changed_role = ProtectedBlockBinding {
         role: ProtectedBlockRole::Root,
         ..binding
     };
     let other_inner = ContentBlock::new(ContentCodec::Raw, b"other").cid();
-    let changed_inner = ProtectedBlockBindingV1 {
+    let changed_inner = ProtectedBlockBinding {
         inner_cid: &other_inner,
         ..binding
     };

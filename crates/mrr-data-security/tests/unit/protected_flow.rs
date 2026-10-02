@@ -20,12 +20,12 @@ use mrr_data_content::{
 use tempfile::tempdir;
 
 use crate::data_protection::{
-    CurrentStorageStateV1, EntityRef, PreparedProtectedSnapshot, ProtectedCommitDispositionV1,
-    ProtectedCommitReceiptV1, ProtectedEnvelopeKey, ProtectedPublish, ProtectedReadClaimV1,
-    ProtectedReadDestination, ProtectedReadIntentV1, ProtectedReadMismatch, ProtectedRestore,
-    ProtectedSnapshotError, ProtectedStage, ProtectedStorageMismatch, ProtectionClaimV1,
-    ProtectionIntentV1, RawSnapshotPublish, RawSnapshotPublishError, RawStorageDestination,
-    RawStorageMismatch, RawStorageTier, SourceLabel, StorageClaimV1, StorageEffectV1,
+    CurrentStorageState, EntityRef, PreparedProtectedSnapshot, ProtectedCommitDisposition,
+    ProtectedCommitReceipt, ProtectedEnvelopeKey, ProtectedPublish, ProtectedReadClaim,
+    ProtectedReadDestination, ProtectedReadIntent, ProtectedReadMismatch, ProtectedRestore,
+    ProtectedSnapshotError, ProtectedStage, ProtectedStorageMismatch, ProtectionClaim,
+    ProtectionIntent, RawSnapshotPublish, RawSnapshotPublishError, RawStorageDestination,
+    RawStorageMismatch, RawStorageTier, SourceLabel, StorageClaim, StorageEffect,
     publish_prepared_snapshot, publish_raw_snapshot, restore_protected_snapshot,
     stage_protected_snapshot,
 };
@@ -111,8 +111,8 @@ fn session() -> TransferSession {
     .unwrap()
 }
 
-fn current(epoch: u64) -> CurrentStorageStateV1<'static> {
-    CurrentStorageStateV1 {
+fn current(epoch: u64) -> CurrentStorageState<'static> {
+    CurrentStorageState {
         policy_root: "policy-root-1",
         lineage_revision: "lineage-1",
         epoch,
@@ -170,8 +170,8 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
         restricted: true,
     }];
     let owners = [owner];
-    let intent = ProtectionIntentV1 {
-        storage: StorageEffectV1 {
+    let intent = ProtectionIntent {
+        storage: StorageEffect {
             operation_id: "op-001",
             subject: EntityRef {
                 type_name: "Service",
@@ -198,7 +198,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
         key_version: "key-version-7",
         residency: "us-east-1",
     };
-    let claim = ProtectionClaimV1 {
+    let claim = ProtectionClaim {
         intent,
         epoch: 4,
         expires_at: 100,
@@ -208,7 +208,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
     assert!(matches!(
         publish_raw_snapshot(
             intent.storage,
-            &StorageClaimV1 {
+            &StorageClaim {
                 effect: intent.storage,
                 epoch: 4,
                 expires_at: 100,
@@ -450,21 +450,21 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
     assert!(!remote.contains(snapshot.cid()));
     assert_eq!(
         publication.decide_commit(&claim, current(4), Some(receipt.as_ack()), None),
-        Ok(ProtectedCommitDispositionV1::Apply)
+        Ok(ProtectedCommitDisposition::Apply)
     );
-    let committed = ProtectedCommitReceiptV1 {
+    let committed = ProtectedCommitReceipt {
         publication,
         child_count: receipt.child_count,
         total_outer_bytes: receipt.total_outer_bytes,
     };
     assert_eq!(
         publication.decide_commit(&claim, current(5), None, Some(&committed)),
-        Ok(ProtectedCommitDispositionV1::Replay)
+        Ok(ProtectedCommitDisposition::Replay)
     );
-    let conflicting = ProtectedCommitReceiptV1 {
-        publication: crate::data_protection::ProtectedPublicationV1 {
-            intent: ProtectionIntentV1 {
-                storage: StorageEffectV1 {
+    let conflicting = ProtectedCommitReceipt {
+        publication: crate::data_protection::ProtectedPublication {
+            intent: ProtectionIntent {
+                storage: StorageEffect {
                     operation_id: "op-conflict",
                     ..intent.storage
                 },
@@ -482,7 +482,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
 
     let protected_cache = MemoryContentStore::default();
     let restore_session = session();
-    let read = ProtectedReadIntentV1 {
+    let read = ProtectedReadIntent {
         operation_id: "read-001",
         subject: EntityRef {
             type_name: "Service",
@@ -499,7 +499,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
         policy_root: "policy-root-1",
         lineage_revision: "lineage-1",
     };
-    let read_claim = ProtectedReadClaimV1 {
+    let read_claim = ProtectedReadClaim {
         intent: read,
         epoch: 4,
         expires_at: 100,
@@ -521,15 +521,15 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
         max_outer_block_bytes: 4096,
         max_outer_total_bytes: 8192,
     };
-    let tiny_committed = ProtectedCommitReceiptV1 {
+    let tiny_committed = ProtectedCommitReceipt {
         total_outer_bytes: 1,
         ..committed
     };
-    let tiny_read = ProtectedReadIntentV1 {
+    let tiny_read = ProtectedReadIntent {
         receipt: tiny_committed,
         ..read
     };
-    let tiny_read_claim = ProtectedReadClaimV1 {
+    let tiny_read_claim = ProtectedReadClaim {
         intent: tiny_read,
         ..read_claim
     };
@@ -592,7 +592,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
         Err(ProtectedSnapshotError::Read(ProtectedReadMismatch::Stale))
     ));
     assert_eq!(remote.gets.load(Ordering::Relaxed), 4);
-    let changed_count = ProtectedCommitReceiptV1 {
+    let changed_count = ProtectedCommitReceipt {
         child_count: committed.child_count + 1,
         ..committed
     };
@@ -616,7 +616,7 @@ async fn protected_outbox_rechecks_before_root_and_restores_cold_then_warm() {
     assert!(matches!(
         restore_protected_snapshot(restore(current(4)), || {
             Ok((
-                CurrentStorageStateV1 {
+                CurrentStorageState {
                     now: 98,
                     ..current(4)
                 },
@@ -699,8 +699,8 @@ async fn protected_s3_tls_conformance() {
         restricted: true,
     }];
     let owners = [owner];
-    let intent = ProtectionIntentV1 {
-        storage: StorageEffectV1 {
+    let intent = ProtectionIntent {
+        storage: StorageEffect {
             operation_id: "op-s3-protected",
             subject: EntityRef {
                 type_name: "Service",
@@ -727,7 +727,7 @@ async fn protected_s3_tls_conformance() {
         key_version: "key-version-7",
         residency: "us-east-1",
     };
-    let claim = ProtectionClaimV1 {
+    let claim = ProtectionClaim {
         intent,
         epoch: 4,
         expires_at: 100,
@@ -769,9 +769,9 @@ async fn protected_s3_tls_conformance() {
     let publication = prepared.publication(intent).unwrap();
     assert_eq!(
         publication.decide_commit(&claim, current(4), Some(physical.as_ack()), None),
-        Ok(ProtectedCommitDispositionV1::Apply)
+        Ok(ProtectedCommitDisposition::Apply)
     );
-    let committed = ProtectedCommitReceiptV1 {
+    let committed = ProtectedCommitReceipt {
         publication,
         child_count: physical.child_count,
         total_outer_bytes: physical.total_outer_bytes,
@@ -779,7 +779,7 @@ async fn protected_s3_tls_conformance() {
     assert!(remote.get(snapshot.cid(), 4096).await.unwrap().is_none());
     let protected_cache = MemoryContentStore::default();
     let restore_session = session();
-    let read = ProtectedReadIntentV1 {
+    let read = ProtectedReadIntent {
         operation_id: "read-s3-protected",
         subject: EntityRef {
             type_name: "Service",
@@ -796,7 +796,7 @@ async fn protected_s3_tls_conformance() {
         policy_root: "policy-root-1",
         lineage_revision: "lineage-1",
     };
-    let read_claim = ProtectedReadClaimV1 {
+    let read_claim = ProtectedReadClaim {
         intent: read,
         epoch: 4,
         expires_at: 100,

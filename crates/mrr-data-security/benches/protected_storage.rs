@@ -15,8 +15,8 @@ use mrr_data_core::{
     SnapshotManifest, SnapshotManifestRequest, raw_cid,
 };
 use mrr_data_security::data_protection::{
-    CurrentStorageStateV1, EntityRef, ProtectedEnvelopeKey, ProtectedStage, ProtectionClaimV1,
-    ProtectionIntentV1, RawStorageDestination, RawStorageTier, SourceLabel, StorageEffectV1,
+    CurrentStorageState, EntityRef, ProtectedEnvelopeKey, ProtectedStage, ProtectionClaim,
+    ProtectionIntent, RawStorageDestination, RawStorageTier, SourceLabel, StorageEffect,
     stage_protected_snapshot,
 };
 
@@ -94,8 +94,8 @@ fn run_case(runtime: &tokio::runtime::Runtime, source_count: usize, children: us
         })
         .collect();
     let owners = [owner];
-    let intent = ProtectionIntentV1 {
-        storage: StorageEffectV1 {
+    let intent = ProtectionIntent {
+        storage: StorageEffect {
             operation_id: "bench-protected",
             subject: EntityRef {
                 type_name: "Service",
@@ -122,13 +122,13 @@ fn run_case(runtime: &tokio::runtime::Runtime, source_count: usize, children: us
         key_version: "key-version-7",
         residency: "us-east-1",
     };
-    let claim = ProtectionClaimV1 {
+    let claim = ProtectionClaim {
         intent,
         epoch: 4,
         expires_at: 100,
         allowed: true,
     };
-    let current = CurrentStorageStateV1 {
+    let current = CurrentStorageState {
         policy_root: "policy-root-1",
         lineage_revision: "lineage-1",
         epoch: 4,

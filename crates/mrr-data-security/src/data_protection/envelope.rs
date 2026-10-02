@@ -5,7 +5,7 @@
 //! CID and the block role are authenticated as associated data. Ciphertext is
 //! addressed by a fresh outer raw CID; equal plaintext is not deduplicated.
 
-use super::{ProtectionIntentV1, RawStorageTier};
+use super::{ProtectionIntent, RawStorageTier};
 use cid::Cid;
 use mrr_data_content::{ContentBlock, ContentCodec};
 #[cfg(feature = "protected-publish")]
@@ -29,8 +29,8 @@ pub enum ProtectedBlockRole {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct ProtectedBlockBindingV1<'a> {
-    pub intent: ProtectionIntentV1<'a>,
+pub struct ProtectedBlockBinding<'a> {
+    pub intent: ProtectionIntent<'a>,
     pub inner_cid: &'a Cid,
     pub role: ProtectedBlockRole,
     pub key_version: &'a str,
@@ -73,12 +73,12 @@ impl ProtectedEnvelopeKey {
 
 /// Addressed ciphertext; it contains no plaintext CID, tenant or key name.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ProtectedBlockV1 {
+pub struct ProtectedBlock {
     outer_cid: Cid,
     bytes: Vec<u8>,
 }
 
-impl ProtectedBlockV1 {
+impl ProtectedBlock {
     #[must_use]
     pub const fn outer_cid(&self) -> &Cid {
         &self.outer_cid
@@ -106,7 +106,7 @@ fn field(output: &mut Vec<u8>, value: &[u8]) -> Result<(), ProtectedEnvelopeErro
 }
 
 fn binding(
-    intent: ProtectionIntentV1<'_>,
+    intent: ProtectionIntent<'_>,
     inner_cid: &Cid,
     role: ProtectedBlockRole,
     key_version: &str,
@@ -177,7 +177,7 @@ fn binding(
 
 #[cfg(feature = "protected-publish")]
 pub(super) fn root_binding_digest(
-    intent: ProtectionIntentV1<'_>,
+    intent: ProtectionIntent<'_>,
     key_version: &str,
 ) -> Result<[u8; 32], ProtectedEnvelopeError> {
     let aad = binding(
@@ -197,11 +197,11 @@ pub(super) fn root_binding_digest(
 /// # Errors
 /// Returns an integrity, size, randomness, or encryption error.
 pub fn seal_block(
-    binding_value: ProtectedBlockBindingV1<'_>,
+    binding_value: ProtectedBlockBinding<'_>,
     inner_bytes: &[u8],
     key: &ProtectedEnvelopeKey,
     max_inner_bytes: usize,
-) -> Result<ProtectedBlockV1, ProtectedEnvelopeError> {
+) -> Result<ProtectedBlock, ProtectedEnvelopeError> {
     if inner_bytes.len() > max_inner_bytes {
         return Err(ProtectedEnvelopeError::TooLarge);
     }
@@ -233,7 +233,7 @@ pub fn seal_block(
     bytes.extend_from_slice(&nonce);
     bytes.extend_from_slice(&encrypted);
     let outer_cid = ContentBlock::new(ContentCodec::Raw, &bytes).cid();
-    Ok(ProtectedBlockV1 { outer_cid, bytes })
+    Ok(ProtectedBlock { outer_cid, bytes })
 }
 
 /// Verify the outer CID, authenticate the complete intent binding and decrypt
@@ -241,7 +241,7 @@ pub fn seal_block(
 /// # Errors
 /// Returns an integrity, size, framing or authentication error.
 pub fn open_block(
-    binding_value: ProtectedBlockBindingV1<'_>,
+    binding_value: ProtectedBlockBinding<'_>,
     outer_cid: &Cid,
     outer_bytes: &[u8],
     key: &ProtectedEnvelopeKey,

@@ -6,11 +6,11 @@
 //! verifies encrypted bytes and both closures, redeems the operation once,
 //! and persists the effect and audit. These checks perform none of that I/O.
 
-use super::storage::{CurrentStorageStateV1, StorageEffectV1};
+use super::storage::{CurrentStorageState, StorageEffect};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ProtectionIntentV1<'a> {
-    pub storage: StorageEffectV1<'a>,
+pub struct ProtectionIntent<'a> {
+    pub storage: StorageEffect<'a>,
     pub profile: &'a str,
     pub key_ref: &'a str,
     pub key_version: &'a str,
@@ -18,16 +18,16 @@ pub struct ProtectionIntentV1<'a> {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct ProtectionClaimV1<'a> {
-    pub intent: ProtectionIntentV1<'a>,
+pub struct ProtectionClaim<'a> {
+    pub intent: ProtectionIntent<'a>,
     pub epoch: u64,
     pub expires_at: u64,
     pub allowed: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ProtectedPublicationV1<'a> {
-    pub intent: ProtectionIntentV1<'a>,
+pub struct ProtectedPublication<'a> {
+    pub intent: ProtectionIntent<'a>,
     pub outer_root: &'a cid::Cid,
     pub envelope_version: u32,
     pub key_version: &'a str,
@@ -37,7 +37,7 @@ pub struct ProtectedPublicationV1<'a> {
 /// publishing library returns the concrete acknowledgement after remote PUT;
 /// a bare projection supplied by a caller is not provider evidence.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ProtectedPhysicalAckV1<'a> {
+pub struct ProtectedPhysicalAck<'a> {
     pub inner_root: &'a cid::Cid,
     pub outer_root: &'a cid::Cid,
     pub child_count: usize,
@@ -47,14 +47,14 @@ pub struct ProtectedPhysicalAckV1<'a> {
 /// An authenticated Host ledger row. The Host persists this together with
 /// approval redemption, discoverability and audit in one atomic transaction.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ProtectedCommitReceiptV1<'a> {
-    pub publication: ProtectedPublicationV1<'a>,
+pub struct ProtectedCommitReceipt<'a> {
+    pub publication: ProtectedPublication<'a>,
     pub child_count: usize,
     pub total_outer_bytes: usize,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ProtectedCommitDispositionV1 {
+pub enum ProtectedCommitDisposition {
     Apply,
     Replay,
 }
@@ -87,7 +87,7 @@ impl std::fmt::Display for ProtectedStorageMismatch {
 
 impl std::error::Error for ProtectedStorageMismatch {}
 
-impl ProtectionIntentV1<'_> {
+impl ProtectionIntent<'_> {
     pub(super) fn check_scope(&self) -> Result<(), ProtectedStorageMismatch> {
         let effect = self.storage;
         if effect.operation_id.is_empty()
@@ -132,8 +132,8 @@ impl ProtectionIntentV1<'_> {
     /// Returns the first missing, stale or incompatible field.
     pub fn check_intent(
         &self,
-        claim: &ProtectionClaimV1<'_>,
-        current: CurrentStorageStateV1<'_>,
+        claim: &ProtectionClaim<'_>,
+        current: CurrentStorageState<'_>,
     ) -> Result<(), ProtectedStorageMismatch> {
         self.check_scope()?;
         let effect = self.storage;
@@ -165,7 +165,7 @@ impl ProtectionIntentV1<'_> {
     }
 }
 
-impl ProtectedPublicationV1<'_> {
+impl ProtectedPublication<'_> {
     pub(super) fn check_static(&self) -> Result<(), ProtectedStorageMismatch> {
         self.intent.check_scope()?;
         if self.outer_root == self.intent.storage.snapshot_root {
@@ -186,8 +186,8 @@ impl ProtectedPublicationV1<'_> {
     /// Returns a mismatch without granting a publication capability.
     pub fn check_pre_root(
         &self,
-        claim: &ProtectionClaimV1<'_>,
-        current: CurrentStorageStateV1<'_>,
+        claim: &ProtectionClaim<'_>,
+        current: CurrentStorageState<'_>,
     ) -> Result<(), ProtectedStorageMismatch> {
         self.intent.check_intent(claim, current)?;
         self.check_static()
@@ -202,11 +202,11 @@ impl ProtectedPublicationV1<'_> {
     /// Returns a stale, conflicting or missing-physical-evidence error.
     pub fn decide_commit(
         &self,
-        claim: &ProtectionClaimV1<'_>,
-        current: CurrentStorageStateV1<'_>,
-        physical: Option<ProtectedPhysicalAckV1<'_>>,
-        existing: Option<&ProtectedCommitReceiptV1<'_>>,
-    ) -> Result<ProtectedCommitDispositionV1, ProtectedStorageMismatch> {
+        claim: &ProtectionClaim<'_>,
+        current: CurrentStorageState<'_>,
+        physical: Option<ProtectedPhysicalAck<'_>>,
+        existing: Option<&ProtectedCommitReceipt<'_>>,
+    ) -> Result<ProtectedCommitDisposition, ProtectedStorageMismatch> {
         if let Some(receipt) = existing {
             self.check_static()?;
             if receipt.publication != *self {
@@ -215,7 +215,7 @@ impl ProtectedPublicationV1<'_> {
             if receipt.total_outer_bytes == 0 || receipt.child_count > 4096 {
                 return Err(ProtectedStorageMismatch::InvalidReceipt);
             }
-            return Ok(ProtectedCommitDispositionV1::Replay);
+            return Ok(ProtectedCommitDisposition::Replay);
         }
         let physical = physical.ok_or(ProtectedStorageMismatch::MissingPhysicalAck)?;
         self.check_pre_root(claim, current)?;
@@ -227,6 +227,6 @@ impl ProtectedPublicationV1<'_> {
         if physical.total_outer_bytes == 0 || physical.child_count > 4096 {
             return Err(ProtectedStorageMismatch::InvalidPhysical);
         }
-        Ok(ProtectedCommitDispositionV1::Apply)
+        Ok(ProtectedCommitDisposition::Apply)
     }
 }

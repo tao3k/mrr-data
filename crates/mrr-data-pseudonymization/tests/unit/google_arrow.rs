@@ -18,14 +18,14 @@ use crate::{GoogleArrowSelectionError, VerifiedGoogleArrowChild, verify_google_a
     clippy::too_many_lines,
     reason = "replay all SPEC table batch cases with exact outputs"
 )]
-fn spec_google_table_batch_v1_replay() {
+fn spec_google_table_batch_replay() {
     use crate::{
         AesSivTableRecipeBinding, GoogleTableBatchMismatch, GoogleTableBatchRow, Mode,
         TokenLineage, TokenProfile,
     };
     let fixture: serde_json::Value =
         serde_json::from_str(include_str!("../fixtures/google-table-batch-v1.json")).unwrap();
-    assert_eq!(fixture["version"], "google-table-batch-v1");
+    assert_eq!(fixture["schema"], "google-table-batch-v1");
     let mut admitted = 0;
     for case in fixture["cases"].as_array().unwrap() {
         let profile = TokenProfile {

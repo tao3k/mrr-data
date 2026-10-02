@@ -530,7 +530,7 @@ fn unordered_semantic_inputs_have_one_root_cid() {
 }
 
 #[test]
-fn snapshot_v1_root_has_a_golden_cid() {
+fn snapshot_root_has_a_golden_cid() {
     let block = SnapshotBlock::encode(manifest(false)).unwrap();
     assert_eq!(
         block.cid().to_string(),

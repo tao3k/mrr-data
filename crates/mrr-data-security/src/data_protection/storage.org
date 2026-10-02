@@ -1,8 +1,8 @@
-#+TITLE: Storage Effect V1 and Raw Snapshot Admission
+#+TITLE: Storage Effect and Raw Snapshot Admission
 #+OPTIONS: toc:nil
 
 [[file:storage.rs][storage.rs]] implements the physical projection of Cedar
-POO Spec's =CedarPooSpec.Data.StorageEffectV1= rule. The checked
+POO Spec's =CedarPooSpec.Data.StorageEffect= rule. The checked
 [[file:../../fixtures/storage-effect-v1.json][17-case fixture]] is generated
 by SPEC's =Examples/Data/StorageEffectFixture.lean= and replayed by this
 crate's test. It includes two allowed raw effects and negative cases for
@@ -10,7 +10,7 @@ restricted custody, tenant/owner mismatch, substituted operation, subject,
 purpose, source, destination or CID, changed policy/lineage/epoch, expiry and
 denial. The fixture is test evidence, not an authorization credential.
 
-The V1 projection keeps Cedar entity UIDs as separate =type= and =id= fields.
+The storage effect projection keeps Cedar entity UIDs as separate =type= and =id= fields.
 Its snapshot root is a parsed CID; the fixture parser requires canonical
 lowercase CIDv1 base32 text. The policy root and lineage revision are exact
 strings, not local hashes of policy source. An operation ID is an opaque
@@ -23,7 +23,7 @@ atomically redeems an approval and records the committed effect. Rust's
 =check_raw= is a borrowed, allocation-free comparison with a 64-label and
 64-owner bound; it does not evaluate Cedar or persist any approval.
 
-The optional =raw-publish= feature checks the V1 projection before invoking
+The optional =raw-publish= feature checks this projection before invoking
 the existing Tokio-backed =TransferSession=. It checks that the projected CID
 is the actual snapshot root and that the tier is remote. Restricted raw bytes
 are rejected before any transfer operation or remote PUT. The focused test
@@ -44,5 +44,5 @@ cargo test -p mrr-data-security --features raw-publish --locked
 cargo clippy -p mrr-data-security --features raw-publish --all-targets --locked -- -D warnings
 #+end_src
 
-[[file:protected.org][Protected Storage V1]] supplies a separate intent and
+[[file:protected.org][Protected Storage]] supplies a separate intent and
 commit projection, encrypted envelope and bounded local/remote path.

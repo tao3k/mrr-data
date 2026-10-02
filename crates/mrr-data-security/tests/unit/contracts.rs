@@ -158,8 +158,8 @@ fn cloud_profile_requires_exact_release_and_two_decisions() {
 
 #[cfg(feature = "raw-publish")]
 use crate::data_protection::{
-    CurrentStorageStateV1, EntityRef, RawStorageDestination, RawStorageTier, SourceLabel,
-    StorageClaimV1, StorageEffectV1,
+    CurrentStorageState, EntityRef, RawStorageDestination, RawStorageTier, SourceLabel,
+    StorageClaim, StorageEffect,
 };
 
 #[cfg(feature = "raw-publish")]
@@ -217,7 +217,7 @@ async fn raw_snapshot_gate_precedes_remote_io_and_allows_unrestricted() {
         accepts_restricted: false,
         tier: RawStorageTier::Remote,
     };
-    let effect = StorageEffectV1 {
+    let effect = StorageEffect {
         operation_id: "op-001",
         subject: EntityRef {
             type_name: "Service",
@@ -230,13 +230,13 @@ async fn raw_snapshot_gate_precedes_remote_io_and_allows_unrestricted() {
         policy_root: "policy-root-1",
         lineage_revision: "lineage-1",
     };
-    let claim = StorageClaimV1 {
+    let claim = StorageClaim {
         effect,
         epoch: 4,
         expires_at: 100,
         allowed: true,
     };
-    let current = CurrentStorageStateV1 {
+    let current = CurrentStorageState {
         policy_root: "policy-root-1",
         lineage_revision: "lineage-1",
         epoch: 4,
@@ -282,7 +282,7 @@ async fn raw_snapshot_gate_precedes_remote_io_and_allows_unrestricted() {
     assert_eq!(session.stats().operations, 0);
 
     let other_root = raw_cid(b"not-this-snapshot");
-    let wrong_root = StorageEffectV1 {
+    let wrong_root = StorageEffect {
         snapshot_root: &other_root,
         ..effect
     };
@@ -298,7 +298,7 @@ async fn raw_snapshot_gate_precedes_remote_io_and_allows_unrestricted() {
     assert_eq!(
         publish_raw_snapshot(
             wrong_root,
-            &StorageClaimV1 {
+            &StorageClaim {
                 effect: wrong_root,
                 ..claim
             },
@@ -323,11 +323,11 @@ async fn raw_snapshot_gate_precedes_remote_io_and_allows_unrestricted() {
         restricted: false,
         ..labels[0]
     }];
-    let allowed_effect = StorageEffectV1 {
+    let allowed_effect = StorageEffect {
         sources: &unrestricted,
         ..effect
     };
-    let allowed_claim = StorageClaimV1 {
+    let allowed_claim = StorageClaim {
         effect: allowed_effect,
         ..claim
     };

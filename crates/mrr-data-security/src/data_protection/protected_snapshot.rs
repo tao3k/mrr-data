@@ -18,10 +18,10 @@ use mrr_data_content::{
 
 use super::envelope::root_binding_digest;
 use super::{
-    CurrentStorageStateV1, ProtectedBlockBindingV1, ProtectedBlockRole, ProtectedEnvelopeError,
-    ProtectedEnvelopeKey, ProtectedPhysicalAckV1, ProtectedPublicationV1, ProtectedReadClaimV1,
-    ProtectedReadIntentV1, ProtectedReadMismatch, ProtectedStorageMismatch, ProtectionClaimV1,
-    ProtectionIntentV1, RawStorageTier, open_block, seal_block,
+    CurrentStorageState, ProtectedBlockBinding, ProtectedBlockRole, ProtectedEnvelopeError,
+    ProtectedEnvelopeKey, ProtectedPhysicalAck, ProtectedPublication, ProtectedReadClaim,
+    ProtectedReadIntent, ProtectedReadMismatch, ProtectedStorageMismatch, ProtectionClaim,
+    ProtectionIntent, RawStorageTier, open_block, seal_block,
 };
 
 #[derive(Debug)]
@@ -86,7 +86,7 @@ pub struct PreparedProtectedSnapshot {
 /// shared content caches. Deserializing it does not prove that ciphertext was
 /// staged or that the current operation is authorized.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ProtectedSnapshotRecordV1 {
+pub struct ProtectedSnapshotRecord {
     pub inner_root: Cid,
     pub outer_root: Cid,
     pub root_block_outer: Cid,
@@ -103,10 +103,10 @@ impl PreparedProtectedSnapshot {
     /// Returns a root or intent-binding mismatch.
     pub fn publication<'a>(
         &'a self,
-        intent: ProtectionIntentV1<'a>,
-    ) -> Result<ProtectedPublicationV1<'a>, ProtectedSnapshotError> {
+        intent: ProtectionIntent<'a>,
+    ) -> Result<ProtectedPublication<'a>, ProtectedSnapshotError> {
         check_prepared(intent, self)?;
-        Ok(ProtectedPublicationV1 {
+        Ok(ProtectedPublication {
             intent,
             outer_root: &self.outer_root,
             envelope_version: 1,
@@ -117,8 +117,8 @@ impl PreparedProtectedSnapshot {
     /// Export the Host-owned fields needed to resume publish or restore after
     /// process restart. The Host chooses its authenticated storage format.
     #[must_use]
-    pub fn host_record(&self) -> ProtectedSnapshotRecordV1 {
-        ProtectedSnapshotRecordV1 {
+    pub fn host_record(&self) -> ProtectedSnapshotRecord {
+        ProtectedSnapshotRecord {
             inner_root: self.inner_root,
             outer_root: self.outer_root,
             root_block_outer: self.root_block_outer,
@@ -135,8 +135,8 @@ impl PreparedProtectedSnapshot {
     /// # Errors
     /// Returns an identity, version or malformed-record error.
     pub fn from_authenticated_record(
-        intent: ProtectionIntentV1<'_>,
-        record: ProtectedSnapshotRecordV1,
+        intent: ProtectionIntent<'_>,
+        record: ProtectedSnapshotRecord,
     ) -> Result<Self, ProtectedSnapshotError> {
         if record.inner_root != *intent.storage.snapshot_root {
             return Err(ProtectedSnapshotError::WrongRoot);
@@ -201,9 +201,9 @@ impl PreparedProtectedSnapshot {
 }
 
 pub struct ProtectedStage<'a> {
-    pub intent: ProtectionIntentV1<'a>,
-    pub claim: &'a ProtectionClaimV1<'a>,
-    pub current: CurrentStorageStateV1<'a>,
+    pub intent: ProtectionIntent<'a>,
+    pub claim: &'a ProtectionClaim<'a>,
+    pub current: CurrentStorageState<'a>,
     pub source: &'a dyn AsyncContentStore,
     pub outbox: &'a dyn AsyncContentStore,
     pub relations: &'a RelationCatalog,
@@ -328,7 +328,7 @@ fn decode_manifest(bytes: &[u8]) -> Result<(Cid, Cid, BTreeMap<Cid, Cid>), Prote
 
 async fn store_block(
     outbox: &dyn AsyncContentStore,
-    block: &super::ProtectedBlockV1,
+    block: &super::ProtectedBlock,
 ) -> Result<(), ProtectedSnapshotError> {
     let actual = outbox.store(block.content()).await?;
     if actual != *block.outer_cid() {
@@ -366,7 +366,7 @@ pub async fn stage_protected_snapshot(
     let mut children = BTreeMap::new();
     for (inner, bytes) in restored.children() {
         let protected = seal_block(
-            ProtectedBlockBindingV1 {
+            ProtectedBlockBinding {
                 intent: stage.intent,
                 inner_cid: inner,
                 role: ProtectedBlockRole::Child,
@@ -388,7 +388,7 @@ pub async fn stage_protected_snapshot(
         children.insert(*inner, *protected.outer_cid());
     }
     let protected_root = seal_block(
-        ProtectedBlockBindingV1 {
+        ProtectedBlockBinding {
             intent: stage.intent,
             inner_cid: &inner_root,
             role: ProtectedBlockRole::Root,
@@ -411,7 +411,7 @@ pub async fn stage_protected_snapshot(
     let manifest_bytes = encode_manifest(&inner_root, &root_block_outer, &children)?;
     let manifest_plain_cid = ContentBlock::new(ContentCodec::Raw, &manifest_bytes).cid();
     let protected_manifest = seal_block(
-        ProtectedBlockBindingV1 {
+        ProtectedBlockBinding {
             intent: stage.intent,
             inner_cid: &manifest_plain_cid,
             role: ProtectedBlockRole::Manifest,
@@ -443,7 +443,7 @@ pub async fn stage_protected_snapshot(
 }
 
 fn check_prepared(
-    intent: ProtectionIntentV1<'_>,
+    intent: ProtectionIntent<'_>,
     prepared: &PreparedProtectedSnapshot,
 ) -> Result<(), ProtectedSnapshotError> {
     if prepared.inner_root != *intent.storage.snapshot_root {
@@ -456,9 +456,9 @@ fn check_prepared(
 }
 
 pub struct ProtectedPublish<'a> {
-    pub intent: ProtectionIntentV1<'a>,
-    pub claim: &'a ProtectionClaimV1<'a>,
-    pub current: CurrentStorageStateV1<'a>,
+    pub intent: ProtectionIntent<'a>,
+    pub claim: &'a ProtectionClaim<'a>,
+    pub current: CurrentStorageState<'a>,
     pub prepared: &'a PreparedProtectedSnapshot,
     pub key: &'a ProtectedEnvelopeKey,
     pub outbox: &'a dyn AsyncContentStore,
@@ -479,8 +479,8 @@ pub struct ProtectedPhysicalPublication {
 
 impl ProtectedPhysicalPublication {
     #[must_use]
-    pub const fn as_ack(&self) -> ProtectedPhysicalAckV1<'_> {
-        ProtectedPhysicalAckV1 {
+    pub const fn as_ack(&self) -> ProtectedPhysicalAck<'_> {
+        ProtectedPhysicalAck {
             inner_root: &self.inner_root,
             outer_root: &self.outer_root,
             child_count: self.child_count,
@@ -513,7 +513,7 @@ pub async fn publish_prepared_snapshot<'a, F>(
     refresh: F,
 ) -> Result<ProtectedPhysicalPublication, ProtectedSnapshotError>
 where
-    F: FnOnce() -> Result<CurrentStorageStateV1<'a>, ProtectedSnapshotError>,
+    F: FnOnce() -> Result<CurrentStorageState<'a>, ProtectedSnapshotError>,
 {
     if publish.intent.storage.destination.tier != RawStorageTier::Remote {
         return Err(ProtectedSnapshotError::WrongTier);
@@ -570,7 +570,7 @@ where
         return Err(ProtectedSnapshotError::WrongBinding);
     }
     let manifest_plaintext = open_block(
-        ProtectedBlockBindingV1 {
+        ProtectedBlockBinding {
             intent: publish.intent,
             inner_cid: &publish.prepared.manifest_plain_cid,
             role: ProtectedBlockRole::Manifest,
@@ -605,10 +605,10 @@ where
 }
 
 pub struct ProtectedRestore<'a> {
-    pub read: ProtectedReadIntentV1<'a>,
-    pub claim: &'a ProtectedReadClaimV1<'a>,
-    pub current: CurrentStorageStateV1<'a>,
-    pub committed: Option<&'a super::ProtectedCommitReceiptV1<'a>>,
+    pub read: ProtectedReadIntent<'a>,
+    pub claim: &'a ProtectedReadClaim<'a>,
+    pub current: CurrentStorageState<'a>,
+    pub committed: Option<&'a super::ProtectedCommitReceipt<'a>>,
     pub prepared: &'a PreparedProtectedSnapshot,
     pub protected_cache: &'a dyn AsyncContentStore,
     pub remote: &'a dyn RemoteContentStore,
@@ -623,7 +623,7 @@ pub struct ProtectedRestore<'a> {
 
 fn check_restore_binding<'a>(
     restore: &ProtectedRestore<'a>,
-) -> Result<super::ProtectedCommitReceiptV1<'a>, ProtectedSnapshotError> {
+) -> Result<super::ProtectedCommitReceipt<'a>, ProtectedSnapshotError> {
     restore
         .read
         .check_read(restore.claim, restore.current, restore.committed)
@@ -654,8 +654,8 @@ pub async fn restore_protected_snapshot<'a, F>(
 where
     F: FnOnce() -> Result<
         (
-            CurrentStorageStateV1<'a>,
-            Option<&'a super::ProtectedCommitReceiptV1<'a>>,
+            CurrentStorageState<'a>,
+            Option<&'a super::ProtectedCommitReceipt<'a>>,
         ),
         ProtectedSnapshotError,
     >,
@@ -682,7 +682,7 @@ where
         receipt.total_outer_bytes,
     )?;
     let manifest_plaintext = open_block(
-        ProtectedBlockBindingV1 {
+        ProtectedBlockBinding {
             intent,
             inner_cid: &restore.prepared.manifest_plain_cid,
             role: ProtectedBlockRole::Manifest,
@@ -728,7 +728,7 @@ where
             receipt.total_outer_bytes,
         )?;
         let plaintext = open_block(
-            ProtectedBlockBindingV1 {
+            ProtectedBlockBinding {
                 intent,
                 inner_cid: &inner,
                 role,
@@ -759,8 +759,8 @@ async fn verify_and_release<'a, F>(
 where
     F: FnOnce() -> Result<
         (
-            CurrentStorageStateV1<'a>,
-            Option<&'a super::ProtectedCommitReceiptV1<'a>>,
+            CurrentStorageState<'a>,
+            Option<&'a super::ProtectedCommitReceipt<'a>>,
         ),
         ProtectedSnapshotError,
     >,

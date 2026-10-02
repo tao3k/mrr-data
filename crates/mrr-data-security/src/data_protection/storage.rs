@@ -45,7 +45,7 @@ pub struct RawStorageDestination<'a> {
 /// V1 of one exact raw-storage effect. `snapshot_root` is a parsed CID, whose
 /// wire representation must be canonical lowercase `CIDv1` base32 text.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct StorageEffectV1<'a> {
+pub struct StorageEffect<'a> {
     pub operation_id: &'a str,
     pub subject: EntityRef<'a>,
     pub purpose: &'a str,
@@ -58,8 +58,8 @@ pub struct StorageEffectV1<'a> {
 
 /// A Host-authenticated, action-specific decision projection.
 #[derive(Clone, Copy, Debug)]
-pub struct StorageClaimV1<'a> {
-    pub effect: StorageEffectV1<'a>,
+pub struct StorageClaim<'a> {
+    pub effect: StorageEffect<'a>,
     pub epoch: u64,
     pub expires_at: u64,
     pub allowed: bool,
@@ -67,7 +67,7 @@ pub struct StorageClaimV1<'a> {
 
 /// Current Host-authenticated state at the effect boundary.
 #[derive(Clone, Copy, Debug)]
-pub struct CurrentStorageStateV1<'a> {
+pub struct CurrentStorageState<'a> {
     pub policy_root: &'a str,
     pub lineage_revision: &'a str,
     pub epoch: u64,
@@ -95,7 +95,7 @@ impl std::fmt::Display for RawStorageMismatch {
 
 impl std::error::Error for RawStorageMismatch {}
 
-impl StorageEffectV1<'_> {
+impl StorageEffect<'_> {
     /// Compare Host-authenticated scope and current governance, then refuse
     /// every restricted raw source. This is not Cedar evaluation or approval
     /// redemption.
@@ -103,8 +103,8 @@ impl StorageEffectV1<'_> {
     /// Returns the first mismatched or unsafe projected condition.
     pub fn check_raw(
         &self,
-        claim: &StorageClaimV1<'_>,
-        current: CurrentStorageStateV1<'_>,
+        claim: &StorageClaim<'_>,
+        current: CurrentStorageState<'_>,
     ) -> Result<(), RawStorageMismatch> {
         if self.operation_id.is_empty()
             || self.subject.is_empty()
@@ -195,9 +195,9 @@ impl std::error::Error for RawSnapshotPublishError {}
 /// Returns a selection error before remote I/O, or a transfer error afterward.
 #[cfg(feature = "raw-publish")]
 pub async fn publish_raw_snapshot(
-    effect: StorageEffectV1<'_>,
-    claim: &StorageClaimV1<'_>,
-    current: CurrentStorageStateV1<'_>,
+    effect: StorageEffect<'_>,
+    claim: &StorageClaim<'_>,
+    current: CurrentStorageState<'_>,
     transfer: RawSnapshotPublish<'_>,
 ) -> Result<mrr_data_content::SnapshotPublication, RawSnapshotPublishError> {
     if effect.destination.tier != RawStorageTier::Remote {

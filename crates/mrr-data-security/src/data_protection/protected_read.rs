@@ -1,8 +1,8 @@
 //! Projected authorization for one read of an exact committed protected root.
 //! The Host authenticates the ledger row, current lineage, reader and claim.
 
-use super::protected::{ProtectedCommitReceiptV1, ProtectedStorageMismatch};
-use super::storage::{CurrentStorageStateV1, EntityRef};
+use super::protected::{ProtectedCommitReceipt, ProtectedStorageMismatch};
+use super::storage::{CurrentStorageState, EntityRef};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ProtectedReadDestination<'a> {
@@ -13,19 +13,19 @@ pub struct ProtectedReadDestination<'a> {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ProtectedReadIntentV1<'a> {
+pub struct ProtectedReadIntent<'a> {
     pub operation_id: &'a str,
     pub subject: EntityRef<'a>,
     pub purpose: &'a str,
-    pub receipt: ProtectedCommitReceiptV1<'a>,
+    pub receipt: ProtectedCommitReceipt<'a>,
     pub reader: ProtectedReadDestination<'a>,
     pub policy_root: &'a str,
     pub lineage_revision: &'a str,
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct ProtectedReadClaimV1<'a> {
-    pub intent: ProtectedReadIntentV1<'a>,
+pub struct ProtectedReadClaim<'a> {
+    pub intent: ProtectedReadIntent<'a>,
     pub epoch: u64,
     pub expires_at: u64,
     pub allowed: bool,
@@ -55,16 +55,16 @@ impl std::fmt::Display for ProtectedReadMismatch {
 
 impl std::error::Error for ProtectedReadMismatch {}
 
-impl ProtectedReadIntentV1<'_> {
+impl ProtectedReadIntent<'_> {
     /// Check a new action-specific read before any cache or provider GET.
     /// A prior write approval or commit replay does not authorize the read.
     /// # Errors
     /// Returns a missing, stale, conflicting or custody mismatch.
     pub fn check_read(
         &self,
-        claim: &ProtectedReadClaimV1<'_>,
-        current: CurrentStorageStateV1<'_>,
-        committed: Option<&ProtectedCommitReceiptV1<'_>>,
+        claim: &ProtectedReadClaim<'_>,
+        current: CurrentStorageState<'_>,
+        committed: Option<&ProtectedCommitReceipt<'_>>,
     ) -> Result<(), ProtectedReadMismatch> {
         if self.operation_id.is_empty()
             || self.subject.is_empty()
@@ -129,15 +129,9 @@ impl ProtectedReadIntentV1<'_> {
     /// Returns the first rejected observation.
     pub fn check_release(
         &self,
-        claim: &ProtectedReadClaimV1<'_>,
-        before: (
-            CurrentStorageStateV1<'_>,
-            Option<&ProtectedCommitReceiptV1<'_>>,
-        ),
-        after: (
-            CurrentStorageStateV1<'_>,
-            Option<&ProtectedCommitReceiptV1<'_>>,
-        ),
+        claim: &ProtectedReadClaim<'_>,
+        before: (CurrentStorageState<'_>, Option<&ProtectedCommitReceipt<'_>>),
+        after: (CurrentStorageState<'_>, Option<&ProtectedCommitReceipt<'_>>),
     ) -> Result<(), ProtectedReadMismatch> {
         self.check_read(claim, before.0, before.1)?;
         if after.0.now < before.0.now {

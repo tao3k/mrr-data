@@ -10,29 +10,29 @@ mod storage;
 
 #[cfg(feature = "protected-envelope")]
 pub use envelope::{
-    ProtectedBlockBindingV1, ProtectedBlockRole, ProtectedBlockV1, ProtectedEnvelopeError,
+    ProtectedBlock, ProtectedBlockBinding, ProtectedBlockRole, ProtectedEnvelopeError,
     ProtectedEnvelopeKey, open_block, seal_block,
 };
 pub use profile::{
     DataProtectionDecisions, DataProtectionMismatch, DataProtectionProfile, ReleaseReceiptClaim,
 };
 pub use protected::{
-    ProtectedCommitDispositionV1, ProtectedCommitReceiptV1, ProtectedPhysicalAckV1,
-    ProtectedPublicationV1, ProtectedStorageMismatch, ProtectionClaimV1, ProtectionIntentV1,
+    ProtectedCommitDisposition, ProtectedCommitReceipt, ProtectedPhysicalAck, ProtectedPublication,
+    ProtectedStorageMismatch, ProtectionClaim, ProtectionIntent,
 };
 pub use protected_read::{
-    ProtectedReadClaimV1, ProtectedReadDestination, ProtectedReadIntentV1, ProtectedReadMismatch,
+    ProtectedReadClaim, ProtectedReadDestination, ProtectedReadIntent, ProtectedReadMismatch,
 };
 #[cfg(feature = "protected-publish")]
 pub use protected_snapshot::{
     PreparedProtectedSnapshot, ProtectedPhysicalPublication, ProtectedPublish, ProtectedRestore,
-    ProtectedSnapshotError, ProtectedSnapshotRecordV1, ProtectedStage, publish_prepared_snapshot,
+    ProtectedSnapshotError, ProtectedSnapshotRecord, ProtectedStage, publish_prepared_snapshot,
     restore_protected_snapshot, stage_protected_snapshot,
 };
 pub use pseudonymization::PseudonymizationInputBinding;
 pub use storage::{
-    CurrentStorageStateV1, EntityRef, RawStorageDestination, RawStorageMismatch, RawStorageTier,
-    SourceLabel, StorageClaimV1, StorageEffectV1,
+    CurrentStorageState, EntityRef, RawStorageDestination, RawStorageMismatch, RawStorageTier,
+    SourceLabel, StorageClaim, StorageEffect,
 };
 #[cfg(feature = "raw-publish")]
 pub use storage::{RawSnapshotPublish, RawSnapshotPublishError, publish_raw_snapshot};
