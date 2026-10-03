@@ -233,16 +233,14 @@ impl ConditionalContentCommitPort for ProfilePort {
             let provider = self.backend.inner.provider.clone();
             let (request_tx, request_rx) = oneshot::channel();
             let (answer_tx, answer_rx) = oneshot::channel();
-            let (result_tx, result_rx) = oneshot::channel();
-            self.backend.inner.dispatcher.run(false, lease, move || {
+            let result_rx = self.backend.inner.dispatcher.run(false, lease, move || {
                 let mut request = Some((request_tx, answer_rx));
-                let result = provider.commit(&owned, physical.as_ref(), &mut |current| {
+                provider.commit(&owned, physical.as_ref(), &mut |current| {
                     let Some((tx, rx)) = request.take() else {
                         return false;
                     };
                     tx.send(current).is_ok() && rx.blocking_recv().unwrap_or(false)
-                });
-                let _ = result_tx.send(result);
+                })
             });
             if let Ok(current) = request_rx.await {
                 match validate_current(current) {
@@ -276,10 +274,11 @@ impl ConditionalContentCommitPort for ProfilePort {
                 .map_err(PortError::BeforeCommit)?;
             let owned = self.owned(write);
             let provider = self.backend.inner.provider.clone();
-            let (tx, rx) = oneshot::channel();
-            self.backend.inner.dispatcher.run(true, lease, move || {
-                let _ = tx.send(provider.recover(&owned));
-            });
+            let rx = self
+                .backend
+                .inner
+                .dispatcher
+                .run(true, lease, move || provider.recover(&owned));
             let result = rx
                 .await
                 .map_err(|_| PortError::BeforeCommit(BackendError::WorkerLost))?
@@ -367,10 +366,11 @@ impl ProfilePort {
             .admit(recovery, 16384)
             .map_err(PortError::BeforeCommit)?;
         let provider = self.backend.inner.provider.clone();
-        let (tx, rx) = oneshot::channel();
-        self.backend.inner.dispatcher.run(recovery, lease, move || {
-            let _ = tx.send(run(&*provider));
-        });
+        let rx = self
+            .backend
+            .inner
+            .dispatcher
+            .run(recovery, lease, move || run(&*provider));
         rx.await.map_err(|_| {
             if recovery {
                 PortError::BeforeCommit(BackendError::WorkerLost)

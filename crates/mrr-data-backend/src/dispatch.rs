@@ -1,7 +1,10 @@
 //! Wait asynchronously before occupying the Host's bounded blocking executor.
 use crate::{BackendConfig, scheduler::Lease};
 use std::sync::Arc;
-use tokio::{runtime::Handle, sync::Semaphore};
+use tokio::{
+    runtime::Handle,
+    sync::{Semaphore, oneshot},
+};
 
 pub(crate) struct Dispatcher {
     writes: Arc<Semaphore>,
@@ -16,7 +19,13 @@ impl Dispatcher {
             runtime,
         }
     }
-    pub(crate) fn run(&self, recovery: bool, lease: Lease, run: impl FnOnce() + Send + 'static) {
+    pub(crate) fn run<T: Send + 'static>(
+        &self,
+        recovery: bool,
+        lease: Lease,
+        run: impl FnOnce() -> T + Send + 'static,
+    ) -> oneshot::Receiver<T> {
+        let (tx, rx) = oneshot::channel();
         let slots = if recovery {
             &self.recoveries
         } else {
@@ -34,10 +43,15 @@ impl Dispatcher {
             let lease = lease.submitted();
             runtime.spawn_blocking(move || {
                 // Release accounting before a permit wakes the next job.
-                let _permit = permit;
-                let _lease = lease;
-                run();
+                let result = {
+                    let _permit = permit;
+                    let _lease = lease;
+                    run()
+                };
+                // Success must not race the predecessor's admission release.
+                let _ = tx.send(result);
             });
         });
+        rx
     }
 }

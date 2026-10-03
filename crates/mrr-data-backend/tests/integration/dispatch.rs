@@ -6,6 +6,7 @@ use held_provider::{Gate, Held};
 use mrr_data_backend::{
     AuthorityProposal, AuthorityStatus, Backend, BackendConfig, Lifecycle, ProfilePort,
 };
+use mrr_data_content::ConditionalContentCommitOutcome;
 use mrr_data_content::{
     CacheAdmission, ConditionalContentCommitPort, ConditionalContentWrite, ContentBlock,
     ContentCodec, PublishReceipt,
@@ -238,4 +239,46 @@ async fn cancel_queued(backend: &Backend, port: &ProfilePort, validated: Arc<Ato
     admin.abort();
     assert!(content.await.unwrap_err().is_cancelled());
     assert!(admin.await.unwrap_err().is_cancelled());
+}
+
+#[tokio::test]
+async fn successful_responses_release_single_slot_admission_before_the_next_request() {
+    let dir = tempfile::tempdir().unwrap();
+    let backend = Backend::open(
+        BackendConfig {
+            max_writes: 1,
+            max_recoveries: 1,
+            ..BackendConfig::default()
+        },
+        native(dir.path().join("single-slot.db")),
+        tokio::runtime::Handle::current(),
+    )
+    .await
+    .unwrap();
+    let port = backend.profile("dispatch.v1", "tenant").unwrap();
+    let mut expected = None;
+    for index in 0..64 {
+        let operation = format!("operation-{index}");
+        let mut w = write("single-home", &operation);
+        w.expected = expected;
+        let physical = ack(w);
+        let ConditionalContentCommitOutcome::Committed(receipt) = port
+            .commit(w, Some(&physical), |_| Ok::<_, ()>(()))
+            .await
+            .unwrap()
+        else {
+            panic!("fresh operation replayed");
+        };
+        assert_eq!(backend.status().active_writes, 0);
+        assert_eq!(backend.status().blocking_writes, 0);
+        expected = Some(receipt.committed);
+        assert_eq!(
+            port.recover(w).await.unwrap().unwrap().committed,
+            receipt.committed
+        );
+        assert_eq!(backend.status().active_recoveries, 0);
+        assert_eq!(backend.status().blocking_recoveries, 0);
+    }
+    backend.shutdown().await.unwrap();
+    assert_eq!(backend.status().completed, 128);
 }

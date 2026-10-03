@@ -46,6 +46,10 @@ enrollment. Profile/schema changes must preserve canonical coordination homes.
   no write; an accepted administrative update stays owned even while queued.
   Worker permits follow Tokio's acquisition queue; this is not a promise of
   logical per-home request ordering.
+  Provider results are delivered after releasing admission accounting and worker
+  permits. A successful single-slot client can issue its next request without
+  racing the completed predecessor's lease. Early validator refusal can still
+  overlap the owned rollback; it does not promise immediate capacity reuse.
 - The Host provides executor capacity for both lanes and keeps it alive through
   drain. One shared Backend with default worker limits progresses recovery in a
   Host pool capped at two blocking threads while eight accepted writers stall.
