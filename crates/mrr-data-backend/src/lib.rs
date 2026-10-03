@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 mod authority;
 mod config;
+mod dispatch;
 mod engine;
 pub mod providers;
 mod record;

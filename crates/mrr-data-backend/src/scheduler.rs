@@ -15,6 +15,8 @@ impl Scheduler {
                 lifecycle: Lifecycle::Ready,
                 active_writes: 0,
                 active_recoveries: 0,
+                blocking_writes: 0,
+                blocking_recoveries: 0,
                 retained_bytes: 0,
                 completed: 0,
             }),
@@ -63,6 +65,7 @@ impl Scheduler {
             scheduler: self.clone(),
             recovery,
             bytes,
+            submitted: false,
         })
     }
     pub(crate) fn drain(&self) {
@@ -80,10 +83,31 @@ pub(crate) struct Lease {
     scheduler: Arc<Scheduler>,
     recovery: bool,
     bytes: usize,
+    submitted: bool,
+}
+impl Lease {
+    pub(crate) fn submitted(mut self) -> Self {
+        let mut state = self.scheduler.state.lock().expect("scheduler lock");
+        if self.recovery {
+            state.blocking_recoveries += 1;
+        } else {
+            state.blocking_writes += 1;
+        }
+        drop(state);
+        self.submitted = true;
+        self
+    }
 }
 impl Drop for Lease {
     fn drop(&mut self) {
         let mut s = self.scheduler.state.lock().expect("scheduler lock");
+        if self.submitted {
+            if self.recovery {
+                s.blocking_recoveries -= 1;
+            } else {
+                s.blocking_writes -= 1;
+            }
+        }
         if self.recovery {
             s.active_recoveries -= 1;
         } else {

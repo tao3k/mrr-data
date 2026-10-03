@@ -33,6 +33,26 @@ enrollment. Profile/schema changes must preserve canonical coordination homes.
 - Blocking/native provider work is tracked by owned worker leases. Caller
   cancellation after validation does not erase the accepted operation. Before
   validation it leaves no write. Ambiguous COMMIT/worker loss is Unknown.
+- [[file:../../crates/mrr-data-backend/src/dispatch.rs][The shared dispatcher]] waits asynchronously for separate write/recovery worker
+  permits before submitting blocking jobs. =max_write_workers= and
+  =max_recovery_workers= default to one each, matching the native providers'
+  single writer and single read connection. Zero, over-admission and semaphore
+  overflow limits refuse configuration before provider opening. Raising these
+  limits does not create extra provider connections or native parallelism.
+  =active_writes/active_recoveries= include accepted queued work;
+  =blocking_writes/blocking_recoveries= count submitted Host jobs, including jobs
+  waiting in that executor. Queued requests retain their admission count/byte
+  lease, and drain waits for them. Cancellation before content validation leaves
+  no write; an accepted administrative update stays owned even while queued.
+  Worker permits follow Tokio's acquisition queue; this is not a promise of
+  logical per-home request ordering.
+- The Host provides executor capacity for both lanes and keeps it alive through
+  drain. One shared Backend with default worker limits progresses recovery in a
+  Host pool capped at two blocking threads while eight accepted writers stall.
+  Separate worker caps prevent that Backend's queued writes from filling the
+  pool. They do not reserve threads against unrelated Host jobs or other Backend
+  instances. A one-thread blocking pool cannot progress native recovery alongside
+  a stalled writer.
 - Exact operation identity includes profile, namespace, scope, operation ID,
   expected revision/CID, replacement and canonical authority expectations.
   Historical replay skips validation and grants no fresh-effect capability.
@@ -176,6 +196,17 @@ latency SLO or a performance advantage for either provider.
 [[file:../benchmarks/shared-backend-local.org][The local baseline receipt]] records the exact clean source revision, compiler,
 matched observations, lifecycle qualification and next experiments. Its linked
 JSON preserves every round rather than only summary statistics.
+
+[[file:../../crates/mrr-data-backend/tests/integration/dispatch.rs][Native dispatch qualification]] additionally checks the two-thread Host pool,
+queued content cancellation, owned administrative updates after caller exit,
+drain while queued, and restart without losing authority history.
+=just bench-backend-mixed= runs the [[file:../../crates/mrr-data-backend/tests/performance/mixed_performance.rs][mixed native measurement]] with one held
+validated write, seven queued writes and recovery concurrency 1/4/8. It measures
+historical reads while the writer remains stalled, then releases that stall and
+measures completion of the busy drain. Every queued write and historical receipt
+must survive reopen. This controlled stalled-writer workload does not substitute
+for sustained writes, competing Host jobs, larger guarded records or native RSS
+qualification.
 
 * Open performance and deployment gates
 

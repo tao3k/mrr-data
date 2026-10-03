@@ -40,6 +40,9 @@ pub struct ProviderCapabilities {
 pub struct BackendConfig {
     pub max_writes: usize,
     pub max_recoveries: usize,
+    /// Submitted blocking jobs, including those waiting in the Host pool.
+    pub max_write_workers: usize,
+    pub max_recovery_workers: usize,
     pub max_retained_bytes: usize,
     pub max_identity_bytes: usize,
 }
@@ -48,6 +51,8 @@ impl Default for BackendConfig {
         Self {
             max_writes: 32,
             max_recoveries: 8,
+            max_write_workers: 1,
+            max_recovery_workers: 1,
             max_retained_bytes: 131_072,
             max_identity_bytes: 256,
         }
@@ -57,6 +62,12 @@ impl BackendConfig {
     pub(crate) fn validate(self) -> Result<Self, BackendError> {
         if self.max_writes == 0
             || self.max_recoveries == 0
+            || self.max_write_workers == 0
+            || self.max_recovery_workers == 0
+            || self.max_write_workers > self.max_writes
+            || self.max_recovery_workers > self.max_recoveries
+            || self.max_write_workers > tokio::sync::Semaphore::MAX_PERMITS
+            || self.max_recovery_workers > tokio::sync::Semaphore::MAX_PERMITS
             || self.max_retained_bytes < 1024
             || !(1..=256).contains(&self.max_identity_bytes)
         {
@@ -75,12 +86,19 @@ pub enum Lifecycle {
     Closed,
     Faulted,
 }
-/// Current bounded resource usage and completed worker counts.
+/// Accepted work includes asynchronous queueing. Blocking counts include jobs
+/// queued in the Host executor as well as running jobs; they are lane-bounded.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BackendStatus {
     pub lifecycle: Lifecycle,
     pub active_writes: usize,
     pub active_recoveries: usize,
+    pub blocking_writes: usize,
+    pub blocking_recoveries: usize,
     pub retained_bytes: usize,
     pub completed: u64,
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/config.rs"]
+mod tests;

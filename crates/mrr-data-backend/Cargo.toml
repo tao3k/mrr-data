@@ -33,5 +33,13 @@ path = "tests/integration/backend_consumer.rs"
 name = "backend_performance"
 path = "tests/performance/backend_performance.rs"
 
+[[test]]
+name = "backend_dispatch"
+path = "tests/integration/dispatch.rs"
+
+[[test]]
+name = "backend_mixed_performance"
+path = "tests/performance/mixed_performance.rs"
+
 [lints]
 workspace = true

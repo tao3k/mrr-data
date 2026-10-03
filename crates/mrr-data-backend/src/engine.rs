@@ -17,6 +17,7 @@ struct Inner {
     provider: Arc<dyn MetadataProvider>,
     scheduler: Arc<Scheduler>,
     runtime: Handle,
+    dispatcher: crate::dispatch::Dispatcher,
     close_started: AtomicBool,
     close_result: Mutex<Option<Result<(), BackendError>>>,
 }
@@ -54,6 +55,7 @@ impl Backend {
             inner: Arc::new(Inner {
                 provider,
                 scheduler: Scheduler::new(config),
+                dispatcher: crate::dispatch::Dispatcher::new(config, runtime.clone()),
                 runtime,
                 close_started: AtomicBool::new(false),
                 close_result: Mutex::new(None),
@@ -232,8 +234,7 @@ impl ConditionalContentCommitPort for ProfilePort {
             let (request_tx, request_rx) = oneshot::channel();
             let (answer_tx, answer_rx) = oneshot::channel();
             let (result_tx, result_rx) = oneshot::channel();
-            self.backend.inner.runtime.spawn_blocking(move || {
-                let _lease = lease;
+            self.backend.inner.dispatcher.run(false, lease, move || {
                 let mut request = Some((request_tx, answer_rx));
                 let result = provider.commit(&owned, physical.as_ref(), &mut |current| {
                     let Some((tx, rx)) = request.take() else {
@@ -276,8 +277,7 @@ impl ConditionalContentCommitPort for ProfilePort {
             let owned = self.owned(write);
             let provider = self.backend.inner.provider.clone();
             let (tx, rx) = oneshot::channel();
-            self.backend.inner.runtime.spawn_blocking(move || {
-                let _lease = lease;
+            self.backend.inner.dispatcher.run(true, lease, move || {
                 let _ = tx.send(provider.recover(&owned));
             });
             let result = rx
@@ -368,8 +368,7 @@ impl ProfilePort {
             .map_err(PortError::BeforeCommit)?;
         let provider = self.backend.inner.provider.clone();
         let (tx, rx) = oneshot::channel();
-        self.backend.inner.runtime.spawn_blocking(move || {
-            let _lease = lease;
+        self.backend.inner.dispatcher.run(recovery, lease, move || {
             let _ = tx.send(run(&*provider));
         });
         rx.await.map_err(|_| {

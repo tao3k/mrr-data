@@ -117,6 +117,8 @@ async fn closed(backend: &Backend, operations: usize) -> u128 {
     assert_eq!(status.lifecycle, Lifecycle::Closed);
     assert_eq!(status.active_writes, 0);
     assert_eq!(status.active_recoveries, 0);
+    assert_eq!(status.blocking_writes, 0);
+    assert_eq!(status.blocking_recoveries, 0);
     assert_eq!(status.retained_bytes, 0);
     assert_eq!(status.completed, u64::try_from(operations).unwrap());
     start.elapsed().as_nanos()
@@ -215,6 +217,7 @@ async fn suite<P: MetadataProvider>(name: &str, factory: impl Fn(PathBuf) -> P) 
         "required_cargo_profile": "test", "rounds": ROUNDS,
         "operations_per_lane": OPERATIONS, "warmup_per_lane": WARMUP,
             "runtime_workers": 2, "max_writes": config.max_writes, "max_recoveries": config.max_recoveries,
+            "max_write_workers": config.max_write_workers, "max_recovery_workers": config.max_recovery_workers,
             "max_retained_bytes": config.max_retained_bytes, "sequencing": "application-per-home-mutex",
         "block_publication": "synthetic-ack-metadata-only"})
     );
