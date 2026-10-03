@@ -11,6 +11,8 @@ pub enum BackendError {
     Corrupt,
     Cancelled,
     WorkerLost,
+    AuthorityConflict,
+    AuthorityRetired,
 }
 impl std::fmt::Display for BackendError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -18,6 +20,12 @@ impl std::fmt::Display for BackendError {
     }
 }
 impl std::error::Error for BackendError {}
+/// Whether authority generations participate in the protected transaction.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AuthorityCapability {
+    Unsupported,
+    Transactional,
+}
 /// Verified by provider qualification, not vendor naming. No self-attestation
 /// authenticates arbitrary external storage or block durability.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -25,6 +33,7 @@ pub struct ProviderCapabilities {
     pub atomic_head_operation: bool,
     pub durable_commit: bool,
     pub historical_lookup: bool,
+    pub authority_versions: AuthorityCapability,
 }
 /// Limits are checked before copying requests or spawning blocking work.
 #[derive(Clone, Copy, Debug)]

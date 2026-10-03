@@ -1,8 +1,8 @@
-//! Independent consumers exercise real `SQLite` files, profile isolation and lifecycle.
+//! Independent consumers run unchanged against each selected optional database.
+#![cfg(any(feature = "turso", feature = "duckdb"))]
 use mrr_data_backend::{
     Backend, BackendConfig, BackendError, Lifecycle, MetadataProvider, ProviderCapabilities,
-    StoredOutcome, StoredRevision, StoredWrite,
-    providers::{ProviderResult, SqliteProvider},
+    StoredOutcome, StoredRevision, StoredWrite, providers::ProviderResult,
 };
 use mrr_data_content::{
     CacheAdmission, ConditionalCommitError, ConditionalCommitPortError as PortError,
@@ -17,6 +17,20 @@ use std::{
     },
     time::Duration,
 };
+#[cfg(feature = "turso")]
+type NativeProvider = mrr_data_backend::providers::TursoProvider;
+#[cfg(all(not(feature = "turso"), feature = "duckdb"))]
+type NativeProvider = mrr_data_backend::providers::DuckDbProvider;
+fn native(path: std::path::PathBuf) -> NativeProvider {
+    #[cfg(feature = "turso")]
+    {
+        NativeProvider::new(path, tokio::runtime::Handle::current())
+    }
+    #[cfg(all(not(feature = "turso"), feature = "duckdb"))]
+    {
+        NativeProvider::new(path)
+    }
+}
 fn root(bytes: &[u8]) -> cid::Cid {
     ContentBlock::new(ContentCodec::Raw, bytes).cid()
 }
@@ -47,7 +61,7 @@ fn committed(result: &Outcome<'_>) -> ContentRevision {
 async fn open(path: &Path) -> Backend {
     Backend::open(
         BackendConfig::default(),
-        SqliteProvider::new(path.into()),
+        native(path.into()),
         tokio::runtime::Handle::current(),
     )
     .await
@@ -148,28 +162,39 @@ async fn two_backend_instances_race_one_head_and_validation_refusal_leaves_no_ro
         pb.commit(two, Some(&ab), |_| Ok::<_, ()>(()))
     );
     assert_eq!(usize::from(r1.is_ok()) + usize::from(r2.is_ok()), 1);
-    let failure = if r1.is_err() { r1 } else { r2 };
-    assert!(matches!(
-        failure,
-        Err(PortError::Protocol(
-            ConditionalCommitError::RevisionConflict
-        ))
-    ));
+    let (failure, winner, loser) = if r1.is_err() {
+        (&r1, two, one)
+    } else {
+        (&r2, one, two)
+    };
+    assert!(
+        matches!(
+            failure,
+            Err(
+                PortError::Protocol(ConditionalCommitError::RevisionConflict)
+                    | PortError::BeforeCommit(BackendError::Unavailable)
+                    | PortError::Unknown(BackendError::Unavailable)
+            )
+        ),
+        "unexpected native conflict: {failure:?}"
+    );
+    assert!(pa.recover(winner).await.unwrap().is_some());
+    assert!(pb.recover(loser).await.unwrap().is_none());
     a.shutdown().await.unwrap();
     b.shutdown().await.unwrap();
 }
 struct HeldProvider {
     before_validation: bool,
-    sqlite: SqliteProvider,
+    native: NativeProvider,
     entered: Arc<AtomicBool>,
     gate: Arc<(Mutex<bool>, Condvar)>,
 }
 impl MetadataProvider for HeldProvider {
     fn capabilities(&self) -> ProviderCapabilities {
-        self.sqlite.capabilities()
+        self.native.capabilities()
     }
     fn open(&self) -> Result<(), BackendError> {
-        self.sqlite.open()
+        self.native.open()
     }
     fn commit(
         &self,
@@ -177,7 +202,7 @@ impl MetadataProvider for HeldProvider {
         p: Option<&PublishReceipt>,
         v: &mut dyn FnMut(Option<ContentRevision>) -> bool,
     ) -> ProviderResult<StoredOutcome> {
-        self.sqlite.commit(w, p, &mut |head| {
+        self.native.commit(w, p, &mut |head| {
             if self.before_validation {
                 self.entered.store(true, Ordering::Release);
                 let (lock, changed) = &*self.gate;
@@ -199,10 +224,10 @@ impl MetadataProvider for HeldProvider {
         })
     }
     fn recover(&self, w: &StoredWrite) -> ProviderResult<Option<StoredRevision>> {
-        self.sqlite.recover(w)
+        self.native.recover(w)
     }
     fn close(&self) -> Result<(), BackendError> {
-        self.sqlite.close()
+        self.native.close()
     }
 }
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -224,7 +249,7 @@ async fn cancellation_keeps_owned_commit_drain_and_reserved_recovery_alive() {
             config,
             HeldProvider {
                 before_validation: false,
-                sqlite: SqliteProvider::new(dir.path().join("held.db")),
+                native: native(dir.path().join("held.db")),
                 entered: entered.clone(),
                 gate: gate.clone(),
             },
@@ -297,7 +322,7 @@ async fn cancellation_keeps_owned_commit_drain_and_reserved_recovery_alive() {
         reopened.shutdown().await.unwrap();
     }
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn bounds_bad_configuration_and_corruption_refuse_before_ready_or_write() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("bounds.db");
@@ -307,7 +332,7 @@ async fn bounds_bad_configuration_and_corruption_refuse_before_ready_or_write() 
                 max_writes: 0,
                 ..BackendConfig::default()
             },
-            SqliteProvider::new(path.clone()),
+            native(path.clone()),
             tokio::runtime::Handle::current()
         )
         .await,
@@ -328,13 +353,16 @@ async fn bounds_bad_configuration_and_corruption_refuse_before_ready_or_write() 
     ));
     assert_eq!(backend.status().completed, 0);
     backend.shutdown().await.unwrap();
-    let db = rusqlite::Connection::open(&path).unwrap();
-    db.execute_batch("PRAGMA user_version=99").unwrap();
-    drop(db);
+    tamper(
+        &path,
+        "UPDATE mrr_backend_kv SET value=?1 WHERE key='mrr.backend.schema'",
+        Some(b"unknown-version"),
+        false,
+    );
     assert!(matches!(
         Backend::open(
             BackendConfig::default(),
-            SqliteProvider::new(path),
+            native(path),
             tokio::runtime::Handle::current()
         )
         .await,
@@ -359,11 +387,12 @@ fn durable_child_write() {
                 .unwrap(),
         );
         if std::env::var("MRR_BACKEND_CHILD_PARTIAL").is_ok() {
-            let conn = rusqlite::Connection::open(&path).unwrap();
-            conn.execute_batch(
-                "BEGIN IMMEDIATE; DELETE FROM mrr_heads; DELETE FROM mrr_operations;",
-            )
-            .unwrap();
+            tamper(
+                Path::new(&path),
+                "DELETE FROM mrr_backend_kv WHERE key <> 'mrr.backend.schema'",
+                None,
+                true,
+            );
             std::process::exit(0); // Exit without COMMIT, rollback or Rust destructors.
         }
         std::process::exit(0); // Durable commit without backend shutdown/Drop.
@@ -407,7 +436,7 @@ async fn abrupt_process_exit_and_uncommitted_transaction_preserve_atomic_receipt
     }
 }
 
-struct LostAck(SqliteProvider);
+struct LostAck(NativeProvider);
 impl MetadataProvider for LostAck {
     fn capabilities(&self) -> ProviderCapabilities {
         self.0.capabilities()
@@ -440,7 +469,7 @@ async fn lost_ack_remains_unknown_then_recovers_original_receipt_without_validat
     let dir = tempfile::tempdir().unwrap();
     let backend = Backend::open(
         BackendConfig::default(),
-        LostAck(SqliteProvider::new(dir.path().join("ack.db"))),
+        LostAck(native(dir.path().join("ack.db"))),
         tokio::runtime::Handle::current(),
     )
     .await
@@ -465,19 +494,17 @@ async fn lost_ack_remains_unknown_then_recovers_original_receipt_without_validat
     ));
     backend.shutdown().await.unwrap();
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn deleted_metadata_tables_are_not_recreated_as_fresh_authority() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("missing.db");
     let backend = open(&path).await;
     backend.shutdown().await.unwrap();
-    let db = rusqlite::Connection::open(&path).unwrap();
-    db.execute_batch("DROP TABLE mrr_heads").unwrap();
-    drop(db);
+    tamper(&path, "DROP TABLE mrr_backend_kv", None, false);
     assert!(matches!(
         Backend::open(
             BackendConfig::default(),
-            SqliteProvider::new(path),
+            native(path),
             tokio::runtime::Handle::current()
         )
         .await,
@@ -495,7 +522,7 @@ async fn cancellation_before_validator_creates_no_head_or_operation() {
         BackendConfig::default(),
         HeldProvider {
             before_validation: true,
-            sqlite: SqliteProvider::new(path.clone()),
+            native: native(path.clone()),
             entered: entered.clone(),
             gate: gate.clone(),
         },
@@ -542,4 +569,102 @@ async fn cancellation_before_validator_creates_no_head_or_operation() {
             .unwrap(),
     );
     reopened.shutdown().await.unwrap();
+}
+
+fn tamper(path: &Path, statement: &str, bytes: Option<&[u8]>, exit_uncommitted: bool) {
+    #[cfg(feature = "turso")]
+    {
+        let handle = tokio::runtime::Handle::current();
+        let conn = tokio::task::block_in_place(|| {
+            let db = handle
+                .block_on(turso::Builder::new_local(path.to_str().unwrap()).build())
+                .unwrap();
+            db.connect().unwrap()
+        });
+        tokio::task::block_in_place(|| {
+            if exit_uncommitted {
+                handle
+                    .block_on(conn.execute("BEGIN IMMEDIATE", ()))
+                    .unwrap();
+            }
+            if let Some(value) = bytes {
+                handle
+                    .block_on(conn.execute(statement, [turso::Value::Blob(value.into())]))
+                    .unwrap();
+            } else {
+                handle.block_on(conn.execute(statement, ())).unwrap();
+            }
+            if exit_uncommitted {
+                std::process::exit(0);
+            }
+        });
+    }
+    #[cfg(all(not(feature = "turso"), feature = "duckdb"))]
+    {
+        let conn = duckdb::Connection::open(path).unwrap();
+        if exit_uncommitted {
+            conn.execute_batch("BEGIN TRANSACTION").unwrap();
+        }
+        if let Some(value) = bytes {
+            conn.execute(statement, [value]).unwrap();
+        } else {
+            conn.execute_batch(statement).unwrap();
+        }
+        if exit_uncommitted {
+            std::process::exit(0);
+        }
+    }
+}
+
+#[path = "authorities.rs"]
+mod authorities;
+
+#[cfg(all(not(feature = "turso"), feature = "duckdb", unix))]
+#[tokio::test]
+async fn canonical_aliases_share_native_state_and_hardlinks_refuse() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("native.db");
+    let alias = dir.path().join("alias.db");
+    let first = open(&path).await;
+    std::os::unix::fs::symlink(&path, &alias).unwrap();
+    let second = open(&alias).await;
+    let a = first.profile("profile.v1", "tenant").unwrap();
+    let b = second.profile("profile.v1", "tenant").unwrap();
+    let one = write("alias-one", None, b"one");
+    let head = committed(
+        &a.commit(one, Some(&ack(one)), |_| Ok::<_, ()>(()))
+            .await
+            .unwrap(),
+    );
+    let two = write("alias-two", Some(head), b"two");
+    committed(
+        &b.commit(two, Some(&ack(two)), |_| Ok::<_, ()>(()))
+            .await
+            .unwrap(),
+    );
+    assert!(a.recover(two).await.unwrap().is_some());
+    first.shutdown().await.unwrap();
+    assert!(b.recover(one).await.unwrap().is_some());
+    second.shutdown().await.unwrap();
+    let dangling = dir.path().join("dangling.db");
+    std::os::unix::fs::symlink(dir.path().join("absent.db"), &dangling).unwrap();
+    assert!(matches!(
+        Backend::open(
+            BackendConfig::default(),
+            native(dangling),
+            tokio::runtime::Handle::current()
+        )
+        .await,
+        Err(BackendError::InvalidConfiguration)
+    ));
+    std::fs::hard_link(&path, dir.path().join("hardlink.db")).unwrap();
+    assert!(matches!(
+        Backend::open(
+            BackendConfig::default(),
+            native(path),
+            tokio::runtime::Handle::current()
+        )
+        .await,
+        Err(BackendError::InvalidConfiguration)
+    ));
 }

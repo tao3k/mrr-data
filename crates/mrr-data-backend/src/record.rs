@@ -1,4 +1,5 @@
 //! Owned exact records passed to blocking provider workers.
+use crate::AuthorityExpectation;
 use cid::Cid;
 use mrr_data_content::{ConditionalContentWrite, ContentRevision};
 use serde::{Deserialize, Serialize};
@@ -36,6 +37,8 @@ pub struct StoredWrite {
     pub operation_id: String,
     pub expected: Option<StoredRevision>,
     pub replacement: Cid,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub authorities: Vec<AuthorityExpectation>,
 }
 impl StoredWrite {
     #[must_use]

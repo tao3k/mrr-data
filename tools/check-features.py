@@ -8,7 +8,7 @@ from pathlib import Path
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-CASES = [None, "", "backend", "backend-sqlite", "commerce-cedar", "commerce-credential", "commerce-consumption", "commerce-presentation", "arrow", "content-identity", "content", "snapshot", "transfer", "car", "filesystem", "cache", "s3",
+CASES = [None, "", "backend", "backend-turso", "backend-duckdb", "commerce-cedar", "commerce-credential", "commerce-consumption", "commerce-presentation", "arrow", "content-identity", "content", "snapshot", "transfer", "car", "filesystem", "cache", "s3",
          "data-protection", "raw-publish", "protected-envelope", "protected-publish", "datafusion", "graphar", "content-identity,graphar", "cache,s3", "snapshot,cache,s3", "transfer,cache,s3",
          "arrow,content-identity,content,snapshot,transfer,raw-publish,protected-publish,car,filesystem,cache,s3,datafusion,graphar"]
 
@@ -18,7 +18,7 @@ def main():
         ["cargo", "tree", "-p", "mrr-data-backend", "--no-default-features", "--edges", "normal",
          "--prefix", "none", "--locked"], cwd=ROOT, text=True)
     backend_packages = {line.split()[0] for line in backend_tree.splitlines() if line.strip()}
-    forbidden = {"cedar-poo-commerce", "cedar-poo-bridge", "mrr-data-commerce", "rusqlite", "kache-store", "opendal-service-s3"}
+    forbidden = {"cedar-poo-commerce", "cedar-poo-bridge", "mrr-data-commerce", "rusqlite", "turso", "duckdb", "kache-store", "opendal-service-s3"}
     if backend_packages & forbidden:
         raise SystemExit(f"generic backend imports domain/provider dependencies: {backend_packages & forbidden}")
     tree = subprocess.check_output(
@@ -33,13 +33,15 @@ def main():
         enabled = {"arrow", "filesystem"} if selected is None else set(selected.split(","))
         if enabled & {"commerce-cedar", "commerce-credential", "commerce-consumption", "commerce-presentation"}:
             enabled |= {"commerce-cedar", "content"}
-        if "backend-sqlite" in enabled:
+        if enabled & {"backend-turso", "backend-duckdb"}:
             enabled.add("backend")
         content = bool(enabled & {"backend", "content", "snapshot", "transfer", "raw-publish", "protected-envelope", "protected-publish", "car", "filesystem", "cache", "s3", "datafusion"})
         identity = content or bool(enabled & {"content-identity", "data-protection"})
         expected = {
             "mrr-data-backend": "backend" in enabled,
-            "rusqlite": bool(enabled & {"backend-sqlite", "cache"}),
+            "rusqlite": "cache" in enabled,
+            "turso": "backend-turso" in enabled,
+            "duckdb": "backend-duckdb" in enabled,
             "mrr-data-commerce": "commerce-cedar" in enabled,
             "cedar-poo-commerce": "commerce-cedar" in enabled,
             "p256": "commerce-cedar" in enabled,
@@ -69,7 +71,10 @@ def main():
         for package, present in expected.items():
             if (package in packages) != present:
                 raise SystemExit(f"{selected!r}: expected {package} present={present}")
-        subprocess.run(["cargo", "check", "-p", "mrr-data", "--quiet", "--locked", *flags],
+        # Reuse the qualified bundled native SDK build; isolation is independent
+        # of code generation profile. Avoid compiling DuckDB twice in one gate.
+        profile = ["--profile", "test"] if "backend-duckdb" in enabled else []
+        subprocess.run(["cargo", "check", "-p", "mrr-data", "--quiet", "--locked", *profile, *flags],
                        cwd=ROOT, check=True)
         print(f"{selected if selected else ('default' if selected is None else 'none')}: passed", flush=True)
 

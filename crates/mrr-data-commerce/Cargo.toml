@@ -20,7 +20,7 @@ serde_json.workspace = true
 p256 = { version = "=0.13.2", default-features = false, features = ["ecdsa"], optional = true }
 
 [dev-dependencies]
-mrr-data-backend = { workspace = true, features = ["sqlite"] }
+mrr-data-backend = { workspace = true, features = ["turso"] }
 tokio.workspace = true
 tempfile.workspace = true
 base64 = "0.23"

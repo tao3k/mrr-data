@@ -1,12 +1,21 @@
 //! One shared persistence engine; profiles own validation, providers own storage.
 //! Host-authenticated namespaces and live authority synchronization remain required.
 #![forbid(unsafe_code)]
+mod authority;
 mod config;
 mod engine;
 pub mod providers;
 mod record;
 mod scheduler;
-pub use config::{BackendConfig, BackendError, BackendStatus, Lifecycle, ProviderCapabilities};
+mod transaction;
+pub use authority::{
+    AuthorityChange, AuthorityExpectation, AuthorityKey, AuthorityProposal, AuthorityState,
+    AuthorityStatus,
+};
+pub use config::{
+    AuthorityCapability, BackendConfig, BackendError, BackendStatus, Lifecycle,
+    ProviderCapabilities,
+};
 pub use engine::{Backend, ProfilePort};
 pub use providers::MetadataProvider;
 pub use record::{StoredOutcome, StoredRevision, StoredWrite};

@@ -41,12 +41,12 @@ impl Scheduler {
         // Recovery has its own count AND byte reservation so saturated fresh work
         // cannot consume the resources needed to reconcile already accepted work.
         let lane_bytes = if recovery {
-            self.config.max_recoveries.saturating_mul(16384)
+            self.config.max_recoveries.saturating_mul(65536)
         } else {
             self.config.max_retained_bytes
         };
         let used = if recovery {
-            s.active_recoveries.saturating_mul(16384)
+            s.active_recoveries.saturating_mul(65536)
         } else {
             s.retained_bytes
         };

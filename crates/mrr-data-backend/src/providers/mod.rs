@@ -1,7 +1,15 @@
-//! Provider modules implement one metadata transaction contract for the engine.
+//! Optional database providers implement physical transactions for one engine.
 mod contract;
-#[cfg(feature = "sqlite")]
-mod sqlite;
+#[cfg(feature = "duckdb")]
+mod duckdb;
+#[cfg(feature = "duckdb")]
+mod duckdb_database;
+mod storage;
+#[cfg(feature = "turso")]
+mod turso;
 pub use contract::{MetadataProvider, ProviderResult};
-#[cfg(feature = "sqlite")]
-pub use sqlite::SqliteProvider;
+#[cfg(feature = "duckdb")]
+pub use duckdb::DuckDbProvider;
+pub use storage::{MetadataTransaction, TransactionProvider};
+#[cfg(feature = "turso")]
+pub use turso::TursoProvider;

@@ -9,7 +9,8 @@ repository.workspace = true
 
 [features]
 default = []
-sqlite = ["dep:rusqlite"]
+turso = ["dep:turso"]
+duckdb = ["dep:duckdb"]
 
 [dependencies]
 mrr-data-content.workspace = true
@@ -17,7 +18,8 @@ cid.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["sync", "time"] }
-rusqlite = { workspace = true, optional = true }
+turso = { workspace = true, optional = true }
+duckdb = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile.workspace = true
@@ -26,7 +28,6 @@ mrr-data-asp-rust-build-support.workspace = true
 [[test]]
 name = "backend_consumer"
 path = "tests/integration/backend_consumer.rs"
-required-features = ["sqlite"]
 
 [lints]
 workspace = true

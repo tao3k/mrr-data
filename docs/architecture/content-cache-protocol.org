@@ -365,7 +365,7 @@ remain optional and require explicitly supplied deployment credentials.
 
 * Shared metadata backend
 
-The optional [[file:shared-backend.org][shared Production backend]] implements this port using a SQLite
-head/operation transaction and explicit owned-worker lifecycle. Domain adapters
+The optional [[file:shared-backend.org][shared Production backend]] implements this port through optional Turso/DuckDB
+physical transactions and explicit owned-worker lifecycle. Domain adapters
 consume the same port; immutable block durability and current external authority
 remain independently qualified composition requirements.

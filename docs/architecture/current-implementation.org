@@ -3,7 +3,8 @@
 ** Shared Production backend
 
 The opt-in ~backend~ feature exposes one provider-neutral persistence engine.
-~backend-sqlite~ selects its file-backed WAL/FULL metadata provider. Profiles
+~backend-turso~ and ~backend-duckdb~ select optional native provider modules.
+The shared engine contains no database/SQL driver or schema. Profiles
 supply validation and stable enrollment; all Cases share admission, recovery and
 shutdown. See [[file:shared-backend.org][implementation, tests and open qualification boundaries]].
 
@@ -228,7 +229,8 @@ Facade features:
 | ~content-identity~ | yes, through ~filesystem~ | CID/DAG-CBOR identity and immutable manifests |
 | ~content~ | yes, through ~filesystem~ | verified blocks, memory store and protocol; implies ~content-identity~ |
 | ~backend~ | no | shared metadata lifecycle and provider-neutral profile commit port |
-| ~backend-sqlite~ | no | SQLite WAL/FULL head/operation provider; implies ~backend~ |
+| ~backend-turso~ | no | native Turso metadata provider; implies ~backend~ |
+| ~backend-duckdb~ | no | native DuckDB metadata provider; implies ~backend~ |
 | ~snapshot~ | no | complete Arrow snapshot publication/restore; implies ~content~, not CAR |
 | ~transfer~ | no | Tokio snapshot sessions: deadline, cancellation, retry budgets and blocking local adapter |
 | ~raw-publish~ | no | SPEC Storage Effect projection and 17-case replay, with initial and pre-root current-state checks before unrestricted raw snapshot publication over ~transfer~ |

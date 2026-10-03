@@ -47,9 +47,11 @@ clippy-property-query:
 
 [group('test')]
 test-backend:
-    {{ native_env }} {{ cargo }} test -p mrr-data-backend --all-features --locked -- --nocapture
+    {{ native_env }} {{ cargo }} test -p mrr-data-backend --no-default-features --locked
+    {{ native_env }} {{ cargo }} test -p mrr-data-backend --features turso --locked -- --nocapture
+    {{ native_env }} {{ cargo }} test -p mrr-data-backend --features duckdb --locked -- --nocapture
     {{ native_env }} {{ cargo }} test -p mrr-data-commerce --all-features --test commerce_commit_consumer shared_backend_persists --locked -- --nocapture
 
 [group('test')]
 clippy-backend:
-    {{ native_env }} {{ cargo }} clippy -p mrr-data-backend --all-features --all-targets --locked -- -D warnings
+    {{ native_env }} {{ cargo }} clippy -p mrr-data-backend --all-features --all-targets --profile test --locked -- -D warnings

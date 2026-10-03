@@ -23,17 +23,17 @@ jobs:
   msrv:
     name: Rust 1.95 MSRV (ubuntu-24.04)
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.95.0
       - name: Test workspace at the declared MSRV
-        run: cargo test --workspace --features mrr-data/transfer,mrr-data/car,mrr-data/filesystem,mrr-data/cache,mrr-data/s3,mrr-data/backend-sqlite --locked
+        run: cargo test --workspace --features mrr-data/transfer,mrr-data/car,mrr-data/filesystem,mrr-data/cache,mrr-data/s3,mrr-data/backend-turso --locked
 
   test:
     name: Rust (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
@@ -53,7 +53,13 @@ jobs:
         if: runner.os == 'Linux'
         run: python3 tools/check-spec-fixtures.py
       - name: Test workspace
-        run: cargo test --workspace --features mrr-data/transfer,mrr-data/car,mrr-data/filesystem,mrr-data/cache,mrr-data/s3,mrr-data/backend-sqlite --locked
+        run: cargo test --workspace --features mrr-data/transfer,mrr-data/car,mrr-data/filesystem,mrr-data/cache,mrr-data/s3,mrr-data/backend-turso --locked
+      - name: Test optional database providers independently
+        env:
+          CARGO_BUILD_JOBS: '2'
+        run: |
+          cargo test -p mrr-data-backend --no-default-features --features turso --locked -- --nocapture
+          cargo test -p mrr-data-backend --no-default-features --features duckdb --locked -- --nocapture
       - name: Test shared backend without a provider feature
         run: cargo test -p mrr-data-backend --no-default-features --locked
       - name: Test Commerce integration profiles
@@ -62,7 +68,7 @@ jobs:
           cargo test -p mrr-data-commerce --features credential --locked
           cargo test -p mrr-data-commerce --features consumption --locked
           cargo clippy -p mrr-data-commerce --all-features --all-targets --locked -- -D warnings
-          cargo clippy -p mrr-data-backend --all-features --all-targets --locked -- -D warnings
+          cargo clippy -p mrr-data-backend --all-features --all-targets --profile test --locked -- -D warnings
       - name: Check optional feature dependency isolation
         run: python3 tools/check-features.py
       - name: Check facade feature contract

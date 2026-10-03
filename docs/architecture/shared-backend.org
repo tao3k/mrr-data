@@ -1,123 +1,150 @@
-#+TITLE: Shared Production Backend: implementation and qualification
+#+TITLE: Shared Production Backend: optional providers and qualification
 #+DATE: 2026-10-03
 
 * Ownership and dependency direction
 
-[[file:../../crates/mrr-data-backend/src/lib.rs][mrr-data-backend]] is one engine with provider modules/features. It has no
-Cedar, Commerce, Example or application-runtime dependency. All Production
-Profiles/Cases can consume its content transaction contract. Domain adapters
-supply validation; Cases select provider/configuration. MRR Data owns physical
-persistence; MRR owns semantic admission; the Host/POO Flow owns the runtime.
+[[file:../../crates/mrr-data-backend/src/lib.rs][mrr-data-backend]] is one generic engine for every Production Profile/Case.
+Its default feature set is empty. The core owns bounded admission, logical
+head/operation decisions, authority comparisons, recovery and lifecycle.
+[[file:../../crates/mrr-data-backend/src/providers/storage.rs][TransactionProvider/MetadataTransaction]] expose bounded opaque record access
+inside physical transactions. The shared [[file:../../crates/mrr-data-backend/src/transaction.rs][logical engine]] contains no database schema,
+SQL dialect, SQL driver or Cedar/Commerce dependency.
 
-The architecture is synchronized with Cedar Production design at
-[[https://github.com/tao3k/cedar-poo-spec/blob/bcacabbdd188a821799dc6be92ebbed4a7c46214/Productions/Backend.org][the immutable Production backend design]]. MRR Commerce now pins that Cedar revision.
-No reverse Cedar-to-MRR dependency was introduced. Updating a profile/schema
-version must not create a fresh coordination home for pending/spent authority;
-canonical registry enrollment and migration remain Host responsibilities.
+Database implementations are optional provider modules: =turso= and =duckdb=.
+The facade exposes =backend=, =backend-turso= and =backend-duckdb=. Constructors
+perform no I/O; databases open under the Host-owned runtime/lifecycle. No SQLite
+provider, =backend-sqlite= feature or backend rusqlite dependency remains. The
+existing Kache cache has its own transitive dependencies and is a separate owner.
 
-* Implemented common engine
+The architecture follows the immutable Cedar
+[[https://github.com/tao3k/cedar-poo-spec/blob/bcacabbdd188a821799dc6be92ebbed4a7c46214/Productions/Backend.org][Production Backend design]]. Commerce and pseudonymization share that exact
+Cedar pin. Production does not depend on an Example. MRR owns semantic admission;
+MRR Data owns physical execution; the Host/POO Flow owns the runtime and semantic
+enrollment. Profile/schema changes must preserve canonical coordination homes.
 
-- Explicit async opening borrows a Host Tokio Handle. Constructors perform no I/O.
-  Opening/recovery complete before a Ready handle is exposed. No process signal
-  handlers or extra runtime are created.
-- Profile plus deployment namespace plus scope form a parameterized tuple key.
-  Operation identity binds the exact expected revision/CID and replacement CID.
-  Caller IDs are bounded before copying or enqueueing. Admission charges fixed
-  overhead plus eight times the total identity bytes for owned strings/JSON escapes;
-  cache diagnostic payloads are not copied into the metadata worker. This is a
-  request budget, not a bound on the process allocator/runtime/database cache.
-- One atomic admission lock covers lifecycle and worker leases. Fresh writes have
-  count/byte limits; recovery has a separate count and 16 KiB reservation per slot.
-  Saturation is a known no-write refusal. There is no unbounded retry queue.
-- Blocking provider work runs on spawn_blocking. Once admitted, the backend owns
-  its lease and completion even if the caller cancels. Worker loss after submission
-  is Unknown. A rejected/canceled validator before write performs no new commit.
-- Validators run only for Apply while the metadata transaction is protected.
-  Exact replay skips validation and returns historical status, including after
-  the head advanced. This result is never a payment/send capability.
-- Shutdown seals all fresh entrypoints, drains accepted writes and recovery,
-  then closes provider handles. A canceled shutdown waiter leaves the owned drain
-  task alive. Repeated/concurrent calls share the cached terminal report.
-  Failed close reports Faulted. Drop alone is not a durable async shutdown.
+* Common engine and lifecycle
 
-The Host runtime must outlive accepted work and explicit shutdown. Validation
-callbacks must be bounded and must not reenter the same writer. Metadata locks
-serialize metadata only: a deploying Host must retain independently owned live
-key/revocation/authority synchronization through persistence, including after
-caller cancellation, or supply a qualified atomic authority-version protocol.
-Returning a copied CommerceAdmissionHost from a callback alone does not establish
-this synchronization. The integration test uses fixed authority; live external
-revocation composition is still open.
+- Explicit async open borrows a Tokio Handle. The provider finishes opening before
+  Ready. No process signal handler, global allocator or extra runtime is installed.
+- Admission bounds count and bytes before copying content requests/spawning work.
+  Writes and historical reads have independent count/byte capacity. Recovery slots
+  reserve 64 KiB each. Charges cover bounded identity/guard encoding; they are
+  request budgets, not process RSS/native database cache bounds.
+- Blocking/native provider work is tracked by owned worker leases. Caller
+  cancellation after validation does not erase the accepted operation. Before
+  validation it leaves no write. Ambiguous COMMIT/worker loss is Unknown.
+- Exact operation identity includes profile, namespace, scope, operation ID,
+  expected revision/CID, replacement and canonical authority expectations.
+  Historical replay skips validation and grants no fresh-effect capability.
+- Shutdown seals admission, drains accepted work and closes provider handles.
+  Canceling a waiter leaves the owned drain task alive; repeated/concurrent calls
+  observe the same terminal report. Failed close reports Faulted. Drop cannot
+  promise an async durable close. The Host keeps its runtime alive through drain.
 
-* SQLite provider feature
+* Durable authority versions
 
-=sqlite= selects [[file:../../crates/mrr-data-backend/src/providers/sqlite.rs][one metadata provider module]]. =mrr-data/backend= exposes the
-provider-neutral engine; =mrr-data/backend-sqlite= composes the SQLite feature.
-Both are opt-in. The provider uses SQLite WAL with synchronous=FULL, checks the
-actual selected mode, and bounds busy waiting to 250 ms. A writer connection
-and independent read connection separate historical recovery from a held writer.
-BEGIN IMMEDIATE serializes new head/operation decisions across backend instances.
-Head and exact completion row are persisted in the same transaction. COMMIT
-errors are Unknown, not known no-write. Historical operations are retained.
+[[file:../../crates/mrr-data-backend/src/authority.rs][AuthorityProposal/AuthorityState]] bind an exact Host commitment to a monotonic
+generation and Active/Retired status. =advance_authority= compares the complete
+expected state, persists the next state and exact update history atomically,
+and makes each enrolled ID mandatory for that profile/namespace/scope.
+Retirement is terminal. There is no deletion/reset that could make old authority
+fresh again. An exact old update retry returns its historical generation without
+resetting the current generation, even after subsequent rotation/retirement.
 
-Opening refuses unknown schema/application identities, foreign nonempty databases,
-missing metadata tables and structurally orphaned heads/operations. It does not
-recreate lost authority tables as a fresh database. Stored records are bounded
-before BLOB allocation and typed decoding. Closing releases connections after
-FULL commit barriers; it does not require truncating another live owner's WAL.
+A =with_authorities= port canonicalizes at most 16 independently validated
+snapshots. Every fresh content commit checks the complete durable authority set
+inside its physical transaction. An unguarded port or omitted guard cannot bypass
+an enrolled home. Same commitment bytes with a newer generation remain different,
+preventing ABA. Historical lookup/replay retains the original expectations and
+remains a status query after retirement. A changed guard body cannot reuse an ID.
 
-The Host must protect the local database directory and choose a supported local
-filesystem. SQLite does not authenticate a maliciously replaced database or reject
-a restored older valid backup. This implementation therefore supplies physical
-local transaction/restart persistence, not cryptographic latest-head authentication,
-canonical home enrollment, external payment ownership fencing or power-loss proof.
-Immutable block publication remains the existing content-store/provider boundary;
-a PublishReceipt needs a truthful durable block ACK from the deploying composition.
-The backend currently schedules metadata operations, not the entire blob transfer.
+All fresh content and authority transactions update the same internal home sequence.
+Native write-conflict detection must protect that row. This prevents a
+snapshot-isolation write-skew race between retiring authority and a content write
+that only read its old state. Provider qualification tests this premise.
 
-* Executable evidence
+These are physical version/CAS guarantees. The Host authenticates administrative
+updates and binds commitments to its actual key/policy/revocation snapshot.
+An independently mutable external registry is synchronized only if it participates
+in this durable version protocol. A copied CommerceAdmissionHost or arbitrary
+caller commitment does not prove that integration. Domain-specific authority
+binding and malicious storage rollback remain separate open gates.
 
-[[file:../../crates/mrr-data-backend/tests/integration/backend_consumer.rs][Independent file-backed consumers]] check separate Profiles and namespaces,
-exact operation/body conflicts, replay after later head changes, validator refusal,
-two independently opened instances racing one head, cancellation with an owned
-commit, reserved historical reads, drain/shutdown, input bounds, schema refusal,
-lost ACK recovery and refusal to recreate missing metadata tables.
+* Optional Turso provider
 
-A subprocess exits directly without Rust destructors after a FULL commit; reopening
-recovers its receipt/head. Another exits during an uncommitted deletion transaction;
-reopening retains the original head and receipt. These exercise actual SQLite
-files/WAL and process-exit recovery. They do not simulate power failure, every
-filesystem boundary, malicious rollback or multi-host/network filesystems.
+[[file:../../crates/mrr-data-backend/src/providers/turso.rs][TursoProvider]] pins the native Rust Turso crate =0.7.2= with default features
+disabled. It uses the Host executor from bounded blocking workers and separate
+writer/read connections. Physical transactions use the SDK's local engine;
+FULL durability mode is explicitly selected and checked, busy waits are bounded,
+and completed operations persist before a success receipt. SDK/database dialect
+calls stay inside this optional module. No legacy libSQL/SQLite driver is selected.
 
-The [[file:../../crates/mrr-data-commerce/tests/integration/agentic_ai/commerce/budget_transactions.rs][signed budget consumer]] enrolls a genesis budget through the ordinary
-absent-head commit, validates a signed reservation with the shared backend,
-closes/reopens, recovers the exact receipt and proves replay skips admission.
-No separate Commerce backend was created.
+The configured file has a versioned provider schema marker. Foreign/incompatible
+files and missing metadata tables refuse opening rather than recreate authority.
+This is a local provider: remote sync, embedded replicas, remote authentication
+and multi-process/multi-host writer fencing are not qualified by these consumers.
+
+* Optional DuckDB provider
+
+[[file:../../crates/mrr-data-backend/src/providers/duckdb.rs][DuckDbProvider]] pins the Rust client =1.10502.0= and its bundled native library.
+All provider instances for a canonical local path share one native database
+handle through a weak, lifecycle-bound registry; independent writer/read connections
+are cloned from that handle. Calling the native open API independently is not used
+as a cross-instance synchronization guarantee. Relative/symlink aliases resolve
+to the canonical identity; Unix hard-linked database files refuse before opening.
+The last provider closes the native anchor after its connections drain, and final
+close is synchronized with reopen. The provider uses native transactions. COMMIT ambiguity stays Unknown; a native write conflict never becomes
+an Applied receipt. The common home sequence makes concurrent authority/content
+transactions contend on an actual modified record, preventing read-only guard
+checks from relying on snapshot isolation alone.
+
+The declared local capability is a single writer process. This module does not
+turn DuckDB into a multi-process/distributed coordination service. Native build
+and execution costs are incurred only when the DuckDB feature is explicitly enabled.
+
+* Executable evidence and compatibility boundary
+
+The [[file:../../crates/mrr-data-backend/tests/integration/backend_consumer.rs][same consumers]] run against each selected provider independently: content
+CAS/replay, namespace isolation, two instances, lost ACK, canceled callbacks,
+owned accepted work, separate recovery, count/byte saturation, drain, provider
+schema refusal, process exit recovery and uncommitted rollback. Authority consumers
+exercise mandatory guard enforcement, rotation/retirement, exact old update replay,
+ABA, ordering, bounded enrollment and restart. DuckDB consumers additionally check
+canonical aliases, continued recovery after another instance closes, and refusal
+of hard-linked database files. The DuckDB-specific consumer holds
+a content validator while another connection commits retirement, then requires
+that content transaction to refuse through native write-conflict protection.
+
+The [[file:../../crates/mrr-data-commerce/tests/integration/agentic_ai/commerce/budget_transactions.rs][signed budget consumer]] uses the optional Turso provider through the same
+generic port. Fixtures stay byte-identical to the shared Cedar pin. It covers
+fixed-authority signed admission, restart and exact replay, not live external
+revocation integration or payment release.
+
+The former SQLite provider is removed directly. Its database schema is not adopted
+or reset by these providers; no compatibility shim or automatic migration exists.
+Existing files must remain protected while a separately authorized migration is
+qualified. No path silently resets pending/spent/operation history.
 
 #+begin_src sh
+cargo test -p mrr-data-backend --no-default-features --locked
+cargo test -p mrr-data-backend --features turso --locked -- --nocapture
+cargo test -p mrr-data-backend --features duckdb --locked -- --nocapture
 just test-backend
-just clippy-backend
 python3 tools/check-features.py
+python3 tools/check-spec-fixtures.py --spec-root /path/to/pinned/cedar
 #+end_src
 
-* Remaining performance and lifecycle qualification
+* Open performance and deployment gates
 
-One SQLite writer serializes metadata across independent homes. This is a
-correctness baseline, not a claimed high-throughput scheduler. Home partitioning,
-provider pooling, group flush and integrated immutable publication need matched
-measurements before selection. Exposed status reports active writes/recovery,
-retained write bytes and completed workers; latency histograms/tenant fairness
-and durable retention/GC are not implemented yet. There is no automatic ledger
-expiration that could make a reused operation fresh.
+Matched hot-home/independent-home throughput and p50/p95/p99 remain required;
+provider selection and batching are not presented as measured optimizations.
+Integrated blob-transfer scheduling, native cache budgets, fairness/latency metrics,
+durable retention/GC, power-loss injection and authenticated latest-head/anti-rollback
+are still open. Immutable block publication retains its own truthful durable ACK.
 
-Next qualification: matched hot-home/independent-home throughput and p50/p95/p99,
-byte saturation and provider stalls, physical fault injection at durable boundaries,
-authenticated latest-head/incarnation and live authority-version composition.
-Further providers reuse the same engine and conformance consumers; they are
-modules/features, not independent backend engines.
+* Primary provider references
 
-* Primary API references
-
-- [[https://www.sqlite.org/wal.html][SQLite WAL and durability]]: transaction/reader behavior and FULL versus NORMAL.
-- [[https://docs.rs/rusqlite/0.40.2/rusqlite/struct.Connection.html][rusqlite 0.40.2 Connection]]: immediate transactions, busy timeout and closing.
-- [[https://docs.rs/tokio/1.53.1/tokio/task/fn.spawn_blocking.html][Tokio blocking worker contract]]: started blocking work cannot be reliably aborted.
+- [[https://docs.rs/turso/0.7.2/turso/][Turso native Rust SDK]]: optional native binding and transaction APIs.
+- [[https://duckdb.org/docs/current/connect/concurrency][DuckDB concurrency]]: declared single-process local write capability.
+- [[https://duckdb.org/docs/lts/sql/statements/transactions][DuckDB transactions]]: persistence and snapshot-isolation boundary.
+- [[https://docs.rs/tokio/1.53.1/tokio/task/fn.spawn_blocking.html][Tokio blocking work]]: accepted blocking workers require explicit ownership.

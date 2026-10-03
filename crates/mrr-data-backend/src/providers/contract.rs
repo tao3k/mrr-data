@@ -1,5 +1,8 @@
 //! Blocking metadata capabilities; the engine isolates them from executor threads.
-use crate::{BackendError, ProviderCapabilities, StoredOutcome, StoredRevision, StoredWrite};
+use crate::{
+    AuthorityChange, AuthorityKey, AuthorityState, BackendError, ProviderCapabilities,
+    StoredOutcome, StoredRevision, StoredWrite,
+};
 use mrr_data_content::{ConditionalCommitPortError, ContentRevision, PublishReceipt};
 /// Separate known refusal, validation failure and ambiguous commit.
 pub type ProviderResult<T> = Result<T, ConditionalCommitPortError<BackendError, ()>>;
@@ -31,4 +34,20 @@ pub trait MetadataProvider: Send + Sync + 'static {
     /// # Errors
     /// A failed barrier/close does not establish clean shutdown.
     fn close(&self) -> Result<(), BackendError>;
+    /// # Errors
+    /// Unsupported providers refuse version operations; absence requires lookup.
+    fn authority(&self, _key: &AuthorityKey) -> ProviderResult<Option<AuthorityState>> {
+        Err(ConditionalCommitPortError::BeforeCommit(
+            BackendError::UnsupportedCapabilities,
+        ))
+    }
+    /// Persist next authority generation and exact update history together.
+    /// Exact retry returns its historical generation even after later updates.
+    /// # Errors
+    /// Compare conflict, terminal retirement, known failure or Unknown COMMIT.
+    fn advance_authority(&self, _change: &AuthorityChange) -> ProviderResult<AuthorityState> {
+        Err(ConditionalCommitPortError::BeforeCommit(
+            BackendError::UnsupportedCapabilities,
+        ))
+    }
 }

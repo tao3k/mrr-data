@@ -433,7 +433,7 @@ fn competing_signed_children_share_one_head_and_retry_cannot_exceed_root_cap() {
 
 #[test]
 fn shared_backend_persists_signed_budget_and_replays_after_reopen() {
-    use mrr_data_backend::{Backend, BackendConfig, providers::SqliteProvider};
+    use mrr_data_backend::{Backend, BackendConfig, providers::TursoProvider};
     use mrr_data_content::CacheAdmission;
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let dir = tempfile::tempdir().unwrap();
@@ -442,7 +442,7 @@ fn shared_backend_persists_signed_budget_and_replays_after_reopen() {
     let backend = runtime
         .block_on(Backend::open(
             BackendConfig::default(),
-            SqliteProvider::new(path.clone()),
+            TursoProvider::new(path.clone(), runtime.handle().clone()),
             runtime.handle().clone(),
         ))
         .unwrap();
@@ -487,7 +487,7 @@ fn shared_backend_persists_signed_budget_and_replays_after_reopen() {
     let reopened = runtime
         .block_on(Backend::open(
             BackendConfig::default(),
-            SqliteProvider::new(path),
+            TursoProvider::new(path, runtime.handle().clone()),
             runtime.handle().clone(),
         ))
         .unwrap();
