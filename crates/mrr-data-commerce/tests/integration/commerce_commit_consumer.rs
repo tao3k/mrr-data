@@ -342,3 +342,7 @@ mod credentials;
 #[cfg(feature = "consumption")]
 #[path = "agentic_ai/commerce/consumption.rs"]
 mod consumption;
+
+#[cfg(feature = "presentation")]
+#[path = "agentic_ai/commerce/presentation.rs"]
+mod presentation;

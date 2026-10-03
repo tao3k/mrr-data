@@ -66,7 +66,7 @@ impl TestPort {
         self.0.lock().unwrap().unavailable = true;
     }
 }
-#[cfg(feature = "consumption")]
+#[cfg(any(feature = "consumption", feature = "presentation"))]
 impl TestPort {
     pub(super) fn lose_ack(&self) {
         self.0.lock().unwrap().lose_ack = true;

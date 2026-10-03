@@ -12,3 +12,6 @@ pub mod recovery;
 #[cfg(test)]
 #[path = "../tests/unit/asp_rust_gate.rs"]
 mod asp_rust_gate;
+
+#[cfg(feature = "presentation")]
+pub mod presentation;

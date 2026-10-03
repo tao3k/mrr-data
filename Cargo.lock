@@ -634,8 +634,9 @@ dependencies = [
 [[package]]
 name = "cedar-poo-commerce"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/cedar-poo-spec?rev=211d6331661ffcfb8d361687c07ff72748c7da59#211d6331661ffcfb8d361687c07ff72748c7da59"
+source = "git+https://github.com/tao3k/cedar-poo-spec?rev=101aff3b6c11769dfc6e8e727e31437383d5f351#101aff3b6c11769dfc6e8e727e31437383d5f351"
 dependencies = [
+ "base64 0.23.1",
  "p256",
  "serde",
  "serde_json",
@@ -645,7 +646,7 @@ dependencies = [
 [[package]]
 name = "cedar-poo-pseudonymization"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/cedar-poo-spec?rev=211d6331661ffcfb8d361687c07ff72748c7da59#211d6331661ffcfb8d361687c07ff72748c7da59"
+source = "git+https://github.com/tao3k/cedar-poo-spec?rev=101aff3b6c11769dfc6e8e727e31437383d5f351#101aff3b6c11769dfc6e8e727e31437383d5f351"
 dependencies = [
  "base64 0.23.1",
  "serde",
@@ -2962,6 +2963,7 @@ dependencies = [
 name = "mrr-data-commerce"
 version = "0.1.0"
 dependencies = [
+ "base64 0.23.1",
  "cedar-poo-commerce",
  "mrr-data-asp-rust-build-support",
  "mrr-data-content",

@@ -8,7 +8,7 @@ from pathlib import Path
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-CASES = [None, "", "commerce-cedar", "commerce-credential", "commerce-consumption", "arrow", "content-identity", "content", "snapshot", "transfer", "car", "filesystem", "cache", "s3",
+CASES = [None, "", "commerce-cedar", "commerce-credential", "commerce-consumption", "commerce-presentation", "arrow", "content-identity", "content", "snapshot", "transfer", "car", "filesystem", "cache", "s3",
          "data-protection", "raw-publish", "protected-envelope", "protected-publish", "datafusion", "graphar", "content-identity,graphar", "cache,s3", "snapshot,cache,s3", "transfer,cache,s3",
          "arrow,content-identity,content,snapshot,transfer,raw-publish,protected-publish,car,filesystem,cache,s3,datafusion,graphar"]
 
@@ -24,7 +24,7 @@ def main():
         if selected:
             flags += ["--features", selected]
         enabled = {"arrow", "filesystem"} if selected is None else set(selected.split(","))
-        if enabled & {"commerce-cedar", "commerce-credential", "commerce-consumption"}:
+        if enabled & {"commerce-cedar", "commerce-credential", "commerce-consumption", "commerce-presentation"}:
             enabled |= {"commerce-cedar", "content"}
         content = bool(enabled & {"content", "snapshot", "transfer", "raw-publish", "protected-envelope", "protected-publish", "car", "filesystem", "cache", "s3", "datafusion"})
         identity = content or bool(enabled & {"content-identity", "data-protection"})
