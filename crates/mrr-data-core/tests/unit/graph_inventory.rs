@@ -219,3 +219,70 @@ fn distinct_paths_can_share_content_without_undercounting_declared_bytes() {
         Err(GraphInventoryError::Limit)
     );
 }
+
+#[test]
+fn streamed_identity_matches_borrowed_identity_and_refuses_read_overflow() {
+    let bytes = vec![7u8; 100_000];
+    let limits = GraphInventoryLimits::default();
+    let streamed = GraphFile::from_reader(
+        "chunk0".into(),
+        bytes.as_slice(),
+        GraphFileKind::Parquet,
+        limits,
+    )
+    .unwrap();
+    assert_eq!(
+        streamed,
+        GraphFile::new("chunk0".into(), &bytes, GraphFileKind::Parquet)
+    );
+    assert_eq!(
+        GraphFile::from_reader(
+            "chunk0".into(),
+            bytes.as_slice(),
+            GraphFileKind::Parquet,
+            GraphInventoryLimits {
+                max_total_bytes: 99_999,
+                ..limits
+            }
+        ),
+        Err(GraphInventoryError::Limit)
+    );
+    let broken = std::io::Read::take(std::io::repeat(1), 100);
+    assert_eq!(
+        GraphFile::from_reader(
+            "chunk0".into(),
+            broken,
+            GraphFileKind::Parquet,
+            GraphInventoryLimits {
+                max_total_bytes: 10,
+                ..limits
+            }
+        ),
+        Err(GraphInventoryError::Limit)
+    );
+}
+
+#[test]
+fn stream_budget_reads_only_one_probe_byte_and_io_failure_refuses() {
+    struct Broken;
+    impl std::io::Read for Broken {
+        fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::other("read failed"))
+        }
+    }
+    let bytes = vec![1u8; 100_000];
+    let mut cursor = std::io::Cursor::new(&bytes);
+    let limits = GraphInventoryLimits {
+        max_total_bytes: 10,
+        ..GraphInventoryLimits::default()
+    };
+    assert_eq!(
+        GraphFile::from_reader("chunk0".into(), &mut cursor, GraphFileKind::Parquet, limits),
+        Err(GraphInventoryError::Limit)
+    );
+    assert_eq!(cursor.position(), 11);
+    assert_eq!(
+        GraphFile::from_reader("chunk0".into(), Broken, GraphFileKind::Parquet, limits),
+        Err(GraphInventoryError::Io)
+    );
+}

@@ -6,12 +6,17 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use crate::inventory::{
+    GraphArInventoryError, inventory_graphar_directory, validate_inventory_limits,
+};
 use graphar_rs::{
     builder::{Edge, EdgesBuilder, Vertex, VerticesBuilder},
     info::{AdjListType, AdjacentList, EdgeInfo, GraphInfo, InfoVersion, VertexInfo},
     property::{Property, PropertyGroup, PropertyVec},
     types::{Cardinality, DataType, FileType},
 };
+use mrr_data_core::{GraphDatasetInventory, GraphInventoryLimits};
+
 use meta_relational_reasoning::{
     EvidenceCompleteness, FactId, FactProvenance, FactValidity, RelationAuthority, RelationId,
 };
@@ -35,9 +40,16 @@ const EDGE_INFO_FILE: &str = "entity_mrr_relation_entity.edge.yaml";
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GraphArDatasetReceipt {
     query_source: GraphArQuerySource,
+    inventory: GraphDatasetInventory,
 }
 
 impl GraphArDatasetReceipt {
+    /// Exact physical file identities observed before the staging directory rename.
+    #[must_use]
+    pub const fn inventory(&self) -> &GraphDatasetInventory {
+        &self.inventory
+    }
+
     #[must_use]
     pub fn root(&self) -> &Path {
         self.query_source.root()
@@ -83,6 +95,7 @@ pub enum GraphArWriteError {
     },
     Projection(GraphProjectionError),
     Native(graphar_rs::Error),
+    Inventory(GraphArInventoryError),
 }
 
 impl GraphArWriteError {
@@ -108,6 +121,7 @@ impl Error for GraphArWriteError {
         match self {
             Self::Projection(error) => Some(error),
             Self::Native(error) => Some(error),
+            Self::Inventory(error) => Some(error),
             _ => None,
         }
     }
@@ -133,6 +147,19 @@ pub fn write_graphar_dataset(
     projection: &BinaryEntityProjection,
     edges: &[GraphEdgeRecord],
 ) -> Result<GraphArDatasetReceipt, GraphArWriteError> {
+    write_graphar_dataset_with_limits(output, projection, edges, GraphInventoryLimits::default())
+}
+
+/// Write a dataset with explicit physical inventory budgets checked before rename.
+/// # Errors
+/// Refuses invalid input, native/filesystem failures or physical inventory limits.
+pub fn write_graphar_dataset_with_limits(
+    output: impl AsRef<Path>,
+    projection: &BinaryEntityProjection,
+    edges: &[GraphEdgeRecord],
+    inventory_limits: GraphInventoryLimits,
+) -> Result<GraphArDatasetReceipt, GraphArWriteError> {
+    validate_inventory_limits(inventory_limits).map_err(GraphArWriteError::Inventory)?;
     let output = output.as_ref();
     validate_batch(projection, edges)?;
     match fs::symlink_metadata(output) {
@@ -160,12 +187,15 @@ pub fn write_graphar_dataset(
 
     let (vertex_count, edge_count) =
         write_staged(staging.path(), &committed_prefix, projection, edges)?;
+    let inventory = inventory_graphar_directory(staging.path(), inventory_limits)
+        .map_err(GraphArWriteError::Inventory)?;
     let staged_path = staging.keep();
     if let Err(error) = fs::rename(&staged_path, output) {
         let _ = fs::remove_dir_all(&staged_path);
         return Err(GraphArWriteError::io("commit dataset", &error));
     }
     Ok(GraphArDatasetReceipt {
+        inventory,
         query_source: GraphArQuerySource::new(
             output.to_path_buf(),
             projection,

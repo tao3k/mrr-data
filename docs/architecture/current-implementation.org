@@ -298,5 +298,10 @@ The optional core =content-identity= feature now exports a standalone
 =GraphDatasetInventory= with canonical root verification, portable logical
 paths, per-file RAW CID/length verification and declared resource limits.
 It adds no native database dependency and preserves existing snapshot wire
-bindings. Native metadata traversal, complete dataset enumeration, generation
-binding, filesystem sealing and Backend publication remain RFC 0002 gates.
+bindings. The optional GraphAr =file-inventory= feature enumerates physical
+files with bounded streaming hashes and verifies exact directory contents. The
+native writer records this inventory before rename; explicit writer limits are
+available. Count width and Parquet framing are checked, without claiming schema
+validation. Arbitrary metadata-reference closure, generation binding, filesystem
+sealing and Backend publication remain RFC 0002 gates. Receipts observe files;
+they do not prevent concurrent replacement or constrain native writer RSS.

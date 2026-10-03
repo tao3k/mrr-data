@@ -4,6 +4,8 @@
 //! that the adapter hands to the project-maintained Apache `GraphAr` fork.
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "file-inventory")]
+mod inventory;
 mod projection;
 mod query_source;
 #[cfg(feature = "native-graphar")]
@@ -11,6 +13,8 @@ mod reader;
 #[cfg(feature = "native-graphar")]
 mod writer;
 
+#[cfg(feature = "file-inventory")]
+pub use inventory::{GraphArInventoryError, inventory_graphar_directory, verify_graphar_directory};
 pub use mrr_data_profile::{GRAPHAR_BINARY_ENTITY_NAMESPACE, GRAPHAR_BINARY_ENTITY_VERSION};
 pub use projection::{
     BinaryEntityProjection, GraphEdgeRecord, GraphProjectionError, IndexedGraphEdge,
@@ -24,7 +28,10 @@ pub use reader::{
     read_graphar_dataset, read_graphar_dataset_observed,
 };
 #[cfg(feature = "native-graphar")]
-pub use writer::{GraphArDatasetReceipt, GraphArWriteError, write_graphar_dataset};
+pub use writer::{
+    GraphArDatasetReceipt, GraphArWriteError, write_graphar_dataset,
+    write_graphar_dataset_with_limits,
+};
 
 #[cfg(test)]
 #[path = "../tests/unit/mod.rs"]

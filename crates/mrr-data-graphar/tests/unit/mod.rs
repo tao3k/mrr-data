@@ -5,3 +5,6 @@ mod query_parity;
 mod scenarios;
 #[cfg(feature = "native-graphar")]
 mod writer;
+
+#[cfg(feature = "file-inventory")]
+mod inventory;

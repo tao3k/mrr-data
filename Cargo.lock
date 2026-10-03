@@ -3779,6 +3779,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_ipld_dagcbor 0.7.0",
+ "sha2 0.10.9",
 ]
 
 [[package]]

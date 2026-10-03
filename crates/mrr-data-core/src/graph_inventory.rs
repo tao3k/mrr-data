@@ -2,6 +2,7 @@
 use crate::{RAW_CODEC, dag_cbor_cid, profile::validate_cid, raw_cid};
 use cid::Cid;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 /// Physical files supported by the initial `GraphAr` inventory profile.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -29,6 +30,53 @@ impl GraphFile {
             byte_length: bytes.len() as u64,
             kind,
         }
+    }
+    /// Hash a bounded reader with a fixed 32 KiB scratch buffer.
+    /// # Errors
+    /// Refuses invalid paths/limits, I/O failures, empty input or byte overflow.
+    pub fn from_reader(
+        path: String,
+        mut reader: impl std::io::Read,
+        kind: GraphFileKind,
+        limits: GraphInventoryLimits,
+    ) -> Result<Self, GraphInventoryError> {
+        validate_limits(limits)?;
+        validate_path(&path, limits.max_path_bytes)?;
+        let mut hasher = Sha256::new();
+        let mut buffer = vec![0u8; 32 * 1024].into_boxed_slice();
+        let mut byte_length = 0u64;
+        loop {
+            let remaining = limits.max_total_bytes - byte_length;
+            let capacity = usize::try_from(remaining.saturating_add(1))
+                .unwrap_or(usize::MAX)
+                .min(buffer.len());
+            let read = match reader.read(&mut buffer[..capacity]) {
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(_) => return Err(GraphInventoryError::Io),
+                Ok(read) => read,
+            };
+            if read == 0 {
+                break;
+            }
+            byte_length = byte_length
+                .checked_add(read as u64)
+                .ok_or(GraphInventoryError::Limit)?;
+            if byte_length > limits.max_total_bytes {
+                return Err(GraphInventoryError::Limit);
+            }
+            hasher.update(&buffer[..read]);
+        }
+        if byte_length == 0 {
+            return Err(GraphInventoryError::Limit);
+        }
+        let hash = cid::multihash::Multihash::<64>::wrap(crate::SHA2_256_CODE, &hasher.finalize())
+            .map_err(|_| GraphInventoryError::InvalidCid)?;
+        Ok(Self {
+            path,
+            cid: Cid::new_v1(RAW_CODEC, hash),
+            byte_length,
+            kind,
+        })
     }
     #[must_use]
     pub fn path(&self) -> &str {
@@ -77,6 +125,7 @@ impl Default for GraphInventoryLimits {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum GraphInventoryError {
     Configuration,
+    Io,
     Limit,
     InvalidPath,
     DuplicatePath,
