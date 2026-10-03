@@ -228,6 +228,8 @@ every refused operation. Readers are capped at 8,192 operations each and produce
 collection at 30 seconds. Read-start overlap records producer activity; it does
 not prove simultaneous execution inside both native connections. Close timing is
 quiescent; the held-writer experiment above qualifies busy drain separately.
+[[file:../benchmarks/shared-backend-sustained.org][The continuous producer receipt]] records the exact source, separate refusal latency,
+reopen absence checks and the limits of this finite workload.
 
 [[file:../benchmarks/shared-backend-dispatch.org][The dispatch and mixed recovery receipt]] preserves both reproduced defects,
 the exact post-fix source, all mixed-load rounds and the rerun metadata baseline.
