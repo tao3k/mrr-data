@@ -1,7 +1,7 @@
 //! Optional Cedar POO pseudonymization profile for MRR Data snapshots.
 #![forbid(unsafe_code)]
 
-pub use cedar_poo_bridge::pseudonymization::{Mode, TokenLineage, TokenProfile};
+pub use cedar_poo_pseudonymization::pseudonymization::{Mode, TokenLineage, TokenProfile};
 mod authorization;
 mod binding;
 pub use authorization::{
@@ -36,7 +36,7 @@ pub use google_sdp_binding::{
 /// Optional Google Sensitive Data Protection wire contract, without a cloud
 /// SDK or Cedar runtime dependency.
 #[cfg(feature = "google-sdp")]
-pub use cedar_poo_bridge::google_sdp;
+pub use cedar_poo_pseudonymization::google_sdp;
 
 #[cfg(test)]
 #[path = "../tests/unit/mod.rs"]

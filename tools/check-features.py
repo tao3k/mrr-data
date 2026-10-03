@@ -8,7 +8,7 @@ from pathlib import Path
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-CASES = [None, "", "arrow", "content-identity", "content", "snapshot", "transfer", "car", "filesystem", "cache", "s3",
+CASES = [None, "", "commerce-cedar", "commerce-credential", "commerce-consumption", "arrow", "content-identity", "content", "snapshot", "transfer", "car", "filesystem", "cache", "s3",
          "data-protection", "raw-publish", "protected-envelope", "protected-publish", "datafusion", "graphar", "content-identity,graphar", "cache,s3", "snapshot,cache,s3", "transfer,cache,s3",
          "arrow,content-identity,content,snapshot,transfer,raw-publish,protected-publish,car,filesystem,cache,s3,datafusion,graphar"]
 
@@ -24,9 +24,14 @@ def main():
         if selected:
             flags += ["--features", selected]
         enabled = {"arrow", "filesystem"} if selected is None else set(selected.split(","))
+        if enabled & {"commerce-cedar", "commerce-credential", "commerce-consumption"}:
+            enabled |= {"commerce-cedar", "content"}
         content = bool(enabled & {"content", "snapshot", "transfer", "raw-publish", "protected-envelope", "protected-publish", "car", "filesystem", "cache", "s3", "datafusion"})
         identity = content or bool(enabled & {"content-identity", "data-protection"})
         expected = {
+            "mrr-data-commerce": "commerce-cedar" in enabled,
+            "cedar-poo-commerce": "commerce-cedar" in enabled,
+            "p256": "commerce-cedar" in enabled,
             "mrr-data-arrow": bool(enabled & {"arrow", "datafusion"}),
             "mrr-data-core": identity or "datafusion" in enabled,
             "mrr-data-content": content,
@@ -34,7 +39,7 @@ def main():
             "mrr-data-security": bool(enabled & {"data-protection", "raw-publish", "protected-envelope", "protected-publish"}),
             "tokio": bool(enabled & {"s3", "transfer", "raw-publish", "protected-publish", "datafusion"}),
             "ring": bool(enabled & {"protected-envelope", "protected-publish", "s3"}),
-            "zeroize": bool(enabled & {"protected-envelope", "protected-publish", "s3"}),
+            "zeroize": bool(enabled & {"protected-envelope", "protected-publish", "s3", "commerce-cedar"}),
             "cid": identity,
             "serde_ipld_dagcbor": identity,
             "fvm_ipld_car": "car" in enabled,

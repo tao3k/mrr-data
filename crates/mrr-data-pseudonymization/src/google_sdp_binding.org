@@ -3,7 +3,7 @@
 
 [[file:google_sdp_binding.rs][google_sdp_binding.rs]] checks one selected
 tabular AES-SIV input against its MRR Data snapshot binding before constructing
-the public =cedar-poo-bridge= Google SDP request. It first compares the
+the public =cedar-poo-pseudonymization= Google SDP request. It first compares the
 Host-authenticated authorization claim and current governance state; then the
 selected dataset, field, actual context, complete token profile, and SHA-256
 of the exact UTF-8 selected value must agree. The bridge then checks the

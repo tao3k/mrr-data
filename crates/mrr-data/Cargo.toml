@@ -17,6 +17,9 @@ data-protection = ["dep:mrr-data-security"]
 raw-publish = ["data-protection", "transfer", "mrr-data-security/raw-publish"]
 protected-envelope = ["data-protection", "content", "mrr-data-security/protected-envelope"]
 protected-publish = ["protected-envelope", "transfer", "filesystem", "mrr-data-security/protected-publish"]
+commerce-cedar = ["content", "dep:mrr-data-commerce"]
+commerce-credential = ["commerce-cedar", "mrr-data-commerce/credential"]
+commerce-consumption = ["commerce-credential", "mrr-data-commerce/consumption"]
 pseudonymization = ["data-protection"]
 pseudonymization-cedar = ["pseudonymization", "dep:mrr-data-pseudonymization"]
 google-sdp = ["pseudonymization-cedar", "mrr-data-pseudonymization/google-sdp"]
@@ -30,6 +33,7 @@ graphar = ["dep:mrr-data-graphar"]
 graphar-native = ["graphar", "mrr-data-graphar/native-graphar"]
 
 [dependencies]
+mrr-data-commerce = { path = "../mrr-data-commerce", version = "0.1.0", default-features = false, optional = true }
 mrr-data-cache = { workspace = true, optional = true }
 mrr-data-arrow = { workspace = true, optional = true }
 mrr-data-content = { workspace = true, optional = true }

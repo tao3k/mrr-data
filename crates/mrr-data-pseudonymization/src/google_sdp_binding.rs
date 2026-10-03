@@ -1,6 +1,6 @@
 //! Bind a Google SDP AES-SIV request to an MRR Data selected input.
 
-use cedar_poo_bridge::google_sdp::{
+use cedar_poo_pseudonymization::google_sdp::{
     CheckedTableOutput, GoogleSdpRequest, GoogleSdpResponse, SelectedTabularInput, TabularAesSiv,
     TabularAesSivBatch, WrappedKeyBinding,
 };

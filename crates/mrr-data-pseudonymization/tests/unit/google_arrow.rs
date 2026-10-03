@@ -1,4 +1,4 @@
-use cedar_poo_bridge::google_sdp::SelectedTabularInput;
+use cedar_poo_pseudonymization::google_sdp::SelectedTabularInput;
 use meta_relational_reasoning::{
     EntityCatalog, EntityId, EvidenceCompleteness, ExternalRevisionIdentity, Fact, FactId,
     FactProvenance, FactValidity, GenerationId, RelationAuthority, RelationCatalog,
@@ -331,7 +331,9 @@ fn arrow_selection_reads_the_child_local_row_and_rejects_drift() {
     reason = "complete cloud authorization and physical Arrow selection fixture"
 )]
 fn cloud_prepare_requires_authorization_then_actual_arrow_cells() {
-    use cedar_poo_bridge::google_sdp::{GoogleSdpResponse, SurrogateInfoType, WrappedKeyBinding};
+    use cedar_poo_pseudonymization::google_sdp::{
+        GoogleSdpResponse, SurrogateInfoType, WrappedKeyBinding,
+    };
     use mrr_data_security::data_protection::{
         DataProtectionDecisions, DataProtectionProfile, ReleaseReceiptClaim,
     };

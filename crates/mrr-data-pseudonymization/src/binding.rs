@@ -1,6 +1,6 @@
 //! Snapshot, selected input, and token-profile composition.
 
-use cedar_poo_bridge::pseudonymization::TokenProfile;
+use cedar_poo_pseudonymization::pseudonymization::TokenProfile;
 use mrr_data_core::{SnapshotBlock, SnapshotRowBinding};
 use mrr_data_security::data_protection::PseudonymizationInputBinding;
 use std::collections::HashMap;
@@ -59,7 +59,7 @@ pub fn compatible_inputs(left: &TokenInputBinding<'_>, right: &TokenInputBinding
 pub fn hmac_catalog_separated(profiles: &[TokenProfile<'_>]) -> bool {
     let mut scopes = HashMap::with_capacity(profiles.len());
     for profile in profiles {
-        if profile.mode != cedar_poo_bridge::pseudonymization::Mode::HmacSha256 {
+        if profile.mode != cedar_poo_pseudonymization::pseudonymization::Mode::HmacSha256 {
             continue;
         }
         let key = (

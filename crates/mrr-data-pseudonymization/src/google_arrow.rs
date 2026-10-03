@@ -1,6 +1,6 @@
 //! Exact MRR Arrow row selection for the Cedar POO AES-SIV table model.
 
-use cedar_poo_bridge::google_sdp::{SelectedTabularInput, WrappedKeyBinding};
+use cedar_poo_pseudonymization::google_sdp::{SelectedTabularInput, WrappedKeyBinding};
 use cid::Cid;
 use meta_relational_reasoning::{
     EntityCatalog, Fact, RelationCatalog, RelationId, RelationSchema, Value,

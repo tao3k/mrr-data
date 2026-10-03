@@ -4,7 +4,7 @@
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 
-use cedar_poo_bridge::google_sdp::{
+use cedar_poo_pseudonymization::google_sdp::{
     GoogleSdpResponse, SelectedTabularInput, TabularAesSiv, WrappedKeyBinding,
 };
 use meta_relational_reasoning::{

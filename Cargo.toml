@@ -9,6 +9,7 @@ members = [
   "crates/mrr-data-core",
   "crates/mrr-data-security",
   "crates/mrr-data-pseudonymization",
+  "crates/mrr-data-commerce",
   "crates/mrr-data-datafusion",
   "crates/mrr-data-graphar",
   "crates/mrr-data-profile",

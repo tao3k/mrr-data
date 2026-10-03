@@ -1,0 +1,27 @@
+[package]
+name = "mrr-data-commerce"
+version.workspace = true
+edition.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+description = "MRR conditional commits, recovered credentials and consumption for commerce"
+
+[features]
+default = []
+credential = ["dep:p256"]
+consumption = ["credential"]
+
+[dependencies]
+cedar-poo-commerce = { git = "https://github.com/tao3k/cedar-poo-spec", rev = "e587fa5c4e9eb6a92b5599a88f894f5bdd6407c9", default-features = false, features = ["admission"] }
+mrr-data-content.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+p256 = { version = "=0.13.2", default-features = false, features = ["ecdsa"], optional = true }
+
+[dev-dependencies]
+p256 = { version = "=0.13.2", default-features = false, features = ["ecdsa"] }
+mrr-data-asp-rust-build-support.workspace = true
+
+[[test]]
+name = "commerce_commit_consumer"
+path = "tests/integration/commerce_commit_consumer.rs"

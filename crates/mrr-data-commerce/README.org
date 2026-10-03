@@ -1,0 +1,25 @@
+#+TITLE: MRR Data Commerce Integration
+
+This integration depends on Cedar's storage-independent Commerce admission API
+and MRR Data's conditional content commit protocol. Cedar never imports MRR.
+The crate owns shared-budget commits, =credential= recovery and =consumption=
+(including provider-bound permits). Default features enable budget commits only.
+
+The migrated consumer tests use =tests/fixtures/commerce-projection-v1.json=,
+whose exact bytes are checked against the same immutable Cedar pin as the API.
+Cedar's projection check compares this fixture with an actual Lean export.
+
+#+begin_src sh
+cargo test --locked -p mrr-data-commerce
+cargo test --locked -p mrr-data-commerce --features credential
+cargo test --locked -p mrr-data-commerce --features consumption
+#+end_src
+
+The test port is in memory. A deployed Host must authenticate current heads,
+keys, policy, revocations and time and synchronize authority through effect
+release. Unknown outcomes and replay mint no dispatch permit. These tests do
+not establish durable storage, processor execution or exactly-once payments.
+
+The facade opts in with =commerce-cedar=, =commerce-credential= or
+=commerce-consumption=. Its defaults import no Cedar Commerce code. The moved
+implementation retains the source crate's Apache-2.0 license.

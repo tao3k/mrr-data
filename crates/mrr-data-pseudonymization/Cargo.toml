@@ -9,10 +9,10 @@ repository.workspace = true
 
 [features]
 default = []
-google-sdp = ["cedar-poo-bridge/google-sdp", "dep:sha2", "dep:mrr-data-arrow"]
+google-sdp = ["cedar-poo-pseudonymization/google-sdp", "dep:sha2", "dep:mrr-data-arrow"]
 
 [dependencies]
-cedar-poo-bridge = { git = "https://github.com/tao3k/cedar-poo-spec", rev = "54af553f89b8e2682f43e62672fd8c5d98c04106", default-features = false, features = ["pseudonymization"] }
+cedar-poo-pseudonymization = { git = "https://github.com/tao3k/cedar-poo-spec", rev = "e587fa5c4e9eb6a92b5599a88f894f5bdd6407c9", default-features = false }
 cid.workspace = true
 meta-relational-reasoning.workspace = true
 mrr-data-core = { workspace = true, features = ["content-identity"] }

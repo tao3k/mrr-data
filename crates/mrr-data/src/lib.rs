@@ -45,3 +45,7 @@ pub use mrr_data_graphar as graphar;
 #[cfg(test)]
 #[path = "../tests/unit/mod.rs"]
 mod tests;
+
+/// Optional Cedar Commerce integration with MRR content commits.
+#[cfg(feature = "commerce-cedar")]
+pub use mrr_data_commerce as commerce;

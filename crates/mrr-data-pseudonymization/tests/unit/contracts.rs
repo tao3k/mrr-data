@@ -188,8 +188,8 @@ fn claim_must_match_exact_effect_and_current_governance() {
 fn google_selected(
     value: &str,
     dataset: &str,
-) -> cedar_poo_bridge::google_sdp::SelectedTabularInput {
-    cedar_poo_bridge::google_sdp::SelectedTabularInput {
+) -> cedar_poo_pseudonymization::google_sdp::SelectedTabularInput {
+    cedar_poo_pseudonymization::google_sdp::SelectedTabularInput {
         dataset: dataset.into(),
         value_field: "patient_id".into(),
         context_field: "study_context".into(),
@@ -204,8 +204,8 @@ fn google_selected(
 }
 
 #[cfg(feature = "google-sdp")]
-fn google_key() -> cedar_poo_bridge::google_sdp::WrappedKeyBinding {
-    cedar_poo_bridge::google_sdp::WrappedKeyBinding {
+fn google_key() -> cedar_poo_pseudonymization::google_sdp::WrappedKeyBinding {
+    cedar_poo_pseudonymization::google_sdp::WrappedKeyBinding {
         key_domain: "research-key".into(),
         token_key_version: "key-1".into(),
         wrapping_version: "wrapper-1".into(),
@@ -222,7 +222,7 @@ fn google_key() -> cedar_poo_bridge::google_sdp::WrappedKeyBinding {
 )]
 fn google_request_requires_exact_snapshot_selection() {
     use crate::{CurrentGovernance, GoogleCurrentAuthority, prepare_google_aes_siv_deidentify};
-    use cedar_poo_bridge::google_sdp::GoogleSdpResponse;
+    use cedar_poo_pseudonymization::google_sdp::GoogleSdpResponse;
     use sha2::{Digest, Sha256};
 
     let source = snapshot();
@@ -547,7 +547,7 @@ fn cloud_profile_requires_release_and_transformation_decisions() {
         CurrentGovernance, GoogleCurrentAuthority, GoogleSelectionMismatch,
         prepare_cloud_google_aes_siv_deidentify,
     };
-    use cedar_poo_bridge::google_sdp::GoogleSdpResponse;
+    use cedar_poo_pseudonymization::google_sdp::GoogleSdpResponse;
     use mrr_data_core::SnapshotRowBinding;
     use mrr_data_security::data_protection::{
         DataProtectionDecisions, DataProtectionMismatch, DataProtectionProfile, ReleaseReceiptClaim,
@@ -922,7 +922,7 @@ fn cloud_gate_mirrors_the_lean_recipe_tenant_context_and_artifact_relation() {
 }
 
 #[cfg(feature = "google-sdp")]
-fn google_key_for_campaign() -> cedar_poo_bridge::google_sdp::WrappedKeyBinding {
+fn google_key_for_campaign() -> cedar_poo_pseudonymization::google_sdp::WrappedKeyBinding {
     let mut key = google_key();
     key.key_domain = "campaign-key".into();
     key.token_key_version = "dek-a".into();

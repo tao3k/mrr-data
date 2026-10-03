@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "crates/mrr-data-pseudonymization/Cargo.toml"
 LOCK = ROOT / "Cargo.lock"
 FIXTURES = {
+    "commerce-projection-v1.json": ROOT / "crates/mrr-data-commerce/tests/fixtures/commerce-projection-v1.json",
     "storage-effect-v1.json": ROOT / "crates/mrr-data-security/fixtures/storage-effect-v1.json",
     "storage-profiles-v1.json": ROOT / "crates/mrr-data-security/fixtures/storage-profiles-v1.json",
     "protected-storage-v1.json": ROOT / "crates/mrr-data-security/fixtures/protected-storage-v1.json",
@@ -30,17 +31,20 @@ def command(*args: str, cwd: Path | None = None) -> bytes:
 
 def pinned_spec() -> tuple[str, str]:
     manifest = tomllib.loads(MANIFEST.read_text())
-    dependency = manifest["dependencies"]["cedar-poo-bridge"]
+    dependency = manifest["dependencies"]["cedar-poo-pseudonymization"]
     url, revision = dependency["git"], dependency["rev"]
     if url != "https://github.com/tao3k/cedar-poo-spec" or not re.fullmatch(
         r"[0-9a-f]{40}", revision
     ):
-        raise ValueError("cedar-poo-bridge must pin a full SPEC Git commit")
+        raise ValueError("cedar-poo-pseudonymization must pin a full SPEC Git commit")
     lock = tomllib.loads(LOCK.read_text())
-    packages = [p for p in lock["package"] if p["name"] == "cedar-poo-bridge"]
+    packages = [p for p in lock["package"] if p["name"] == "cedar-poo-pseudonymization"]
     expected = f"git+{url}?rev={revision}#{revision}"
     if len(packages) != 1 or packages[0].get("source") != expected:
         raise ValueError("Cargo.lock does not pin the manifest SPEC commit")
+    commerce = tomllib.loads((ROOT / "crates/mrr-data-commerce/Cargo.toml").read_text())["dependencies"]["cedar-poo-commerce"]
+    if (commerce["git"], commerce["rev"]) != (url, revision):
+        raise ValueError("Commerce and pseudonymization must use the same SPEC pin")
     return url, revision
 
 
