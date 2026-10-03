@@ -348,7 +348,9 @@ terminal report; partial batches grant no complete candidate, authorization or
 protected disclosure. The consumer can cancel explicitly or drop the query;
 queued native work is skipped and output waits wake. A driver registers a short,
 thread-safe native interrupt through =on_cancel= before executing a native call.
-Registration/cancellation races refuse execution. Running work remains owned
+Registration/cancellation races refuse execution. Interrupt callback panics are
+contained so cancellation and consumer Drop still release output and drain ownership.
+Running work remains owned
 through completion, and both returned batches and in-flight interrupt hooks hold
 the original Backend drain barrier.
 

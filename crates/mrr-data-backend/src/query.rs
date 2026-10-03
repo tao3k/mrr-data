@@ -90,9 +90,13 @@ impl Budget {
         };
         self.changed.notify_all();
         if let Some(hook) = hook {
-            hook();
+            interrupt(hook.as_ref());
         }
     }
+}
+// A Host callback must not unwind out of query cancellation or Drop.
+fn interrupt(hook: &(dyn Fn() + Send + Sync)) {
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(hook));
 }
 struct BytesLease {
     budget: Arc<Budget>,
@@ -172,7 +176,7 @@ impl ArrowQueryEmitter {
             }
         };
         if cancelled {
-            hook();
+            interrupt(hook.as_ref());
             self.failure = Some(ArrowQueryError::Cancelled);
             Err(ArrowQueryError::Cancelled)
         } else {

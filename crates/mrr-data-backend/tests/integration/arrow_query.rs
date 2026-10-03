@@ -212,6 +212,43 @@ async fn byte_backpressure_precedes_fetch_and_consumer_drop_wakes_the_producer()
     backend.shutdown().await.unwrap();
 }
 #[tokio::test]
+async fn panicking_native_interrupt_cannot_unwind_cancellation_or_consumer_drop() {
+    for explicit in [false, true] {
+        let backend = backend().await;
+        let calls = Arc::new(AtomicUsize::new(0));
+        let marker = calls.clone();
+        let mut query = backend
+            .query_arrow(batch().schema(), limits(), 1024, move |out| {
+                out.on_cancel(move || {
+                    marker.fetch_add(1, Ordering::SeqCst);
+                    panic!("failed native interrupt callback");
+                })?;
+                for _ in 0..3 {
+                    out.emit(|| Ok(batch()))?;
+                }
+                Ok(())
+            })
+            .unwrap();
+        let retained = query.next_batch().await.unwrap().unwrap();
+        if explicit {
+            query.cancel();
+            assert_eq!(
+                query.next_batch().await.err(),
+                Some(ArrowQueryError::Cancelled)
+            );
+            assert!(query.summary().is_none());
+        }
+        drop(query);
+        drop(retained);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        tokio::time::timeout(Duration::from_secs(3), backend.shutdown())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(backend.status().resource_bytes, 0);
+    }
+}
+#[tokio::test]
 async fn configuration_row_and_batch_limits_refuse_without_complete_results() {
     let backend = backend().await;
     assert!(matches!(
