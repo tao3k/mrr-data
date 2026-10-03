@@ -1,0 +1,32 @@
+[package]
+name = "mrr-data-backend"
+description = "Shared bounded persistence lifecycle and metadata providers for MRR Data profiles"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+sqlite = ["dep:rusqlite"]
+
+[dependencies]
+mrr-data-content.workspace = true
+cid.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["sync", "time"] }
+rusqlite = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile.workspace = true
+mrr-data-asp-rust-build-support.workspace = true
+
+[[test]]
+name = "backend_consumer"
+path = "tests/integration/backend_consumer.rs"
+required-features = ["sqlite"]
+
+[lints]
+workspace = true

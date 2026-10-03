@@ -13,13 +13,16 @@ credential = ["dep:p256"]
 consumption = ["credential"]
 
 [dependencies]
-cedar-poo-commerce = { git = "https://github.com/tao3k/cedar-poo-spec", rev = "101aff3b6c11769dfc6e8e727e31437383d5f351", default-features = false, features = ["admission", "acceptance"] }
+cedar-poo-commerce = { git = "https://github.com/tao3k/cedar-poo-spec", rev = "bcacabbdd188a821799dc6be92ebbed4a7c46214", default-features = false, features = ["admission", "acceptance"] }
 mrr-data-content.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 p256 = { version = "=0.13.2", default-features = false, features = ["ecdsa"], optional = true }
 
 [dev-dependencies]
+mrr-data-backend = { workspace = true, features = ["sqlite"] }
+tokio.workspace = true
+tempfile.workspace = true
 base64 = "0.23"
 p256 = { version = "=0.13.2", default-features = false, features = ["ecdsa"] }
 mrr-data-asp-rust-build-support.workspace = true

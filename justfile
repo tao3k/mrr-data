@@ -44,3 +44,12 @@ test-property-query:
 clippy-property-query:
     {{ native_env }} {{ cargo }} clippy -p mrr-data-content --features property-snapshot --all-targets --locked -- -D warnings
     {{ native_env }} {{ cargo }} clippy -p mrr-data-datafusion --all-targets --locked -- -D warnings
+
+[group('test')]
+test-backend:
+    {{ native_env }} {{ cargo }} test -p mrr-data-backend --all-features --locked -- --nocapture
+    {{ native_env }} {{ cargo }} test -p mrr-data-commerce --all-features --test commerce_commit_consumer shared_backend_persists --locked -- --nocapture
+
+[group('test')]
+clippy-backend:
+    {{ native_env }} {{ cargo }} clippy -p mrr-data-backend --all-features --all-targets --locked -- -D warnings

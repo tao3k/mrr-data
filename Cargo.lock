@@ -634,7 +634,7 @@ dependencies = [
 [[package]]
 name = "cedar-poo-commerce"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/cedar-poo-spec?rev=101aff3b6c11769dfc6e8e727e31437383d5f351#101aff3b6c11769dfc6e8e727e31437383d5f351"
+source = "git+https://github.com/tao3k/cedar-poo-spec?rev=bcacabbdd188a821799dc6be92ebbed4a7c46214#bcacabbdd188a821799dc6be92ebbed4a7c46214"
 dependencies = [
  "base64 0.23.1",
  "p256",
@@ -2901,6 +2901,7 @@ version = "0.1.0"
 dependencies = [
  "mrr-data-arrow",
  "mrr-data-asp-rust-build-support",
+ "mrr-data-backend",
  "mrr-data-cache",
  "mrr-data-commerce",
  "mrr-data-content",
@@ -2936,6 +2937,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "mrr-data-backend"
+version = "0.1.0"
+dependencies = [
+ "cid",
+ "mrr-data-asp-rust-build-support",
+ "mrr-data-content",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "mrr-data-cache"
 version = "0.1.0"
 dependencies = [
@@ -2966,10 +2981,13 @@ dependencies = [
  "base64 0.23.1",
  "cedar-poo-commerce",
  "mrr-data-asp-rust-build-support",
+ "mrr-data-backend",
  "mrr-data-content",
  "p256",
  "serde",
  "serde_json",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]

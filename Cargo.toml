@@ -5,6 +5,7 @@ members = [
   "crates/mrr-data-poo-flow",
   "crates/mrr-data-arrow",
   "crates/mrr-data-content",
+  "crates/mrr-data-backend",
   "crates/mrr-data-cache",
   "crates/mrr-data-core",
   "crates/mrr-data-security",
@@ -25,6 +26,8 @@ license = "LGPL-2.1-or-later"
 repository = "https://github.com/tao3k/mrr-data"
 
 [workspace.dependencies]
+mrr-data-backend = { path = "crates/mrr-data-backend", version = "0.1.0", default-features = false }
+rusqlite = { version = "=0.40.2", default-features = false, features = ["bundled"] }
 serde_json = "1"
 sha2 = "0.10"
 mrr-data-cache = { path = "crates/mrr-data-cache", version = "0.1.0", default-features = false }

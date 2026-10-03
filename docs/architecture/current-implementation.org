@@ -1,5 +1,12 @@
 * Current implementation and development
 
+** Shared Production backend
+
+The opt-in ~backend~ feature exposes one provider-neutral persistence engine.
+~backend-sqlite~ selects its file-backed WAL/FULL metadata provider. Profiles
+supply validation and stable enrollment; all Cases share admission, recovery and
+shutdown. See [[file:shared-backend.org][implementation, tests and open qualification boundaries]].
+
 ** Current status
 
 The public ~mrr-data~ facade now defaults to ~arrow,filesystem~. Its dependency-light
@@ -220,6 +227,8 @@ Facade features:
 | ~graphar-native~ | no | maintained GraphAr C++ writer/readback path |
 | ~content-identity~ | yes, through ~filesystem~ | CID/DAG-CBOR identity and immutable manifests |
 | ~content~ | yes, through ~filesystem~ | verified blocks, memory store and protocol; implies ~content-identity~ |
+| ~backend~ | no | shared metadata lifecycle and provider-neutral profile commit port |
+| ~backend-sqlite~ | no | SQLite WAL/FULL head/operation provider; implies ~backend~ |
 | ~snapshot~ | no | complete Arrow snapshot publication/restore; implies ~content~, not CAR |
 | ~transfer~ | no | Tokio snapshot sessions: deadline, cancellation, retry budgets and blocking local adapter |
 | ~raw-publish~ | no | SPEC Storage Effect projection and 17-case replay, with initial and pre-root current-state checks before unrestricted raw snapshot publication over ~transfer~ |

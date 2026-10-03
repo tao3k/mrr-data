@@ -430,3 +430,87 @@ fn competing_signed_children_share_one_head_and_retry_cannot_exceed_root_cap() {
     assert_eq!(port.0.lock().unwrap().head, Some(head(current)));
     assert_eq!(port.0.lock().unwrap().rows.len(), 1);
 }
+
+#[test]
+fn shared_backend_persists_signed_budget_and_replays_after_reopen() {
+    use mrr_data_backend::{Backend, BackendConfig, providers::SqliteProvider};
+    use mrr_data_content::CacheAdmission;
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("commerce.db");
+    let fixture = Fixture::lean();
+    let backend = runtime
+        .block_on(Backend::open(
+            BackendConfig::default(),
+            SqliteProvider::new(path.clone()),
+            runtime.handle().clone(),
+        ))
+        .unwrap();
+    let port = backend
+        .profile("commerce.shared-budget.v1", "registered-buyer")
+        .unwrap();
+    // Initialize revision one through an ordinary absent-head transaction, never
+    // by installing an arbitrary observed head or replacing existing history.
+    let genesis = Write {
+        scope: "buyer-trip-root",
+        operation_id: "enroll-budget",
+        expected: None,
+        replacement: head(&fixture.before).root,
+    };
+    let physical = PublishReceipt {
+        cid: genesis.replacement,
+        cache: CacheAdmission::Stored,
+    };
+    let initial = runtime
+        .block_on(port.commit(genesis, Some(&physical), |_| Ok::<_, ()>(())))
+        .unwrap();
+    assert_eq!(
+        disposition(initial),
+        ConditionalCommitDisposition::Apply(head(&fixture.before))
+    );
+    let reservation = fixture.with_request(&fixture.before, &fixture.after, true, |request| {
+        runtime
+            .block_on(commit_shared_reservation(
+                &port,
+                request,
+                || authority(&fixture),
+                |lineage, offer| lineage == fixture.lineage && offer == &fixture.lean_offer,
+            ))
+            .map(disposition)
+            .unwrap()
+    });
+    assert_eq!(
+        reservation,
+        ConditionalCommitDisposition::Apply(head(&fixture.after))
+    );
+    runtime.block_on(backend.shutdown()).unwrap();
+    let reopened = runtime
+        .block_on(Backend::open(
+            BackendConfig::default(),
+            SqliteProvider::new(path),
+            runtime.handle().clone(),
+        ))
+        .unwrap();
+    let port = reopened
+        .profile("commerce.shared-budget.v1", "registered-buyer")
+        .unwrap();
+    let historical = runtime
+        .block_on(port.recover(query(&fixture.before, &fixture.after)))
+        .unwrap()
+        .unwrap();
+    assert_eq!(historical.committed, head(&fixture.after));
+    fixture.with_request(&fixture.before, &fixture.after, true, |request| {
+        let replay = runtime
+            .block_on(commit_shared_reservation(
+                &port,
+                request,
+                || -> Result<CurrentCommerceAuthority, BudgetCommitError> {
+                    panic!("historical replay must not refresh or reserve")
+                },
+                |_, _| panic!("historical replay policy"),
+            ))
+            .unwrap();
+        assert_eq!(disposition(replay), ConditionalCommitDisposition::Replay);
+    });
+    runtime.block_on(reopened.shutdown()).unwrap();
+}

@@ -1,0 +1,15 @@
+//! One shared persistence engine; profiles own validation, providers own storage.
+//! Host-authenticated namespaces and live authority synchronization remain required.
+#![forbid(unsafe_code)]
+mod config;
+mod engine;
+pub mod providers;
+mod record;
+mod scheduler;
+pub use config::{BackendConfig, BackendError, BackendStatus, Lifecycle, ProviderCapabilities};
+pub use engine::{Backend, ProfilePort};
+pub use providers::MetadataProvider;
+pub use record::{StoredOutcome, StoredRevision, StoredWrite};
+#[cfg(test)]
+#[path = "../tests/unit/asp_rust_gate.rs"]
+mod asp_rust_gate;

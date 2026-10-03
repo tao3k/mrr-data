@@ -8,12 +8,19 @@ from pathlib import Path
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-CASES = [None, "", "commerce-cedar", "commerce-credential", "commerce-consumption", "commerce-presentation", "arrow", "content-identity", "content", "snapshot", "transfer", "car", "filesystem", "cache", "s3",
+CASES = [None, "", "backend", "backend-sqlite", "commerce-cedar", "commerce-credential", "commerce-consumption", "commerce-presentation", "arrow", "content-identity", "content", "snapshot", "transfer", "car", "filesystem", "cache", "s3",
          "data-protection", "raw-publish", "protected-envelope", "protected-publish", "datafusion", "graphar", "content-identity,graphar", "cache,s3", "snapshot,cache,s3", "transfer,cache,s3",
          "arrow,content-identity,content,snapshot,transfer,raw-publish,protected-publish,car,filesystem,cache,s3,datafusion,graphar"]
 
 
 def main():
+    backend_tree = subprocess.check_output(
+        ["cargo", "tree", "-p", "mrr-data-backend", "--no-default-features", "--edges", "normal",
+         "--prefix", "none", "--locked"], cwd=ROOT, text=True)
+    backend_packages = {line.split()[0] for line in backend_tree.splitlines() if line.strip()}
+    forbidden = {"cedar-poo-commerce", "cedar-poo-bridge", "mrr-data-commerce", "rusqlite", "kache-store", "opendal-service-s3"}
+    if backend_packages & forbidden:
+        raise SystemExit(f"generic backend imports domain/provider dependencies: {backend_packages & forbidden}")
     tree = subprocess.check_output(
         ["cargo", "tree", "-p", "mrr-data-poo-flow", "--no-default-features", "--edges", "normal",
          "--prefix", "none", "--locked"], cwd=ROOT, text=True)
@@ -26,9 +33,13 @@ def main():
         enabled = {"arrow", "filesystem"} if selected is None else set(selected.split(","))
         if enabled & {"commerce-cedar", "commerce-credential", "commerce-consumption", "commerce-presentation"}:
             enabled |= {"commerce-cedar", "content"}
-        content = bool(enabled & {"content", "snapshot", "transfer", "raw-publish", "protected-envelope", "protected-publish", "car", "filesystem", "cache", "s3", "datafusion"})
+        if "backend-sqlite" in enabled:
+            enabled.add("backend")
+        content = bool(enabled & {"backend", "content", "snapshot", "transfer", "raw-publish", "protected-envelope", "protected-publish", "car", "filesystem", "cache", "s3", "datafusion"})
         identity = content or bool(enabled & {"content-identity", "data-protection"})
         expected = {
+            "mrr-data-backend": "backend" in enabled,
+            "rusqlite": bool(enabled & {"backend-sqlite", "cache"}),
             "mrr-data-commerce": "commerce-cedar" in enabled,
             "cedar-poo-commerce": "commerce-cedar" in enabled,
             "p256": "commerce-cedar" in enabled,
@@ -37,7 +48,7 @@ def main():
             "mrr-data-content": content,
             "mrr-data-cache": bool(enabled & {"cache", "s3", "transfer", "raw-publish", "protected-publish"}),
             "mrr-data-security": bool(enabled & {"data-protection", "raw-publish", "protected-envelope", "protected-publish"}),
-            "tokio": bool(enabled & {"s3", "transfer", "raw-publish", "protected-publish", "datafusion"}),
+            "tokio": bool(enabled & {"backend", "s3", "transfer", "raw-publish", "protected-publish", "datafusion"}),
             "ring": bool(enabled & {"protected-envelope", "protected-publish", "s3"}),
             "zeroize": bool(enabled & {"protected-envelope", "protected-publish", "s3", "commerce-cedar"}),
             "cid": identity,

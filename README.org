@@ -8,6 +8,7 @@
 
 - Architecture and ownership: [[file:docs/architecture/0001-mrr-data-plane.org][Data-plane RFC]]
 - Implemented APIs, feature contract, and development commands: [[file:docs/architecture/current-implementation.org][Current implementation]]
+- Shared Production persistence, lifecycle and provider qualification: [[file:docs/architecture/shared-backend.org][Shared backend]]
 - Content identity, local cache, snapshot, and S3: [[file:docs/architecture/content-cache-protocol.org][Content cache protocol]]
 - Snapshot transport acceptance: [[file:docs/architecture/s3-kache-transport-audit.org][S3 and Kache transport audit]]
 - Property snapshot and worker: [[file:docs/architecture/property-snapshot.org][Property snapshot]] and [[file:docs/architecture/healthcare-query-audit.org][Healthcare query audit]]

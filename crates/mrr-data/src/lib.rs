@@ -49,3 +49,7 @@ mod tests;
 /// Optional Cedar Commerce integration with MRR content commits.
 #[cfg(feature = "commerce-cedar")]
 pub use mrr_data_commerce as commerce;
+
+/// Shared persistence engine and optional metadata providers for all profiles.
+#[cfg(feature = "backend")]
+pub use mrr_data_backend as backend;
