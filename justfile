@@ -38,7 +38,8 @@ bench-google-sdp:
 
 [group('bench')]
 bench-backend:
-    {{ backend_native_env }} CARGO_BUILD_JOBS=2 {{ cargo }} test -p mrr-data-backend --all-features --test backend_performance --locked -- --ignored --nocapture --test-threads=1
+    {{ backend_native_env }} CARGO_BUILD_JOBS=2 {{ cargo }} test -p mrr-data-backend --no-default-features --features turso --test backend_performance --locked -- --ignored --nocapture --test-threads=1
+    {{ backend_native_env }} CARGO_BUILD_JOBS=2 {{ cargo }} test -p mrr-data-backend --no-default-features --features duckdb --test backend_performance --locked -- --ignored --nocapture --test-threads=1
 
 [group('test')]
 test-property-query:
