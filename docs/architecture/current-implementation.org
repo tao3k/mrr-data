@@ -231,6 +231,7 @@ Facade features:
 | ~backend~ | no | shared metadata lifecycle and provider-neutral profile commit port |
 | ~backend-turso~ | no | native Turso metadata provider; implies ~backend~ |
 | ~backend-duckdb~ | no | native DuckDB metadata provider; implies ~backend~ |
+| ~backend-graphar~ | no | native graph capture using shared resource admission and drain; no database implied |
 | ~snapshot~ | no | complete Arrow snapshot publication/restore; implies ~content~, not CAR |
 | ~transfer~ | no | Tokio snapshot sessions: deadline, cancellation, retry budgets and blocking local adapter |
 | ~raw-publish~ | no | SPEC Storage Effect projection and 17-case replay, with initial and pre-root current-state checks before unrestricted raw snapshot publication over ~transfer~ |
@@ -302,6 +303,19 @@ bindings. The optional GraphAr =file-inventory= feature enumerates physical
 files with bounded streaming hashes and verifies exact directory contents. The
 native writer records this inventory before rename; explicit writer limits are
 available. Count width and Parquet framing are checked, without claiming schema
-validation. Arbitrary metadata-reference closure, generation binding, filesystem
-sealing and Backend publication remain RFC 0002 gates. Receipts observe files;
-they do not prevent concurrent replacement or constrain native writer RSS.
+validation. Receipts observe files; they do not prevent concurrent replacement
+or constrain native writer RSS.
+
+=GraphDatasetBinding= adds a separate canonical root binding inventory, snapshot,
+generation, semantic/catalog digests and relation. The Host authenticates this
+root separately from the legacy RAW metadata CID. =CapturedGraphArSnapshot=
+copies verified files privately and uses the fixed binary-Entity schema rather
+than following YAML references. It requires a catalog-bound projection and checks
+fact generations. Owned facts remain stable after source mutation/deletion;
+temporary files are cleaned on the worker before return. General metadata import,
+streaming Arrow execution and protected graph publication remain RFC 0002 gates.
+
+=backend-graphar= prepares these snapshots through the same Backend's independent
+resource admission/worker lane. Shared ResourceHandle clones hold reservations
+through final drop and participate in drain. Reservations are Host budgets, not
+native RSS measurements; no database dependency is required by this feature.

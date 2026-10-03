@@ -10,6 +10,7 @@ repository.workspace = true
 [features]
 default = []
 file-inventory = ["dep:mrr-data-core"]
+backend = ["native-graphar", "dep:mrr-data-backend"]
 native-graphar = ["file-inventory", "dep:arrow-array", "dep:graphar-rs", "dep:tempfile"]
 
 [dependencies]
@@ -19,8 +20,10 @@ meta-relational-reasoning.workspace = true
 mrr-data-profile.workspace = true
 mrr-data-core = { workspace = true, optional = true, features = ["content-identity"] }
 tempfile = { workspace = true, optional = true }
+mrr-data-backend = { workspace = true, optional = true }
 
 [dev-dependencies]
+mrr-data-content.workspace = true
 tempfile.workspace = true
 mrr-data-asp-rust-build-support.workspace = true
 mrr-data-arrow.workspace = true

@@ -4,14 +4,22 @@
 //! that the adapter hands to the project-maintained Apache `GraphAr` fork.
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "backend")]
+mod backend;
 #[cfg(feature = "file-inventory")]
 mod inventory;
+#[cfg(feature = "backend")]
+pub use backend::{GraphArSnapshotRequest, prepare_graphar_snapshot};
 mod projection;
 mod query_source;
 #[cfg(feature = "native-graphar")]
 mod reader;
 #[cfg(feature = "native-graphar")]
+mod snapshot;
+#[cfg(feature = "native-graphar")]
 mod writer;
+#[cfg(feature = "native-graphar")]
+pub use snapshot::{CapturedGraphArSnapshot, GraphArCaptureError, capture_graphar_snapshot};
 
 #[cfg(feature = "file-inventory")]
 pub use inventory::{GraphArInventoryError, inventory_graphar_directory, verify_graphar_directory};

@@ -7,6 +7,8 @@ mod dispatch;
 mod engine;
 pub mod providers;
 mod record;
+mod resource;
+pub use resource::ResourceHandle;
 mod scheduler;
 mod transaction;
 pub use authority::{

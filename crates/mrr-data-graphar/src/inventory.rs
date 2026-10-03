@@ -129,7 +129,7 @@ pub fn verify_graphar_directory(
     }
     Ok(())
 }
-fn file_kind(path: &str) -> Result<GraphFileKind, GraphArInventoryError> {
+pub(crate) fn file_kind(path: &str) -> Result<GraphFileKind, GraphArInventoryError> {
     let name = path
         .rsplit('/')
         .next()
@@ -157,7 +157,7 @@ fn file_kind(path: &str) -> Result<GraphFileKind, GraphArInventoryError> {
     Err(GraphArInventoryError::UnsupportedFile)
 }
 
-fn check_framing(
+pub(crate) fn check_framing(
     file: &mut fs::File,
     kind: GraphFileKind,
     length: u64,

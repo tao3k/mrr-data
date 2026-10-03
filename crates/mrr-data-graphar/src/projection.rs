@@ -2,7 +2,8 @@ use std::{collections::BTreeSet, error::Error, fmt};
 
 use meta_relational_reasoning::{
     EntityId, EvidenceCompleteness, Fact, FactId, FactProvenance, FactValidity, GenerationId,
-    RelationAuthority, RelationError, RelationId, RelationSchema, Value, ValueSchema,
+    RelationAuthority, RelationCatalog, RelationCatalogDigest, RelationError, RelationId,
+    RelationSchema, Value, ValueSchema,
 };
 
 /// A validated binary-Entity relation that can be projected as `GraphAr` edges.
@@ -12,6 +13,7 @@ use meta_relational_reasoning::{
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BinaryEntityProjection {
     relation: RelationSchema,
+    catalog: Option<RelationCatalogDigest>,
 }
 
 impl BinaryEntityProjection {
@@ -45,7 +47,27 @@ impl BinaryEntityProjection {
         }
         Ok(Self {
             relation: relation.clone(),
+            catalog: None,
         })
+    }
+
+    /// Admit a projection from an authenticated relation catalog.
+    /// # Errors
+    /// Refuses absent relations or unsupported binary-Entity schemas.
+    pub fn admit_catalog(
+        catalog: &RelationCatalog,
+        relation: RelationId,
+    ) -> Result<Self, GraphProjectionError> {
+        let schema = catalog
+            .relation(relation)
+            .ok_or(GraphProjectionError::RelationUnavailable(relation))?;
+        let mut projection = Self::admit(schema)?;
+        projection.catalog = Some(catalog.digest());
+        Ok(projection)
+    }
+    #[must_use]
+    pub const fn catalog_digest(&self) -> Option<RelationCatalogDigest> {
+        self.catalog
     }
 
     /// The admitted source endpoint field name.
@@ -199,7 +221,7 @@ impl PhysicalVertexIndex {
     }
 
     /// Iterates semantic entities in their physical vertex-ID order.
-    #[must_use]
+    #[must_use = "consume the iterator to enumerate semantic entities"]
     pub fn entities(&self) -> impl ExactSizeIterator<Item = EntityId> + '_ {
         self.entities.iter().copied()
     }
@@ -273,6 +295,7 @@ impl IndexedGraphEdge {
 #[derive(Debug, Eq, PartialEq)]
 pub enum GraphProjectionError {
     InvalidRelation(RelationError),
+    RelationUnavailable(RelationId),
     UnsupportedArity { actual: usize },
     NullableEndpoint { field: String },
     UnsupportedEndpoint { field: String, schema: ValueSchema },
@@ -284,6 +307,9 @@ pub enum GraphProjectionError {
 impl fmt::Display for GraphProjectionError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::RelationUnavailable(relation) => {
+                write!(formatter, "relation {relation} is absent from catalog")
+            }
             Self::InvalidRelation(error) => write!(formatter, "invalid relation: {error:?}"),
             Self::UnsupportedArity { actual } => {
                 write!(

@@ -208,18 +208,19 @@ jobs:
             echo "CXXFLAGS=-I$arrow_prefix/include -Wno-error=deprecated-declarations -Wno-error=macro-redefined" >> "$GITHUB_ENV"
           fi
       - name: Test maintained GraphAr round-trip
-        run: cargo test -p mrr-data-graphar --features native-graphar --locked
+        run: cargo test -p mrr-data-graphar --features native-graphar,backend --locked
       - name: Verify GraphAr Arrow performance parity
         run: >-
-          cargo test -p mrr-data-graphar --features native-graphar --locked
+          cargo test -p mrr-data-graphar --features native-graphar,backend --locked
           scenario_semantically_reads_ten_thousand_graphar_edges --
           --ignored --nocapture
       - name: Check facade GraphAr native feature
         run: |
           cargo check -p mrr-data --no-default-features --features graphar-native --locked
           cargo check -p mrr-data --no-default-features --features content-identity,graphar-native --locked
+          cargo check -p mrr-data --no-default-features --features backend-graphar --locked
       - name: Lint maintained GraphAr adapter
-        run: cargo clippy -p mrr-data-graphar --all-targets --features native-graphar --locked -- -D warnings
+        run: cargo clippy -p mrr-data-graphar --all-targets --features native-graphar,backend --locked -- -D warnings
 
   property-physical:
     name: Property snapshot and physical query (${{ matrix.os }})

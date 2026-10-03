@@ -62,6 +62,24 @@ impl Backend {
             }),
         })
     }
+    /// Prepare a retained physical resource on the Host blocking executor.
+    /// Admission is shared across all profiles. Cancelling a queued request skips
+    /// preparation; a running worker retains its lease until it finishes. Returned
+    /// handles participate in shutdown until their final clone is dropped.
+    /// # Errors
+    /// Refuses lifecycle/count/byte limits, preparation failure or lost workers.
+    pub async fn prepare_resource<T: Send + Sync + 'static>(
+        &self,
+        reserved_bytes: usize,
+        prepare: impl FnOnce() -> Result<T, BackendError> + Send + 'static,
+    ) -> Result<crate::ResourceHandle<T>, BackendError> {
+        let lease = self.inner.scheduler.admit_resource(reserved_bytes)?;
+        self.inner
+            .dispatcher
+            .prepare(lease, prepare)
+            .await
+            .map_err(|_| BackendError::WorkerLost)?
+    }
     /// Select Host-enrolled profile and stable deployment namespace. Versioning
     /// must never silently move pending authority to a fresh namespace.
     /// # Errors
@@ -126,7 +144,10 @@ async fn finish_close(inner: Arc<Inner>) {
         tokio::pin!(changed);
         changed.as_mut().enable();
         let status = inner.scheduler.status();
-        if status.active_writes == 0 && status.active_recoveries == 0 {
+        if status.active_writes == 0
+            && status.active_recoveries == 0
+            && status.active_resources == 0
+        {
             break;
         }
         changed.await;

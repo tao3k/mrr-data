@@ -27,7 +27,8 @@ The graph file format alone cannot replace that transaction contract.
 | =GraphArQuerySource= | Root path, relation, endpoint roles, identity properties and counts | Generation/catalog identity plus a verified immutable child inventory |
 | =prepare_graphar_source= | Imports native Arrow C Stream batches, validates and materializes facts | Streaming admission with bounded buffers; preparation currently retains facts |
 | =admit_graphar_query_source= | Re-hashes =mrr.graph.yaml= against the bound projection CID | Protect all referenced metadata and data chunks, including read-time drift |
-| Shared =Backend= | Count/byte admission, separate write/recovery dispatch, authority/CAS/history, owned drain | Bounded graph I/O and Arrow execution jobs under this lifecycle |
+| Shared =Backend= | Independent write/recovery/resource admission and dispatch; resource handles join owned drain | Fallible streaming Arrow query execution and measured native memory bounds |
+| =CapturedGraphArSnapshot= | Authenticated binding/inventory, private verified copies, catalog-bound fixed schema, immutable facts | Additional graph profiles and streaming native buffer ownership |
 | Optional DuckDB | Local metadata transactions; this change enables and tests native Arrow capabilities | A public bounded graph/query port using the shared dispatcher |
 
 The current graph-info check authenticates the entry metadata bytes. It does
@@ -53,7 +54,8 @@ row/buffer limits, unique nonempty field names and the qualified Int64/Utf8/Bina
 subset before registration. It grants no semantic authority or Backend lease.
 The generic
 Backend and =backend-turso= do not opt into DuckDB or this Arrow capability.
-=graphar= remains a portable projection contract; =graphar-native= opts into the
+=backend-graphar= composes the same Backend with native graph capture; it does
+not select a database. =graphar= remains a portable projection contract; =graphar-native= opts into the
 pinned C++ provider. GraphAr never depends on DuckDB. Engine composition stays
 above the physical graph format and adds no provider-owned runtime.
 
@@ -222,12 +224,46 @@ or bytes already written to staging. Explicit writer limits allow larger
 qualified datasets without replacing the default manifest budgets.
 
 The writer's existing metadata uses an absolute committed prefix, so its exact
-metadata identity is location-specific. Arbitrary YAML reference traversal,
-external/missing referenced chunks, generation/catalog binding, immutable
-preparation and Backend publication/query composition remain open gates. The
-existing V1 graph descriptor keeps its RAW metadata binding; the inventory cannot
-silently replace that CID. Slices C-F and those Slice B composition gates remain
-proposed. Existing native parity evidence covers its current interfaces.
+metadata identity remains location-specific. A separate
+=mrr.graphar.dataset-binding.v1= DAG-CBOR root now binds the inventory root,
+snapshot root, generation, semantic digest, relation/entity catalog digests,
+relation ID and entry metadata CID. The existing V1 graph descriptor retains its
+RAW metadata binding. The Host must authenticate the new binding root through
+publication authority; constructing a candidate from V1 metadata alone does not
+authenticate data chunks.
+
+=BinaryEntityProjection::admit_catalog= admits the relation from its complete
+catalog. Capture requires that catalog digest to match the bound query. Before
+native I/O, =capture_graphar_snapshot= verifies the binding and inventory, copies
+only declared files with bounded streaming CID/length checks into a private
+random directory, and checks the copied count/Parquet framing. Only declared
+paths are created; files are hashed once during copy, with no second full scan. Native GraphInfo
+uses the fixed binary-Entity writer schema with a private prefix. Authenticated
+YAML bytes are preserved but never interpreted as path instructions, so external
+YAML references cannot redirect this entry point. This qualifies the fixed writer
+profile, not arbitrary GraphAr metadata import.
+
+After native preparation, every fact must pass the admitted projection and match
+the binding's generation. Immutable Rust fact buffers are exposed only through a
+query-scope check. All native handles are gone and temporary files are removed on
+the preparation worker before a successful return. Source deletion or mutation
+cannot change these facts. This is a captured semantic snapshot, not an OS
+sandbox or a streaming Arrow query engine; existing legacy readers remain mutable
+path entry points.
+
+The =backend= feature in the GraphAr adapter composes this capture with
+=Backend::prepare_resource=. It uses shared count/byte admission, independent
+resource worker slots and the same Host runtime. Queued cancellation skips work;
+submitted native work keeps its lease until completion. Cloned ResourceHandles
+retain the reservation until final destruction; shutdown refuses new work and
+waits for these handles before closing metadata providers. The Host reservation
+must cover declared physical bytes and separately budget native decompression
+and fact materialization. It does not measure or cap native RSS.
+
+Slice C is implemented for captured binary-Entity facts. Slice E has shared
+resource lifecycle support; a fallible streaming Arrow query port remains open.
+Protected child/manifest ACK-to-CAS composition (D), additional profiles and
+matched performance/RSS qualification (F) remain proposed.
 
 The implementation and malformed-wire qualification are in
 [[file:../../crates/mrr-data-core/src/graph_inventory.rs][the core inventory]] and [[file:../../crates/mrr-data-core/tests/unit/graph_inventory.rs][its focused tests]], with [[file:../../crates/mrr-data-graphar/src/inventory.rs][directory enumeration]] in the GraphAr adapter.
@@ -248,6 +284,34 @@ without =graphar-rs=, Arrow arrays, DuckDB or Turso. Format, diff and Org link
 checks passed. Full package-level GraphAr tests and parity scenarios remain
 separate CI gates; no throughput, native RSS or concurrent replacement claim is
 made by this local receipt.
+
+* Local qualification for semantic capture and shared leases
+
+On 2026-10-03, the final focused checks passed on aarch64 macOS:
+
+- Core: 36 tests, including binding root round-trip, changed inventory, unknown
+  fields, wrong root and semantic/relation/entity digest drift.
+- Generic Backend: 5 library/policy tests and 3 integration cases. Resource
+  saturation preserves write/recovery capacity; final clones hold drain; failed
+  and panicking workers release reservations; queued cancellation skips work and
+  running cancellation retains its worker lease.
+- A minimal external caller with dependency versions matching the workspace lock
+  passed 12 cases: 4 repository directory tests, 2 native writer cases, and 6
+  repository capture cases. These use the real pinned C++ SDK, including source
+  deletion, tampering, hostile YAML path instructions, catalog/generation refusal
+  and capture under the same Backend's final-handle drain.
+- Strict all-feature/all-target Clippy for core/GraphAr and provider-free
+  all-target Backend Clippy passed in the test profile. The facade compiled with
+  only =backend-graphar=; its normal graph includes Backend, native GraphAr and
+  Arrow arrays without DuckDB, Turso, rusqlite or Commerce.
+- rustfmt, diff checks and 19 Org documents / 5 Org READMEs passed.
+
+The native build used system Arrow C++ 25.0.1; Rust Arrow remains 58.4.0. These
+are focused local receipts. The complete GraphAr package suite, both-OS CI,
+protected publication, fallible Arrow query completion and performance/RSS
+qualification remain separate gates. The two lint failures observed on the prior
+remote head were repaired: the iterator now supplies a meaningful must-use
+message, and the sustained benchmark uses a diagnostic empty-array comparison.
 
 * Alternatives and decisions
 

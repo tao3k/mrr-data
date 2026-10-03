@@ -796,3 +796,66 @@ fn replace(value: &mut Ipld, path: &[&str], replacement: Ipld) {
 
 #[allow(dead_code)]
 fn _assert_ipld_map_shape(_: BTreeMap<String, Ipld>, _: Cid) {}
+
+#[test]
+fn graph_dataset_root_binds_inventory_and_semantic_scope() {
+    use crate::{
+        GraphDatasetBinding, GraphDatasetInventory, GraphFile, GraphFileKind, GraphInventoryError,
+        GraphInventoryLimits, dag_cbor_cid,
+    };
+    let limits = GraphInventoryLimits::default();
+    let inventory = |chunk: &[u8]| {
+        GraphDatasetInventory::admit(
+            "graph.yaml".into(),
+            vec![
+                GraphFile::new(
+                    "graph.yaml".into(),
+                    b"graphar-manifest",
+                    GraphFileKind::Metadata,
+                ),
+                GraphFile::new("chunk0".into(), chunk, GraphFileKind::Parquet),
+            ],
+            limits,
+        )
+        .unwrap()
+    };
+    let files = inventory(b"original");
+    let snapshot = SnapshotBlock::encode(manifest_with_graph(false, true)).unwrap();
+    let engine = DataEngineProfile::new("graphar-native", true, []).unwrap();
+    let query = bind_data_query(&bound_query(Some(1)), &snapshot, &engine).unwrap();
+    let binding = GraphDatasetBinding::admit(&query, relation_id("alpha"), &files, limits).unwrap();
+    let bytes = binding.canonical_bytes().unwrap();
+    let root = dag_cbor_cid(&bytes);
+    let decoded = GraphDatasetBinding::decode_checked(&bytes, &root).unwrap();
+    assert_eq!(decoded, binding);
+    decoded.admit_query(&query, &files, limits).unwrap();
+    assert_eq!(
+        decoded.admit_query(&query, &inventory(b"replacement"), limits),
+        Err(GraphInventoryError::Integrity)
+    );
+    assert!(GraphDatasetBinding::admit(&query, relation_id("beta"), &files, limits).is_err());
+    assert!(GraphDatasetBinding::decode_checked(&bytes, &dag_cbor_cid(b"wrong root")).is_err());
+    for field in [
+        "semantic_digest",
+        "relation_catalog_digest",
+        "entity_catalog_digest",
+    ] {
+        let mut value: Ipld = serde_ipld_dagcbor::from_slice(&bytes).unwrap();
+        replace(&mut value, &[field], Ipld::Bytes(vec![0; 32]));
+        let changed = serde_ipld_dagcbor::to_vec(&value).unwrap();
+        let drifted =
+            GraphDatasetBinding::decode_checked(&changed, &dag_cbor_cid(&changed)).unwrap();
+        assert_eq!(
+            drifted.admit_query(&query, &files, limits),
+            Err(GraphInventoryError::Integrity)
+        );
+    }
+    // A valid recomputed CID does not permit an extra field in the wire contract.
+    let mut value: Ipld = serde_ipld_dagcbor::from_slice(&bytes).unwrap();
+    let Ipld::Map(ref mut map) = value else {
+        panic!("binding map")
+    };
+    map.insert("unexpected".into(), Ipld::Bool(true));
+    let unknown = serde_ipld_dagcbor::to_vec(&value).unwrap();
+    assert!(GraphDatasetBinding::decode_checked(&unknown, &dag_cbor_cid(&unknown)).is_err());
+}

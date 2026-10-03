@@ -35,6 +35,7 @@ filesystem = ["content", "mrr-data-content/filesystem"]
 datafusion = ["arrow", "dep:mrr-data-datafusion"]
 graphar = ["dep:mrr-data-graphar"]
 graphar-native = ["graphar", "mrr-data-graphar/native-graphar"]
+backend-graphar = ["backend", "content-identity", "graphar-native", "mrr-data-graphar/backend"]
 
 [dependencies]
 mrr-data-backend = { workspace = true, optional = true }

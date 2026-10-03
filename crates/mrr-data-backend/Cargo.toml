@@ -53,3 +53,7 @@ path = "tests/performance/sustained_performance.rs"
 [[test]]
 name = "backend_duckdb_arrow"
 path = "tests/integration/duckdb_arrow.rs"
+
+[[test]]
+name = "backend_resources"
+path = "tests/integration/resources.rs"

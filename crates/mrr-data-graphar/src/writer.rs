@@ -285,7 +285,7 @@ fn write_staged(
     Ok((index.len(), edges.len()))
 }
 
-fn vertex_info(version: InfoVersion) -> Result<VertexInfo, GraphArWriteError> {
+pub(crate) fn vertex_info(version: InfoVersion) -> Result<VertexInfo, GraphArWriteError> {
     let group = property_group(
         [Property::new(
             ENTITY_ID_PROPERTY,
@@ -304,7 +304,7 @@ fn vertex_info(version: InfoVersion) -> Result<VertexInfo, GraphArWriteError> {
         .map_err(upstream)
 }
 
-fn edge_info(version: InfoVersion) -> Result<EdgeInfo, GraphArWriteError> {
+pub(crate) fn edge_info(version: InfoVersion) -> Result<EdgeInfo, GraphArWriteError> {
     let names = [
         (FACT_ID_PROPERTY, true, false),
         ("relation_id", false, false),

@@ -1,5 +1,8 @@
 //! Wait asynchronously before occupying the Host's bounded blocking executor.
-use crate::{BackendConfig, scheduler::Lease};
+use crate::{
+    BackendConfig, BackendError, ResourceHandle,
+    scheduler::{Lease, ResourceLease},
+};
 use std::sync::Arc;
 use tokio::{
     runtime::Handle,
@@ -9,6 +12,7 @@ use tokio::{
 pub(crate) struct Dispatcher {
     writes: Arc<Semaphore>,
     recoveries: Arc<Semaphore>,
+    resources: Arc<Semaphore>,
     runtime: Handle,
 }
 impl Dispatcher {
@@ -16,8 +20,44 @@ impl Dispatcher {
         Self {
             writes: Arc::new(Semaphore::new(config.max_write_workers)),
             recoveries: Arc::new(Semaphore::new(config.max_recovery_workers)),
+            resources: Arc::new(Semaphore::new(config.max_resource_workers)),
             runtime,
         }
+    }
+    pub(crate) fn prepare<T: Send + Sync + 'static>(
+        &self,
+        lease: ResourceLease,
+        run: impl FnOnce() -> Result<T, BackendError> + Send + 'static,
+    ) -> oneshot::Receiver<Result<ResourceHandle<T>, BackendError>> {
+        let (mut tx, rx) = oneshot::channel();
+        let slots = self.resources.clone();
+        let runtime = self.runtime.clone();
+        self.runtime.spawn(async move {
+            let permit = tokio::select! {
+                biased;
+                () = tx.closed() => return,
+                permit = slots.acquire_owned() => permit.expect("resource slots never closed"),
+            };
+            let mut lease = lease.submitted();
+            runtime.spawn_blocking(move || {
+                if tx.is_closed() {
+                    return;
+                }
+                let result = run();
+                lease.finished();
+                // A failed preparation releases its lease before waking a waiter.
+                let result = match result {
+                    Ok(value) => Ok(ResourceHandle::new(value, lease)),
+                    Err(error) => {
+                        drop(lease);
+                        Err(error)
+                    }
+                };
+                drop(permit);
+                let _ = tx.send(result);
+            });
+        });
+        rx
     }
     pub(crate) fn run<T: Send + 'static>(
         &self,

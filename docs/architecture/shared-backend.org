@@ -70,6 +70,37 @@ enrollment. Profile/schema changes must preserve canonical coordination homes.
   observe the same terminal report. Failed close reports Faulted. Drop cannot
   promise an async durable close. The Host keeps its runtime alive through drain.
 
+* Retained physical resources
+
+=Backend::prepare_resource= uses independent =max_resources=,
+=max_resource_workers= and =max_resource_bytes= limits shared across all profiles.
+=active_resources= includes queued/running jobs and returned handles;
+=blocking_resources= counts submitted jobs only. =resource_bytes= records Host
+reservations and =saturated_resources= counts count/byte refusals. These limits do
+not charge the write/recovery lanes and do not measure native memory.
+
+The Host budgets blocking capacity for all three lanes. Independent semaphores
+do not reserve executor threads against concurrent resource work or unrelated
+Host jobs. The existing two-thread recovery qualification does not include a
+stalled resource preparation.
+
+The dispatcher waits asynchronously before entering the Host blocking pool.
+Dropping a queued caller skips preparation; a submitted caller can cancel its
+wait but native work retains its lease until completion. Failed or panicking
+workers release accounting. A successful ResourceHandle shares one reservation
+across clones and drops its physical value before releasing that reservation.
+Resource implementations must keep buffers private: ownership exported outside
+the handle would outlive this accounting. Hosts keep handles until use completes,
+drop every clone before awaiting shutdown, and keep their runtime alive through
+the drain barrier. Resource admission closes with the same lifecycle seal as
+metadata admission; provider close waits for all resources as well as mutations.
+
+The optional GraphAr adapter prepares an immutable captured fact snapshot on this
+lane. Private temporary files and native handles are cleaned during preparation;
+returned handles retain immutable facts. =backend-graphar= composes this capability
+without selecting Turso or DuckDB. Fallible streaming Arrow query jobs and measured
+native RSS/throughput qualification remain separate implementation gates.
+
 * Durable authority versions
 
 [[file:../../crates/mrr-data-backend/src/authority.rs][AuthorityProposal/AuthorityState]] bind an exact Host commitment to a monotonic

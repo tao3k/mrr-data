@@ -8,3 +8,6 @@ mod writer;
 
 #[cfg(feature = "file-inventory")]
 mod inventory;
+
+#[cfg(feature = "native-graphar")]
+mod snapshot;

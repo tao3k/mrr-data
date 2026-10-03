@@ -13,6 +13,10 @@ impl Scheduler {
             config,
             state: Mutex::new(BackendStatus {
                 lifecycle: Lifecycle::Ready,
+                active_resources: 0,
+                blocking_resources: 0,
+                resource_bytes: 0,
+                saturated_resources: 0,
                 active_writes: 0,
                 active_recoveries: 0,
                 blocking_writes: 0,
@@ -76,6 +80,35 @@ impl Scheduler {
             submitted: false,
         })
     }
+    pub(crate) fn admit_resource(
+        self: &Arc<Self>,
+        bytes: usize,
+    ) -> Result<ResourceLease, BackendError> {
+        if bytes == 0 {
+            return Err(BackendError::Limit);
+        }
+        let mut state = self.state.lock().map_err(|_| BackendError::Unavailable)?;
+        if state.lifecycle != Lifecycle::Ready {
+            return Err(BackendError::NotReady);
+        }
+        if state.active_resources >= self.config.max_resources
+            || bytes
+                > self
+                    .config
+                    .max_resource_bytes
+                    .saturating_sub(state.resource_bytes)
+        {
+            state.saturated_resources = state.saturated_resources.saturating_add(1);
+            return Err(BackendError::Saturated);
+        }
+        state.active_resources += 1;
+        state.resource_bytes += bytes;
+        Ok(ResourceLease {
+            scheduler: self.clone(),
+            bytes,
+            submitted: false,
+        })
+    }
     pub(crate) fn drain(&self) {
         let mut s = self.state.lock().expect("scheduler lock");
         if s.lifecycle == Lifecycle::Ready {
@@ -128,6 +161,48 @@ impl Drop for Lease {
         }
         s.completed = s.completed.saturating_add(1);
         drop(s);
+        self.scheduler.changed.notify_waiters();
+    }
+}
+
+/// Keeps the reservation alive through final resource destruction.
+pub(crate) struct ResourceLease {
+    scheduler: Arc<Scheduler>,
+    bytes: usize,
+    submitted: bool,
+}
+impl ResourceLease {
+    pub(crate) fn submitted(mut self) -> Self {
+        self.scheduler
+            .state
+            .lock()
+            .expect("scheduler lock")
+            .blocking_resources += 1;
+        self.submitted = true;
+        self
+    }
+    pub(crate) fn finished(&mut self) {
+        if self.submitted {
+            self.scheduler
+                .state
+                .lock()
+                .expect("scheduler lock")
+                .blocking_resources -= 1;
+            self.submitted = false;
+            self.scheduler.changed.notify_waiters();
+        }
+    }
+}
+impl Drop for ResourceLease {
+    fn drop(&mut self) {
+        let mut state = self.scheduler.state.lock().expect("scheduler lock");
+        if self.submitted {
+            state.blocking_resources -= 1;
+        }
+        state.active_resources -= 1;
+        state.resource_bytes -= self.bytes;
+        state.completed = state.completed.saturating_add(1);
+        drop(state);
         self.scheduler.changed.notify_waiters();
     }
 }

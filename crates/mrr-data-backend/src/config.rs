@@ -45,6 +45,11 @@ pub struct BackendConfig {
     pub max_recovery_workers: usize,
     pub max_retained_bytes: usize,
     pub max_identity_bytes: usize,
+    /// Accepted preparation jobs plus retained resource handles.
+    pub max_resources: usize,
+    pub max_resource_workers: usize,
+    /// Host-declared reservations; this is not a native RSS measurement.
+    pub max_resource_bytes: usize,
 }
 impl Default for BackendConfig {
     fn default() -> Self {
@@ -55,12 +60,20 @@ impl Default for BackendConfig {
             max_recovery_workers: 1,
             max_retained_bytes: 131_072,
             max_identity_bytes: 256,
+            max_resources: 8,
+            max_resource_workers: 1,
+            max_resource_bytes: 1_073_741_824,
         }
     }
 }
 impl BackendConfig {
     pub(crate) fn validate(self) -> Result<Self, BackendError> {
-        if self.max_writes == 0
+        if self.max_resources == 0
+            || self.max_resource_workers == 0
+            || self.max_resource_workers > self.max_resources
+            || self.max_resource_workers > tokio::sync::Semaphore::MAX_PERMITS
+            || self.max_resource_bytes == 0
+            || self.max_writes == 0
             || self.max_recoveries == 0
             || self.max_write_workers == 0
             || self.max_recovery_workers == 0
@@ -91,6 +104,10 @@ pub enum Lifecycle {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BackendStatus {
     pub lifecycle: Lifecycle,
+    pub active_resources: usize,
+    pub blocking_resources: usize,
+    pub resource_bytes: usize,
+    pub saturated_resources: u64,
     pub active_writes: usize,
     pub active_recoveries: usize,
     pub blocking_writes: usize,

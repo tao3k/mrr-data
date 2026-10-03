@@ -52,3 +52,30 @@ fn byte_refusal_counts_without_retaining_the_rejected_request() {
     drop(lease);
     assert_eq!(scheduler.status().completed, 1);
 }
+
+#[test]
+fn resource_byte_saturation_does_not_consume_metadata_lane_capacity() {
+    let scheduler = Scheduler::new(BackendConfig {
+        max_resource_bytes: 16,
+        ..BackendConfig::default()
+    });
+    let resource = scheduler.admit_resource(16).unwrap();
+    assert!(matches!(
+        scheduler.admit_resource(1),
+        Err(BackendError::Saturated)
+    ));
+    assert_eq!(scheduler.status().saturated_resources, 1);
+    let write = scheduler.admit(false, 1024).unwrap();
+    let recovery = scheduler.admit(true, 65536).unwrap();
+    scheduler.drain();
+    assert!(matches!(
+        scheduler.admit_resource(1),
+        Err(BackendError::NotReady)
+    ));
+    assert_eq!(scheduler.status().resource_bytes, 16);
+    drop(resource);
+    assert_eq!(scheduler.status().resource_bytes, 0);
+    assert_eq!(scheduler.status().active_resources, 0);
+    drop(write);
+    drop(recovery);
+}

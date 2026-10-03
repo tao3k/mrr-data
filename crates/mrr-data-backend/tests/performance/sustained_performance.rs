@@ -203,7 +203,7 @@ async fn scenario<P: MetadataProvider>(name: &str, factory: &impl Fn(PathBuf) ->
         total.success_ns.len() + total.refusal_ns.len(),
         WRITERS * ATTEMPTS
     );
-    assert!(!total.success_ns.is_empty());
+    assert_ne!(total.success_ns, [] as [u128; 0]);
     assert!(total.reads_during_writes > 0);
     assert_eq!(
         backend.status().saturated_writes,

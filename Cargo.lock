@@ -3808,6 +3808,8 @@ dependencies = [
  "meta-relational-reasoning",
  "mrr-data-arrow",
  "mrr-data-asp-rust-build-support",
+ "mrr-data-backend",
+ "mrr-data-content",
  "mrr-data-core",
  "mrr-data-datafusion",
  "mrr-data-profile",
