@@ -383,7 +383,7 @@ it does not discover or authenticate the latest head by itself.
 retry, denied/cancelled root gate, cold restoration, tampered children, absence
 and aggregate limits. Opaque payloads qualify transport integrity; native graph
 format and semantic facts are qualified by the separate capture tests.
-[[file:../../crates/mrr-data-backend/tests/integration/graph_publication.rs][Native Turso composition tests]] cover retained resource preparation, missing
+[[file:../../crates/mrr-data-backend/tests/integration/graph_publication.rs][Native metadata composition tests]] cover retained resource preparation, missing
 or mismatched receipts, fresh policy refusal, complete ACK-to-CAS, retired
 versions, original-operation absence/retry, close/reopen recovery and historical
 replay without new transport or validation. These are local native restart
@@ -391,7 +391,8 @@ receipts, not power-loss or deployed blob durability measurements.
 
 #+begin_src sh
 cargo test -p mrr-data-content --features graph-snapshot --test graph_publication --locked
-cargo test -p mrr-data-backend --features graph-publish,turso --test backend_graph_publication --locked
+cargo test -p mrr-data-backend --no-default-features --features graph-publish,turso --test backend_graph_publication --locked
+cargo test -p mrr-data-backend --no-default-features --features graph-publish,duckdb --test backend_graph_publication --locked
 cargo check -p mrr-data --no-default-features --features backend-graph-publish --locked
 #+end_src
 
