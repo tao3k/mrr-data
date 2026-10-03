@@ -25,6 +25,9 @@ qualification counts. [[file:../architecture/shared-backend.org][The shared Back
 measurement boundaries. Physical block publication is a synthetic ACK; no blob
 transfer, authority guard or end-to-end Production workflow is timed.
 
+This receipt predates asynchronous worker dispatch. [[file:shared-backend-dispatch.org][Later dispatch measurements]]
+retain a separate clean source pin and raw receipt.
+
 * Matched commit observations
 
 Each row is the median of three round-level statistics, not a percentile pooled

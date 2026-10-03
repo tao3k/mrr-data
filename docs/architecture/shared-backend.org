@@ -212,6 +212,9 @@ must survive reopen. This controlled stalled-writer workload does not substitute
 for sustained writes, competing Host jobs, larger guarded records or native RSS
 qualification.
 
+[[file:../benchmarks/shared-backend-dispatch.org][The dispatch and mixed recovery receipt]] preserves both reproduced defects,
+the exact post-fix source, all mixed-load rounds and the rerun metadata baseline.
+
 * Open performance and deployment gates
 
 The matched measurement above provides a repeatable baseline; representative
