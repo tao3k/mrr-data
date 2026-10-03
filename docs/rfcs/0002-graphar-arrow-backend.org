@@ -407,7 +407,7 @@ The native graph lifecycle consumer composes existing crates rather than adding
 a second coordination engine. Both Turso and DuckDB graph ACK/CAS/recovery tests
 are selected independently; the facade's native consumer additionally uses real
 GraphAr files, Arrow IPC, source deletion, cold restore and final MRR admission.
-These tests qualify finite local process restart and configured remote ACKs.
+This consumer exercises finite native close/reopen and configured remote ACKs.
 They do not qualify power loss, deployed object durability or live application
 revocation integration.
 

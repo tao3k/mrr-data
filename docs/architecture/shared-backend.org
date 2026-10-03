@@ -370,3 +370,26 @@ real GraphAr files and Arrow IPC, publication, protected CAS, reopen recovery,
 source deletion, cold restoration, native capture, leased Arrow output and final
 MRR candidate admission. It is configured for each metadata provider on both OS
 CI jobs; exact-head CI receipts remain required.
+
+* Source-bound qualification on 2026-10-04
+
+[[https://github.com/tao3k/mrr-data/actions/runs/37133967554][CI run 37133967554]] completed all ten jobs successfully for source commit
+=bdffe95f560e7e4ab734646c159b312d3ef963a5=. Both Linux and macOS qualified
+both Turso and DuckDB independently through real GraphAr files and Arrow IPC,
+publication, CAS, native close/reopen, source deletion, cold restoration, retained
+Arrow output and final MRR admission. Each cell exercises the finite one-fact
+single-hop Entity fixture. Both OS jobs also passed strict Backend Clippy with
+all features and targets, and the feature dependency/facade contracts.
+
+Final local focused runs passed query/dispatch cases for Turso (12) and DuckDB
+(14), content publication/restoration cases (6), and the provider-free Arrow
+facade/workspace policy cases (5). The final DuckDB iterator borrow adjustment
+was rerun with all nine Arrow query cases passing. Local native GraphAr and
+DuckDB Clippy attempts encountered the mixed Nix/macOS SDK toolchain; the remote
+standard-SDK receipts above provide their qualification.
+
+This does not qualify a process crash, power loss, deployed content durability,
+live Host authorization, full semantic type mapping, native query streaming or
+RSS/throughput. Those remain the ordered RFC gates. Documentation-only updates
+following this source commit preserve these bounded source receipts; their new
+workflow runs must be reported separately.
