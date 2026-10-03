@@ -274,3 +274,22 @@ bounded physical query supplied by MRR. Source compilation, semantic binding,
 execution sequencing, and candidate admission belong to MRR's Query API;
 the POO Flow caller must connect that API to these physical capabilities.
 The existing Python tool integration remains the static-edge profile.
+
+* GraphAr and Arrow Backend design
+
+[[file:../rfcs/0002-graphar-arrow-backend.org][RFC 0002]] defines the proposed graph dataset manifest, verified native
+snapshot, protected publication and shared Arrow query lifecycle. The optional
+DuckDB feature enables native Arrow appending and virtual-table input and
+composes the facade Arrow feature. Native tests qualify workspace Arrow types,
+4,097-row append/reopen, explicit rollback and Arrow virtual-table queries.
+The optional =DuckDbArrowInput= carrier bounds native virtual-table input before
+the SDK callback: oversized batches refuse, and vector-sized slices preserve the
+complete fixture. Its qualified scalar subset is Int64/Utf8/Binary.
+The current Backend public provider contract still serves metadata transactions;
+the RFC explicitly tracks the graph/query port and complete child-integrity
+gates as proposed work.
+
+[[file:arrow-execution-practices.org][The Arrow execution audit]] records official and pinned GitHub source evidence.
+The bounded input iterator lazily slices shared Rust buffers after one source
+validation. Native VTab conversion still copies values; complete streamed
+result/error propagation and scan-performance qualification remain open gates.

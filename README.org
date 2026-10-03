@@ -7,6 +7,7 @@
 * Start here
 
 - Architecture and ownership: [[file:docs/architecture/0001-mrr-data-plane.org][Data-plane RFC]]
+- Graph storage and query composition: [[file:docs/rfcs/0002-graphar-arrow-backend.org][GraphAr, Arrow and shared Backend RFC]]
 - Implemented APIs, feature contract, and development commands: [[file:docs/architecture/current-implementation.org][Current implementation]]
 - Shared Production persistence, lifecycle and provider qualification: [[file:docs/architecture/shared-backend.org][Shared backend]]
 - Content identity, local cache, snapshot, and S3: [[file:docs/architecture/content-cache-protocol.org][Content cache protocol]]

@@ -10,7 +10,7 @@ repository.workspace = true
 [features]
 default = []
 turso = ["dep:turso"]
-duckdb = ["dep:duckdb"]
+duckdb = ["dep:duckdb", "dep:arrow-array", "dep:arrow-schema"]
 
 [dependencies]
 mrr-data-content.workspace = true
@@ -20,6 +20,8 @@ serde_json.workspace = true
 tokio = { workspace = true, features = ["sync", "time"] }
 turso = { workspace = true, optional = true }
 duckdb = { workspace = true, optional = true }
+arrow-array = { workspace = true, optional = true }
+arrow-schema = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile.workspace = true
@@ -47,3 +49,7 @@ workspace = true
 [[test]]
 name = "backend_sustained_performance"
 path = "tests/performance/sustained_performance.rs"
+
+[[test]]
+name = "backend_duckdb_arrow"
+path = "tests/integration/duckdb_arrow.rs"

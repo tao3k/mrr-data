@@ -35,6 +35,8 @@ def main():
             enabled |= {"commerce-cedar", "content"}
         if enabled & {"backend-turso", "backend-duckdb"}:
             enabled.add("backend")
+        if "backend-duckdb" in enabled:
+            enabled.add("arrow")
         content = bool(enabled & {"backend", "content", "snapshot", "transfer", "raw-publish", "protected-envelope", "protected-publish", "car", "filesystem", "cache", "s3", "datafusion"})
         identity = content or bool(enabled & {"content-identity", "data-protection"})
         expected = {
