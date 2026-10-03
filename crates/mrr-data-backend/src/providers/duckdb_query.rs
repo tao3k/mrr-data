@@ -26,13 +26,13 @@ fn emit_materialized(
     params: impl Params,
     output: &mut ArrowQueryEmitter,
 ) -> Result<(), ArrowQueryError> {
-    let result = statement
+    let schema = statement
         .query_arrow(params)
-        .map_err(|_| ArrowQueryError::Driver)?;
-    if &result.get_schema() != output.schema() {
+        .map_err(|_| ArrowQueryError::Driver)?
+        .get_schema();
+    if &schema != output.schema() {
         return Err(ArrowQueryError::Schema);
     }
-    drop(result);
     let expected = statement.row_count();
     output.check_rows(expected)?;
     let mut rows = 0;
