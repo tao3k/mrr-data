@@ -60,7 +60,7 @@ impl ProviderReceiptTrust {
     pub fn revoke(&mut self, provider: &ProviderId) {
         self.keys.remove(provider);
     }
-    fn verify(
+    pub(crate) fn verify(
         &self,
         request: &PaymentDispatchClaims,
         receipt: SignedProviderReceipt,

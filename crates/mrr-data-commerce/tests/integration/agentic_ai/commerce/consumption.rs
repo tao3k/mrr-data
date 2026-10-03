@@ -114,7 +114,7 @@ fn claim(
     live: CurrentConsumptionAuthority,
 ) -> Result<DispatchPermit, ConsumptionClaimError<&'static str>> {
     let provider: ProviderId = "processor".into();
-    let dispatch = PaymentDispatchClaims::new(provider.clone(), credential.clone());
+    let dispatch = PaymentDispatchClaims::new(provider.clone(), credential.clone(), active_fence());
     let proposed = ledger
         .prepare(dispatch)
         .map_err(ConsumptionClaimError::Validation)?;
@@ -169,6 +169,7 @@ fn active_fence() -> RootFence {
     }
 }
 struct Provider {
+    ownership: Mutex<Option<mrr_data_commerce::recovery::DispatchOwnership>>,
     fence: Mutex<RootFence>,
     calls: AtomicUsize,
     mode: AtomicUsize,
@@ -177,6 +178,7 @@ struct Provider {
 impl Default for Provider {
     fn default() -> Self {
         Self {
+            ownership: Mutex::new(None),
             fence: Mutex::new(active_fence()),
             calls: AtomicUsize::new(0),
             mode: AtomicUsize::new(0),
@@ -216,6 +218,17 @@ impl PaymentProviderPort for Provider {
             if !permit.eligible_at(&fence, &"processor".into()).unwrap() {
                 return Err(ProviderFailure::NotSent("fenced"));
             }
+            let mut owner = self.ownership.lock().unwrap();
+            let state = owner.get_or_insert(mrr_data_commerce::recovery::DispatchOwnership {
+                request_commitment: permit.request().commitment().unwrap(),
+                generation: 0,
+                owner: "fresh".into(),
+                accepted: false,
+            });
+            let accepted = state
+                .accept(0, "fresh", &permit.request().commitment().unwrap())
+                .ok_or(ProviderFailure::NotSent("obsolete owner"))?;
+            *state = accepted;
             self.calls.fetch_add(1, Ordering::SeqCst);
             let request = permit.request().clone();
             let receipt = Self::receipt(&request, self.mode.load(Ordering::SeqCst) == 2);
@@ -257,7 +270,8 @@ fn exact_lean_claim_releases_once_and_verifies_provider_receipt() {
     let credential = claims(&fixture);
     let ledger = before();
     let port = DualPort::new(&fixture, &ledger);
-    let request = PaymentDispatchClaims::new("processor".into(), credential.clone());
+    let request =
+        PaymentDispatchClaims::new("processor".into(), credential.clone(), active_fence());
     let proposed = ledger.prepare(request.clone()).unwrap();
     let data = super::projection();
     let mut source: ConsumptionLedgerClaims =
@@ -301,7 +315,8 @@ fn reissued_credential_or_provider_change_cannot_consume_same_purchase() {
         recorded
             .prepare(PaymentDispatchClaims::new(
                 "other-provider".into(),
-                reissued.clone()
+                reissued.clone(),
+                active_fence(),
             ))
             .is_err()
     );
@@ -312,8 +327,9 @@ fn reissued_credential_or_provider_change_cannot_consume_same_purchase() {
         ))
     ));
     assert_eq!(
-        PaymentDispatchClaims::new("processor".into(), credential).idempotency_key,
-        PaymentDispatchClaims::new("other-provider".into(), reissued).idempotency_key
+        PaymentDispatchClaims::new("processor".into(), credential, active_fence()).idempotency_key,
+        PaymentDispatchClaims::new("other-provider".into(), reissued, active_fence())
+            .idempotency_key
     );
 }
 
@@ -623,3 +639,6 @@ fn ticket_cannot_release_at_another_provider_endpoint() {
             .unwrap()
     );
 }
+
+#[path = "recovery.rs"]
+mod recovery;

@@ -39,6 +39,22 @@ regressions include pause after claim, retirement, rotation, logical state
 reload, unrelated roots and recovery after a lost response. Their acceptance
 counter is a deterministic oracle, not evidence of real processor charges.
 Deployment supplies authenticated durable fences and complete mediation.
-These interfaces install no database and implement no settlement rail. A crash
-after claim before send remains stranded until a separate fenced ownership
-recovery protocol is implemented.
+These interfaces install no database and implement no settlement rail. A fresh-only endpoint can still strand an acknowledged claim. The optional
+resumable endpoint protocol below closes that gap under its stronger contract.
+
+* Fenced recovery
+
+Consumption requests now persist their original root authority snapshot.
+=recover_dispatch= reads an exact authenticated consumption receipt and returns
+a historical descriptor, not a fresh permit. =ResumablePaymentProviderPort=
+adds ownership lookup, protected CAS takeover and dispatch under both ownership
+and root fences. Fresh dispatch must participate in the same ownership row at
+generation zero. Accepted operations never reacquire, including when receipts
+are lost or payment outcome is unknown.
+
+The endpoint supplies durable ownership/acceptance records and an idempotent
+queue or processor reconciliation protocol. Durable acceptance is responsibility
+for an operation, not bank settlement. Tests simulate logical crashes and
+interleavings without establishing backend durability or payment-rail finality.
+The request schema change is direct within the current unpublished API; older
+serialized request layouts are rejected. No compatibility storage layer is added.

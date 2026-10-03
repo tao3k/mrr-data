@@ -42,11 +42,13 @@ pub struct PaymentDispatchClaims {
     pub provider_id: ProviderId,
     pub idempotency_key: String,
     pub credential: CredentialClaims,
+    /// Root snapshot persisted atomically with consumption, never refreshed on replay.
+    pub authority: RootFence,
 }
 impl PaymentDispatchClaims {
     /// Deterministic provider retry key derived from the scoped purchase, not
     /// credential identity. A different credential cannot create another claim.
-    pub fn new(provider: ProviderId, credential: CredentialClaims) -> Self {
+    pub fn new(provider: ProviderId, credential: CredentialClaims, authority: RootFence) -> Self {
         let scope = &credential.receipt.scope;
         let purchase = &credential.receipt.reservation.purchase.purchase_id;
         let mut bytes = b"cedar-poo/commerce/payment-operation/v1\0".to_vec();
@@ -58,6 +60,7 @@ impl PaymentDispatchClaims {
             provider_id: provider,
             idempotency_key: sha256_hex(&bytes),
             credential,
+            authority,
         }
     }
 
@@ -199,8 +202,17 @@ fn transition(
         serde_json::from_slice(input.current_bytes).map_err(|_| ConsumptionError::InvalidClaims)?;
     let after: ConsumptionLedgerClaims = serde_json::from_slice(input.proposed_bytes)
         .map_err(|_| ConsumptionError::InvalidClaims)?;
-    let request =
-        PaymentDispatchClaims::new(input.provider.clone(), input.credential.credential.clone());
+    let authority = after
+        .requests
+        .first()
+        .ok_or(ConsumptionError::InvalidTransition)?
+        .authority
+        .clone();
+    let request = PaymentDispatchClaims::new(
+        input.provider.clone(),
+        input.credential.credential.clone(),
+        authority,
+    );
     if before.revision != input.current.revision
         || before.budget_scope != input.credential.expected_scope
         || after != before.prepare(request.clone())?
@@ -286,7 +298,8 @@ where
                 .lineage
                 .first()
                 .ok_or(ConsumptionError::InvalidFence)?;
-            if live.root_fence.retired
+            if live.root_fence != request.authority
+                || live.root_fence.retired
                 || live.root_fence.root.budget_scope != input.credential.expected_scope
                 || live.root_fence.root.mandate_id != root.mandate_id.as_str()
             {
@@ -319,4 +332,123 @@ where
         request,
         acceptance,
     })
+}
+
+/// Historical dispatch recovered from an authenticated exact consumption commit.
+/// It is neither a fresh permit nor permission to charge. Ownership acquisition
+/// at the provider must refresh live authority before resuming execution.
+#[derive(Debug)]
+pub struct RecoveredDispatch {
+    request: PaymentDispatchClaims,
+}
+impl RecoveredDispatch {
+    /// Transfer a fresh permit into the same fenced ownership protocol.
+    #[must_use]
+    pub fn from_permit(permit: DispatchPermit) -> Self {
+        Self {
+            request: permit.request,
+        }
+    }
+    /// Exact immutable historical request, including its original root generation.
+    pub fn request(&self) -> &PaymentDispatchClaims {
+        &self.request
+    }
+    /// Rebuild the historical ticket without adopting a newer root generation.
+    /// # Errors
+    /// Returns InvalidClaims when the commitment cannot be encoded.
+    pub fn ticket(&self) -> Result<AcceptanceTicket, ConsumptionError> {
+        Ok(AcceptanceTicket {
+            root: self.request.authority.root.clone(),
+            generation: self.request.authority.generation,
+            provider_id: self.request.provider_id.as_str().into(),
+            operation_id: self.request.idempotency_key.clone(),
+            request_commitment: self.request.commitment()?,
+        })
+    }
+}
+
+/// Original immutable proposal locator, independently scoped by the Host.
+/// A status read needs neither current signing keys nor publication ACK.
+pub struct ConsumptionRecoveryRequest<'a> {
+    pub budget_scope: &'a str,
+    pub provider: &'a ProviderId,
+    pub purchase_id: &'a str,
+    pub current: ContentRevision,
+    pub current_bytes: &'a [u8],
+    pub proposed_bytes: &'a [u8],
+}
+
+/// Recover one exact consumption operation, even after its head advances.
+/// No current-authority check or fresh dispatch permit is implied by this read.
+/// A deploying port authenticates the operation ledger and its validation path.
+/// # Errors
+/// Returns mismatch, absence, or explicit uncertainty; never retries a new ID.
+pub async fn recover_dispatch<P: ConditionalContentCommitPort>(
+    port: &P,
+    input: ConsumptionRecoveryRequest<'_>,
+) -> Result<Option<RecoveredDispatch>, ConsumptionClaimError<P::Error>> {
+    let parse = |bytes: &[u8]| -> Result<ConsumptionLedgerClaims, ConsumptionClaimError<P::Error>> {
+        serde_json::from_slice(bytes)
+            .map_err(|_| ConsumptionClaimError::Validation(ConsumptionError::InvalidClaims))
+    };
+    if ContentBlock::new(ContentCodec::Raw, input.current_bytes).cid() != input.current.root {
+        return Err(ConsumptionClaimError::Validation(
+            ConsumptionError::ContentMismatch,
+        ));
+    }
+    let before = parse(input.current_bytes)?;
+    let after = parse(input.proposed_bytes)?;
+    let request = after
+        .requests
+        .first()
+        .ok_or(ConsumptionClaimError::Validation(
+            ConsumptionError::InvalidTransition,
+        ))?
+        .clone();
+    let normalized = PaymentDispatchClaims::new(
+        request.provider_id.clone(),
+        request.credential.clone(),
+        request.authority.clone(),
+    );
+    if before.budget_scope != input.budget_scope
+        || before.revision != input.current.revision
+        || request.provider_id != *input.provider
+        || request.credential.receipt.reservation.purchase.purchase_id != input.purchase_id
+        || request != normalized
+        || after
+            != before
+                .prepare(request.clone())
+                .map_err(ConsumptionClaimError::Validation)?
+    {
+        return Err(ConsumptionClaimError::Validation(
+            ConsumptionError::InvalidTransition,
+        ));
+    }
+    let scope = format!(
+        "cedar-poo/commerce/consumption/v1/{}",
+        sha256_hex(before.budget_scope.as_bytes())
+    );
+    let write = ConditionalContentWrite {
+        scope: &scope,
+        operation_id: &request.credential.receipt.reservation.purchase.purchase_id,
+        expected: Some(input.current),
+        replacement: ContentBlock::new(ContentCodec::Raw, input.proposed_bytes).cid(),
+    };
+    let receipt = port.recover(write).await.map_err(|error| {
+        ConsumptionClaimError::Port(match error {
+            ConditionalCommitPortError::Protocol(e) => ConditionalCommitPortError::Protocol(e),
+            ConditionalCommitPortError::BeforeCommit(e) => {
+                ConditionalCommitPortError::BeforeCommit(e)
+            }
+            ConditionalCommitPortError::Unknown(e) => ConditionalCommitPortError::Unknown(e),
+            ConditionalCommitPortError::Validation(never) => match never {},
+        })
+    })?;
+    let Some(receipt) = receipt else {
+        return Ok(None);
+    };
+    write
+        .recover_receipt(Some(&receipt))
+        .map_err(|e| ConsumptionClaimError::Validation(ConsumptionError::Commit(e)))?;
+    Ok(Some(RecoveredDispatch { request }))
 }

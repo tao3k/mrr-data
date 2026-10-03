@@ -6,6 +6,8 @@ pub mod consumption;
 pub mod credential;
 #[cfg(feature = "consumption")]
 pub mod provider;
+#[cfg(feature = "consumption")]
+pub mod recovery;
 
 #[cfg(test)]
 #[path = "../tests/unit/asp_rust_gate.rs"]

@@ -12,7 +12,7 @@ credential = ["dep:p256"]
 consumption = ["credential"]
 
 [dependencies]
-cedar-poo-commerce = { git = "https://github.com/tao3k/cedar-poo-spec", rev = "8433815cade4067ed8be18fb99670119a5a1f844", default-features = false, features = ["admission", "acceptance"] }
+cedar-poo-commerce = { git = "https://github.com/tao3k/cedar-poo-spec", rev = "211d6331661ffcfb8d361687c07ff72748c7da59", default-features = false, features = ["admission", "acceptance"] }
 mrr-data-content.workspace = true
 serde.workspace = true
 serde_json.workspace = true
