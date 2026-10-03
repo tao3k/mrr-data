@@ -137,6 +137,7 @@ async fn native_graph_publication_restoration_and_admission() {
             .await
             .unwrap()
             .unwrap()
+            .committed
             .root,
         write.replacement
     );
