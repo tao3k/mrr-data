@@ -29,5 +29,9 @@ mrr-data-asp-rust-build-support.workspace = true
 name = "backend_consumer"
 path = "tests/integration/backend_consumer.rs"
 
+[[test]]
+name = "backend_performance"
+path = "tests/performance/backend_performance.rs"
+
 [lints]
 workspace = true

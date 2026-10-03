@@ -2,6 +2,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 cargo := env_var_or_default("CARGO", "cargo")
 native_env := if os() == "macos" { "env -u SDKROOT -u DEVELOPER_DIR -u CPATH -u LIBRARY_PATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u DYLD_LIBRARY_PATH -u DYLD_FALLBACK_LIBRARY_PATH CC=/usr/bin/clang CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER=/usr/bin/clang MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion | cut -d. -f1).0" } else { "env" }
+backend_native_env := if os() == "macos" { "env CC=/usr/bin/clang CXX=/usr/bin/clang++ SDKROOT=$(xcrun --sdk macosx --show-sdk-path) CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER=/usr/bin/clang" } else { "env" }
 
 [group('check')]
 format:
@@ -34,6 +35,10 @@ bench-token-catalog:
 [group('bench')]
 bench-google-sdp:
     {{ native_env }} {{ cargo }} bench -p mrr-data-pseudonymization --features google-sdp --bench google_sdp --locked
+
+[group('bench')]
+bench-backend:
+    {{ backend_native_env }} CARGO_BUILD_JOBS=2 {{ cargo }} test -p mrr-data-backend --all-features --test backend_performance --locked -- --ignored --nocapture --test-threads=1
 
 [group('test')]
 test-property-query:

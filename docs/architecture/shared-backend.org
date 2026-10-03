@@ -134,10 +134,50 @@ python3 tools/check-features.py
 python3 tools/check-spec-fixtures.py --spec-root /path/to/pinned/cedar
 #+end_src
 
+* Reproducible metadata performance and lifecycle measurement
+
+[[file:../../crates/mrr-data-backend/tests/performance/backend_performance.rs][The opt-in native measurement]] runs both optional providers through the same
+Backend and ProfilePort APIs. Run alone, with the optimized test profile already
+used for native qualification:
+
+#+begin_src sh
+git rev-parse HEAD
+git status --short
+rustc -Vv
+just bench-backend
+#+end_src
+
+Capture those commands together with stdout to bind results to the source, dirty
+state, compiler, target and host. Each provider runs three rounds, alternates
+hot-home and independent-home order, and tests one and four concurrent lanes.
+Every lane executes eight warmup writes and 64 sampled writes. A per-home
+application mutex sequences expected revisions: hot-home latency includes waiting
+on this mutex. This is a successful ordered workload, not an optimistic conflict
+or overload benchmark. Both scenarios use one profile and namespace, fixed small
+records without authority guards, the default admission limits and a two-thread
+Host runtime.
+
+JSON rows report individual-operation p50/p95/p99 using nearest-rank percentiles.
+Commit wall throughput includes warmup and uses the explicitly reported full
+operation count; latency samples exclude warmup. Recovery is serial after reopen,
+includes all historical operations, and verifies each exact committed revision.
+Each round requires zero errors, exact completed-worker accounting, idempotent
+shutdown and zero active workers/retained request bytes after close. A failure
+aborts qualification. Shutdown time measures an already-idle engine, not a busy
+drain. Provider setup, reopen and teardown are outside operation timing.
+
+Physical block publication uses a synthetic ACK. Measurements cover metadata,
+application sequencing and shared engine overhead; they do not measure blob
+durability, power loss or a full Production workflow. Native database cache/RSS,
+mixed recovery/write pressure, overload fairness and long-lived database growth
+require separate experiments. Small local samples cannot establish a production
+latency SLO or a performance advantage for either provider.
+
 * Open performance and deployment gates
 
-Matched hot-home/independent-home throughput and p50/p95/p99 remain required;
-provider selection and batching are not presented as measured optimizations.
+The matched measurement above provides a repeatable baseline; representative
+Production load, longer runs and matched optimization comparisons remain required.
+Provider selection and batching are not presented as measured optimizations.
 Integrated blob-transfer scheduling, native cache budgets, fairness/latency metrics,
 durable retention/GC, power-loss injection and authenticated latest-head/anti-rollback
 are still open. Immutable block publication retains its own truthful durable ACK.
