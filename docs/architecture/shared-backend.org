@@ -373,7 +373,7 @@ CI jobs; exact-head CI receipts remain required.
 
 * Source-bound qualification on 2026-10-04
 
-[[https://github.com/tao3k/mrr-data/actions/runs/37133967554][CI run 37133967554]] completed all ten jobs successfully for source commit
+[[https://github.com/tao3k/mrr-data/actions/runs/37133967554][CI run 37133967554]] completed all eleven jobs successfully for source commit
 =bdffe95f560e7e4ab734646c159b312d3ef963a5=. Both Linux and macOS qualified
 both Turso and DuckDB independently through real GraphAr files and Arrow IPC,
 publication, CAS, native close/reopen, source deletion, cold restoration, retained
