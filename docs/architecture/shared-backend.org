@@ -173,6 +173,10 @@ mixed recovery/write pressure, overload fairness and long-lived database growth
 require separate experiments. Small local samples cannot establish a production
 latency SLO or a performance advantage for either provider.
 
+[[file:../benchmarks/shared-backend-local.org][The local baseline receipt]] records the exact clean source revision, compiler,
+matched observations, lifecycle qualification and next experiments. Its linked
+JSON preserves every round rather than only summary statistics.
+
 * Open performance and deployment gates
 
 The matched measurement above provides a repeatable baseline; representative

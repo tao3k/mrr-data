@@ -1,0 +1,81 @@
+#+TITLE: Shared Backend Local Metadata Baseline
+#+OPTIONS: toc:nil
+
+* Source and execution receipt
+
+Run date: 2026-10-03 UTC. Measurement source:
+=e5abc6a20cb25375701dc6595c7f57f7def636e2=, clean worktree.
+Harness SHA-256: =2c41f611802e6e8c1c458076f359062fdcdd032278dac65f1d52e2c2e3a07400=.
+macOS 26.6.1, aarch64-apple-darwin, Rust 1.95.0.
+The optimized test profile uses opt-level 2, 16 codegen units and no debug info.
+Two optional providers were built separately and run sequentially on the same
+shared development host. Process/resource isolation and native RSS bounds were
+not established. These are local observations, not a production SLO or a provider
+selection recommendation.
+
+#+begin_src sh
+git checkout e5abc6a20cb25375701dc6595c7f57f7def636e2
+git status --short
+rustc -Vv
+just bench-backend
+#+end_src
+
+[[file:../../crates/mrr-data-backend/tests/performance/receipts/2026-10-03-local.jsonl][Raw JSON receipt]] retains provenance, every per-round metric and the final
+qualification counts. [[file:../architecture/shared-backend.org][The shared Backend architecture]] defines workload and
+measurement boundaries. Physical block publication is a synthetic ACK; no blob
+transfer, authority guard or end-to-end Production workflow is timed.
+
+* Matched commit observations
+
+Each row is the median of three round-level statistics, not a percentile pooled
+across rounds. Latencies are individual sampled operations in milliseconds;
+nearest-rank p50/p95/p99 exclude eight warmup writes per lane. Wall throughput
+includes all warmup and measured operations, with the full operation count and
+elapsed nanoseconds preserved in the raw receipt. Each lane samples 64 writes.
+Hot-home latency includes the application mutex that orders expected revisions.
+One-worker scenarios provide equivalent work; their variation exposes local noise.
+
+| Provider | Home layout | Lanes | Wall operations/s | p50 ms | p95 ms | p99 ms |
+|----------+-------------+-------+-------------------+--------+--------+--------|
+| turso | hot-home | 1 | 2130 | 0.380 | 1.779 | 2.732 |
+| turso | hot-home | 4 | 2235 | 1.468 | 3.410 | 6.898 |
+| turso | independent-homes | 1 | 2221 | 0.339 | 1.025 | 1.734 |
+| turso | independent-homes | 4 | 1361 | 1.870 | 11.218 | 27.232 |
+| duckdb | hot-home | 1 | 98 | 7.819 | 25.351 | 99.552 |
+| duckdb | hot-home | 4 | 77 | 31.485 | 163.717 | 253.512 |
+| duckdb | independent-homes | 1 | 68 | 9.120 | 43.624 | 86.828 |
+| duckdb | independent-homes | 4 | 88 | 33.265 | 133.865 | 216.517 |
+
+Four lanes did not produce a consistent throughput gain over one lane in this
+small run, and increased tail latency. Both providers currently serialize writes
+on one provider connection, but these observations do not isolate connection
+waiting, executor scheduling, native execution or synchronous commit costs.
+
+* Recovery and lifecycle qualification
+
+turso: serial historical recovery wall throughput ranged from 699 to 45213 operations/s across the 12 cases.
+duckdb: serial historical recovery wall throughput ranged from 786 to 3032 operations/s across the 12 cases.
+Recovery is serial after reopen; the lane count in its raw rows describes the
+preceding write workload. It includes every warmup and measured historical
+operation and requires equality with the original committed revision. It does
+not establish fresh authorization or concurrent recovery throughput.
+
+Both native tests passed. Across 24 cases: 4,320 fresh commits, 4,320 exact
+historical recoveries, zero errors and 48 closed Backend instances. Each shutdown
+is called twice; the terminal state must be Closed with zero active writes,
+zero active recoveries, zero retained request bytes and the exact completed-worker
+count. Shutdown timings are for an idle engine, not a busy drain or native RSS
+release guarantee. Default-feature source policy and strict all-feature/all-target
+Clippy also passed locally.
+
+* Next falsifiable experiments
+
+- Attribute admission-to-completion time to application sequencing, provider
+  connection waiting, validator round trip, native transaction and commit before
+  choosing a write scheduling or batching optimization.
+- Run recovery concurrency 1/4/8 alongside stalled and sustained writes; report
+  successful work, refusals and latency separately. Retain exact recovery,
+  cancellation ownership and drain assertions.
+- Repeat on an isolated host with larger records, authority guards, longer-lived
+  databases and explicit native cache budgets before assigning an SLO or claiming
+  a matched optimization gain.
