@@ -1,0 +1,79 @@
+#+TITLE: MRR Data Commerce Integration
+
+This integration depends on Cedar's storage-independent Commerce admission API
+and MRR Data's conditional content commit protocol. Cedar never imports MRR.
+The crate owns shared-budget commits, =credential= recovery and =consumption=
+(including provider-bound permits). Default features enable budget commits only.
+
+The migrated consumer tests use =tests/fixtures/commerce-projection-v1.json=,
+whose exact bytes are checked against the same immutable Cedar pin as the API.
+Cedar's projection check compares this fixture with an actual Lean export.
+
+#+begin_src sh
+cargo test --locked -p mrr-data-commerce
+cargo test --locked -p mrr-data-commerce --features credential
+cargo test --locked -p mrr-data-commerce --features consumption
+#+end_src
+
+The test port is in memory. A deployed Host must authenticate current heads,
+keys, policy, revocations and time and synchronize authority through effect
+release. Unknown outcomes and replay mint no dispatch permit. These tests do
+not establish durable storage, processor execution or exactly-once payments.
+
+The facade opts in with =commerce-cedar=, =commerce-credential= or
+=commerce-consumption=. Its defaults import no Cedar Commerce code. The moved
+implementation retains the source crate's Apache-2.0 license.
+
+* Single-root acceptance fence
+
+Fresh consumption claims capture the authenticated root namespace, mandate and
+generation in an exact provider/request ticket. The provider endpoint checks
+=DispatchPermit::eligible_at= against its independently trusted current fence,
+atomically with protected acceptance. Root retirement is permanent and key
+rotation increments generation. An issuer cut alone does not establish that an
+endpoint installed its fence. Status recovery of a pre-fence accepted request
+remains available; it creates no new permit.
+
+The pinned =commerce-acceptance-v1.json= fixture is exported by Lean. Endpoint
+regressions include pause after claim, retirement, rotation, logical state
+reload, unrelated roots and recovery after a lost response. Their acceptance
+counter is a deterministic oracle, not evidence of real processor charges.
+Deployment supplies authenticated durable fences and complete mediation.
+These interfaces install no database and implement no settlement rail. A fresh-only endpoint can still strand an acknowledged claim. The optional
+resumable endpoint protocol below closes that gap under its stronger contract.
+
+* Fenced recovery
+
+Consumption requests now persist their original root authority snapshot.
+=recover_dispatch= reads an exact authenticated consumption receipt and returns
+a historical descriptor, not a fresh permit. =ResumablePaymentProviderPort=
+adds ownership lookup, protected CAS takeover and dispatch under both ownership
+and root fences. Fresh dispatch must participate in the same ownership row at
+generation zero. Accepted operations never reacquire, including when receipts
+are lost or payment outcome is unknown.
+
+The endpoint supplies durable ownership/acceptance records and an idempotent
+queue or processor reconciliation protocol. Durable acceptance is responsibility
+for an operation, not bank settlement. Tests simulate logical crashes and
+interleavings without establishing backend durability or payment-rail finality.
+The request schema change is direct within the current unpublished API; older
+serialized request layouts are rejected. No compatibility storage layer is added.
+
+* Pinned checkout receipt profile
+
+The independent =presentation= feature and facade =commerce-presentation= use
+the pinned Cedar =ap2-receipt= subprofile. It supports Checkout Receipt compact
+ES256 JWT, exact role/issuer/reference/time checks and a single pending checkout
+in an authenticated open-mandate/agent scope. The Host supplies full SD-JWT,
+constraint and key-binding verification and any broader cross-scope serialization.
+Only merchant-configured terminal rejection codes allow reuse with a fresh
+reference. Unknown status, unsupported errors and exact operation replay grant
+no new presentation send.
+
+=PresentationJournal= persists presentation descriptors and original signed JWT
+bytes atomically with lifecycle state; later transitions cannot erase evidence.
+Mandate chains themselves remain retrievable by reference from the Host evidence
+store. =commit_presentation= refreshes current authority inside the conditional
+transaction. It installs no database and sends no network request. Success is
+not settlement finality or fulfillment. Payment Receipt and full AP2 mandate
+interoperability remain separate work.

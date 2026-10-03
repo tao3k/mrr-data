@@ -120,6 +120,13 @@ fn maintained_graphar_round_trips_vertices_edges_and_metadata() {
     assert_eq!(receipt.vertex_count(), 3);
     assert_eq!(receipt.edge_count(), 2);
     assert!(receipt.graph_info_path().is_file());
+    crate::verify_graphar_directory(
+        &output,
+        receipt.inventory(),
+        mrr_data_core::GraphInventoryLimits::default(),
+    )
+    .unwrap();
+    assert!(receipt.inventory().files().len() > 3);
     let query_source = receipt.query_source();
     assert_query_source(query_source, &output, &projection);
     assert_eq!(query_source.graph_info_path(), receipt.graph_info_path());
@@ -746,4 +753,27 @@ fn writer_rejects_duplicate_fact_ids_before_creating_output() {
         Err(GraphArWriteError::DuplicateFact(_))
     ));
     assert!(!output.exists());
+}
+
+#[test]
+fn writer_inventory_refusal_leaves_no_committed_directory() {
+    let projection = projection();
+    let edges = [projection.project(&fact("edge-1", "alice", "bob")).unwrap()];
+    let parent = tempfile::tempdir().unwrap();
+    let output = parent.path().join("dataset");
+    let result = crate::write_graphar_dataset_with_limits(
+        &output,
+        &projection,
+        &edges,
+        mrr_data_core::GraphInventoryLimits {
+            max_total_bytes: 1,
+            ..mrr_data_core::GraphInventoryLimits::default()
+        },
+    );
+    assert!(matches!(
+        result,
+        Err(crate::GraphArWriteError::Inventory(_))
+    ));
+    assert!(!output.exists());
+    assert_eq!(std::fs::read_dir(parent.path()).unwrap().count(), 0);
 }

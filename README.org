@@ -7,14 +7,18 @@
 * Start here
 
 - Architecture and ownership: [[file:docs/architecture/0001-mrr-data-plane.org][Data-plane RFC]]
+- Graph storage and query composition: [[file:docs/rfcs/0002-graphar-arrow-backend.org][GraphAr, Arrow and shared Backend RFC]]
 - Implemented APIs, feature contract, and development commands: [[file:docs/architecture/current-implementation.org][Current implementation]]
+- Shared Production persistence, lifecycle and provider qualification: [[file:docs/architecture/shared-backend.org][Shared backend]]
 - Content identity, local cache, snapshot, and S3: [[file:docs/architecture/content-cache-protocol.org][Content cache protocol]]
 - Snapshot transport acceptance: [[file:docs/architecture/s3-kache-transport-audit.org][S3 and Kache transport audit]]
 - Property snapshot and worker: [[file:docs/architecture/property-snapshot.org][Property snapshot]] and [[file:docs/architecture/healthcare-query-audit.org][Healthcare query audit]]
 - Existing POO Flow static-edge consumer: [[file:integrations/poo_flow/README.org][Integration guide]]
+- Optional operation and privacy bindings: [[file:crates/mrr-data-core/src/operation_binding.org][Data operation bindings]], [[file:crates/mrr-data-security/README.org][Data Protection]], and [[file:crates/mrr-data-pseudonymization/README.org][Cedar POO token profile]]
+- Proposed sensitive-data design across local storage, S3, and Google SDP: [[file:docs/architecture/sensitive-data-storage-plane.org][Sensitive data storage plane]]
 
 * Verify
 
-Run =just test-property-query= for the original Healthcare GQL worker path, and =just clippy-property-query= for its strict lint gate. The [[file:docs/architecture/current-implementation.org][current implementation]] lists broader workspace and optional-provider checks. CI validates Ubuntu and macOS independently.
+Run =just test-property-query= for generic property snapshot and physical-query tests, and =just clippy-property-query= for their strict lint gate. MRR owns source-bound Query orchestration; this repository no longer publishes a property Query entry point through its legacy POO Flow resource. The [[file:docs/architecture/current-implementation.org][current implementation]] lists broader workspace and optional-provider checks. CI validates Ubuntu and macOS independently.
 
 The Lambda/Marlin typed native handoff is a separate acceptance gate; the property-row producer and worker tests alone do not prove an application invocation.

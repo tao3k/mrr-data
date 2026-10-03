@@ -8,12 +8,19 @@ from pathlib import Path
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-CASES = [None, "", "arrow", "content-identity", "content", "snapshot", "transfer", "car", "filesystem", "cache", "s3",
-         "datafusion", "graphar", "content-identity,graphar", "cache,s3", "snapshot,cache,s3", "transfer,cache,s3",
-         "arrow,content-identity,content,snapshot,transfer,car,filesystem,cache,s3,datafusion,graphar"]
+CASES = [None, "", "backend", "backend-graph-publish", "backend-arrow-query", "backend-turso", "backend-duckdb", "commerce-cedar", "commerce-credential", "commerce-consumption", "commerce-presentation", "arrow", "content-identity", "content", "snapshot", "transfer", "car", "filesystem", "cache", "s3",
+         "data-protection", "raw-publish", "protected-envelope", "protected-publish", "datafusion", "graphar", "content-identity,graphar", "cache,s3", "snapshot,cache,s3", "transfer,cache,s3",
+         "arrow,content-identity,content,snapshot,transfer,raw-publish,protected-publish,car,filesystem,cache,s3,datafusion,graphar"]
 
 
 def main():
+    backend_tree = subprocess.check_output(
+        ["cargo", "tree", "-p", "mrr-data-backend", "--no-default-features", "--edges", "normal",
+         "--prefix", "none", "--locked"], cwd=ROOT, text=True)
+    backend_packages = {line.split()[0] for line in backend_tree.splitlines() if line.strip()}
+    forbidden = {"cedar-poo-commerce", "cedar-poo-bridge", "mrr-data-commerce", "rusqlite", "turso", "duckdb", "kache-store", "opendal-service-s3"}
+    if backend_packages & forbidden:
+        raise SystemExit(f"generic backend imports domain/provider dependencies: {backend_packages & forbidden}")
     tree = subprocess.check_output(
         ["cargo", "tree", "-p", "mrr-data-poo-flow", "--no-default-features", "--edges", "normal",
          "--prefix", "none", "--locked"], cwd=ROOT, text=True)
@@ -24,14 +31,30 @@ def main():
         if selected:
             flags += ["--features", selected]
         enabled = {"arrow", "filesystem"} if selected is None else set(selected.split(","))
-        content = bool(enabled & {"content", "snapshot", "transfer", "car", "filesystem", "cache", "s3", "datafusion"})
-        identity = content or "content-identity" in enabled
+        if enabled & {"commerce-cedar", "commerce-credential", "commerce-consumption", "commerce-presentation"}:
+            enabled |= {"commerce-cedar", "content"}
+        if enabled & {"backend-turso", "backend-duckdb", "backend-graph-publish", "backend-arrow-query"}:
+            enabled.add("backend")
+        if enabled & {"backend-duckdb", "backend-arrow-query"}:
+            enabled.add("arrow")
+        content = bool(enabled & {"backend", "content", "snapshot", "transfer", "raw-publish", "protected-envelope", "protected-publish", "car", "filesystem", "cache", "s3", "datafusion"})
+        identity = content or bool(enabled & {"content-identity", "data-protection"})
         expected = {
+            "mrr-data-backend": "backend" in enabled,
+            "rusqlite": "cache" in enabled,
+            "turso": "backend-turso" in enabled,
+            "duckdb": "backend-duckdb" in enabled,
+            "mrr-data-commerce": "commerce-cedar" in enabled,
+            "cedar-poo-commerce": "commerce-cedar" in enabled,
+            "p256": "commerce-cedar" in enabled,
             "mrr-data-arrow": bool(enabled & {"arrow", "datafusion"}),
             "mrr-data-core": identity or "datafusion" in enabled,
             "mrr-data-content": content,
-            "mrr-data-cache": bool(enabled & {"cache", "s3", "transfer"}),
-            "tokio": bool(enabled & {"s3", "transfer", "datafusion"}),
+            "mrr-data-cache": bool(enabled & {"cache", "s3", "transfer", "raw-publish", "protected-publish"}),
+            "mrr-data-security": bool(enabled & {"data-protection", "raw-publish", "protected-envelope", "protected-publish"}),
+            "tokio": bool(enabled & {"backend", "s3", "transfer", "raw-publish", "protected-publish", "datafusion"}),
+            "ring": bool(enabled & {"protected-envelope", "protected-publish", "s3"}),
+            "zeroize": bool(enabled & {"protected-envelope", "protected-publish", "s3", "commerce-cedar"}),
             "cid": identity,
             "serde_ipld_dagcbor": identity,
             "fvm_ipld_car": "car" in enabled,
@@ -50,7 +73,10 @@ def main():
         for package, present in expected.items():
             if (package in packages) != present:
                 raise SystemExit(f"{selected!r}: expected {package} present={present}")
-        subprocess.run(["cargo", "check", "-p", "mrr-data", "--quiet", "--locked", *flags],
+        # Reuse the qualified bundled native SDK build; isolation is independent
+        # of code generation profile. Avoid compiling DuckDB twice in one gate.
+        profile = ["--profile", "test"] if "backend-duckdb" in enabled else []
+        subprocess.run(["cargo", "check", "-p", "mrr-data", "--quiet", "--locked", *profile, *flags],
                        cwd=ROOT, check=True)
         print(f"{selected if selected else ('default' if selected is None else 'none')}: passed", flush=True)
 

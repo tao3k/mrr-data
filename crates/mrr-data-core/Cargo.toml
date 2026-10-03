@@ -9,7 +9,7 @@ repository.workspace = true
 
 [features]
 default = []
-content-identity = ["dep:cid", "dep:multihash-codetable", "dep:serde", "dep:serde_bytes", "dep:serde_ipld_dagcbor"]
+content-identity = ["dep:cid", "dep:multihash-codetable", "dep:serde", "dep:serde_bytes", "dep:serde_ipld_dagcbor", "dep:sha2"]
 
 [dependencies]
 cid = { workspace = true, optional = true }
@@ -19,6 +19,7 @@ mrr-data-profile.workspace = true
 serde = { workspace = true, optional = true }
 serde_bytes = { workspace = true, optional = true }
 serde_ipld_dagcbor = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
 
 [dev-dependencies]
 ipld-core.workspace = true
@@ -26,3 +27,9 @@ mrr-data-asp-rust-build-support.workspace = true
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "operation_binding"
+path = "benches/operation_binding.rs"
+harness = false
+required-features = ["content-identity"]

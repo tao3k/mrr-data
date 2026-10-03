@@ -13,6 +13,21 @@ arrow = ["dep:mrr-data-arrow"]
 cache = ["content", "dep:mrr-data-cache", "mrr-data-cache/kache"]
 s3 = ["content", "dep:mrr-data-cache", "mrr-data-cache/s3"]
 content-identity = ["dep:mrr-data-core", "mrr-data-core/content-identity"]
+data-protection = ["dep:mrr-data-security"]
+raw-publish = ["data-protection", "transfer", "mrr-data-security/raw-publish"]
+protected-envelope = ["data-protection", "content", "mrr-data-security/protected-envelope"]
+protected-publish = ["protected-envelope", "transfer", "filesystem", "mrr-data-security/protected-publish"]
+commerce-cedar = ["content", "dep:mrr-data-commerce"]
+commerce-presentation = ["commerce-cedar", "mrr-data-commerce/presentation"]
+commerce-credential = ["commerce-cedar", "mrr-data-commerce/credential"]
+commerce-consumption = ["commerce-credential", "mrr-data-commerce/consumption"]
+pseudonymization = ["data-protection"]
+pseudonymization-cedar = ["pseudonymization", "dep:mrr-data-pseudonymization"]
+google-sdp = ["pseudonymization-cedar", "mrr-data-pseudonymization/google-sdp"]
+backend = ["content", "dep:mrr-data-backend"]
+backend-graph-publish = ["backend", "mrr-data-backend/graph-publish"]
+backend-turso = ["backend", "mrr-data-backend/turso"]
+backend-duckdb = ["backend", "arrow", "mrr-data-backend/duckdb"]
 content = ["content-identity", "dep:mrr-data-content"]
 transfer = ["snapshot", "mrr-data-content/transfer", "dep:mrr-data-cache", "mrr-data-cache/blocking"]
 snapshot = ["content", "mrr-data-content/snapshot"]
@@ -21,17 +36,27 @@ filesystem = ["content", "mrr-data-content/filesystem"]
 datafusion = ["arrow", "dep:mrr-data-datafusion"]
 graphar = ["dep:mrr-data-graphar"]
 graphar-native = ["graphar", "mrr-data-graphar/native-graphar"]
+backend-arrow-query = ["backend", "arrow", "mrr-data-backend/arrow-query"]
+backend-graphar = ["backend", "content-identity", "graphar-native", "mrr-data-graphar/backend"]
 
 [dependencies]
+mrr-data-backend = { workspace = true, optional = true }
+mrr-data-commerce = { path = "../mrr-data-commerce", version = "0.1.0", default-features = false, optional = true }
 mrr-data-cache = { workspace = true, optional = true }
 mrr-data-arrow = { workspace = true, optional = true }
 mrr-data-content = { workspace = true, optional = true }
 mrr-data-core = { workspace = true, optional = true }
+mrr-data-security = { workspace = true, optional = true }
 mrr-data-datafusion = { workspace = true, optional = true }
 mrr-data-graphar = { workspace = true, optional = true }
+mrr-data-pseudonymization = { path = "../mrr-data-pseudonymization", version = "0.1.0", optional = true }
 mrr-data-profile.workspace = true
 
 [dev-dependencies]
+cid.workspace = true
+meta-relational-reasoning.workspace = true
+tokio.workspace = true
+tempfile.workspace = true
 mrr-data-asp-rust-build-support.workspace = true
 
 [lints]

@@ -21,7 +21,7 @@ profile remains unchanged.
 
 * Implemented library path
 
-=mrr-data-poo-flow::materialize_property_snapshot= accepts MRR-admitted
+=mrr-data-content::materialize_property_snapshot= accepts MRR-admitted
 catalogs and semantic generation, typed source rows, caller-owned coverage
 evidence, and physical budgets. It verifies the complete catalog table set,
 property shapes, unique entity identities, relation endpoints, coverage CID,
@@ -31,22 +31,16 @@ labels, claim source completeness,
 or define a second GQL parser. Remote publication remains the existing
 =mrr_data_content::publish_snapshot= path.
 
-=mrr-data-poo-flow::execute_property_source_worker_query= accepts the original
-source and digest, admitted entity/relation catalogs, a CID root, transfer
-session and independent transfer, execution and result limits. It restores a
-complete content closure, compiles GQL through =mrr-frontends=, binds the MRR
-query to the restored semantic snapshot, binds the physical root, executes the
-property path in DataFusion, and submits the candidate to MRR admission.
-
-The worker does not infer type IDs from label strings. Its caller must supply
-catalogs whose identities agree with the MRR frontend. Tests derive their
-catalog identities from the compiled query IR, so a frontend namespace change
-cannot silently make the fixture a parallel authority.
+=mrr-data-datafusion::execute_restored_property_path_query= accepts an MRR-bound
+query, admitted catalogs, a verified restored snapshot, and physical limits.
+The MRR Query owner compiles the original source and admits the resulting
+candidate. The POO Flow caller must supply catalogs whose identities agree
+with the MRR frontend and connect the MRR Query API to this physical executor.
 
 * Evidence and remaining gate
 
-On 2026-09-23, the focused macOS =just test-property-query= suite passed 12/12
-tests. It includes exact-source digest rejection, deterministic producer
+At the 2026-09-23 historical worker revision, the focused macOS suite passed 12/12
+tests. It included exact-source digest rejection, deterministic producer
 materialization, failed catalog/endpoint/coverage admission, a cold/warm
 restored-snapshot test with the same admitted result digest, and the full
 typed-row producer to remote publication to original Healthcare GQL worker
@@ -54,10 +48,13 @@ path. Existing
 DataFusion tests cover malformed IPC, row-count and catalog substitution,
 resource limits, dangling endpoints, null properties and multiplicity.
 
-The original-GQL property worker and S3/Kache transport passed Ubuntu and
+The former original-GQL property worker and S3/Kache transport passed Ubuntu and
 macOS in [[https://github.com/tao3k/mrr-data/actions/runs/35851110524][CI run 35851110524]], which also passed the snapshot distribution
 acceptance gate. The change was [[https://github.com/tao3k/mrr-data/pull/2][squash-merged in PR #2]]. This is cross-platform
-library and transport acceptance, not application invocation evidence.
+library and transport acceptance at that revision, not application invocation
+evidence. The source-level worker entry point was later removed from MRR Data
+to keep Query ownership in MRR; current CI exercises the generic physical
+producer and executor independently.
 
 The actual Lambda/Marlin process has not yet exported its projected POO rows
 through a typed native boundary or called the property producer/worker. A

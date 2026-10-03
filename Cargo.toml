@@ -5,8 +5,12 @@ members = [
   "crates/mrr-data-poo-flow",
   "crates/mrr-data-arrow",
   "crates/mrr-data-content",
+  "crates/mrr-data-backend",
   "crates/mrr-data-cache",
   "crates/mrr-data-core",
+  "crates/mrr-data-security",
+  "crates/mrr-data-pseudonymization",
+  "crates/mrr-data-commerce",
   "crates/mrr-data-datafusion",
   "crates/mrr-data-graphar",
   "crates/mrr-data-profile",
@@ -22,6 +26,9 @@ license = "LGPL-2.1-or-later"
 repository = "https://github.com/tao3k/mrr-data"
 
 [workspace.dependencies]
+mrr-data-backend = { path = "crates/mrr-data-backend", version = "0.1.0", default-features = false }
+turso = { version = "=0.8.1", default-features = false }
+duckdb = { version = "=1.10502.0", default-features = false, features = ["bundled", "appender-arrow"] }
 serde_json = "1"
 sha2 = "0.10"
 mrr-data-cache = { path = "crates/mrr-data-cache", version = "0.1.0", default-features = false }
@@ -43,12 +50,12 @@ arrow-ipc = "58.4.0"
 arrow-schema = "58.4.0"
 datafusion = { version = "=53.1.0", default-features = false }
 flatbuffers = "25.2.10"
-meta-relational-reasoning = { git = "https://github.com/tao3k/meta-relational-reasoning.git", rev = "c4328064ab0bf5eca39dc2f79fbf890b6b99f7c9", version = "0.1.0" }
-mrr-frontends = { git = "https://github.com/tao3k/meta-relational-reasoning.git", rev = "c4328064ab0bf5eca39dc2f79fbf890b6b99f7c9", version = "0.1.0" }
+meta-relational-reasoning = { git = "https://github.com/tao3k/meta-relational-reasoning.git", rev = "e9f87c3744b0d38709c479edc1b2143ef5ec9bbd", version = "0.1.0" }
 mrr-data-asp-rust-build-support = { path = "build-support/mrr-data-asp-rust-project-policy", version = "0.1.0" }
 mrr-data-arrow = { path = "crates/mrr-data-arrow", version = "0.1.0" }
 mrr-data-content = { path = "crates/mrr-data-content", version = "0.1.0", default-features = false }
 mrr-data-core = { path = "crates/mrr-data-core", version = "0.1.0", default-features = false }
+mrr-data-security = { path = "crates/mrr-data-security", version = "0.1.0" }
 mrr-data-datafusion = { path = "crates/mrr-data-datafusion", version = "0.1.0" }
 mrr-data-graphar = { path = "crates/mrr-data-graphar", version = "0.1.0" }
 mrr-data-profile = { path = "crates/mrr-data-profile", version = "0.1.0" }

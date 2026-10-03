@@ -1,0 +1,107 @@
+#+TITLE: Protected Storage Projection and Envelope
+#+OPTIONS: toc:nil
+
+[[file:protected.rs][The intent and publication checks]] replay
+[[https://github.com/tao3k/cedar-poo-spec/pull/5][SPEC Protected Storage]] at the
+Rust boundary. The versioned fixture in =fixtures/protected-storage-v1.json=
+contains fourteen intent, nine pre-root, and fourteen post-root commit cases. The separate
+=storage-profiles-v1.json= crosses sensitivity, destination acceptance,
+tenant match and storage tier into sixteen composed production cases. These
+fixtures are decision checks, not authenticated Host claims.
+The protected fixture also contains eighteen read and eleven read-release cases. The Rust
+[[file:protected_read.rs][read projection]] requires a fresh action-specific
+claim and an authenticated exact committed receipt. The restore API checks it
+before cache or remote GET, including for a warm cache hit. After it verifies
+the full closure, a required Host refresh supplies current governance and the
+committed row for a second check before plaintext is returned. A changed epoch,
+expired claim, rollback of observed time, or missing/conflicting row returns no plaintext result, on cold
+and warm cache paths. The caller must authenticate both observations and
+serialize the final check with disclosure.
+The read intent binds the receipt's outer root, child count and ciphertext
+byte total. Restore compares those values with the prepared closure before
+any GET, then rejects cumulative ciphertext bytes above the committed total
+as each GET completes, before decrypting that block. The caller's independent
+size limit still applies. A changed
+receipt at the final refresh prevents plaintext release.
+
+The optional =protected-envelope= feature supplies [[file:envelope.rs][AES-256-GCM envelopes]].
+Every block gets a fresh random nonce and a raw outer CID. The AEAD binding
+includes the inner CID, full intent, destination, source labels, profile, key
+reference/version, residency and role. The wire bytes expose only a format
+tag, nonce and ciphertext. The Host supplies and controls key bytes; it must
+enforce a bounded key lifetime and avoid logging plaintext or secrets.
+
+The optional =protected-publish= feature supplies
+[[file:protected_snapshot.rs][bounded staging and transport]]. It verifies the
+inner closure before encryption, stages encrypted children and root into a
+Host-selected local outbox, then stages an encrypted manifest containing the
+outer child map. The private =PreparedProtectedSnapshot= receipt binds inner
+and outer roots and must be durably authenticated by the Host before remote
+publication. =host_record= exports owned fields for Host-controlled durable
+storage; =from_authenticated_record= resumes from those fields after a restart.
+The caller authenticates that record and its storage format. The publisher
+uploads ciphertext children and the encrypted inner root, then authenticates
+and decrypts the staged manifest with the supplied key. It requires the inner
+root and complete child map to match the recovered record before refreshing
+current governance and uploading the encrypted manifest root. It checks the
+cumulative ciphertext bytes against the authenticated record before each
+remote PUT, so an undersized record cannot cause excess publication. The final
+root PUT makes one =TransferSession= call even when the session retries child PUTs;
+an ambiguous failure must re-enter this publisher and obtain fresh Host state
+before another root attempt. The provider adapter's internal behavior remains
+its own contract. The returned
+physical acknowledgement can feed =decide_commit=. A fresh
+commit requires that exact acknowledgement and current authority; a matching
+authenticated prior ledger receipt yields =Replay= even after expiry. A root
+PUT that returned an error has no acknowledgement from this API, including
+when the remote retained its bytes. The Host performs atomic ledger compare-and-set,
+pointer publication, approval redemption and audit; replay grants no read access.
+
+After that read gate, restore reads only outer ciphertext into a protected cache, checks outer CIDs,
+authenticates and decrypts each envelope, checks inner CIDs, then validates the
+complete snapshot closure in a private memory store. The local test reopens a filesystem outbox,
+rebuilds the prepared handle from a Host record, denies a changed epoch before
+the outer root PUT, checks the commit disposition, denies missing/stale read
+authority before I/O and after verification, and checks cold restore and zero-GET warm restore using
+a mock remote. It also injects a stored-but-unacknowledged root ambiguity in a
+retry-enabled session and verifies that revoked authority prevents a second
+root attempt. The independent loopback SigV4/TLS conformance runner also
+publishes and restores the protected closure through the production S3 adapter
+and confirms that the raw inner root is absent remotely.
+The same restricted source is first offered to the raw-publication wrapper,
+which rejects it before any remote PUT even when the destination accepts
+restricted protected data. This links the negative raw route to the positive
+protected route in one executable case; generic content APIs remain
+label-blind and still require a trusted Host to prevent bypass.
+Recovery negatives additionally reopen a Host record against a missing
+outbox, an outbox that returns corrupted manifest bytes, and a recovered record
+whose child map disagrees with the authenticated manifest. None of these paths
+returns a physical acknowledgement or publishes the discoverable outer root;
+the existing SPEC commit rule rejects a missing acknowledgement. This checks
+the library's failure boundary without claiming durable Host ledger behavior.
+
+* Reflection: local S3 composition and LeanPoo
+
+This iteration uses the SPEC's existing LeanPoo profile composition to name
+the admitted destination and key version. The S3 adapter then moves opaque
+ciphertext blocks; it has no independent policy owners, inherited slots or
+proof dependency graph. Applying LeanPoo dispatch to each PUT/GET would not
+strengthen SigV4, TLS, CID verification or the fresh read gate. The local
+s3s server tests the real adapter and wire protocol on loopback. It is not
+evidence of AWS deployment or a Host's atomic ledger and audit behavior.
+The release refresh also compares dynamic Host facts, so it does not create a
+new LeanPoo composition point or a safe authorization cache.
+The exact ciphertext total is likewise an observed property of the staged
+closure and authenticated commit receipt. LeanPoo's existing profile
+composition still supplies static destination and key choices, while these
+per-block bounds remain direct Rust checks at the I/O boundary.
+
+The generic content APIs still accept arbitrary bytes. A deploying Host must
+authenticate the source catalog, lineage, Cedar decision, destination and
+key configuration; prevent bypasses; atomically redeem the operation ID and
+persist the outer-root pointer and audit; manage orphan ciphertext and
+retention; and control plaintext memory. A mock remote is not S3 acceptance.
+
+#+begin_src sh
+cargo test -p mrr-data-security --features protected-publish --locked
+#+end_src

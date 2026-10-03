@@ -42,13 +42,14 @@ OpenDAL/reqwest adapter performs the actual conformance operations.
 | External corruption | Adapter PUT fails and leaves poisoned bytes unchanged |
 | Read budget | Oversized response returns TooLarge |
 | Snapshot | Genuine Arrow facts survive publication and cold Kache restore |
+| Protected snapshot | Root-last ciphertext publication, exact physical ACK, no raw root on S3, and read-gated cold restore over the production adapter |
 
 The runner also executes both public S3 examples against the same TLS service
 and checks that the single-file example rejects input larger than 64 MiB.
 =python3 tools/s3-conformance/test_runner.py= verifies source fingerprinting and
 stale-receipt removal without network access.
 
-The Rust test is ignored during ordinary workspace tests and explicitly required
+Both Rust integration tests are ignored during ordinary workspace tests and explicitly required
 by this runner; missing configuration or selecting zero tests is a failure. CI
 has a dedicated Ubuntu/macOS job for it. The fault-injection HTTP fixture remains
 separate and intentionally does not validate signatures.

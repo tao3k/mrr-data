@@ -304,7 +304,7 @@ async fn absent_and_null_filter_properties_produce_no_matches() {
         let result = execute_property_path_query(&f.query, &f.entities, &f.relations, limits())
             .await
             .unwrap();
-        assert!(result.rows().is_empty());
+        assert_eq!(result.rows().len(), 0);
         assert_eq!(result.columns().len(), 3);
     }
 }

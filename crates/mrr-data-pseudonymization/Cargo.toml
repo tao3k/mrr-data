@@ -1,0 +1,39 @@
+[package]
+name = "mrr-data-pseudonymization"
+description = "Optional Cedar POO pseudonymization binding for MRR Data"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+google-sdp = ["cedar-poo-pseudonymization/google-sdp", "dep:sha2", "dep:mrr-data-arrow"]
+
+[dependencies]
+cedar-poo-pseudonymization = { git = "https://github.com/tao3k/cedar-poo-spec", rev = "bcacabbdd188a821799dc6be92ebbed4a7c46214", default-features = false }
+cid.workspace = true
+meta-relational-reasoning.workspace = true
+mrr-data-core = { workspace = true, features = ["content-identity"] }
+mrr-data-arrow = { workspace = true, optional = true }
+mrr-data-security.workspace = true
+sha2 = { workspace = true, optional = true }
+
+[dev-dependencies]
+mrr-data-asp-rust-build-support.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true
+
+[[bench]]
+name = "token_catalog"
+path = "benches/token_catalog.rs"
+harness = false
+
+[[bench]]
+name = "google_sdp"
+path = "benches/google_sdp.rs"
+harness = false
+required-features = ["google-sdp"]

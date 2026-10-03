@@ -9,16 +9,22 @@ repository.workspace = true
 
 [features]
 default = []
-native-graphar = ["dep:arrow-array", "dep:graphar-rs", "dep:tempfile"]
+file-inventory = ["dep:mrr-data-core"]
+backend = ["native-graphar", "dep:mrr-data-backend"]
+native-graphar = ["file-inventory", "dep:arrow-array", "dep:graphar-rs", "dep:tempfile"]
 
 [dependencies]
 arrow-array = { workspace = true, optional = true }
 graphar-rs = { git = "https://github.com/GTrunSec/incubator-graphar", rev = "4d4b29715d9825bd3e9b78589cfb863880b9d1d8", optional = true }
 meta-relational-reasoning.workspace = true
 mrr-data-profile.workspace = true
+mrr-data-core = { workspace = true, optional = true, features = ["content-identity"] }
 tempfile = { workspace = true, optional = true }
+mrr-data-backend = { workspace = true, optional = true }
 
 [dev-dependencies]
+mrr-data-content.workspace = true
+tempfile.workspace = true
 mrr-data-asp-rust-build-support.workspace = true
 mrr-data-arrow.workspace = true
 mrr-data-core = { workspace = true, features = ["content-identity"] }

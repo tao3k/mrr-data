@@ -23,7 +23,7 @@ pub const DAG_CBOR_CODEC_NAME: &str = "dag-cbor";
 /// Multihash name pinned by the V1 content identity profile.
 pub const SHA2_256_NAME: &str = "sha2-256";
 /// Numeric CID version pinned by the V1 content identity profile.
-pub const CID_VERSION_V1: u64 = 1;
+pub const CID_VERSION: u64 = 1;
 /// Registered multicodec number for opaque raw bytes.
 pub const RAW_CODEC: u64 = 0x55;
 /// Registered multicodec number for DAG-CBOR.

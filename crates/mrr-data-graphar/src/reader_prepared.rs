@@ -251,9 +251,17 @@ pub fn prepare_graphar_source(
     let root = root.as_ref();
     let graph_info_started = Instant::now();
     let graph_info = GraphInfo::load(root.join(GRAPH_INFO_FILE))?;
-    let graph_info_elapsed = graph_info_started.elapsed();
-    let vertices = read_and_admit_vertices(&graph_info, limits.max_vertices)?;
-    let edges = read_edge_batches(&graph_info, limits.max_edges)?;
+    prepare_with_info(root, &graph_info, limits, graph_info_started.elapsed())
+}
+
+pub(crate) fn prepare_with_info(
+    root: &Path,
+    graph_info: &GraphInfo,
+    limits: GraphArReadLimits,
+    graph_info_elapsed: Duration,
+) -> Result<PreparedGraphArSource, GraphArReadError> {
+    let vertices = read_and_admit_vertices(graph_info, limits.max_vertices)?;
+    let edges = read_edge_batches(graph_info, limits.max_edges)?;
     let facts = prepare_facts(&edges.values, edges.count, &vertices.physical_entities)?;
 
     Ok(PreparedGraphArSource {

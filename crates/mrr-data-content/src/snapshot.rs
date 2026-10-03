@@ -8,6 +8,7 @@ use cid::Cid;
 use meta_relational_reasoning::{EntityCatalog, RelationCatalog};
 use mrr_data_core::{SnapshotBlock, SnapshotManifest};
 use std::collections::BTreeMap;
+use std::future::Future;
 
 /// Logical resident payload limits. Count and total include the root, while
 /// `block_bytes` applies to children. Execution is serial; there are no retries.
@@ -79,6 +80,17 @@ pub struct SnapshotPublication {
     root: Cid,
     total_bytes: usize,
     cache: BTreeMap<Cid, CacheAdmission>,
+}
+
+/// Physical inputs for one bounded snapshot publication. The remote is a
+/// byte transport; any policy gate belongs to its caller.
+pub struct SnapshotPublishInputs<'a> {
+    pub local: &'a dyn AsyncContentStore,
+    pub remote: &'a dyn RemoteContentStore,
+    pub snapshot: &'a SnapshotBlock,
+    pub relations: &'a RelationCatalog,
+    pub entities: &'a EntityCatalog,
+    pub limits: SnapshotTransferLimits,
 }
 impl SnapshotPublication {
     #[must_use]
@@ -203,13 +215,52 @@ fn transfer(cid: Cid, error: ContentProtocolError) -> SnapshotTransferError {
 /// Failed attempts may leave immutable children or an already published root;
 /// no success receipt is returned and shared remote objects are never removed.
 pub async fn publish_snapshot(
-    local: &(impl AsyncContentStore + ?Sized),
-    remote: &(impl RemoteContentStore + ?Sized),
+    local: &dyn AsyncContentStore,
+    remote: &dyn RemoteContentStore,
     snapshot: &SnapshotBlock,
     relations: &RelationCatalog,
     entities: &EntityCatalog,
     limits: SnapshotTransferLimits,
 ) -> Result<SnapshotPublication, SnapshotTransferError> {
+    publish_snapshot_with_root_gate(
+        SnapshotPublishInputs {
+            local,
+            remote,
+            snapshot,
+            relations,
+            entities,
+            limits,
+        },
+        remote,
+        || async { Ok(()) },
+    )
+    .await
+}
+
+/// Validates and publishes children, then invokes `before_root` immediately
+/// before publishing the root through `root_remote`. The caller supplies a
+/// one-call root remote decorator when another attempt requires renewed authority.
+/// Failed attempts may leave children or an unacknowledged root remotely.
+/// # Errors
+/// Returns a snapshot failure or the caller's root-gate error.
+pub(crate) async fn publish_snapshot_with_root_gate<E, F, Fut>(
+    inputs: SnapshotPublishInputs<'_>,
+    root_remote: &(impl RemoteContentStore + ?Sized),
+    before_root: F,
+) -> Result<SnapshotPublication, E>
+where
+    E: From<SnapshotTransferError>,
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = Result<(), E>>,
+{
+    let SnapshotPublishInputs {
+        local,
+        remote,
+        snapshot,
+        relations,
+        entities,
+        limits,
+    } = inputs;
     check(
         SnapshotResource::RootBytes,
         limits.root_bytes,
@@ -220,7 +271,10 @@ pub async fn publish_snapshot(
     let mut children = BTreeMap::new();
     for cid in cids {
         let remaining = limits.total_bytes - total;
-        let bytes = local.load(&cid, limits.block_bytes.min(remaining)).await?;
+        let bytes = local
+            .load(&cid, limits.block_bytes.min(remaining))
+            .await
+            .map_err(SnapshotTransferError::from)?;
         check(
             SnapshotResource::BlockBytes,
             limits.block_bytes,
@@ -232,15 +286,19 @@ pub async fn publish_snapshot(
     closure(snapshot.manifest(), &children)?;
     let mut cache = BTreeMap::new();
     for (cid, bytes) in &children {
-        let block = ContentBlock::new(ContentCodec::from_cid(cid)?, bytes);
+        let block = ContentBlock::new(
+            ContentCodec::from_cid(cid).map_err(SnapshotTransferError::from)?,
+            bytes,
+        );
         let receipt = publish_content(local, remote, block)
             .await
             .map_err(|e| transfer(*cid, e))?;
         cache.insert(*cid, receipt.cache);
     }
+    before_root().await?;
     let receipt = publish_content(
         local,
-        remote,
+        root_remote,
         ContentBlock::new(ContentCodec::DagCbor, snapshot.bytes()),
     )
     .await

@@ -15,11 +15,13 @@ use multihash_codetable::{Code, MultihashDigest};
 
 use crate::{
     BatchDescriptor, CoverageDescriptor, CoverageKind, DAG_CBOR_CODEC, DataEngineProfile,
-    DataError, DataGraphSourceBindingError, DataQueryBindingError, DataQueryFeature,
-    DataQueryOutputError, EntityDescriptor, GraphProjectionDescriptor,
-    PROPERTY_SNAPSHOT_SCHEMA_VERSION, PhysicalQueryOutput, RAW_CODEC, RelationDescriptor,
-    SnapshotBlock, SnapshotManifest, SnapshotManifestRequest, admit_graph_projection_source,
-    bind_data_query, project_data_query_output, raw_cid,
+    DataError, DataGraphSourceBindingError, DataOperationBinding, DataQueryBindingError,
+    DataQueryFeature, DataQueryOutputError, EntityDescriptor, GraphProjectionDescriptor,
+    PROPERTY_SNAPSHOT_SCHEMA_VERSION, PhysicalQueryOutput, QueryOperationBinding, RAW_CODEC,
+    RelationDescriptor, ReleaseBindingError, ReleaseOperationBinding, SnapshotBlock,
+    SnapshotManifest, SnapshotManifestRequest, SnapshotOperationBinding, SnapshotRowBinding,
+    SnapshotRowBindingError, admit_graph_projection_source, bind_data_query,
+    project_data_query_output, raw_cid,
 };
 
 fn relation_id(name: &str) -> RelationId {
@@ -287,6 +289,53 @@ fn admitted_query_binds_to_exact_physical_snapshot_and_graph_projection() {
             .map(GraphProjectionDescriptor::manifest_cid)
     );
     assert_eq!(bound.engine().name(), "graphar-native");
+
+    let snapshot_binding = SnapshotOperationBinding::new(&snapshot);
+    let query_binding = QueryOperationBinding::new(&bound);
+    assert_eq!(snapshot_binding.root(), query_binding.root());
+    assert_eq!(snapshot_binding.generation(), query_binding.generation());
+    assert_eq!(
+        snapshot_binding.semantic_digest(),
+        bound.query().snapshot_digest()
+    );
+    assert_eq!(query_binding.query_binding_digest(), bound.query().digest());
+    assert_eq!(query_binding.engine_name(), "graphar-native");
+    assert!(matches!(
+        DataOperationBinding::Publish(snapshot_binding),
+        DataOperationBinding::Publish(_)
+    ));
+}
+
+#[test]
+fn selected_row_must_belong_to_the_relation_child_and_ordinal() {
+    let source = SnapshotBlock::encode(manifest(false)).unwrap();
+    let relations = source.manifest().relations();
+    let alpha = relations
+        .iter()
+        .find(|relation| relation.relation_id() == relation_id("alpha"))
+        .unwrap();
+    let beta = relations
+        .iter()
+        .find(|relation| relation.relation_id() == relation_id("beta"))
+        .unwrap();
+    let child = &alpha.batches()[0];
+    let row = SnapshotRowBinding::new(&source, alpha.relation_id(), child.cid(), 0).unwrap();
+    assert_eq!(row.source().root(), source.cid());
+    assert_eq!(row.relation_id(), alpha.relation_id());
+    assert_eq!(row.child_cid(), child.cid());
+    assert_eq!(row.row_index(), 0);
+    assert_eq!(
+        SnapshotRowBinding::new(&source, relation_id("other"), child.cid(), 0).err(),
+        Some(SnapshotRowBindingError::RelationUnavailable)
+    );
+    assert_eq!(
+        SnapshotRowBinding::new(&source, alpha.relation_id(), beta.batches()[0].cid(), 0).err(),
+        Some(SnapshotRowBindingError::ChildUnavailable)
+    );
+    assert_eq!(
+        SnapshotRowBinding::new(&source, alpha.relation_id(), child.cid(), child.row_count()).err(),
+        Some(SnapshotRowBindingError::RowOutOfBounds)
+    );
 }
 
 #[test]
@@ -354,6 +403,25 @@ fn physical_execution_injects_binding_then_mrr_admits_the_candidate() {
     )
     .unwrap();
     assert_eq!(receipt.row_count(), 1);
+
+    let output_digest = [7; 32];
+    let release = ReleaseOperationBinding::new(&bound, &receipt, &output_digest).unwrap();
+    assert_eq!(release.query().root(), snapshot.cid());
+    assert_eq!(release.admitted_result_digest(), receipt.digest());
+    assert_eq!(release.output_digest(), &output_digest);
+    assert_eq!(release.row_count(), 1);
+
+    let other_engine = DataEngineProfile::new(
+        "arrow-native",
+        false,
+        [DataQueryFeature::BoundedVariableLengthPath],
+    )
+    .unwrap();
+    let other = bind_data_query(&bound_query(Some(2)), &snapshot, &other_engine).unwrap();
+    assert_eq!(
+        ReleaseOperationBinding::new(&other, &receipt, &output_digest).err(),
+        Some(ReleaseBindingError::QueryBindingMismatch)
+    );
 }
 
 #[test]
@@ -462,7 +530,7 @@ fn unordered_semantic_inputs_have_one_root_cid() {
 }
 
 #[test]
-fn snapshot_v1_root_has_a_golden_cid() {
+fn snapshot_root_has_a_golden_cid() {
     let block = SnapshotBlock::encode(manifest(false)).unwrap();
     assert_eq!(
         block.cid().to_string(),
@@ -728,3 +796,66 @@ fn replace(value: &mut Ipld, path: &[&str], replacement: Ipld) {
 
 #[allow(dead_code)]
 fn _assert_ipld_map_shape(_: BTreeMap<String, Ipld>, _: Cid) {}
+
+#[test]
+fn graph_dataset_root_binds_inventory_and_semantic_scope() {
+    use crate::{
+        GraphDatasetBinding, GraphDatasetInventory, GraphFile, GraphFileKind, GraphInventoryError,
+        GraphInventoryLimits, dag_cbor_cid,
+    };
+    let limits = GraphInventoryLimits::default();
+    let inventory = |chunk: &[u8]| {
+        GraphDatasetInventory::admit(
+            "graph.yaml".into(),
+            vec![
+                GraphFile::new(
+                    "graph.yaml".into(),
+                    b"graphar-manifest",
+                    GraphFileKind::Metadata,
+                ),
+                GraphFile::new("chunk0".into(), chunk, GraphFileKind::Parquet),
+            ],
+            limits,
+        )
+        .unwrap()
+    };
+    let files = inventory(b"original");
+    let snapshot = SnapshotBlock::encode(manifest_with_graph(false, true)).unwrap();
+    let engine = DataEngineProfile::new("graphar-native", true, []).unwrap();
+    let query = bind_data_query(&bound_query(Some(1)), &snapshot, &engine).unwrap();
+    let binding = GraphDatasetBinding::admit(&query, relation_id("alpha"), &files, limits).unwrap();
+    let bytes = binding.canonical_bytes().unwrap();
+    let root = dag_cbor_cid(&bytes);
+    let decoded = GraphDatasetBinding::decode_checked(&bytes, &root).unwrap();
+    assert_eq!(decoded, binding);
+    decoded.admit_query(&query, &files, limits).unwrap();
+    assert_eq!(
+        decoded.admit_query(&query, &inventory(b"replacement"), limits),
+        Err(GraphInventoryError::Integrity)
+    );
+    assert!(GraphDatasetBinding::admit(&query, relation_id("beta"), &files, limits).is_err());
+    assert!(GraphDatasetBinding::decode_checked(&bytes, &dag_cbor_cid(b"wrong root")).is_err());
+    for field in [
+        "semantic_digest",
+        "relation_catalog_digest",
+        "entity_catalog_digest",
+    ] {
+        let mut value: Ipld = serde_ipld_dagcbor::from_slice(&bytes).unwrap();
+        replace(&mut value, &[field], Ipld::Bytes(vec![0; 32]));
+        let changed = serde_ipld_dagcbor::to_vec(&value).unwrap();
+        let drifted =
+            GraphDatasetBinding::decode_checked(&changed, &dag_cbor_cid(&changed)).unwrap();
+        assert_eq!(
+            drifted.admit_query(&query, &files, limits),
+            Err(GraphInventoryError::Integrity)
+        );
+    }
+    // A valid recomputed CID does not permit an extra field in the wire contract.
+    let mut value: Ipld = serde_ipld_dagcbor::from_slice(&bytes).unwrap();
+    let Ipld::Map(ref mut map) = value else {
+        panic!("binding map")
+    };
+    map.insert("unexpected".into(), Ipld::Bool(true));
+    let unknown = serde_ipld_dagcbor::to_vec(&value).unwrap();
+    assert!(GraphDatasetBinding::decode_checked(&unknown, &dag_cbor_cid(&unknown)).is_err());
+}

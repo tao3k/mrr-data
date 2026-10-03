@@ -1,0 +1,71 @@
+[package]
+name = "mrr-data-backend"
+description = "Shared bounded persistence lifecycle and metadata providers for MRR Data profiles"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+arrow-query = ["dep:arrow-array", "dep:arrow-schema"]
+graph-publish = ["mrr-data-content/graph-snapshot"]
+turso = ["dep:turso"]
+duckdb = ["dep:duckdb", "arrow-query"]
+
+[dependencies]
+mrr-data-content.workspace = true
+cid.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["sync", "time"] }
+turso = { workspace = true, optional = true }
+duckdb = { workspace = true, optional = true }
+arrow-array = { workspace = true, optional = true }
+arrow-schema = { workspace = true, optional = true }
+
+[dev-dependencies]
+meta-relational-reasoning.workspace = true
+mrr-data-core = { workspace = true, features = ["content-identity"] }
+tempfile.workspace = true
+mrr-data-asp-rust-build-support.workspace = true
+
+[[test]]
+name = "backend_consumer"
+path = "tests/integration/backend_consumer.rs"
+
+[[test]]
+name = "backend_performance"
+path = "tests/performance/backend_performance.rs"
+
+[[test]]
+name = "backend_dispatch"
+path = "tests/integration/dispatch.rs"
+
+[[test]]
+name = "backend_mixed_performance"
+path = "tests/performance/mixed_performance.rs"
+
+[lints]
+workspace = true
+
+[[test]]
+name = "backend_sustained_performance"
+path = "tests/performance/sustained_performance.rs"
+
+[[test]]
+name = "backend_duckdb_arrow"
+path = "tests/integration/duckdb_arrow.rs"
+
+[[test]]
+name = "backend_resources"
+path = "tests/integration/resources.rs"
+
+[[test]]
+name = "backend_graph_publication"
+path = "tests/integration/graph_publication.rs"
+
+[[test]]
+name = "backend_arrow_query"
+path = "tests/integration/arrow_query.rs"

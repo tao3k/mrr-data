@@ -3,6 +3,7 @@
 #[path = "reader_prepared.rs"]
 mod prepared;
 
+pub(crate) use prepared::prepare_with_info;
 pub use prepared::{GraphArPrepareTimings, PreparedGraphArSource, prepare_graphar_source};
 
 use std::{
@@ -305,6 +306,10 @@ impl GraphArReadTimings {
 }
 
 impl GraphArDataset {
+    pub(crate) fn shared_facts(&self) -> Arc<[Fact]> {
+        self.facts.clone()
+    }
+
     #[must_use]
     pub fn root(&self) -> &Path {
         &self.root

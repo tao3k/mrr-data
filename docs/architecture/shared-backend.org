@@ -1,0 +1,395 @@
+#+TITLE: Shared Production Backend: optional providers and qualification
+#+DATE: 2026-10-03
+
+* Ownership and dependency direction
+
+[[file:../../crates/mrr-data-backend/src/lib.rs][mrr-data-backend]] is one generic engine for every Production Profile/Case.
+Its default feature set is empty. The core owns bounded admission, logical
+head/operation decisions, authority comparisons, recovery and lifecycle.
+[[file:../../crates/mrr-data-backend/src/providers/storage.rs][TransactionProvider/MetadataTransaction]] expose bounded opaque record access
+inside physical transactions. The shared [[file:../../crates/mrr-data-backend/src/transaction.rs][logical engine]] contains no database schema,
+SQL dialect, SQL driver or Cedar/Commerce dependency.
+
+Database implementations are optional provider modules: =turso= and =duckdb=.
+The facade exposes =backend=, =backend-turso= and =backend-duckdb=, with
+independent =backend-graphar=, =backend-graph-publish= and =backend-arrow-query= capabilities. Constructors
+perform no I/O; databases open under the Host-owned runtime/lifecycle. No SQLite
+provider, =backend-sqlite= feature or backend rusqlite dependency remains. The
+existing Kache cache has its own transitive dependencies and is a separate owner.
+
+The architecture follows the immutable Cedar
+[[https://github.com/tao3k/cedar-poo-spec/blob/bcacabbdd188a821799dc6be92ebbed4a7c46214/Productions/Backend.org][Production Backend design]]. Commerce and pseudonymization share that exact
+Cedar pin. Production does not depend on an Example. MRR owns semantic admission;
+MRR Data owns physical execution; the Host/POO Flow owns the runtime and semantic
+enrollment. Profile/schema changes must preserve canonical coordination homes.
+
+* Common engine and lifecycle
+
+- Explicit async open borrows a Tokio Handle. The provider finishes opening before
+  Ready. No process signal handler, global allocator or extra runtime is installed.
+- Admission bounds count and bytes before copying content requests/spawning work.
+  Writes and historical reads have independent count/byte capacity. Recovery slots
+  reserve 64 KiB each. Charges cover bounded identity/guard encoding; they are
+  request budgets, not process RSS/native database cache bounds.
+- Blocking/native provider work is tracked by owned worker leases. Caller
+  cancellation after validation does not erase the accepted operation. Before
+  validation it leaves no write. Ambiguous COMMIT/worker loss is Unknown.
+- [[file:../../crates/mrr-data-backend/src/dispatch.rs][The shared dispatcher]] waits asynchronously for separate write/recovery worker
+  permits before submitting blocking jobs. =max_write_workers= and
+  =max_recovery_workers= default to one each, matching the native providers'
+  single writer and single read connection. A combined =max_shared_workers=
+  semaphore bounds submitted writes, resource preparations and Arrow queries;
+  its default is one. Recovery never acquires this shared semaphore. The Host
+  budgets at least =max_shared_workers + max_recovery_workers= blocking threads
+  for this Backend and coordinates unrelated blocking work separately.
+  Zero, over-admission and semaphore
+  overflow limits refuse configuration before provider opening. Raising these
+  limits does not create extra provider connections or native parallelism.
+  =active_writes/active_recoveries= include accepted queued work;
+  =blocking_writes/blocking_recoveries= count submitted Host jobs, including jobs
+  waiting in that executor. Queued requests retain their admission count/byte
+  lease, and drain waits for them. Cancellation before content validation leaves
+  no write; an accepted administrative update stays owned even while queued.
+  Worker permits follow Tokio's acquisition queue; this is not a promise of
+  logical per-home request ordering.
+  Provider results are delivered after releasing admission accounting and worker
+  permits. A successful single-slot client can issue its next request without
+  racing the completed predecessor's lease. Early validator refusal can still
+  overlap the owned rollback; it does not promise immediate capacity reuse.
+  =saturated_writes/saturated_recoveries= are saturating lifetime counters for
+  admission refusals caused by lane count/byte limits. Administrative updates
+  share the write counter. These refusals create no lease and do not increment
+  =completed=. Lifecycle, malformed-request and validator refusals are excluded.
+  Counters carry no profile, tenant or operation labels and add no clock reads.
+- The Host provides executor capacity for both lanes and keeps it alive through
+  drain. One shared Backend with default worker limits progresses recovery in a
+  Host pool capped at two blocking threads while eight accepted writers stall.
+  Separate worker caps prevent that Backend's queued writes from filling the
+  pool. They do not reserve threads against unrelated Host jobs or other Backend
+  instances. A one-thread blocking pool cannot progress native recovery alongside
+  a stalled writer.
+- Exact operation identity includes profile, namespace, scope, operation ID,
+  expected revision/CID, replacement and canonical authority expectations.
+  Historical replay skips validation and grants no fresh-effect capability.
+- Shutdown seals admission, drains accepted work and closes provider handles.
+  Canceling a waiter leaves the owned drain task alive; repeated/concurrent calls
+  observe the same terminal report. Failed close reports Faulted. Drop cannot
+  promise an async durable close. The Host keeps its runtime alive through drain.
+
+* Retained physical resources
+
+=Backend::prepare_resource= uses independent =max_resources=,
+=max_resource_workers= and =max_resource_bytes= limits shared across all profiles.
+=active_resources= includes queued/running jobs and returned handles;
+=blocking_resources= counts submitted jobs only. =resource_bytes= records Host
+reservations and =saturated_resources= counts count/byte refusals. These limits do
+not charge the write/recovery lanes and do not measure native memory.
+
+Writes and resource/query workers acquire the same shared semaphore before
+submission. The two-thread native qualification now includes a stalled resource
+preparation and an accepted write waiting asynchronously, while original-operation
+recovery still progresses. The Host budgets the combined shared/recovery capacity;
+these Backend semaphores do not reserve threads against unrelated Host jobs or
+other Backend instances.
+
+The dispatcher waits asynchronously before entering the Host blocking pool.
+Dropping a queued caller skips preparation; a submitted caller can cancel its
+wait but native work retains its lease until completion. Failed or panicking
+workers release accounting. A successful ResourceHandle shares one reservation
+across clones and drops its physical value before releasing that reservation.
+Resource implementations must keep buffers private: ownership exported outside
+the handle would outlive this accounting. Hosts keep handles until use completes,
+drop every clone before awaiting shutdown, and keep their runtime alive through
+the drain barrier. Resource admission closes with the same lifecycle seal as
+metadata admission; provider close waits for all resources as well as mutations.
+
+The optional GraphAr adapter prepares an immutable captured fact snapshot on this
+lane. Private temporary files and native handles are cleaned during preparation;
+returned handles retain immutable facts. =backend-graphar= composes this capability
+without selecting Turso or DuckDB. The optional Arrow query port shares this
+resource lane. Measured native RSS/throughput and a DuckDB native streaming driver
+remain separate qualification gates.
+
+* Durable authority versions
+
+[[file:../../crates/mrr-data-backend/src/authority.rs][AuthorityProposal/AuthorityState]] bind an exact Host commitment to a monotonic
+generation and Active/Retired status. =advance_authority= compares the complete
+expected state, persists the next state and exact update history atomically,
+and makes each enrolled ID mandatory for that profile/namespace/scope.
+Retirement is terminal. There is no deletion/reset that could make old authority
+fresh again. An exact old update retry returns its historical generation without
+resetting the current generation, even after subsequent rotation/retirement.
+
+A =with_authorities= port canonicalizes at most 16 independently validated
+snapshots. Every fresh content commit checks the complete durable authority set
+inside its physical transaction. An unguarded port or omitted guard cannot bypass
+an enrolled home. Same commitment bytes with a newer generation remain different,
+preventing ABA. Historical lookup/replay retains the original expectations and
+remains a status query after retirement. A changed guard body cannot reuse an ID.
+
+All fresh content and authority transactions update the same internal home sequence.
+Native write-conflict detection must protect that row. This prevents a
+snapshot-isolation write-skew race between retiring authority and a content write
+that only read its old state. Provider qualification tests this premise.
+
+These are physical version/CAS guarantees. The Host authenticates administrative
+updates and binds commitments to its actual key/policy/revocation snapshot.
+An independently mutable external registry is synchronized only if it participates
+in this durable version protocol. A copied CommerceAdmissionHost or arbitrary
+caller commitment does not prove that integration. Domain-specific authority
+binding and malicious storage rollback remain separate open gates.
+
+* Optional Turso provider
+
+[[file:../../crates/mrr-data-backend/src/providers/turso.rs][TursoProvider]] pins the native Rust Turso crate =0.8.1= with default features
+disabled. It uses the Host executor from bounded blocking workers and separate
+writer/read connections. Physical transactions use the SDK's local engine;
+FULL durability mode is explicitly selected and checked, busy waits are bounded,
+and completed operations persist before a success receipt. SDK/database dialect
+calls stay inside this optional module. No legacy libSQL/SQLite driver is selected.
+
+The configured file has a versioned provider schema marker. Foreign/incompatible
+files and missing metadata tables refuse opening rather than recreate authority.
+This is a local provider: remote sync, embedded replicas, remote authentication
+and multi-process/multi-host writer fencing are not qualified by these consumers.
+
+* Optional DuckDB provider
+
+[[file:../../crates/mrr-data-backend/src/providers/duckdb.rs][DuckDbProvider]] pins the Rust client =1.10502.0= and its bundled native library.
+Enabling DuckDB includes the SDK's =appender-arrow= and =vtab-arrow= capabilities;
+the facade's =backend-duckdb= also enables the common =arrow= feature.
+[[file:../../crates/mrr-data-backend/src/providers/duckdb_arrow.rs][DuckDbArrowInput]] validates explicit row/buffer limits, native vector capacity,
+field identities and the qualified Int64/Utf8/Binary subset before virtual-table
+registration. It is an input carrier, with no semantic authority or job lease.
+[[file:../rfcs/0002-graphar-arrow-backend.org][RFC 0002]] specifies the proposed graph publication and Arrow query ports under
+this lifecycle, with current SDK conformance and remaining implementation gates.
+All provider instances for a canonical local path share one native database
+handle through a weak, lifecycle-bound registry; independent writer/read connections
+are cloned from that handle. Calling the native open API independently is not used
+as a cross-instance synchronization guarantee. Relative/symlink aliases resolve
+to the canonical identity; Unix hard-linked database files refuse before opening.
+The last provider closes the native anchor after its connections drain, and final
+close is synchronized with reopen. The provider uses native transactions. COMMIT ambiguity stays Unknown; a native write conflict never becomes
+an Applied receipt. The common home sequence makes concurrent authority/content
+transactions contend on an actual modified record, preventing read-only guard
+checks from relying on snapshot isolation alone.
+
+The declared local capability is a single writer process. This module does not
+turn DuckDB into a multi-process/distributed coordination service. Native build
+and execution costs are incurred only when the DuckDB feature is explicitly enabled.
+
+* Executable evidence and compatibility boundary
+
+The [[file:../../crates/mrr-data-backend/tests/integration/backend_consumer.rs][same consumers]] run against each selected provider independently: content
+CAS/replay, namespace isolation, two instances, lost ACK, canceled callbacks,
+owned accepted work, separate recovery, count/byte saturation, drain, provider
+schema refusal, process exit recovery and uncommitted rollback. Authority consumers
+exercise mandatory guard enforcement, rotation/retirement, exact old update replay,
+ABA, ordering, bounded enrollment and restart. DuckDB consumers additionally check
+canonical aliases, continued recovery after another instance closes, and refusal
+of hard-linked database files. The DuckDB-specific consumer holds
+a content validator while another connection commits retirement, then requires
+that content transaction to refuse through native write-conflict protection.
+
+The [[file:../../crates/mrr-data-commerce/tests/integration/agentic_ai/commerce/budget_transactions.rs][signed budget consumer]] uses the optional Turso provider through the same
+generic port. Fixtures stay byte-identical to the shared Cedar pin. It covers
+fixed-authority signed admission, restart and exact replay, not live external
+revocation integration or payment release.
+
+The former SQLite provider is removed directly. Its database schema is not adopted
+or reset by these providers; no compatibility shim or automatic migration exists.
+Existing files must remain protected while a separately authorized migration is
+qualified. No path silently resets pending/spent/operation history.
+
+#+begin_src sh
+cargo test -p mrr-data-backend --no-default-features --locked
+cargo test -p mrr-data-backend --features turso --locked -- --nocapture
+cargo test -p mrr-data-backend --features duckdb --locked -- --nocapture
+just test-backend
+python3 tools/check-features.py
+python3 tools/check-spec-fixtures.py --spec-root /path/to/pinned/cedar
+#+end_src
+
+* Reproducible metadata performance and lifecycle measurement
+
+[[file:../../crates/mrr-data-backend/tests/performance/backend_performance.rs][The opt-in native measurement]] runs both optional providers through the same
+Backend and ProfilePort APIs. Run alone, with the optimized test profile already
+used for native qualification:
+
+#+begin_src sh
+git rev-parse HEAD
+git status --short
+rustc -Vv
+just bench-backend
+#+end_src
+
+Capture those commands together with stdout to bind results to the source, dirty
+state, compiler, target and host. Each provider runs three rounds, alternates
+hot-home and independent-home order, and tests one and four concurrent lanes.
+Every lane executes eight warmup writes and 64 sampled writes. A per-home
+application mutex sequences expected revisions: hot-home latency includes waiting
+on this mutex. This is a successful ordered workload, not an optimistic conflict
+or overload benchmark. Both scenarios use one profile and namespace, fixed small
+records without authority guards, the default admission limits and a two-thread
+Host runtime.
+
+JSON rows report individual-operation p50/p95/p99 using nearest-rank percentiles.
+Commit wall throughput includes warmup and uses the explicitly reported full
+operation count; latency samples exclude warmup. Recovery is serial after reopen,
+includes all historical operations, and verifies each exact committed revision.
+Each round requires zero errors, exact completed-worker accounting, idempotent
+shutdown and zero active workers/retained request bytes after close. A failure
+aborts qualification. Shutdown time measures an already-idle engine, not a busy
+drain. Provider setup, reopen and teardown are outside operation timing.
+
+Physical block publication uses a synthetic ACK. Measurements cover metadata,
+application sequencing and shared engine overhead; they do not measure blob
+durability, power loss or a full Production workflow. Native database cache/RSS,
+mixed recovery/write pressure, overload fairness and long-lived database growth
+require separate experiments. Small local samples cannot establish a production
+latency SLO or a performance advantage for either provider.
+
+[[file:../benchmarks/shared-backend-local.org][The local baseline receipt]] records the exact clean source revision, compiler,
+matched observations, lifecycle qualification and next experiments. Its linked
+JSON preserves every round rather than only summary statistics.
+
+[[file:../../crates/mrr-data-backend/tests/integration/dispatch.rs][Native dispatch qualification]] additionally checks the two-thread Host pool,
+queued content cancellation, owned administrative updates after caller exit,
+drain while queued, and restart without losing authority history.
+=just bench-backend-mixed= runs the [[file:../../crates/mrr-data-backend/tests/performance/mixed_performance.rs][mixed native measurement]] with one held
+validated write, seven queued writes and recovery concurrency 1/4/8. It measures
+historical reads while the writer remains stalled, then releases that stall and
+measures completion of the busy drain. Every queued write and historical receipt
+must survive reopen. This controlled stalled-writer workload does not substitute
+for sustained writes, competing Host jobs, larger guarded records or native RSS
+qualification.
+
+=just bench-backend-sustained= runs [[file:../../crates/mrr-data-backend/tests/performance/sustained_performance.rs][finite continuous producers]]: eight
+write producers each attempt 64 distinct operations, four readers recover one
+historical seed until producers finish (at least 64 reads each), and write/read
+admission is capped at four each. Both providers use the same two-thread blocking
+pool and one submitted worker per lane. Saturated attempts are counted without
+retry and have their own latency distribution. Successful throughput excludes
+refused attempts; reopen verifies every committed revision and the absence of
+every refused operation. Readers are capped at 8,192 operations each and producer
+collection at 30 seconds. Read-start overlap records producer activity; it does
+not prove simultaneous execution inside both native connections. Close timing is
+quiescent; the held-writer experiment above qualifies busy drain separately.
+[[file:../benchmarks/shared-backend-sustained.org][The continuous producer receipt]] records the exact source, separate refusal latency,
+reopen absence checks and the limits of this finite workload.
+
+[[file:../benchmarks/shared-backend-dispatch.org][The dispatch and mixed recovery receipt]] preserves both reproduced defects,
+the exact post-fix source, all mixed-load rounds and the rerun metadata baseline.
+
+* Open performance and deployment gates
+
+The matched measurement above provides a repeatable baseline; representative
+Production load, longer runs and matched optimization comparisons remain required.
+Provider selection and batching are not presented as measured optimizations.
+Integrated blob-transfer scheduling, native cache budgets, fairness/latency metrics,
+durable retention/GC, power-loss injection and authenticated latest-head/anti-rollback
+are still open. Immutable block publication retains its own truthful durable ACK.
+
+* Turso 0.8.1 upgrade boundary
+
+The workspace fixes the native Rust SDK and every locked Turso component at
+=0.8.1=. Default crate features remain disabled. The physical provider continues
+using its serialized =BEGIN IMMEDIATE= transaction, independent historical reader,
+verified =synchronous=FULL= setting and the same opaque metadata records. Upstream
+[[https://github.com/tursodatabase/turso/releases/tag/v0.8.1][0.8.1]] and [[https://turso.tech/blog/turso-0.8.0][0.8 concurrent-write guidance]] do not establish performance for this
+protected Backend path. =BEGIN CONCURRENT=, optimistic conflict handling and
+additional physical writer connections require their own authority/CAS/recovery
+qualification before enabling them here.
+
+The earlier benchmark receipts retain their exact source and =0.7.2= dependency
+baseline. They are historical evidence, not measurements of =0.8.1=. Cargo build
+parallelism uses its default; the Justfile and CI no longer set a worker-count
+environment override.
+
+* Primary provider references
+
+- [[https://docs.rs/turso/0.8.1/turso/][Turso native Rust SDK]]: optional native binding and transaction APIs.
+- [[https://duckdb.org/docs/current/connect/concurrency][DuckDB concurrency]]: declared single-process local write capability.
+- [[https://duckdb.org/docs/lts/sql/statements/transactions][DuckDB transactions]]: persistence and snapshot-isolation boundary.
+- [[https://docs.rs/tokio/1.53.1/tokio/task/fn.spawn_blocking.html][Tokio blocking work]]: accepted blocking workers require explicit ownership.
+
+
+* Portable graph closure publication
+
+=backend-graph-publish= adds complete immutable graph closure ACKs and typed
+protected ProfilePort commit composition to this same engine. It selects no
+physical database or native graph SDK. [[file:../rfcs/0002-graphar-arrow-backend.org][RFC 0002]] records the root ordering,
+authenticated restore contract, retained resource lifetime, exact-operation
+recovery and remaining streaming/performance/deployment gates. Physical ACKs
+remain distinct from semantic authorization and durable metadata commit.
+
+* Fallible Arrow query output under the shared lifecycle
+
+=arrow-query= in Backend and =backend-arrow-query= in the facade enable
+[[file:../../crates/mrr-data-backend/src/query.rs][the portable output protocol]] without a database or native GraphAr dependency.
+=Backend::query_arrow= admits a Host-owned physical producer, declared Arrow
+schema, output limits and a total Host reservation before queueing. The Host
+first admits the semantic query and authenticates its source. No SQL text, new
+runtime or semantic admission engine enters this generic protocol.
+
+The producer executes on the shared blocking lane. Before fetching each batch,
+=ArrowQueryEmitter::emit= reserves its maximum allowed batch bytes; previous
+outstanding buffers apply backpressure before the next fetch. After fetching,
+schema identity, aggregate rows/batches and retained array memory are checked;
+the unused part of that reservation is released. A bounded channel supplies a
+second count limit. Cloned =ArrowBatchLease= values share one byte/resource lease.
+Consumers release old leases to permit further fetches, and retain a lease for
+any independently cloned Arrow arrays/batches. Public Arrow buffer clones can
+escape Rust-level accounting; the Host ownership contract is explicit.
+
+Output refusal is sticky. Driver errors, early termination and worker panic never
+become successful EOF. =summary= exists only after the producer's successful
+terminal report; partial batches grant no complete candidate, authorization or
+protected disclosure. The consumer can cancel explicitly or drop the query;
+queued native work is skipped and output waits wake. A driver registers a short,
+thread-safe native interrupt through =on_cancel= before executing a native call.
+Registration/cancellation races refuse execution. Interrupt callback panics are
+contained so cancellation and consumer Drop still release output and drain ownership.
+Running work remains owned
+through completion, and both returned batches and in-flight interrupt hooks hold
+the original Backend drain barrier.
+
+The optional [[file:../../crates/mrr-data-backend/src/providers/duckdb_query.rs][DuckDB adapter]] consumes a Host-prepared native statement. It uses the SDK's
+materialized Arrow result and authoritative result row count; missing/empty fetch
+progress or excess rows refuse. It does not reconstruct rows or use the SDK's
+ambiguous streaming iterator. Output backpressure does not establish bounded
+native result materialization. Native query/cache/decompression/spill budgets and
+full semantic type mapping remain separate Host/provider qualifications.
+
+[[file:../../crates/mrr-data-backend/tests/integration/arrow_query.rs][Query tests]] cover successful terminal output, late failure, panic, sticky schema
+refusal, retained final clones, row/buffer refusal, pre-fetch byte backpressure,
+queue cancellation and cancellation-safe receiving. Native DuckDB additionally
+qualifies 4,097 Int64/Utf8/Binary rows with null/empty/Unicode/raw bytes and an
+interrupt of running native execution. [[file:../../crates/mrr-data/tests/unit/graph_lifecycle.rs][The native graph lifecycle consumer]] combines
+real GraphAr files and Arrow IPC, publication, protected CAS, reopen recovery,
+source deletion, cold restoration, native capture, leased Arrow output and final
+MRR candidate admission. It is configured for each metadata provider on both OS
+CI jobs; exact-head CI receipts remain required.
+
+* Source-bound qualification on 2026-10-04
+
+[[https://github.com/tao3k/mrr-data/actions/runs/37133967554][CI run 37133967554]] completed all eleven jobs successfully for source commit
+=bdffe95f560e7e4ab734646c159b312d3ef963a5=. Both Linux and macOS qualified
+both Turso and DuckDB independently through real GraphAr files and Arrow IPC,
+publication, CAS, native close/reopen, source deletion, cold restoration, retained
+Arrow output and final MRR admission. Each cell exercises the finite one-fact
+single-hop Entity fixture. Both OS jobs also passed strict Backend Clippy with
+all features and targets, and the feature dependency/facade contracts.
+
+Final local focused runs passed query/dispatch cases for Turso (12) and DuckDB
+(14), content publication/restoration cases (6), and the provider-free Arrow
+facade/workspace policy cases (5). The final DuckDB iterator borrow adjustment
+was rerun with all nine Arrow query cases passing. Local native GraphAr and
+DuckDB Clippy attempts encountered the mixed Nix/macOS SDK toolchain; the remote
+standard-SDK receipts above provide their qualification.
+
+This does not qualify a process crash, power loss, deployed content durability,
+live Host authorization, full semantic type mapping, native query streaming or
+RSS/throughput. Those remain the ordered RFC gates. Documentation-only updates
+following this source commit preserve these bounded source receipts; their new
+workflow runs must be reported separately.
