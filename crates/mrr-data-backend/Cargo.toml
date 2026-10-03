@@ -9,6 +9,7 @@ repository.workspace = true
 
 [features]
 default = []
+graph-publish = ["mrr-data-content/graph-snapshot"]
 turso = ["dep:turso"]
 duckdb = ["dep:duckdb", "dep:arrow-array", "dep:arrow-schema"]
 
@@ -24,6 +25,8 @@ arrow-array = { workspace = true, optional = true }
 arrow-schema = { workspace = true, optional = true }
 
 [dev-dependencies]
+meta-relational-reasoning.workspace = true
+mrr-data-core = { workspace = true, features = ["content-identity"] }
 tempfile.workspace = true
 mrr-data-asp-rust-build-support.workspace = true
 
@@ -57,3 +60,7 @@ path = "tests/integration/duckdb_arrow.rs"
 [[test]]
 name = "backend_resources"
 path = "tests/integration/resources.rs"
+
+[[test]]
+name = "backend_graph_publication"
+path = "tests/integration/graph_publication.rs"

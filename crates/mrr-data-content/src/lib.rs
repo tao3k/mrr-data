@@ -59,3 +59,12 @@ pub use snapshot::{
 mod transfer;
 #[cfg(feature = "transfer")]
 pub use transfer::{BudgetedRemote, RemoteTransferLimits, TransferSession, TransferStats};
+
+#[cfg(feature = "graph-snapshot")]
+mod graph_snapshot;
+#[cfg(feature = "graph-snapshot")]
+pub use graph_snapshot::{
+    GraphPublication, GraphPublishInputs, GraphTransferError, GraphTransferLimits,
+    PreparedGraphPublication, prepare_graph_publication, publish_graph_dataset,
+    restore_graph_dataset,
+};

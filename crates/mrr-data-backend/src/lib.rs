@@ -25,3 +25,6 @@ pub use record::{StoredOutcome, StoredRevision, StoredWrite};
 #[cfg(test)]
 #[path = "../tests/unit/asp_rust_gate.rs"]
 mod asp_rust_gate;
+
+#[cfg(feature = "graph-publish")]
+mod graph_publication;

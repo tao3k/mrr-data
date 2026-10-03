@@ -262,8 +262,10 @@ and fact materialization. It does not measure or cap native RSS.
 
 Slice C is implemented for captured binary-Entity facts. Slice E has shared
 resource lifecycle support; a fallible streaming Arrow query port remains open.
-Protected child/manifest ACK-to-CAS composition (D), additional profiles and
-matched performance/RSS qualification (F) remain proposed.
+Slice D now implements complete closure preparation, child/root ACK ordering,
+cold restoration and the typed protected ProfilePort composition described below.
+Process/power-loss injection at every phase, additional profiles and matched
+performance/RSS qualification (F) remain open.
 
 The implementation and malformed-wire qualification are in
 [[file:../../crates/mrr-data-core/src/graph_inventory.rs][the core inventory]] and [[file:../../crates/mrr-data-core/tests/unit/graph_inventory.rs][its focused tests]], with [[file:../../crates/mrr-data-graphar/src/inventory.rs][directory enumeration]] in the GraphAr adapter.
@@ -340,3 +342,53 @@ message, and the sustained benchmark uses a diagnostic empty-array comparison.
 - [[https://arrow.apache.org/docs/format/CStreamInterface.html][Apache Arrow C Stream interface]]: schema, stream/buffer ownership and release.
 - [[file:../../crates/mrr-data-graphar/src/query_source.rs][Current graph source]], [[file:../../crates/mrr-data-graphar/src/reader_prepared.rs][prepared source]], [[file:../../crates/mrr-data/src/graphar_binding.rs][metadata binding]],
   and [[file:../../crates/mrr-data-backend/tests/integration/duckdb_arrow.rs][DuckDB Arrow qualification tests]] are the concrete starting seams.
+
+
+* Complete graph publication and protected recovery
+
+=backend-graph-publish= composes the generic Backend and the portable content
+=graph-snapshot= feature. It selects no native GraphAr SDK, database, cache or
+network provider. =backend-graphar= independently enables immutable native
+capture; an application selects both when it needs capture and publication.
+
+[[file:../../crates/mrr-data-content/src/graph_snapshot.rs][The graph closure protocol]] verifies the binding, inventory, legacy snapshot,
+complete catalogs, every referenced child CID and declared byte length before
+any remote PUT. Count, per-block and aggregate logical payload bounds include
+all three roots. Identical CIDs share one stored payload. Preparation currently
+materializes the closure; these bounds do not establish native RSS or streaming
+performance. A disk ContentStore must execute on the Host blocking executor.
+The same =Backend::prepare_resource= holds its reservation until final handle
+destruction; retain that handle throughout publication and protected CAS.
+
+Publication ACKs ordinary children first, then inventory and legacy snapshot,
+and finally the binding root. =GraphPublication= has private construction and
+is returned only after every ACK. A fresh before-root callback is distinct from
+synchronized authorization: the Host's root transport must hold the actual
+policy guard throughout PUT. A later [[file:../../crates/mrr-data-backend/src/graph_publication.rs][ProfilePort::commit_graph_publication]]
+requires the matching receipt, current enrolled authority generations and fresh
+validation inside the existing protected metadata transaction. Failure or
+cancellation may leave immutable orphans; it neither deletes shared content nor
+selects a head. No new provider runtime or metadata transaction engine is added.
+
+After an uncertain metadata COMMIT, recover the original operation, expected
+revision, replacement and authority expectations. Exact historical replay can
+omit publication and skips new validation. It conveys the original receipt and
+grants no fresh content or disclosure permission. Restoration starts from a
+Host-authenticated binding root and verifies the entire bounded closure again;
+it does not discover or authenticate the latest head by itself.
+
+[[file:../../crates/mrr-data-content/tests/integration/graph_publication.rs][Transport tests]] cover every block ACK failure, final ACK loss and exact CID
+retry, denied/cancelled root gate, cold restoration, tampered children, absence
+and aggregate limits. Opaque payloads qualify transport integrity; native graph
+format and semantic facts are qualified by the separate capture tests.
+[[file:../../crates/mrr-data-backend/tests/integration/graph_publication.rs][Native Turso composition tests]] cover retained resource preparation, missing
+or mismatched receipts, fresh policy refusal, complete ACK-to-CAS, retired
+versions, original-operation absence/retry, close/reopen recovery and historical
+replay without new transport or validation. These are local native restart
+receipts, not power-loss or deployed blob durability measurements.
+
+#+begin_src sh
+cargo test -p mrr-data-content --features graph-snapshot --test graph_publication --locked
+cargo test -p mrr-data-backend --features graph-publish,turso --test backend_graph_publication --locked
+cargo check -p mrr-data --no-default-features --features backend-graph-publish --locked
+#+end_src

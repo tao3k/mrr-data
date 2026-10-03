@@ -2,7 +2,6 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 cargo := env_var_or_default("CARGO", "cargo")
 native_env := if os() == "macos" { "env -u SDKROOT -u DEVELOPER_DIR -u CPATH -u LIBRARY_PATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u DYLD_LIBRARY_PATH -u DYLD_FALLBACK_LIBRARY_PATH CC=/usr/bin/clang CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER=/usr/bin/clang MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion | cut -d. -f1).0" } else { "env" }
-backend_native_env := if os() == "macos" { "env CC=/usr/bin/clang CXX=/usr/bin/clang++ SDKROOT=$(xcrun --sdk macosx --show-sdk-path) CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER=/usr/bin/clang" } else { "env" }
 
 [group('check')]
 format:
@@ -38,18 +37,18 @@ bench-google-sdp:
 
 [group('bench')]
 bench-backend:
-    {{ backend_native_env }} CARGO_BUILD_JOBS=2 {{ cargo }} test -p mrr-data-backend --no-default-features --features turso --test backend_performance --locked -- --ignored --nocapture --test-threads=1
-    {{ backend_native_env }} CARGO_BUILD_JOBS=2 {{ cargo }} test -p mrr-data-backend --no-default-features --features duckdb --test backend_performance --locked -- --ignored --nocapture --test-threads=1
+    {{ cargo }} test -p mrr-data-backend --no-default-features --features turso --test backend_performance --locked -- --ignored --nocapture --test-threads=1
+    {{ cargo }} test -p mrr-data-backend --no-default-features --features duckdb --test backend_performance --locked -- --ignored --nocapture --test-threads=1
 
 [group('bench')]
 bench-backend-mixed:
-    {{ backend_native_env }} CARGO_BUILD_JOBS=2 {{ cargo }} test -p mrr-data-backend --no-default-features --features turso --test backend_mixed_performance --locked -- --ignored --nocapture --test-threads=1
-    {{ backend_native_env }} CARGO_BUILD_JOBS=2 {{ cargo }} test -p mrr-data-backend --no-default-features --features duckdb --test backend_mixed_performance --locked -- --ignored --nocapture --test-threads=1
+    {{ cargo }} test -p mrr-data-backend --no-default-features --features turso --test backend_mixed_performance --locked -- --ignored --nocapture --test-threads=1
+    {{ cargo }} test -p mrr-data-backend --no-default-features --features duckdb --test backend_mixed_performance --locked -- --ignored --nocapture --test-threads=1
 
 [group('bench')]
 bench-backend-sustained:
-    {{ backend_native_env }} CARGO_BUILD_JOBS=2 {{ cargo }} test -p mrr-data-backend --no-default-features --features turso --test backend_sustained_performance --locked -- --ignored --nocapture --test-threads=1
-    {{ backend_native_env }} CARGO_BUILD_JOBS=2 {{ cargo }} test -p mrr-data-backend --no-default-features --features duckdb --test backend_sustained_performance --locked -- --ignored --nocapture --test-threads=1
+    {{ cargo }} test -p mrr-data-backend --no-default-features --features turso --test backend_sustained_performance --locked -- --ignored --nocapture --test-threads=1
+    {{ cargo }} test -p mrr-data-backend --no-default-features --features duckdb --test backend_sustained_performance --locked -- --ignored --nocapture --test-threads=1
 
 [group('test')]
 test-property-query:
@@ -63,11 +62,11 @@ clippy-property-query:
 
 [group('test')]
 test-backend:
-    {{ native_env }} {{ cargo }} test -p mrr-data-backend --no-default-features --locked
-    {{ native_env }} {{ cargo }} test -p mrr-data-backend --features turso --locked -- --nocapture
-    {{ native_env }} {{ cargo }} test -p mrr-data-backend --features duckdb --locked -- --nocapture
+    {{ cargo }} test -p mrr-data-backend --no-default-features --locked
+    {{ cargo }} test -p mrr-data-backend --features turso --locked -- --nocapture
+    {{ cargo }} test -p mrr-data-backend --features duckdb --locked -- --nocapture
     {{ native_env }} {{ cargo }} test -p mrr-data-commerce --all-features --test commerce_commit_consumer shared_backend_persists --locked -- --nocapture
 
 [group('test')]
 clippy-backend:
-    {{ native_env }} {{ cargo }} clippy -p mrr-data-backend --all-features --all-targets --profile test --locked -- -D warnings
+    {{ cargo }} clippy -p mrr-data-backend --all-features --all-targets --profile test --locked -- -D warnings

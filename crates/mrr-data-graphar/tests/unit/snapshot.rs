@@ -254,7 +254,9 @@ fn capture_checks_fact_generation_even_with_matching_published_scope() {
 
 #[cfg(feature = "backend")]
 mod backend_qualification {
-    use super::*;
+    use super::{
+        GraphArReadLimits, GraphDatasetBinding, GraphInventoryLimits, fact, fixture, query,
+    };
     use mrr_data_backend::{
         AuthorityCapability, Backend, BackendConfig, BackendError, Lifecycle, MetadataProvider,
         ProviderCapabilities, StoredOutcome, StoredRevision, StoredWrite,

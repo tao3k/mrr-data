@@ -113,6 +113,10 @@ impl GraphDatasetBinding {
         self.relation
     }
     #[must_use]
+    pub const fn snapshot_root(&self) -> &Cid {
+        &self.snapshot_root
+    }
+    #[must_use]
     pub const fn inventory_root(&self) -> &Cid {
         &self.inventory_root
     }

@@ -11,6 +11,7 @@ repository.workspace = true
 default = []
 transfer = ["snapshot", "dep:tokio"]
 snapshot = ["dep:meta-relational-reasoning"]
+graph-snapshot = ["snapshot"]
 property-snapshot = ["snapshot", "dep:anyhow", "dep:arrow-array", "dep:arrow-ipc", "dep:arrow-schema"]
 car = ["dep:fvm_ipld_car", "dep:meta-relational-reasoning", "dep:unsigned-varint"]
 filesystem = ["dep:tempfile"]
@@ -34,3 +35,7 @@ mrr-data-asp-rust-build-support.workspace = true
 
 [lints]
 workspace = true
+
+[[test]]
+name = "graph_publication"
+path = "tests/integration/graph_publication.rs"

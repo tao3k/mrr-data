@@ -8,7 +8,7 @@ from pathlib import Path
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-CASES = [None, "", "backend", "backend-turso", "backend-duckdb", "commerce-cedar", "commerce-credential", "commerce-consumption", "commerce-presentation", "arrow", "content-identity", "content", "snapshot", "transfer", "car", "filesystem", "cache", "s3",
+CASES = [None, "", "backend", "backend-graph-publish", "backend-turso", "backend-duckdb", "commerce-cedar", "commerce-credential", "commerce-consumption", "commerce-presentation", "arrow", "content-identity", "content", "snapshot", "transfer", "car", "filesystem", "cache", "s3",
          "data-protection", "raw-publish", "protected-envelope", "protected-publish", "datafusion", "graphar", "content-identity,graphar", "cache,s3", "snapshot,cache,s3", "transfer,cache,s3",
          "arrow,content-identity,content,snapshot,transfer,raw-publish,protected-publish,car,filesystem,cache,s3,datafusion,graphar"]
 
@@ -33,7 +33,7 @@ def main():
         enabled = {"arrow", "filesystem"} if selected is None else set(selected.split(","))
         if enabled & {"commerce-cedar", "commerce-credential", "commerce-consumption", "commerce-presentation"}:
             enabled |= {"commerce-cedar", "content"}
-        if enabled & {"backend-turso", "backend-duckdb"}:
+        if enabled & {"backend-turso", "backend-duckdb", "backend-graph-publish"}:
             enabled.add("backend")
         if "backend-duckdb" in enabled:
             enabled.add("arrow")

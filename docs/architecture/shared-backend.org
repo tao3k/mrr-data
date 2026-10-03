@@ -11,7 +11,8 @@ inside physical transactions. The shared [[file:../../crates/mrr-data-backend/sr
 SQL dialect, SQL driver or Cedar/Commerce dependency.
 
 Database implementations are optional provider modules: =turso= and =duckdb=.
-The facade exposes =backend=, =backend-turso= and =backend-duckdb=. Constructors
+The facade exposes =backend=, =backend-turso= and =backend-duckdb=, with
+independent =backend-graphar= and =backend-graph-publish= capabilities. Constructors
 perform no I/O; databases open under the Host-owned runtime/lifecycle. No SQLite
 provider, =backend-sqlite= feature or backend rusqlite dependency remains. The
 existing Kache cache has its own transitive dependencies and is a separate owner.
@@ -132,7 +133,7 @@ binding and malicious storage rollback remain separate open gates.
 
 * Optional Turso provider
 
-[[file:../../crates/mrr-data-backend/src/providers/turso.rs][TursoProvider]] pins the native Rust Turso crate =0.7.2= with default features
+[[file:../../crates/mrr-data-backend/src/providers/turso.rs][TursoProvider]] pins the native Rust Turso crate =0.8.1= with default features
 disabled. It uses the Host executor from bounded blocking workers and separate
 writer/read connections. Physical transactions use the SDK's local engine;
 FULL durability mode is explicitly selected and checked, busy waits are bounded,
@@ -281,9 +282,35 @@ Integrated blob-transfer scheduling, native cache budgets, fairness/latency metr
 durable retention/GC, power-loss injection and authenticated latest-head/anti-rollback
 are still open. Immutable block publication retains its own truthful durable ACK.
 
+* Turso 0.8.1 upgrade boundary
+
+The workspace fixes the native Rust SDK and every locked Turso component at
+=0.8.1=. Default crate features remain disabled. The physical provider continues
+using its serialized =BEGIN IMMEDIATE= transaction, independent historical reader,
+verified =synchronous=FULL= setting and the same opaque metadata records. Upstream
+[[https://github.com/tursodatabase/turso/releases/tag/v0.8.1][0.8.1]] and [[https://turso.tech/blog/turso-0.8.0][0.8 concurrent-write guidance]] do not establish performance for this
+protected Backend path. =BEGIN CONCURRENT=, optimistic conflict handling and
+additional physical writer connections require their own authority/CAS/recovery
+qualification before enabling them here.
+
+The earlier benchmark receipts retain their exact source and =0.7.2= dependency
+baseline. They are historical evidence, not measurements of =0.8.1=. Cargo build
+parallelism uses its default; the Justfile and CI no longer set a worker-count
+environment override.
+
 * Primary provider references
 
-- [[https://docs.rs/turso/0.7.2/turso/][Turso native Rust SDK]]: optional native binding and transaction APIs.
+- [[https://docs.rs/turso/0.8.1/turso/][Turso native Rust SDK]]: optional native binding and transaction APIs.
 - [[https://duckdb.org/docs/current/connect/concurrency][DuckDB concurrency]]: declared single-process local write capability.
 - [[https://duckdb.org/docs/lts/sql/statements/transactions][DuckDB transactions]]: persistence and snapshot-isolation boundary.
 - [[https://docs.rs/tokio/1.53.1/tokio/task/fn.spawn_blocking.html][Tokio blocking work]]: accepted blocking workers require explicit ownership.
+
+
+* Portable graph closure publication
+
+=backend-graph-publish= adds complete immutable graph closure ACKs and typed
+protected ProfilePort commit composition to this same engine. It selects no
+physical database or native graph SDK. [[file:../rfcs/0002-graphar-arrow-backend.org][RFC 0002]] records the root ordering,
+authenticated restore contract, retained resource lifetime, exact-operation
+recovery and remaining streaming/performance/deployment gates. Physical ACKs
+remain distinct from semantic authorization and durable metadata commit.
