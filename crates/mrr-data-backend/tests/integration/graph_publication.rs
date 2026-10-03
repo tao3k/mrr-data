@@ -1,5 +1,5 @@
 //! Native durable graph publication/CAS/recovery; transport payloads are opaque.
-#![cfg(all(feature = "graph-publish", feature = "turso"))]
+#![cfg(all(feature = "graph-publish", any(feature = "turso", feature = "duckdb")))]
 #[path = "../../../mrr-data-content/tests/support/graph_publication_fixture.rs"]
 mod fixture;
 use fixture::{Fixture, Remote};
@@ -10,13 +10,18 @@ use mrr_data_content::{
     ConditionalCommitPortError as Error, ConditionalContentCommitOutcome as Outcome,
     ConditionalContentCommitPort, ConditionalContentWrite, ContentRevision, publish_graph_dataset,
 };
+#[cfg(feature = "turso")]
+fn native(path: &std::path::Path) -> mrr_data_backend::providers::TursoProvider {
+    mrr_data_backend::providers::TursoProvider::new(path.into(), tokio::runtime::Handle::current())
+}
+#[cfg(all(not(feature = "turso"), feature = "duckdb"))]
+fn native(path: &std::path::Path) -> mrr_data_backend::providers::DuckDbProvider {
+    mrr_data_backend::providers::DuckDbProvider::new(path.into())
+}
 async fn open(path: &std::path::Path) -> Backend {
     Backend::open(
         BackendConfig::default(),
-        mrr_data_backend::providers::TursoProvider::new(
-            path.into(),
-            tokio::runtime::Handle::current(),
-        ),
+        native(path),
         tokio::runtime::Handle::current(),
     )
     .await

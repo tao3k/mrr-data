@@ -9,9 +9,10 @@ repository.workspace = true
 
 [features]
 default = []
+arrow-query = ["dep:arrow-array", "dep:arrow-schema"]
 graph-publish = ["mrr-data-content/graph-snapshot"]
 turso = ["dep:turso"]
-duckdb = ["dep:duckdb", "dep:arrow-array", "dep:arrow-schema"]
+duckdb = ["dep:duckdb", "arrow-query"]
 
 [dependencies]
 mrr-data-content.workspace = true
@@ -64,3 +65,7 @@ path = "tests/integration/resources.rs"
 [[test]]
 name = "backend_graph_publication"
 path = "tests/integration/graph_publication.rs"
+
+[[test]]
+name = "backend_arrow_query"
+path = "tests/integration/arrow_query.rs"

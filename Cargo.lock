@@ -3656,6 +3656,8 @@ dependencies = [
 name = "mrr-data"
 version = "0.1.0"
 dependencies = [
+ "cid",
+ "meta-relational-reasoning",
  "mrr-data-arrow",
  "mrr-data-asp-rust-build-support",
  "mrr-data-backend",
@@ -3668,6 +3670,8 @@ dependencies = [
  "mrr-data-profile",
  "mrr-data-pseudonymization",
  "mrr-data-security",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]

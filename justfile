@@ -70,3 +70,9 @@ test-backend:
 [group('test')]
 clippy-backend:
     {{ cargo }} clippy -p mrr-data-backend --all-features --all-targets --profile test --locked -- -D warnings
+
+[group('test')]
+test-backend-query:
+    {{ cargo }} test -p mrr-data-backend --no-default-features --features arrow-query --locked
+    {{ cargo }} test -p mrr-data-backend --no-default-features --features turso,arrow-query,graph-publish --locked -- --nocapture
+    {{ cargo }} test -p mrr-data-backend --no-default-features --features duckdb,graph-publish --locked -- --nocapture

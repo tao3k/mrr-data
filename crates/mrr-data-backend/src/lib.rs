@@ -6,7 +6,14 @@ mod config;
 mod dispatch;
 mod engine;
 pub mod providers;
+#[cfg(feature = "arrow-query")]
+mod query;
 mod record;
+#[cfg(feature = "arrow-query")]
+pub use query::{
+    ArrowBatchLease, ArrowQuery, ArrowQueryEmitter, ArrowQueryError, ArrowQueryLimits,
+    ArrowQuerySummary,
+};
 mod resource;
 pub use resource::ResourceHandle;
 mod scheduler;

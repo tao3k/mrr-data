@@ -12,7 +12,7 @@ SQL dialect, SQL driver or Cedar/Commerce dependency.
 
 Database implementations are optional provider modules: =turso= and =duckdb=.
 The facade exposes =backend=, =backend-turso= and =backend-duckdb=, with
-independent =backend-graphar= and =backend-graph-publish= capabilities. Constructors
+independent =backend-graphar=, =backend-graph-publish= and =backend-arrow-query= capabilities. Constructors
 perform no I/O; databases open under the Host-owned runtime/lifecycle. No SQLite
 provider, =backend-sqlite= feature or backend rusqlite dependency remains. The
 existing Kache cache has its own transitive dependencies and is a separate owner.
@@ -37,7 +37,12 @@ enrollment. Profile/schema changes must preserve canonical coordination homes.
 - [[file:../../crates/mrr-data-backend/src/dispatch.rs][The shared dispatcher]] waits asynchronously for separate write/recovery worker
   permits before submitting blocking jobs. =max_write_workers= and
   =max_recovery_workers= default to one each, matching the native providers'
-  single writer and single read connection. Zero, over-admission and semaphore
+  single writer and single read connection. A combined =max_shared_workers=
+  semaphore bounds submitted writes, resource preparations and Arrow queries;
+  its default is one. Recovery never acquires this shared semaphore. The Host
+  budgets at least =max_shared_workers + max_recovery_workers= blocking threads
+  for this Backend and coordinates unrelated blocking work separately.
+  Zero, over-admission and semaphore
   overflow limits refuse configuration before provider opening. Raising these
   limits does not create extra provider connections or native parallelism.
   =active_writes/active_recoveries= include accepted queued work;
@@ -80,10 +85,12 @@ enrollment. Profile/schema changes must preserve canonical coordination homes.
 reservations and =saturated_resources= counts count/byte refusals. These limits do
 not charge the write/recovery lanes and do not measure native memory.
 
-The Host budgets blocking capacity for all three lanes. Independent semaphores
-do not reserve executor threads against concurrent resource work or unrelated
-Host jobs. The existing two-thread recovery qualification does not include a
-stalled resource preparation.
+Writes and resource/query workers acquire the same shared semaphore before
+submission. The two-thread native qualification now includes a stalled resource
+preparation and an accepted write waiting asynchronously, while original-operation
+recovery still progresses. The Host budgets the combined shared/recovery capacity;
+these Backend semaphores do not reserve threads against unrelated Host jobs or
+other Backend instances.
 
 The dispatcher waits asynchronously before entering the Host blocking pool.
 Dropping a queued caller skips preparation; a submitted caller can cancel its
@@ -99,8 +106,9 @@ metadata admission; provider close waits for all resources as well as mutations.
 The optional GraphAr adapter prepares an immutable captured fact snapshot on this
 lane. Private temporary files and native handles are cleaned during preparation;
 returned handles retain immutable facts. =backend-graphar= composes this capability
-without selecting Turso or DuckDB. Fallible streaming Arrow query jobs and measured
-native RSS/throughput qualification remain separate implementation gates.
+without selecting Turso or DuckDB. The optional Arrow query port shares this
+resource lane. Measured native RSS/throughput and a DuckDB native streaming driver
+remain separate qualification gates.
 
 * Durable authority versions
 
@@ -314,3 +322,49 @@ physical database or native graph SDK. [[file:../rfcs/0002-graphar-arrow-backend
 authenticated restore contract, retained resource lifetime, exact-operation
 recovery and remaining streaming/performance/deployment gates. Physical ACKs
 remain distinct from semantic authorization and durable metadata commit.
+
+* Fallible Arrow query output under the shared lifecycle
+
+=arrow-query= in Backend and =backend-arrow-query= in the facade enable
+[[file:../../crates/mrr-data-backend/src/query.rs][the portable output protocol]] without a database or native GraphAr dependency.
+=Backend::query_arrow= admits a Host-owned physical producer, declared Arrow
+schema, output limits and a total Host reservation before queueing. The Host
+first admits the semantic query and authenticates its source. No SQL text, new
+runtime or semantic admission engine enters this generic protocol.
+
+The producer executes on the shared blocking lane. Before fetching each batch,
+=ArrowQueryEmitter::emit= reserves its maximum allowed batch bytes; previous
+outstanding buffers apply backpressure before the next fetch. After fetching,
+schema identity, aggregate rows/batches and retained array memory are checked;
+the unused part of that reservation is released. A bounded channel supplies a
+second count limit. Cloned =ArrowBatchLease= values share one byte/resource lease.
+Consumers release old leases to permit further fetches, and retain a lease for
+any independently cloned Arrow arrays/batches. Public Arrow buffer clones can
+escape Rust-level accounting; the Host ownership contract is explicit.
+
+Output refusal is sticky. Driver errors, early termination and worker panic never
+become successful EOF. =summary= exists only after the producer's successful
+terminal report; partial batches grant no complete candidate, authorization or
+protected disclosure. The consumer can cancel explicitly or drop the query;
+queued native work is skipped and output waits wake. A driver registers a short,
+thread-safe native interrupt through =on_cancel= before executing a native call.
+Registration/cancellation races refuse execution. Running work remains owned
+through completion, and both returned batches and in-flight interrupt hooks hold
+the original Backend drain barrier.
+
+The optional [[file:../../crates/mrr-data-backend/src/providers/duckdb_query.rs][DuckDB adapter]] consumes a Host-prepared native statement. It uses the SDK's
+materialized Arrow result and authoritative result row count; missing/empty fetch
+progress or excess rows refuse. It does not reconstruct rows or use the SDK's
+ambiguous streaming iterator. Output backpressure does not establish bounded
+native result materialization. Native query/cache/decompression/spill budgets and
+full semantic type mapping remain separate Host/provider qualifications.
+
+[[file:../../crates/mrr-data-backend/tests/integration/arrow_query.rs][Query tests]] cover successful terminal output, late failure, panic, sticky schema
+refusal, retained final clones, row/buffer refusal, pre-fetch byte backpressure,
+queue cancellation and cancellation-safe receiving. Native DuckDB additionally
+qualifies 4,097 Int64/Utf8/Binary rows with null/empty/Unicode/raw bytes and an
+interrupt of running native execution. [[file:../../crates/mrr-data/tests/unit/graph_lifecycle.rs][The native graph lifecycle consumer]] combines
+real GraphAr files and Arrow IPC, publication, protected CAS, reopen recovery,
+source deletion, cold restoration, native capture, leased Arrow output and final
+MRR candidate admission. It is configured for each metadata provider on both OS
+CI jobs; exact-head CI receipts remain required.

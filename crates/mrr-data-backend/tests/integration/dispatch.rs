@@ -298,3 +298,159 @@ async fn successful_responses_release_single_slot_admission_before_the_next_requ
     backend.shutdown().await.unwrap();
     assert_eq!(backend.status().completed, 128);
 }
+
+#[test]
+fn recovery_progresses_while_resource_preparation_holds_the_shared_host_budget() {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .max_blocking_threads(2)
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let dir = tempfile::tempdir().unwrap();
+        let gate = Gate(Arc::new((Mutex::new(false), Condvar::new())));
+        let backend = Backend::open(
+            BackendConfig::default(),
+            native(dir.path().join("resources.db")),
+            tokio::runtime::Handle::current(),
+        )
+        .await
+        .unwrap();
+        let port = backend.profile("resources.v1", "tenant").unwrap();
+        let seed = write("seed", "seed");
+        port.commit(seed, Some(&ack(seed)), |_| Ok::<_, ()>(()))
+            .await
+            .unwrap();
+        let worker = backend.clone();
+        let worker_gate = gate.0.clone();
+        let entered = Arc::new(AtomicBool::new(false));
+        let mark = entered.clone();
+        let resource = tokio::spawn(async move {
+            worker
+                .prepare_resource(8, move || {
+                    mark.store(true, Ordering::Release);
+                    let (lock, changed) = &*worker_gate;
+                    let released = lock.lock().unwrap();
+                    let (released, _) = changed
+                        .wait_timeout_while(released, Duration::from_secs(3), |released| !*released)
+                        .unwrap();
+                    if !*released {
+                        return Err(BackendError::Unavailable);
+                    }
+                    Ok(())
+                })
+                .await
+        });
+        tokio::time::timeout(Duration::from_secs(3), async {
+            while !entered.load(Ordering::Acquire) {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        let queued_port = port.clone();
+        let queued = tokio::spawn(async move {
+            let w = write("queued", "queued");
+            queued_port
+                .commit(w, Some(&ack(w)), |_| Ok::<_, ()>(()))
+                .await
+                .unwrap();
+        });
+        tokio::time::timeout(Duration::from_secs(3), async {
+            while backend.status().active_writes != 1 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(backend.status().blocking_resources, 1);
+        assert_eq!(backend.status().blocking_writes, 0);
+        let recovered = tokio::time::timeout(Duration::from_millis(500), port.recover(seed)).await;
+        gate.release();
+        drop(resource.await.unwrap().unwrap());
+        queued.await.unwrap();
+        backend.shutdown().await.unwrap();
+        assert!(recovered.is_ok(), "resource preparation starved recovery");
+        assert!(recovered.unwrap().unwrap().is_some());
+    });
+}
+
+#[cfg(feature = "arrow-query")]
+#[test]
+fn recovery_progresses_during_query_backpressure_with_queued_fresh_work() {
+    use arrow_array::{Int64Array, RecordBatch};
+    use arrow_schema::{DataType, Field, Schema};
+    use mrr_data_backend::ArrowQueryLimits;
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .max_blocking_threads(2)
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let dir = tempfile::tempdir().unwrap();
+        let backend = Backend::open(
+            BackendConfig::default(),
+            native(dir.path().join("query.db")),
+            tokio::runtime::Handle::current(),
+        )
+        .await
+        .unwrap();
+        let port = backend.profile("query.v1", "tenant").unwrap();
+        let seed = write("seed", "seed");
+        port.commit(seed, Some(&ack(seed)), |_| Ok::<_, ()>(()))
+            .await
+            .unwrap();
+        let batch = RecordBatch::try_new(
+            Arc::new(Schema::new(vec![Field::new("id", DataType::Int64, false)])),
+            vec![Arc::new(Int64Array::from(vec![1, 2]))],
+        )
+        .unwrap();
+        let bytes = batch.get_array_memory_size();
+        let mut query = backend
+            .query_arrow(
+                batch.schema(),
+                ArrowQueryLimits {
+                    max_rows: 4,
+                    max_batches: 2,
+                    max_batch_bytes: bytes,
+                    max_retained_bytes: bytes,
+                    channel_capacity: 1,
+                },
+                bytes,
+                move |out| {
+                    out.emit(|| Ok(batch.clone()))?;
+                    out.emit(|| Ok(batch))
+                },
+            )
+            .unwrap();
+        let first = query.next_batch().await.unwrap().unwrap();
+        let queued_port = port.clone();
+        let queued = tokio::spawn(async move {
+            let w = write("queued", "queued");
+            queued_port
+                .commit(w, Some(&ack(w)), |_| Ok::<_, ()>(()))
+                .await
+                .unwrap();
+        });
+        tokio::time::timeout(Duration::from_secs(3), async {
+            while backend.status().active_writes != 1 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(backend.status().blocking_resources, 1);
+        assert_eq!(backend.status().blocking_writes, 0);
+        let recovered = tokio::time::timeout(Duration::from_millis(500), port.recover(seed)).await;
+        drop(first);
+        drop(query.next_batch().await.unwrap().unwrap());
+        assert!(query.next_batch().await.unwrap().is_none());
+        queued.await.unwrap();
+        drop(query);
+        backend.shutdown().await.unwrap();
+        assert!(recovered.is_ok(), "query backpressure starved recovery");
+        assert!(recovered.unwrap().unwrap().is_some());
+    });
+}

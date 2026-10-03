@@ -58,9 +58,11 @@ incrementally.
 
 The pinned result iterators yield =RecordBatch= rather than
 =Result<RecordBatch, Error>=. Their fetch path contains =Option= returns for
-failed Arrow conversion/fetch as well as end-of-stream. A future public result
-port needs an explicit fallible upstream driver or separately qualified terminal
-error check. Unexpected termination must remain an error/Unknown outcome;
+failed Arrow conversion/fetch as well as end-of-stream. The shared output port now propagates explicit
+producer failures. Its DuckDB materialized adapter checks the authoritative
+result row count and refuses early fetch termination; the native streaming
+iterator still needs an explicit fallible upstream driver or independently
+qualified terminal error check. Unexpected termination must remain an error/Unknown outcome;
 partial candidate results must not be certified as complete. A successful fixed
 row-count fixture cannot establish arbitrary-query failure propagation.
 
@@ -111,5 +113,6 @@ integration are specified in [[file:../rfcs/0002-graphar-arrow-backend.org][RFC 
 complete virtual-table input in lazy slices, scalar/configuration/buffer/schema
 refusal, and shared-buffer/retained-source accounting. Optional-feature
 composition is checked through the facade, with provider-free and Turso normal
-dependency trees retaining isolation. The high-performance scan/result port and
-its benchmark matrix remain explicitly gated by the criteria above.
+dependency trees retaining isolation. The shared result port is described in
+[[file:shared-backend.org][the Backend lifecycle]]; native streaming/pushdown, broader semantic types and
+the performance/RSS benchmark matrix remain gated by the criteria above.

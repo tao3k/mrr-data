@@ -80,6 +80,34 @@ impl Backend {
             .await
             .map_err(|_| BackendError::WorkerLost)?
     }
+    /// Run a fallible physical Arrow producer on shared resource admission.
+    /// The Host admits the semantic query/schema and budgets native memory first.
+    /// Reservations include retained batches, input/native state and one driver fetch.
+    /// Retained batch clones hold the same drain barrier. Dropping the consumer
+    /// cancels queued work and wakes output waits; running native calls must finish.
+    /// # Errors
+    /// Refuses invalid limits, undersized reservations and sealed/saturated admission.
+    #[cfg(feature = "arrow-query")]
+    pub fn query_arrow(
+        &self,
+        schema: arrow_schema::SchemaRef,
+        limits: crate::ArrowQueryLimits,
+        reserved_bytes: usize,
+        run: impl FnOnce(&mut crate::ArrowQueryEmitter) -> Result<(), crate::ArrowQueryError>
+        + Send
+        + 'static,
+    ) -> Result<crate::ArrowQuery, crate::ArrowQueryError> {
+        limits.validate()?;
+        if reserved_bytes < limits.max_retained_bytes {
+            return Err(crate::ArrowQueryError::Limit);
+        }
+        let lease = self
+            .inner
+            .scheduler
+            .admit_resource(reserved_bytes)
+            .map_err(crate::ArrowQueryError::Backend)?;
+        Ok(self.inner.dispatcher.query(lease, schema, limits, run))
+    }
     /// Select Host-enrolled profile and stable deployment namespace. Versioning
     /// must never silently move pending authority to a fresh namespace.
     /// # Errors

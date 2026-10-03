@@ -260,8 +260,10 @@ waits for these handles before closing metadata providers. The Host reservation
 must cover declared physical bytes and separately budget native decompression
 and fact materialization. It does not measure or cap native RSS.
 
-Slice C is implemented for captured binary-Entity facts. Slice E has shared
-resource lifecycle support; a fallible streaming Arrow query port remains open.
+Slice C is implemented for captured binary-Entity facts. Slice E now includes
+a shared fallible output port with leased buffers, pre-fetch backpressure, sticky
+errors, cancellation and terminal completion. Its DuckDB driver uses a complete
+materialized Arrow result; native streaming/fetch-error qualification remains open.
 Slice D now implements complete closure preparation, child/root ACK ordering,
 cold restoration and the typed protected ProfilePort composition described below.
 Process/power-loss injection at every phase, additional profiles and matched
@@ -392,3 +394,34 @@ cargo test -p mrr-data-content --features graph-snapshot --test graph_publicatio
 cargo test -p mrr-data-backend --features graph-publish,turso --test backend_graph_publication --locked
 cargo check -p mrr-data --no-default-features --features backend-graph-publish --locked
 #+end_src
+
+* Ordered implementation after the architecture audit
+
+The portable =backend-arrow-query= capability now shares the existing Backend
+resource admission, combined worker budget and final-handle drain. Metadata keeps
+one selected transaction provider; additional physical capabilities compose under
+that lifecycle. No Profile/Case or provider creates a separate Backend/runtime.
+
+The native graph lifecycle consumer composes existing crates rather than adding
+a second coordination engine. Both Turso and DuckDB graph ACK/CAS/recovery tests
+are selected independently; the facade's native consumer additionally uses real
+GraphAr files, Arrow IPC, source deletion, cold restore and final MRR admission.
+These tests qualify finite local process restart and configured remote ACKs.
+They do not qualify power loss, deployed object durability or live application
+revocation integration.
+
+| Order | Owner / code seam | Gate before claiming completion |
+|-------+-------------------+----------------------------------|
+| 1 | Backend query/output and dispatch | Explicit successful terminal; late failure/panic stays failure; leases/backpressure/cancellation; recovery during stalled resource work |
+| 2 | Optional DuckDB driver | Materialized row-count qualification, schema/null/binary preservation and native interrupt; a true streaming driver must expose late errors |
+| 3 | Facade Production composition | Real native publication/CAS/reopen/cold-read/query/MRR admission on both providers and OS, bound to exact source/pins |
+| 4 | Host/domain authority integration | Actual policy/key snapshot enrollment and retirement synchronized with fresh effects and final protected disclosure |
+| 5 | Fault injection at every publication phase | Original-operation recovery after child/root ACK loss and process crash; no partial head; separate power-loss and deployed-store receipts |
+| 6 | Matched performance matrix | Same facts and admitted results; queue/validation/native fetch/export/admission timings; first batch, retained buffers, RSS/spill, cold/warm and both OS |
+
+The resource reservation is a Host estimate. Maximum batch and retained output
+bytes do not constrain native query materialization, compression scratch, caches
+or arbitrary external Arrow clones. A managed lease must accompany every shared
+buffer. SDK-native row-count qualification is not evidence of a native streaming
+memory bound. Historical metadata benchmarks are not reused as query-throughput
+or Turso 0.8.1 measurements. Build parallelism remains Cargo's default.

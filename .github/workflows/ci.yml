@@ -56,10 +56,12 @@ jobs:
         run: cargo test --workspace --features mrr-data/transfer,mrr-data/car,mrr-data/filesystem,mrr-data/cache,mrr-data/s3,mrr-data/backend-turso,mrr-data/backend-graph-publish --locked
       - name: Test optional database providers independently
         run: |
-          cargo test -p mrr-data-backend --no-default-features --features turso --locked -- --nocapture
-          cargo test -p mrr-data-backend --no-default-features --features duckdb --locked -- --nocapture
+          cargo test -p mrr-data-backend --no-default-features --features turso,arrow-query,graph-publish --locked -- --nocapture
+          cargo test -p mrr-data-backend --no-default-features --features duckdb,graph-publish --locked -- --nocapture
       - name: Test shared backend without a provider feature
-        run: cargo test -p mrr-data-backend --no-default-features --locked
+        run: |
+          cargo test -p mrr-data-backend --no-default-features --locked
+          cargo test -p mrr-data-backend --no-default-features --features arrow-query --locked
       - name: Test Commerce integration profiles
         run: |
           cargo test -p mrr-data-commerce --locked
@@ -177,7 +179,7 @@ jobs:
   graphar:
     name: Maintained GraphAr (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
@@ -217,6 +219,10 @@ jobs:
           cargo check -p mrr-data --no-default-features --features graphar-native --locked
           cargo check -p mrr-data --no-default-features --features content-identity,graphar-native --locked
           cargo check -p mrr-data --no-default-features --features backend-graphar --locked
+      - name: Qualify native graph publication, cold restore and final MRR admission
+        run: |
+          cargo test -p mrr-data --no-default-features --features backend-graphar,backend-graph-publish,backend-turso,backend-arrow-query,datafusion --lib --locked native_graph_publication_restoration_and_admission
+          cargo test -p mrr-data --no-default-features --features backend-graphar,backend-graph-publish,backend-duckdb,backend-arrow-query,datafusion --lib --locked native_graph_publication_restoration_and_admission
       - name: Lint maintained GraphAr adapter
         run: cargo clippy -p mrr-data-graphar --all-targets --features native-graphar,backend --locked -- -D warnings
 

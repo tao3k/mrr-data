@@ -43,6 +43,9 @@ pub struct BackendConfig {
     /// Submitted blocking jobs, including those waiting in the Host pool.
     pub max_write_workers: usize,
     pub max_recovery_workers: usize,
+    /// Combined submitted writes, preparations and queries. Recovery is separate.
+    /// Host blocking capacity must include this budget plus recovery workers.
+    pub max_shared_workers: usize,
     pub max_retained_bytes: usize,
     pub max_identity_bytes: usize,
     /// Accepted preparation jobs plus retained resource handles.
@@ -58,6 +61,7 @@ impl Default for BackendConfig {
             max_recoveries: 8,
             max_write_workers: 1,
             max_recovery_workers: 1,
+            max_shared_workers: 1,
             max_retained_bytes: 131_072,
             max_identity_bytes: 256,
             max_resources: 8,
@@ -68,7 +72,9 @@ impl Default for BackendConfig {
 }
 impl BackendConfig {
     pub(crate) fn validate(self) -> Result<Self, BackendError> {
-        if self.max_resources == 0
+        if self.max_shared_workers == 0
+            || self.max_shared_workers > tokio::sync::Semaphore::MAX_PERMITS
+            || self.max_resources == 0
             || self.max_resource_workers == 0
             || self.max_resource_workers > self.max_resources
             || self.max_resource_workers > tokio::sync::Semaphore::MAX_PERMITS

@@ -21,7 +21,7 @@ use mrr_data_content::{
     prepare_graph_publication,
 };
 use std::{collections::BTreeMap, sync::Mutex};
-fn schema() -> RelationSchema {
+pub fn schema() -> RelationSchema {
     RelationSchema::new(
         RelationId::from_canonical_bytes("knows").unwrap(),
         "knows",
@@ -35,6 +35,7 @@ fn schema() -> RelationSchema {
 }
 fn query(
     inventory: &GraphDatasetInventory,
+    ipc: &[u8],
 ) -> (
     BoundDataQuery,
     SnapshotBlock,
@@ -112,7 +113,10 @@ fn query(
                 RelationDescriptor::new(
                     schema().id(),
                     1,
-                    vec![BatchDescriptor::new(raw_cid(b"ipc"), 1, 3).unwrap()],
+                    vec![
+                        BatchDescriptor::new(raw_cid(ipc), 1, u64::try_from(ipc.len()).unwrap())
+                            .unwrap(),
+                    ],
                 )
                 .unwrap(),
             ],
@@ -159,7 +163,20 @@ impl Fixture {
             GraphInventoryLimits::default(),
         )
         .unwrap();
-        let (query, snapshot, relations, entities) = query(&inventory);
+        let local = MemoryContentStore::default();
+        for bytes in [b"metadata".as_slice(), b"opaque-graph-payload"] {
+            local
+                .put(ContentBlock::new(ContentCodec::Raw, bytes))
+                .unwrap();
+        }
+        Self::with_dataset(inventory, local, b"ipc")
+    }
+    pub fn with_dataset(
+        inventory: GraphDatasetInventory,
+        local: MemoryContentStore,
+        ipc: &[u8],
+    ) -> Self {
+        let (query, snapshot, relations, entities) = query(&inventory, ipc);
         let binding = GraphDatasetBinding::admit(
             &query,
             schema().id(),
@@ -167,13 +184,7 @@ impl Fixture {
             GraphInventoryLimits::default(),
         )
         .unwrap();
-        let local = MemoryContentStore::default();
-        for bytes in [
-            b"metadata".as_slice(),
-            b"opaque-graph-payload",
-            b"ipc",
-            b"coverage",
-        ] {
+        for bytes in [ipc, b"coverage"] {
             local
                 .put(ContentBlock::new(ContentCodec::Raw, bytes))
                 .unwrap();
