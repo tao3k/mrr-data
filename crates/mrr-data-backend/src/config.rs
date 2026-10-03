@@ -97,6 +97,11 @@ pub struct BackendStatus {
     pub blocking_recoveries: usize,
     pub retained_bytes: usize,
     pub completed: u64,
+    /// Lifetime admission refusals caused by write count or retained-byte limits.
+    /// Includes administrative writes; excludes validation and lifecycle refusals.
+    pub saturated_writes: u64,
+    /// Lifetime admission refusals caused by recovery lane limits.
+    pub saturated_recoveries: u64,
 }
 
 #[cfg(test)]

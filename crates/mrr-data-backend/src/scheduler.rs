@@ -19,6 +19,8 @@ impl Scheduler {
                 blocking_recoveries: 0,
                 retained_bytes: 0,
                 completed: 0,
+                saturated_writes: 0,
+                saturated_recoveries: 0,
             }),
             changed: Notify::new(),
         })
@@ -53,6 +55,12 @@ impl Scheduler {
             s.retained_bytes
         };
         if active >= limit || bytes > lane_bytes.saturating_sub(used) {
+            let refused = if recovery {
+                &mut s.saturated_recoveries
+            } else {
+                &mut s.saturated_writes
+            };
+            *refused = refused.saturating_add(1);
             return Err(BackendError::Saturated);
         }
         if recovery {
@@ -79,6 +87,10 @@ impl Scheduler {
         self.changed.notify_waiters();
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/scheduler.rs"]
+mod tests;
 pub(crate) struct Lease {
     scheduler: Arc<Scheduler>,
     recovery: bool,

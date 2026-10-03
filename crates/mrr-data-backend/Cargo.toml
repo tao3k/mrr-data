@@ -43,3 +43,7 @@ path = "tests/performance/mixed_performance.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "backend_sustained_performance"
+path = "tests/performance/sustained_performance.rs"

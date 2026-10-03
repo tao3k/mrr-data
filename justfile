@@ -46,6 +46,11 @@ bench-backend-mixed:
     {{ backend_native_env }} CARGO_BUILD_JOBS=2 {{ cargo }} test -p mrr-data-backend --no-default-features --features turso --test backend_mixed_performance --locked -- --ignored --nocapture --test-threads=1
     {{ backend_native_env }} CARGO_BUILD_JOBS=2 {{ cargo }} test -p mrr-data-backend --no-default-features --features duckdb --test backend_mixed_performance --locked -- --ignored --nocapture --test-threads=1
 
+[group('bench')]
+bench-backend-sustained:
+    {{ backend_native_env }} CARGO_BUILD_JOBS=2 {{ cargo }} test -p mrr-data-backend --no-default-features --features turso --test backend_sustained_performance --locked -- --ignored --nocapture --test-threads=1
+    {{ backend_native_env }} CARGO_BUILD_JOBS=2 {{ cargo }} test -p mrr-data-backend --no-default-features --features duckdb --test backend_sustained_performance --locked -- --ignored --nocapture --test-threads=1
+
 [group('test')]
 test-property-query:
     {{ native_env }} {{ cargo }} test -p mrr-data-content --features property-snapshot --locked

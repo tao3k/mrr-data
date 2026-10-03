@@ -50,6 +50,11 @@ enrollment. Profile/schema changes must preserve canonical coordination homes.
   permits. A successful single-slot client can issue its next request without
   racing the completed predecessor's lease. Early validator refusal can still
   overlap the owned rollback; it does not promise immediate capacity reuse.
+  =saturated_writes/saturated_recoveries= are saturating lifetime counters for
+  admission refusals caused by lane count/byte limits. Administrative updates
+  share the write counter. These refusals create no lease and do not increment
+  =completed=. Lifecycle, malformed-request and validator refusals are excluded.
+  Counters carry no profile, tenant or operation labels and add no clock reads.
 - The Host provides executor capacity for both lanes and keeps it alive through
   drain. One shared Backend with default worker limits progresses recovery in a
   Host pool capped at two blocking threads while eight accepted writers stall.
@@ -211,6 +216,18 @@ measures completion of the busy drain. Every queued write and historical receipt
 must survive reopen. This controlled stalled-writer workload does not substitute
 for sustained writes, competing Host jobs, larger guarded records or native RSS
 qualification.
+
+=just bench-backend-sustained= runs [[file:../../crates/mrr-data-backend/tests/performance/sustained_performance.rs][finite continuous producers]]: eight
+write producers each attempt 64 distinct operations, four readers recover one
+historical seed until producers finish (at least 64 reads each), and write/read
+admission is capped at four each. Both providers use the same two-thread blocking
+pool and one submitted worker per lane. Saturated attempts are counted without
+retry and have their own latency distribution. Successful throughput excludes
+refused attempts; reopen verifies every committed revision and the absence of
+every refused operation. Readers are capped at 8,192 operations each and producer
+collection at 30 seconds. Read-start overlap records producer activity; it does
+not prove simultaneous execution inside both native connections. Close timing is
+quiescent; the held-writer experiment above qualifies busy drain separately.
 
 [[file:../benchmarks/shared-backend-dispatch.org][The dispatch and mixed recovery receipt]] preserves both reproduced defects,
 the exact post-fix source, all mixed-load rounds and the rerun metadata baseline.

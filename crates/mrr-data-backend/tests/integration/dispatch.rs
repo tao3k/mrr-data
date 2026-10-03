@@ -4,12 +4,13 @@
 mod held_provider;
 use held_provider::{Gate, Held};
 use mrr_data_backend::{
-    AuthorityProposal, AuthorityStatus, Backend, BackendConfig, Lifecycle, ProfilePort,
+    AuthorityProposal, AuthorityStatus, Backend, BackendConfig, BackendError, Lifecycle,
+    ProfilePort,
 };
 use mrr_data_content::ConditionalContentCommitOutcome;
 use mrr_data_content::{
-    CacheAdmission, ConditionalContentCommitPort, ConditionalContentWrite, ContentBlock,
-    ContentCodec, PublishReceipt,
+    CacheAdmission, ConditionalCommitPortError, ConditionalContentCommitPort,
+    ConditionalContentWrite, ContentBlock, ContentCodec, PublishReceipt,
 };
 use std::{
     path::PathBuf,
@@ -50,7 +51,7 @@ fn ack(w: ConditionalContentWrite<'_>) -> PublishReceipt {
     }
 }
 #[test]
-fn recovery_progresses_with_two_host_blocking_threads_and_eight_accepted_writes() {
+fn recovery_progresses_when_write_admission_is_saturated_with_two_host_threads() {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .max_blocking_threads(2)
@@ -62,7 +63,10 @@ fn recovery_progresses_with_two_host_blocking_threads_and_eight_accepted_writes(
         let gate = Gate(Arc::new((Mutex::new(false), Condvar::new())));
         let entered = Arc::new(AtomicBool::new(false));
         let backend = Backend::open(
-            BackendConfig::default(),
+            BackendConfig {
+                max_writes: 8,
+                ..BackendConfig::default()
+            },
             Held {
                 native: native(dir.path().join("dispatch.db")),
                 gate: gate.0.clone(),
@@ -112,6 +116,17 @@ fn recovery_progresses_with_two_host_blocking_threads_and_eight_accepted_writes(
         .unwrap();
         tokio::time::sleep(Duration::from_millis(30)).await;
         assert_eq!(backend.status().blocking_writes, 1);
+        let refused = write("refused", "refused");
+        assert!(matches!(
+            port.commit(refused, Some(&ack(refused)), |_| -> Result<(), ()> {
+                panic!("saturated request reached validator")
+            })
+            .await,
+            Err(ConditionalCommitPortError::BeforeCommit(
+                BackendError::Saturated
+            ))
+        ));
+        assert_eq!(backend.status().saturated_writes, 1);
         let recovered = tokio::time::timeout(Duration::from_millis(500), port.recover(seed)).await;
         gate.release();
         while let Some(job) = jobs.join_next().await {
@@ -126,6 +141,7 @@ fn recovery_progresses_with_two_host_blocking_threads_and_eight_accepted_writes(
         assert_eq!(backend.status().completed, 10);
         assert_eq!(backend.status().blocking_writes, 0);
         assert_eq!(backend.status().blocking_recoveries, 0);
+        assert_eq!(backend.status().saturated_recoveries, 0);
     });
 }
 
