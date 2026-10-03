@@ -4,8 +4,9 @@ use super::transactions::{TestPort, complete};
 use super::{Fixture, signer};
 use mrr_data_commerce::budget_commit::{CurrentCommerceAuthority, commit_shared_reservation};
 use mrr_data_commerce::consumption::{
-    ConsumptionClaimError, ConsumptionClaimRequest, ConsumptionError, ConsumptionLedgerClaims,
-    CurrentConsumptionAuthority, DispatchPermit, PaymentDispatchClaims, ProviderId, claim_dispatch,
+    AuthorizationRoot, ConsumptionClaimError, ConsumptionClaimRequest, ConsumptionError,
+    ConsumptionLedgerClaims, CurrentConsumptionAuthority, DispatchPermit, PaymentDispatchClaims,
+    ProviderId, RootFence, claim_dispatch,
 };
 use mrr_data_commerce::credential::{CredentialAdmissionRequest, CredentialClaims};
 use mrr_data_commerce::provider::{
@@ -92,6 +93,7 @@ fn before() -> ConsumptionLedgerClaims {
 fn fresh(fixture: &Fixture) -> CurrentConsumptionAuthority {
     let bytes = serde_json::to_vec(&fixture.after).unwrap();
     CurrentConsumptionAuthority {
+        root_fence: active_fence(),
         commerce: CurrentCommerceAuthority {
             host: fixture.host(),
             now: 10,
@@ -156,11 +158,31 @@ fn claim(
     })
 }
 
-#[derive(Default)]
+fn active_fence() -> RootFence {
+    RootFence {
+        root: AuthorizationRoot {
+            budget_scope: "buyer-trip-root".into(),
+            mandate_id: "trip-root".into(),
+        },
+        generation: 7,
+        retired: false,
+    }
+}
 struct Provider {
+    fence: Mutex<RootFence>,
     calls: AtomicUsize,
     mode: AtomicUsize,
     row: Mutex<Option<(PaymentDispatchClaims, SignedProviderReceipt)>>,
+}
+impl Default for Provider {
+    fn default() -> Self {
+        Self {
+            fence: Mutex::new(active_fence()),
+            calls: AtomicUsize::new(0),
+            mode: AtomicUsize::new(0),
+            row: Mutex::new(None),
+        }
+    }
 }
 impl Provider {
     fn receipt(request: &PaymentDispatchClaims, altered: bool) -> SignedProviderReceipt {
@@ -188,6 +210,12 @@ impl PaymentProviderPort for Provider {
         permit: DispatchPermit,
     ) -> ProviderFuture<'_, SignedProviderReceipt, Self::Error> {
         Box::pin(async move {
+            // Hold the same endpoint lock across eligibility and acceptance.
+            // A process-local preflight check followed by await would be unsafe.
+            let fence = self.fence.lock().unwrap();
+            if !permit.eligible_at(&fence, &"processor".into()).unwrap() {
+                return Err(ProviderFailure::NotSent("fenced"));
+            }
             self.calls.fetch_add(1, Ordering::SeqCst);
             let request = permit.request().clone();
             let receipt = Self::receipt(&request, self.mode.load(Ordering::SeqCst) == 2);
@@ -425,4 +453,173 @@ fn competing_claims_release_only_one_provider_call() {
     });
     assert_eq!(results.into_iter().filter(|released| *released).count(), 1);
     assert_eq!(provider.calls.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn paused_claim_is_rejected_after_provider_retirement_or_key_rotation() {
+    for retired in [true, false] {
+        let fixture = Fixture::lean();
+        let credential = claims(&fixture);
+        let ledger = before();
+        let port = DualPort::new(&fixture, &ledger);
+        let permit = claim(&port, &fixture, &credential, &ledger, fresh(&fixture)).unwrap();
+        let provider = Provider::default();
+        // Worker is paused after claim, while the endpoint installs the new fence.
+        let mut state = provider.fence.lock().unwrap();
+        let next = RootFence {
+            generation: 8,
+            retired,
+            ..state.clone()
+        };
+        *state = state.advance(&next).unwrap();
+        drop(state);
+        assert!(matches!(
+            complete(release_payment(&provider, permit, &provider_trust())),
+            Err(ProviderDispatchError::Provider(ProviderFailure::NotSent(
+                "fenced"
+            )))
+        ));
+        assert_eq!(provider.calls.load(Ordering::SeqCst), 0);
+        assert!(claim(&port, &fixture, &credential, &ledger, fresh(&fixture)).is_err());
+    }
+}
+
+#[test]
+fn endpoint_restart_restores_fence_and_rejects_stale_worker() {
+    let fixture = Fixture::lean();
+    let credential = claims(&fixture);
+    let ledger = before();
+    let port = DualPort::new(&fixture, &ledger);
+    let permit = claim(&port, &fixture, &credential, &ledger, fresh(&fixture)).unwrap();
+    let retired = RootFence {
+        generation: 8,
+        retired: true,
+        ..active_fence()
+    };
+    // Logical crash/reload receipt only: no claim of physical storage durability.
+    let durable_bytes = serde_json::to_vec(&retired).unwrap();
+    let provider = Provider::default();
+    *provider.fence.lock().unwrap() = serde_json::from_slice(&durable_bytes).unwrap();
+    assert!(matches!(
+        complete(release_payment(&provider, permit, &provider_trust())),
+        Err(ProviderDispatchError::Provider(ProviderFailure::NotSent(
+            "fenced"
+        )))
+    ));
+    assert_eq!(provider.calls.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn accepted_before_retirement_can_recover_after_lost_response() {
+    let fixture = Fixture::lean();
+    let credential = claims(&fixture);
+    let ledger = before();
+    let port = DualPort::new(&fixture, &ledger);
+    let permit = claim(&port, &fixture, &credential, &ledger, fresh(&fixture)).unwrap();
+    let request = permit.request().clone();
+    let provider = Provider::default();
+    provider.mode.store(1, Ordering::SeqCst);
+    assert!(matches!(
+        complete(release_payment(&provider, permit, &provider_trust())),
+        Err(ProviderDispatchError::Provider(ProviderFailure::Unknown(_)))
+    ));
+    let mut fence = provider.fence.lock().unwrap();
+    *fence = fence
+        .advance(&RootFence {
+            generation: 8,
+            retired: true,
+            ..fence.clone()
+        })
+        .unwrap();
+    drop(fence);
+    assert!(
+        complete(recover_payment(&provider, &request, &provider_trust()))
+            .unwrap()
+            .is_some()
+    );
+    assert_eq!(provider.calls.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn unrelated_root_cut_does_not_cancel_this_purchase() {
+    let fixture = Fixture::lean();
+    let credential = claims(&fixture);
+    let ledger = before();
+    let port = DualPort::new(&fixture, &ledger);
+    let permit = claim(&port, &fixture, &credential, &ledger, fresh(&fixture)).unwrap();
+    let provider = Provider::default();
+    let other = RootFence {
+        root: AuthorizationRoot {
+            budget_scope: "other".into(),
+            mandate_id: "other".into(),
+        },
+        generation: 99,
+        retired: true,
+    };
+    assert!(provider.fence.lock().unwrap().advance(&other).is_none());
+    assert!(complete(release_payment(&provider, permit, &provider_trust())).is_ok());
+    assert_eq!(provider.calls.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn retired_or_misbound_claim_authority_grants_no_permit() {
+    for wrong_root in [true, false] {
+        let fixture = Fixture::lean();
+        let credential = claims(&fixture);
+        let ledger = before();
+        let port = DualPort::new(&fixture, &ledger);
+        let mut live = fresh(&fixture);
+        if wrong_root {
+            live.root_fence.root.mandate_id = "substituted".into();
+        } else {
+            live.root_fence.retired = true;
+        }
+        assert!(matches!(
+            claim(&port, &fixture, &credential, &ledger, live),
+            Err(ConsumptionClaimError::Port(
+                ConditionalCommitPortError::Validation(ConsumptionError::InvalidFence)
+            ))
+        ));
+    }
+}
+
+#[test]
+fn pinned_lean_acceptance_fixture_matches_domain() {
+    use mrr_data_commerce::consumption::AcceptanceTicket;
+    let data: serde_json::Value = serde_json::from_slice(include_bytes!(
+        "../../../fixtures/commerce-acceptance-v1.json"
+    ))
+    .unwrap();
+    for row in data["cases"].as_array().unwrap() {
+        let fence: RootFence = serde_json::from_value(row["fence"].clone()).unwrap();
+        let ticket: AcceptanceTicket = serde_json::from_value(row["ticket"].clone()).unwrap();
+        assert_eq!(
+            fence.accepts(
+                &ticket,
+                row["provider"].as_str().unwrap(),
+                row["operation"].as_str().unwrap(),
+                row["commitment"].as_str().unwrap()
+            ),
+            row["accepted"].as_bool().unwrap()
+        );
+    }
+}
+
+#[test]
+fn ticket_cannot_release_at_another_provider_endpoint() {
+    let fixture = Fixture::lean();
+    let credential = claims(&fixture);
+    let ledger = before();
+    let port = DualPort::new(&fixture, &ledger);
+    let permit = claim(&port, &fixture, &credential, &ledger, fresh(&fixture)).unwrap();
+    assert!(
+        !permit
+            .eligible_at(&active_fence(), &"other-provider".into())
+            .unwrap()
+    );
+    assert!(
+        permit
+            .eligible_at(&active_fence(), &"processor".into())
+            .unwrap()
+    );
 }

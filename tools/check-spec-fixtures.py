@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "crates/mrr-data-pseudonymization/Cargo.toml"
 LOCK = ROOT / "Cargo.lock"
 FIXTURES = {
+    "commerce-acceptance-v1.json": ROOT / "crates/mrr-data-commerce/tests/fixtures/commerce-acceptance-v1.json",
     "commerce-projection-v1.json": ROOT / "crates/mrr-data-commerce/tests/fixtures/commerce-projection-v1.json",
     "storage-effect-v1.json": ROOT / "crates/mrr-data-security/fixtures/storage-effect-v1.json",
     "storage-profiles-v1.json": ROOT / "crates/mrr-data-security/fixtures/storage-profiles-v1.json",

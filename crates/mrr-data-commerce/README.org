@@ -23,3 +23,22 @@ not establish durable storage, processor execution or exactly-once payments.
 The facade opts in with =commerce-cedar=, =commerce-credential= or
 =commerce-consumption=. Its defaults import no Cedar Commerce code. The moved
 implementation retains the source crate's Apache-2.0 license.
+
+* Single-root acceptance fence
+
+Fresh consumption claims capture the authenticated root namespace, mandate and
+generation in an exact provider/request ticket. The provider endpoint checks
+=DispatchPermit::eligible_at= against its independently trusted current fence,
+atomically with protected acceptance. Root retirement is permanent and key
+rotation increments generation. An issuer cut alone does not establish that an
+endpoint installed its fence. Status recovery of a pre-fence accepted request
+remains available; it creates no new permit.
+
+The pinned =commerce-acceptance-v1.json= fixture is exported by Lean. Endpoint
+regressions include pause after claim, retirement, rotation, logical state
+reload, unrelated roots and recovery after a lost response. Their acceptance
+counter is a deterministic oracle, not evidence of real processor charges.
+Deployment supplies authenticated durable fences and complete mediation.
+These interfaces install no database and implement no settlement rail. A crash
+after claim before send remains stranded until a separate fenced ownership
+recovery protocol is implemented.

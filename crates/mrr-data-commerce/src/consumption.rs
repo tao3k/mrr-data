@@ -9,6 +9,7 @@ use super::credential::{
     CredentialAdmissionRequest, CredentialClaims, CredentialError, CredentialIssuerTrust,
     CredentialRecoveryError, recover_committed_credential, validate_authority,
 };
+pub use cedar_poo_commerce::acceptance::{AcceptanceTicket, AuthorizationRoot, RootFence};
 use cedar_poo_commerce::projection::{LeanMandateClaims, LeanOfferClaims};
 use cedar_poo_commerce::signatures::sha256_hex;
 use mrr_data_content::{
@@ -114,6 +115,7 @@ pub enum ConsumptionError {
     InvalidTransition,
     ContentMismatch,
     MissingValidation,
+    InvalidFence,
     ReceiptMismatch,
     Credential(CredentialError),
     Commit(ConditionalCommitError),
@@ -122,6 +124,9 @@ pub enum ConsumptionError {
 /// Current registry, issuer keys and budget head read under the port's protection.
 /// The adapter must synchronize changes to all of these through provider release.
 pub struct CurrentConsumptionAuthority {
+    /// Independently authenticated root generation synchronized with this claim.
+    /// Issuer cuts must also be installed at the provider before reporting quiescence.
+    pub root_fence: RootFence,
     pub commerce: CurrentCommerceAuthority,
     pub issuers: CredentialIssuerTrust,
     pub budget: ContentRevision,
@@ -153,8 +158,31 @@ pub enum ConsumptionClaimError<E> {
 #[derive(Debug)]
 pub struct DispatchPermit {
     request: PaymentDispatchClaims,
+    acceptance: AcceptanceTicket,
 }
 impl DispatchPermit {
+    /// Claim-time root snapshot; the provider checks it at protected acceptance.
+    pub fn acceptance(&self) -> &AcceptanceTicket {
+        &self.acceptance
+    }
+    /// Eligibility under independently trusted provider-local fence state.
+    /// Provider identity is independently configured by the endpoint.
+    /// This must run atomically with acceptance, never before an unprotected await.
+    /// # Errors
+    /// Returns InvalidClaims if the exact request commitment cannot be encoded.
+    pub fn eligible_at(
+        &self,
+        fence: &RootFence,
+        provider: &ProviderId,
+    ) -> Result<bool, ConsumptionError> {
+        Ok(self.request.provider_id == *provider
+            && fence.accepts(
+                &self.acceptance,
+                provider.as_str(),
+                &self.request.idempotency_key,
+                &self.request.commitment()?,
+            ))
+    }
     /// Inspect the exact request; this accessor cannot create another permit.
     pub fn request(&self) -> &PaymentDispatchClaims {
         &self.request
@@ -243,15 +271,35 @@ where
         replacement: ContentBlock::new(ContentCodec::Raw, input.proposed_bytes).cid(),
     };
     let physical = input.physical;
-    let mut validated = false;
+    let mut acceptance = None;
     let outcome = port
         .commit(write, Some(physical), |observed| {
             if observed != Some(input.current) {
                 return Err(ConsumptionError::InvalidTransition);
             }
             let live = refresh()?;
+            let root = input
+                .credential
+                .credential
+                .receipt
+                .reservation
+                .lineage
+                .first()
+                .ok_or(ConsumptionError::InvalidFence)?;
+            if live.root_fence.retired
+                || live.root_fence.root.budget_scope != input.credential.expected_scope
+                || live.root_fence.root.mandate_id != root.mandate_id.as_str()
+            {
+                return Err(ConsumptionError::InvalidFence);
+            }
             validate_live(input.credential, &live, policy)?;
-            validated = true;
+            acceptance = Some(AcceptanceTicket {
+                root: live.root_fence.root,
+                generation: live.root_fence.generation,
+                provider_id: request.provider_id.as_str().to_owned(),
+                operation_id: request.idempotency_key.clone(),
+                request_commitment: request.commitment()?,
+            });
             Ok(())
         })
         .await
@@ -264,10 +312,11 @@ where
     write
         .recover_receipt(Some(&receipt))
         .map_err(|error| ConsumptionClaimError::Validation(ConsumptionError::Commit(error)))?;
-    if !validated {
-        return Err(ConsumptionClaimError::Validation(
-            ConsumptionError::MissingValidation,
-        ));
-    }
-    Ok(DispatchPermit { request })
+    let acceptance = acceptance.ok_or(ConsumptionClaimError::Validation(
+        ConsumptionError::MissingValidation,
+    ))?;
+    Ok(DispatchPermit {
+        request,
+        acceptance,
+    })
 }

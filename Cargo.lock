@@ -634,7 +634,7 @@ dependencies = [
 [[package]]
 name = "cedar-poo-commerce"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/cedar-poo-spec?rev=e587fa5c4e9eb6a92b5599a88f894f5bdd6407c9#e587fa5c4e9eb6a92b5599a88f894f5bdd6407c9"
+source = "git+https://github.com/tao3k/cedar-poo-spec?rev=8433815cade4067ed8be18fb99670119a5a1f844#8433815cade4067ed8be18fb99670119a5a1f844"
 dependencies = [
  "p256",
  "serde",
@@ -645,7 +645,7 @@ dependencies = [
 [[package]]
 name = "cedar-poo-pseudonymization"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/cedar-poo-spec?rev=e587fa5c4e9eb6a92b5599a88f894f5bdd6407c9#e587fa5c4e9eb6a92b5599a88f894f5bdd6407c9"
+source = "git+https://github.com/tao3k/cedar-poo-spec?rev=8433815cade4067ed8be18fb99670119a5a1f844#8433815cade4067ed8be18fb99670119a5a1f844"
 dependencies = [
  "base64 0.23.1",
  "serde",

@@ -110,6 +110,16 @@ pub type ProviderFuture<'a, T, E> =
 
 /// Implementations release only a newly claimed permit, carry its exact request
 /// to the provider, enforce stable-key idempotency, and authenticate responses.
+/// At the protected provider acceptance event, implementations MUST evaluate
+/// `permit.eligible_at` against independently authenticated current fence state,
+/// using the endpoint's independently configured provider ID, atomically with
+/// recording the accepted request/effect. An earlier client check
+/// is insufficient. Persist fences and accepted operation/body bindings together
+/// with the deploying endpoint's recovery protocol; stale worker snapshots never
+/// replace that authority. Reject missing fences as known non-release.
+/// Root retirement blocks new acceptance, while exact status recovery for requests
+/// already accepted remains available. Never reset or garbage collect root fences
+/// while old carriers can return. No durable storage engine is supplied here.
 /// They must synchronize the current budget, issuer and mandate authority through
 /// the actual external release. A permit is a validated snapshot, not a lease
 /// proving those facts remained current while an adapter suspended or restarted.
