@@ -188,10 +188,32 @@ separate SDK path handles vector splitting. A caller using raw SDK APIs can stil
 bypass the carrier; the future public port must require it, aggregate buffer
 leases and bounded scheduling.
 
-Slice A is implemented by this change. B-F remain proposed and must not be
-presented as a complete GraphAr Backend integration. Existing native GraphAr
-parity tests remain meaningful for their current interfaces; they cannot close
-the new dataset-integrity, shared-job or publication-composition gates.
+Slice A is implemented. Slice B now has a standalone core file inventory under
+=content-identity=: =mrr.graphar.file-inventory.v1= uses a DAG-CBOR root and RAW
+SHA-256 child CIDs, deterministic path ordering, exact declared lengths and
+borrowed-payload verification. Decode checks the encoded-byte budget and root
+before parsing, then refuses unknown fields, unsupported versions, unsafe paths,
+duplicate paths, wrong CID codecs, total-length overflow and noncanonical order.
+Distinct logical paths may share a CID; declared bytes still count per path.
+
+The initial portable path profile admits lowercase ASCII letters, digits,
+=._-= and relative slash-separated components. It rejects traversal, platform
+reserved names and aliases such as backslashes or drive prefixes. This profile
+is narrower than the GraphAr format; native producers must explicitly meet it.
+File/path/count limits bound declared inventory work; encoding checks the byte
+budget after serialization and does not promise a pre-allocation byte cap or
+native engine RSS bound. Empty physical payloads are refused by this profile.
+
+This inventory is caller-declared. It does not yet prove that every native YAML
+reference or chunk is present, bind generation/catalog roles, enumerate/seal
+files or produce a native writer receipt. The existing V1 graph descriptor keeps
+its RAW metadata binding; the new inventory cannot silently replace that CID.
+Those Slice B composition gates and Slices C-F remain proposed. Existing native
+GraphAr parity tests cover their current interfaces and cannot close the new
+dataset-integrity, shared-job or publication-composition gates.
+
+The implementation and malformed-wire qualification are in
+[[file:../../crates/mrr-data-core/src/graph_inventory.rs][the core inventory]] and [[file:../../crates/mrr-data-core/tests/unit/graph_inventory.rs][its focused tests]].
 
 * Alternatives and decisions
 

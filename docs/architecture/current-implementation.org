@@ -293,3 +293,10 @@ gates as proposed work.
 The bounded input iterator lazily slices shared Rust buffers after one source
 validation. Native VTab conversion still copies values; complete streamed
 result/error propagation and scan-performance qualification remain open gates.
+
+The optional core =content-identity= feature now exports a standalone
+=GraphDatasetInventory= with canonical root verification, portable logical
+paths, per-file RAW CID/length verification and declared resource limits.
+It adds no native database dependency and preserves existing snapshot wire
+bindings. Native metadata traversal, complete dataset enumeration, generation
+binding, filesystem sealing and Backend publication remain RFC 0002 gates.

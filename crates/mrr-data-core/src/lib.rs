@@ -4,6 +4,8 @@
 #[cfg(feature = "content-identity")]
 mod error;
 #[cfg(feature = "content-identity")]
+mod graph_inventory;
+#[cfg(feature = "content-identity")]
 mod manifest;
 #[cfg(feature = "content-identity")]
 mod operation_binding;
@@ -15,6 +17,10 @@ mod snapshot_descriptors;
 
 #[cfg(feature = "content-identity")]
 pub use error::DataError;
+#[cfg(feature = "content-identity")]
+pub use graph_inventory::{
+    GraphDatasetInventory, GraphFile, GraphFileKind, GraphInventoryError, GraphInventoryLimits,
+};
 #[cfg(feature = "content-identity")]
 pub use manifest::{
     BatchDescriptor, RelationDescriptor, SnapshotBlock, SnapshotManifest, SnapshotManifestRequest,
