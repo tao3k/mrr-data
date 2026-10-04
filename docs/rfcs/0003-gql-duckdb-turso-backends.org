@@ -4,19 +4,34 @@
 * Status
 
 Proposed against [[https://github.com/tao3k/mrr-data/pull/12][MRR Data PR #12]] at
-=30dcf28f0314addd350aa0c7b690ee90dace84bb=. That PR has one generic
+=62663692ebfcd7a21f3d2e9d7570a14e1c55d001=. That PR has one generic
 =mrr-data-backend= with optional Turso =0.8.1= and DuckDB =1.10502.0=
 metadata providers, a provider-neutral =backend-arrow-query= output protocol,
 and a DuckDB adapter for a Host-prepared statement. The Turso provider currently
 uses SQL only for bounded metadata records. Neither provider executes MRR's
-GQL queries, and the DuckDB adapter does not load DuckGQL. Everything below
-that describes graph-query execution is proposed, not implemented.
+graph queries at that head, and the DuckDB adapter does not load DuckGQL.
+
+This RFC's first local implementation adds the optional =mrr-data-turso-query=
+crate and =backend-turso-query= facade feature. It compiles one already bound,
+outgoing binary-Entity query to a parameterized Turso statement, loads facts
+from a captured GraphAr snapshot into a temporary relation, returns bounded
+=PhysicalQueryOutput=, and leaves final MRR admission to the caller. A native
+fixture proves duplicate-edge preservation, snapshot-drift refusal and MRR
+admission. Backend query-worker integration, additional query shapes, other SQL
+engines and the DuckGQL bridge remain proposed gates.
 
 * Decision and ownership
 
 MRR remains the sole GQL/Cypher parser, semantic catalog and result-admission
 authority. MRR Data consumes an admitted =CatalogBoundQuery= / =BoundDataQuery=,
 binds it to an exact physical snapshot and runs optional native adapters.
+MRR's existing =mrr-frontends= owns both GQL and openCypher source compilation
+and source receipts. No language frontend, compatibility fallback or language
+feature is added to MRR Data. Both frontends construct MRR's typed
+=MetaQueryIr= only for query shapes whose meaning is specified there; an
+unsupported shape is refused, never rewritten as a weaker "compatible" query.
+MRR's catalog binder then admits the IR. The physical adapters consume that
+admitted contract without inspecting source-language spelling.
 
 - The *DuckDB path uses DuckGQL* for graph planning and execution. MRR Data
   does not generate DuckDB SQL for graph patterns or duplicate DuckGQL's
@@ -106,7 +121,7 @@ admission.
 
 * SQL path for Turso and later engines
 
-A private optional Rust module or crate (provisionally =mrr-data-sql=) accepts
+An optional Rust =mrr-data-turso-query= adapter accepts
 only an exact =BoundDataQuery=, a checked physical table/column mapping, typed
 runtime parameters and explicit limits. Its bounded graph-to-relational plan
 records admitted relation/property accesses, joins, filters, projections and
@@ -134,9 +149,9 @@ Turso SQL is universally portable.
 
 MRR's result digest hashes an ordered row vector. Neither a Turso scan nor a
 DuckGQL/DuckDB plan gives receipt parity merely by returning the same set. The
-first slice must define and implement a common deterministic row-sequence rule
-before comparing receipts. Future =ORDER BY=, ties, null ordering and paging
-need separate typed contracts.
+first Turso slice orders by canonical =FactId= text; a DuckGQL bridge must
+implement the same deterministic row-sequence rule before comparing receipts.
+Future =ORDER BY=, ties, null ordering and paging need separate typed contracts.
 
 * GraphAr as the common physical source
 

@@ -41,6 +41,8 @@ pub use mrr_data_content as content;
 /// Property Graph projection contracts.
 #[cfg(feature = "graphar")]
 pub use mrr_data_graphar as graphar;
+#[cfg(feature = "backend-turso-query")]
+pub use mrr_data_turso_query as turso_query;
 
 #[cfg(test)]
 #[path = "../tests/unit/mod.rs"]

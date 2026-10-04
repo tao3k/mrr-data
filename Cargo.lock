@@ -3638,6 +3638,7 @@ dependencies = [
  "mrr-data-profile",
  "mrr-data-pseudonymization",
  "mrr-data-security",
+ "mrr-data-turso-query",
  "tempfile",
  "tokio",
 ]
@@ -3866,6 +3867,19 @@ dependencies = [
  "tempfile",
  "tokio",
  "zeroize",
+]
+
+[[package]]
+name = "mrr-data-turso-query"
+version = "0.1.0"
+dependencies = [
+ "meta-relational-reasoning",
+ "mrr-data-content",
+ "mrr-data-core",
+ "mrr-data-graphar",
+ "tempfile",
+ "tokio",
+ "turso",
 ]
 
 [[package]]

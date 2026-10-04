@@ -14,6 +14,7 @@ members = [
   "crates/mrr-data-datafusion",
   "crates/mrr-data-graphar",
   "crates/mrr-data-profile",
+  "crates/mrr-data-turso-query",
   "crates/mrr-data-kache-probe",
 ]
 resolver = "2"
@@ -59,6 +60,7 @@ mrr-data-security = { path = "crates/mrr-data-security", version = "0.1.0" }
 mrr-data-datafusion = { path = "crates/mrr-data-datafusion", version = "0.1.0" }
 mrr-data-graphar = { path = "crates/mrr-data-graphar", version = "0.1.0" }
 mrr-data-profile = { path = "crates/mrr-data-profile", version = "0.1.0" }
+mrr-data-turso-query = { path = "crates/mrr-data-turso-query", version = "0.1.0", default-features = false }
 cid = { version = "=0.11.3", features = ["serde"] }
 fvm_ipld_car = "=0.9.1"
 multihash-codetable = { version = "=0.2.2", default-features = false, features = ["sha2", "std"] }

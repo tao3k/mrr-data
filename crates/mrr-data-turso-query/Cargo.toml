@@ -1,0 +1,26 @@
+[package]
+name = "mrr-data-turso-query"
+description = "Physical Turso graph-query execution for MRR Data"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+turso-graphar = ["dep:turso", "mrr-data-graphar/native-graphar"]
+
+[dependencies]
+meta-relational-reasoning.workspace = true
+mrr-data-core = { workspace = true, features = ["content-identity"] }
+mrr-data-graphar = { path = "../mrr-data-graphar", version = "0.1.0", default-features = false }
+turso = { workspace = true, optional = true }
+
+[dev-dependencies]
+mrr-data-content.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true
