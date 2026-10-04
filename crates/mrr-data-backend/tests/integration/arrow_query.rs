@@ -392,88 +392,98 @@ async fn configuration_row_and_batch_limits_refuse_without_complete_results() {
 #[cfg(feature = "duckdb")]
 #[tokio::test]
 async fn native_duckdb_arrow_complete_count_and_late_execution_failure() {
-    use mrr_data_backend::providers::emit_duckdb_arrow;
-    let backend = backend().await;
-    let sql = "SELECT i::BIGINT AS id, CASE i%3 WHEN 0 THEN '实体/é' WHEN 1 THEN '' ELSE NULL END AS entity, CASE i%3 WHEN 0 THEN from_hex('00ff7061796c6f6164') WHEN 1 THEN from_hex('') ELSE NULL END AS payload FROM range(4097) t(i)";
-    let mut input = duckdb::Connection::open_in_memory().unwrap();
-    let schema = input
-        .prepare(sql)
-        .unwrap()
-        .query_arrow([])
-        .unwrap()
-        .get_schema();
-    let native_limits = ArrowQueryLimits {
-        max_rows: 4097,
-        max_batches: 8,
-        max_batch_bytes: 262_144,
-        max_retained_bytes: 524_288,
-        channel_capacity: 1,
-    };
-    let mut query = backend
-        .query_arrow(schema.clone(), native_limits, 524_288, move |out| {
-            let mut statement = input.prepare(sql).map_err(|_| ArrowQueryError::Driver)?;
-            emit_duckdb_arrow(&mut statement, [], out)
-        })
-        .unwrap();
-    let mut expected = 0_i64;
-    while let Some(batch) = query.next_batch().await.unwrap() {
-        let ids = batch
-            .batch()
-            .column(0)
-            .as_any()
-            .downcast_ref::<Int64Array>()
-            .unwrap();
-        let strings = batch
-            .batch()
-            .column(1)
-            .as_any()
-            .downcast_ref::<arrow_array::StringArray>()
-            .unwrap();
-        let binary = batch
-            .batch()
-            .column(2)
-            .as_any()
-            .downcast_ref::<arrow_array::BinaryArray>()
-            .unwrap();
-        for (row, value) in ids.values().iter().enumerate() {
-            use arrow_array::Array;
-            assert_eq!(*value, expected);
-            match expected % 3 {
-                0 => {
-                    assert_eq!(strings.value(row), "实体/é");
-                    assert_eq!(binary.value(row), b"\0\xffpayload");
+    use mrr_data_backend::providers::{emit_duckdb_arrow, emit_duckdb_arrow_stream};
+    for streaming in [false, true] {
+        let backend = backend().await;
+        let sql = "SELECT i::BIGINT AS id, CASE i%3 WHEN 0 THEN '实体/é' WHEN 1 THEN '' ELSE NULL END AS entity, CASE i%3 WHEN 0 THEN from_hex('00ff7061796c6f6164') WHEN 1 THEN from_hex('') ELSE NULL END AS payload FROM range(4097) t(i)";
+        let mut input = duckdb::Connection::open_in_memory().unwrap();
+        let schema = input
+            .prepare(sql)
+            .unwrap()
+            .query_arrow([])
+            .unwrap()
+            .get_schema();
+        let native_limits = ArrowQueryLimits {
+            max_rows: 4097,
+            max_batches: 8,
+            max_batch_bytes: 262_144,
+            max_retained_bytes: 524_288,
+            channel_capacity: 1,
+        };
+        let mut query = backend
+            .query_arrow(schema.clone(), native_limits, 524_288, move |out| {
+                let mut statement = input.prepare(sql).map_err(|_| ArrowQueryError::Driver)?;
+                if streaming {
+                    emit_duckdb_arrow_stream(&mut statement, [], out)
+                } else {
+                    emit_duckdb_arrow(&mut statement, [], out)
                 }
-                1 => {
-                    assert_eq!(strings.value(row), "");
-                    assert_eq!(binary.value(row), b"");
+            })
+            .unwrap();
+        let mut expected = 0_i64;
+        while let Some(batch) = query.next_batch().await.unwrap() {
+            let ids = batch
+                .batch()
+                .column(0)
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .unwrap();
+            let strings = batch
+                .batch()
+                .column(1)
+                .as_any()
+                .downcast_ref::<arrow_array::StringArray>()
+                .unwrap();
+            let binary = batch
+                .batch()
+                .column(2)
+                .as_any()
+                .downcast_ref::<arrow_array::BinaryArray>()
+                .unwrap();
+            for (row, value) in ids.values().iter().enumerate() {
+                use arrow_array::Array;
+                assert_eq!(*value, expected);
+                match expected % 3 {
+                    0 => {
+                        assert_eq!(strings.value(row), "实体/é");
+                        assert_eq!(binary.value(row), b"\0\xffpayload");
+                    }
+                    1 => {
+                        assert_eq!(strings.value(row), "");
+                        assert_eq!(binary.value(row), b"");
+                    }
+                    _ => {
+                        assert!(strings.is_null(row));
+                        assert!(binary.is_null(row));
+                    }
                 }
-                _ => {
-                    assert!(strings.is_null(row));
-                    assert!(binary.is_null(row));
-                }
+                expected += 1;
             }
-            expected += 1;
         }
+        assert_eq!(expected, 4097);
+        assert_eq!(query.summary().unwrap().rows, 4097);
+        drop(query);
+        input = duckdb::Connection::open_in_memory().unwrap();
+        let mut failed = backend
+            .query_arrow(schema, native_limits, 524_288, move |out| {
+                let mut statement = input
+                    .prepare("SELECT error('sanitized-native-error') AS id")
+                    .map_err(|_| ArrowQueryError::Driver)?;
+                if streaming {
+                    emit_duckdb_arrow_stream(&mut statement, [], out)
+                } else {
+                    emit_duckdb_arrow(&mut statement, [], out)
+                }
+            })
+            .unwrap();
+        assert_eq!(
+            failed.next_batch().await.err(),
+            Some(ArrowQueryError::Driver)
+        );
+        assert!(failed.summary().is_none());
+        drop(failed);
+        backend.shutdown().await.unwrap();
     }
-    assert_eq!(expected, 4097);
-    assert_eq!(query.summary().unwrap().rows, 4097);
-    drop(query);
-    input = duckdb::Connection::open_in_memory().unwrap();
-    let mut failed = backend
-        .query_arrow(schema, native_limits, 524_288, move |out| {
-            let mut statement = input
-                .prepare("SELECT error('sanitized-native-error') AS id")
-                .map_err(|_| ArrowQueryError::Driver)?;
-            emit_duckdb_arrow(&mut statement, [], out)
-        })
-        .unwrap();
-    assert_eq!(
-        failed.next_batch().await.err(),
-        Some(ArrowQueryError::Driver)
-    );
-    assert!(failed.summary().is_none());
-    drop(failed);
-    backend.shutdown().await.unwrap();
 }
 
 #[tokio::test]
@@ -533,38 +543,237 @@ async fn cancelled_query_queue_skips_native_work_and_a_cancelled_receive_can_res
 #[cfg(feature = "duckdb")]
 #[tokio::test]
 async fn native_interrupt_cancels_running_execution_and_keeps_drain_owned() {
+    for streaming in [false, true] {
+        let backend = backend().await;
+        let conn = duckdb::Connection::open_in_memory().unwrap();
+        let schema = conn
+            .prepare("SELECT count(*) AS id FROM range(1)")
+            .unwrap()
+            .query_arrow([])
+            .unwrap()
+            .get_schema();
+        let (started, start) = tokio::sync::oneshot::channel();
+        let mut query = backend
+            .query_arrow(schema, limits(), 1024, move |out| {
+                let interrupt = conn.interrupt_handle();
+                out.on_cancel(move || interrupt.interrupt())?;
+                let mut statement = conn
+                    .prepare("SELECT count(*) AS id FROM range(1000000000000) t(i) WHERE i%29!=0")
+                    .map_err(|_| ArrowQueryError::Driver)?;
+                let _ = started.send(());
+                if streaming {
+                    mrr_data_backend::providers::emit_duckdb_arrow_stream(&mut statement, [], out)
+                } else {
+                    mrr_data_backend::providers::emit_duckdb_arrow(&mut statement, [], out)
+                }
+            })
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(3), start)
+            .await
+            .unwrap()
+            .unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        query.cancel();
+        assert_eq!(
+            query.next_batch().await.err(),
+            Some(ArrowQueryError::Cancelled)
+        );
+        assert!(query.summary().is_none());
+        until(|| backend.status().blocking_resources == 0).await;
+        drop(query);
+        backend.shutdown().await.unwrap();
+    }
+}
+
+#[cfg(feature = "duckdb")]
+#[tokio::test]
+async fn native_stream_late_fetch_failure_cannot_certify_delivered_prefix() {
     let backend = backend().await;
     let conn = duckdb::Connection::open_in_memory().unwrap();
+    conn.execute_batch("SET threads=1").unwrap();
     let schema = conn
-        .prepare("SELECT count(*) AS id FROM range(1)")
+        .prepare("SELECT i::BIGINT AS id FROM range(1) t(i)")
         .unwrap()
         .query_arrow([])
         .unwrap()
         .get_schema();
-    let (started, start) = tokio::sync::oneshot::channel();
-    let mut query = backend
-        .query_arrow(schema, limits(), 1024, move |out| {
-            let interrupt = conn.interrupt_handle();
-            out.on_cancel(move || interrupt.interrupt())?;
-            let mut statement = conn
-                .prepare("SELECT count(*) AS id FROM range(1000000000000) t(i) WHERE i%29!=0")
-                .map_err(|_| ArrowQueryError::Driver)?;
-            let _ = started.send(());
-            mrr_data_backend::providers::emit_duckdb_arrow(&mut statement, [], out)
-        })
-        .unwrap();
-    tokio::time::timeout(Duration::from_secs(3), start)
-        .await
-        .unwrap()
-        .unwrap();
-    tokio::time::sleep(Duration::from_millis(50)).await;
-    query.cancel();
+    let mut query = backend.query_arrow(schema, ArrowQueryLimits {
+        max_rows: 1_000_000, max_batches: 1024, max_batch_bytes: 65_536,
+        max_retained_bytes: 131_072, channel_capacity: 1,
+    }, 131_072, move |out| {
+        let mut statement = conn.prepare("SELECT CASE WHEN i=999999 THEN error('private-fetch-detail') ELSE i END::BIGINT AS id FROM range(1000000) t(i)")
+            .map_err(|_| ArrowQueryError::Driver)?;
+        // A mistakenly ignored native refusal must still fail the terminal.
+        let _ = mrr_data_backend::providers::emit_duckdb_arrow_stream(&mut statement, [], out);
+        Ok(())
+    }).unwrap();
+    let mut delivered = 0_i64;
+    loop {
+        match tokio::time::timeout(Duration::from_secs(3), query.next_batch())
+            .await
+            .unwrap()
+        {
+            Ok(Some(batch)) => {
+                let ids = batch
+                    .batch()
+                    .column(0)
+                    .as_any()
+                    .downcast_ref::<Int64Array>()
+                    .unwrap();
+                for value in ids.values() {
+                    assert_eq!(*value, delivered);
+                    delivered += 1;
+                }
+            }
+            Err(error) => {
+                assert_eq!(error, ArrowQueryError::Driver);
+                break;
+            }
+            Ok(None) => panic!("late native error became successful EOF"),
+        }
+    }
+    assert!(delivered > 0 && delivered < 1_000_000);
+    assert!(query.summary().is_none());
     assert_eq!(
         query.next_batch().await.err(),
-        Some(ArrowQueryError::Cancelled)
+        Some(ArrowQueryError::Driver)
     );
-    assert!(query.summary().is_none());
-    until(|| backend.status().blocking_resources == 0).await;
     drop(query);
     backend.shutdown().await.unwrap();
+}
+
+#[cfg(feature = "duckdb")]
+#[tokio::test]
+async fn native_stream_empty_exact_limits_and_sticky_schema_or_row_refusal() {
+    for (sql, rows, refusal) in [
+        ("SELECT i::BIGINT AS id FROM range(0) t(i)", 0, None),
+        ("SELECT i::BIGINT AS id FROM range(2048) t(i)", 2048, None),
+        (
+            "SELECT i::BIGINT AS id FROM range(2049) t(i)",
+            0,
+            Some(ArrowQueryError::Limit),
+        ),
+        (
+            "SELECT 'wrong-type' AS id",
+            0,
+            Some(ArrowQueryError::Schema),
+        ),
+    ] {
+        let backend = backend().await;
+        let conn = duckdb::Connection::open_in_memory().unwrap();
+        conn.execute_batch("SET threads=1").unwrap();
+        let schema = conn
+            .prepare("SELECT i::BIGINT AS id FROM range(1) t(i)")
+            .unwrap()
+            .query_arrow([])
+            .unwrap()
+            .get_schema();
+        let mut query = backend
+            .query_arrow(
+                schema,
+                ArrowQueryLimits {
+                    max_rows: 2048,
+                    max_batches: 1,
+                    max_batch_bytes: 65_536,
+                    max_retained_bytes: 131_072,
+                    channel_capacity: 1,
+                },
+                131_072,
+                move |out| {
+                    let mut statement = conn.prepare(sql).map_err(|_| ArrowQueryError::Driver)?;
+                    let _ = mrr_data_backend::providers::emit_duckdb_arrow_stream(
+                        &mut statement,
+                        [],
+                        out,
+                    );
+                    Ok(())
+                },
+            )
+            .unwrap();
+        let mut delivered = 0;
+        loop {
+            match query.next_batch().await {
+                Ok(Some(batch)) => delivered += batch.batch().num_rows(),
+                Ok(None) => {
+                    assert!(refusal.is_none());
+                    break;
+                }
+                Err(error) => {
+                    assert_eq!(Some(error), refusal);
+                    break;
+                }
+            }
+        }
+        if refusal.is_some() {
+            assert!(query.summary().is_none());
+            assert!(delivered <= 2048);
+        } else {
+            assert_eq!(delivered, rows);
+            assert_eq!(query.summary().unwrap().rows, rows);
+        }
+        drop(query);
+        backend.shutdown().await.unwrap();
+    }
+}
+
+#[cfg(feature = "duckdb")]
+#[tokio::test]
+async fn native_stream_batch_survives_result_teardown_and_holds_backend_drain() {
+    let backend = backend().await;
+    let conn = duckdb::Connection::open_in_memory().unwrap();
+    let schema = conn
+        .prepare("SELECT i::BIGINT AS id FROM range(1) t(i)")
+        .unwrap()
+        .query_arrow([])
+        .unwrap()
+        .get_schema();
+    let mut query = backend
+        .query_arrow(
+            schema,
+            ArrowQueryLimits {
+                max_rows: 2048,
+                max_batches: 1,
+                max_batch_bytes: 65_536,
+                max_retained_bytes: 131_072,
+                channel_capacity: 1,
+            },
+            131_072,
+            move |out| {
+                let mut statement = conn
+                    .prepare("SELECT i::BIGINT AS id FROM range(?) t(i)")
+                    .map_err(|_| ArrowQueryError::Driver)?;
+                mrr_data_backend::providers::emit_duckdb_arrow_stream(
+                    &mut statement,
+                    [2048_i64],
+                    out,
+                )
+            },
+        )
+        .unwrap();
+    let batch = query.next_batch().await.unwrap().unwrap();
+    let clone = batch.clone();
+    assert!(query.next_batch().await.unwrap().is_none());
+    assert_eq!(query.summary().unwrap().rows, 2048);
+    assert_eq!(backend.status().blocking_resources, 0);
+    drop(query);
+    drop(batch);
+    let closing = backend.clone();
+    let shutdown = tokio::spawn(async move { closing.shutdown().await });
+    until(|| backend.status().lifecycle == Lifecycle::Draining).await;
+    let ids = clone
+        .batch()
+        .column(0)
+        .as_any()
+        .downcast_ref::<Int64Array>()
+        .unwrap();
+    assert_eq!(ids.value(0), 0);
+    assert_eq!(ids.value(2047), 2047);
+    assert!(!shutdown.is_finished());
+    drop(clone);
+    tokio::time::timeout(Duration::from_secs(3), shutdown)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(backend.status().resource_bytes, 0);
 }

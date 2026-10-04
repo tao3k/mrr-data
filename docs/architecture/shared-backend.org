@@ -107,8 +107,8 @@ The optional GraphAr adapter prepares an immutable captured fact snapshot on thi
 lane. Private temporary files and native handles are cleaned during preparation;
 returned handles retain immutable facts. =backend-graphar= composes this capability
 without selecting Turso or DuckDB. The optional Arrow query port shares this
-resource lane. Measured native RSS/throughput and a DuckDB native streaming driver
-remain separate qualification gates.
+resource lane. Native DuckDB streaming is implemented through the safe fallible
+SDK; measured native RSS/throughput remain separate qualification gates.
 
 * Durable authority versions
 
@@ -155,7 +155,7 @@ and multi-process/multi-host writer fencing are not qualified by these consumers
 
 * Optional DuckDB provider
 
-[[file:../../crates/mrr-data-backend/src/providers/duckdb.rs][DuckDbProvider]] pins the Rust client =1.10502.0= and its bundled native library.
+[[file:../../crates/mrr-data-backend/src/providers/duckdb.rs][DuckDbProvider]] pins the Rust client =1.10506.0= and its bundled native library.
 Enabling DuckDB includes the SDK's =appender-arrow= and =vtab-arrow= capabilities;
 the facade's =backend-duckdb= also enables the common =arrow= feature.
 [[file:../../crates/mrr-data-backend/src/providers/duckdb_arrow.rs][DuckDbArrowInput]] validates explicit row/buffer limits, native vector capacity,
@@ -363,12 +363,17 @@ Running work remains owned
 through completion, and both returned batches and in-flight interrupt hooks hold
 the original Backend drain barrier.
 
-The optional [[file:../../crates/mrr-data-backend/src/providers/duckdb_query.rs][DuckDB adapter]] consumes a Host-prepared native statement. It uses the SDK's
-materialized Arrow result and authoritative result row count; missing/empty fetch
-progress or excess rows refuse. It does not reconstruct rows or use the SDK's
-ambiguous streaming iterator. Output backpressure does not establish bounded
-native result materialization. Native query/cache/decompression/spill budgets and
-full semantic type mapping remain separate Host/provider qualifications.
+The optional [[file:../../crates/mrr-data-backend/src/providers/duckdb_query.rs][DuckDB adapter]] consumes a Host-prepared native statement. =emit_duckdb_arrow=
+checks materialized result row counts. =emit_duckdb_arrow_stream= executes the
+native streaming path, captures the executed result schema and calls fallible
+=Statement::step= under =emit_next= byte reservations. Fetch/conversion errors
+are sanitized as =Driver= and remain sticky even if the caller ignores them.
+Neither driver reconstructs rows or uses the SDK's panicking Arrow iterator.
+Native statements/connections stay on one worker; retained batches hold their
+own native buffers and Backend drain leases after result teardown. The Host
+registers its interrupt before execution and owns engine memory/cache/spill.
+Internal materialization for some statements and full semantic type mapping
+remain separate qualifications; streaming output does not establish bounded RSS.
 
 [[file:../../crates/mrr-data-backend/tests/integration/arrow_query.rs][Query tests]] cover successful terminal output, late failure, panic, sticky schema
 refusal, retained final clones, row/buffer refusal, pre-fetch byte backpressure,

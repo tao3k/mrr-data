@@ -3,13 +3,18 @@
 
 * Evidence basis and version boundary
 
-This audit precedes publication of the Arrow/GraphAr design slice. Research uses
-Apache Arrow and DuckDB documentation plus the exact duckdb-rs GitHub source
-corresponding to =1.10502.0=: =8aa176add468ce2f7ada2d9bfd46f4c13509f198=.
-The GitHub Arrow virtual-table file was compared byte-for-byte against the
-installed Cargo package. Rust Arrow remains =58.4.0=. Latest documentation is
-an architectural guide; a capability is qualified against these pinned sources
-and executable tests before entering a public production port.
+The initial audit used Apache Arrow and DuckDB documentation plus duckdb-rs
+=1.10502.0= source =8aa176add468ce2f7ada2d9bfd46f4c13509f198=; the Arrow
+virtual-table file was compared byte-for-byte against that Cargo package.
+Those initial input-conversion observations remain explicitly historical.
+
+The current workspace pins =duckdb= and =libduckdb-sys= to =1.10506.0=.
+The downloaded published SDK records source
+[[https://github.com/duckdb/duckdb-rs/tree/0fec186cdd4ada2f7703a2df5ee18f9f78d95f8e][0fec186cdd4ada2f7703a2df5ee18f9f78d95f8e]], Rust 1.85.1 and Arrow 58.
+Rust Arrow remains =58.4.0= and our MSRV remains 1.95. Current native fixtures
+must qualify the new SDK's input conversion and both output drivers; previous
+version receipts do not certify the new pin. Latest documentation supplies
+architectural guidance, not executable qualification.
 
 * Practices applied to the actual interfaces
 
@@ -49,22 +54,25 @@ is not a reason to replace point lookups with an analytical scan.
 
 * Streaming result and failure contract
 
-The pinned =query_arrow= executes through =duckdb_execute_prepared_arrow= and then
-iterates an already obtained Arrow result. Merely iterating it batch-by-batch
-does not prove bounded native query materialization. =stream_arrow= invokes the
-native streaming API; some operations can still produce materialized results.
-Query joins/sorts/aggregations may retain native state even when output is pulled
-incrementally.
+The current SDK materialized =query_arrow= and native =stream_arrow= both
+capture executed result metadata. =Statement::step= returns
+=Result<Option<StructArray>>=; its result owner checks native execution errors
+before accepting null/empty chunks as EOF and propagates Arrow conversion errors.
+The generic SDK Arrow iterator still yields bare =RecordBatch= and panics on
+fetch errors. Our drivers bypass that iterator and sanitize fallible-step errors.
 
-The pinned result iterators yield =RecordBatch= rather than
-=Result<RecordBatch, Error>=. Their fetch path contains =Option= returns for
-failed Arrow conversion/fetch as well as end-of-stream. The shared output port now propagates explicit
-producer failures. Its DuckDB materialized adapter checks the authoritative
-result row count and refuses early fetch termination; the native streaming
-iterator still needs an explicit fallible upstream driver or independently
-qualified terminal error check. Unexpected termination must remain an error/Unknown outcome;
-partial candidate results must not be certified as complete. A successful fixed
-row-count fixture cannot establish arbitrary-query failure propagation.
+[[file:../../crates/mrr-data-backend/src/providers/duckdb_query.rs][The streaming adapter]] executes the safe native streaming path, validates the
+executed schema, and reserves retained output bytes before each fetch through
+=emit_next=. Exact-limit EOF succeeds, while excess batches and late errors
+remain sticky failures. A test returns a native prefix before a later expression
+fails; a successful fixed-row fixture alone cannot prove failure propagation.
+Native statement/connection teardown and retained batch drain are tested
+separately. The Host must register its native interrupt before execution.
+
+The API provides incremental result fetching; some operations still materialize
+internally. Joins/sorts/aggregations can retain native state. Engine-memory/spill
+configuration and observed RSS are separate gates; output-byte backpressure is
+not a bound on native engine memory.
 
 * GraphAr transfer limits
 

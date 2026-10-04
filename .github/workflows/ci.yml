@@ -23,12 +23,14 @@ jobs:
   msrv:
     name: Rust 1.95 MSRV (ubuntu-24.04)
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.95.0
       - name: Test workspace at the declared MSRV
         run: cargo test --workspace --features mrr-data/transfer,mrr-data/car,mrr-data/filesystem,mrr-data/cache,mrr-data/s3,mrr-data/backend-turso,mrr-data/backend-graph-publish --locked
+      - name: Test native DuckDB at the declared MSRV
+        run: cargo test -p mrr-data-backend --no-default-features --features duckdb,graph-publish --locked -- --nocapture
 
   test:
     name: Rust (${{ matrix.os }})

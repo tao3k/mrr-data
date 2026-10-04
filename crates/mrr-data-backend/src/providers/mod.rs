@@ -7,7 +7,7 @@ mod duckdb_arrow;
 #[cfg(feature = "duckdb")]
 mod duckdb_query;
 #[cfg(feature = "duckdb")]
-pub use duckdb_query::emit_duckdb_arrow;
+pub use duckdb_query::{emit_duckdb_arrow, emit_duckdb_arrow_stream};
 #[cfg(feature = "duckdb")]
 mod duckdb_database;
 mod storage;

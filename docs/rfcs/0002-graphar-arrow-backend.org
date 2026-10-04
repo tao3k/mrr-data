@@ -262,8 +262,9 @@ and fact materialization. It does not measure or cap native RSS.
 
 Slice C is implemented for captured binary-Entity facts. Slice E now includes
 a shared fallible output port with leased buffers, pre-fetch backpressure, sticky
-errors, cancellation and terminal completion. Its DuckDB driver uses a complete
-materialized Arrow result; native streaming/fetch-error qualification remains open.
+errors, cancellation and terminal completion. DuckDB now implements both the
+materialized result and safe native streaming drivers. Exact-version native
+fetch-error, lifecycle and integration receipts qualify each implementation.
 Slice D now implements complete closure preparation, child/root ACK ordering,
 cold restoration and the typed protected ProfilePort composition described below.
 Process/power-loss injection at every phase, additional profiles and matched
@@ -338,7 +339,7 @@ message, and the sustained benchmark uses a diagnostic empty-array comparison.
 
 - [[https://graphar.apache.org/docs/specification/format/][Apache GraphAr format specification]]: metadata, property groups, supported file
   codecs, adjacency layouts, physical vertex indexing and empirical chunk sizes.
-- [[https://docs.rs/crate/duckdb/1.10502.0/features][Pinned duckdb-rs feature definitions]]: =appender-arrow= enables =vtab-arrow=.
+- [[https://docs.rs/crate/duckdb/1.10506.0/features][Pinned duckdb-rs feature definitions]]: =appender-arrow= enables =vtab-arrow=.
 - [[https://duckdb.org/docs/current/clients/rust/result_handling][DuckDB Rust Arrow result/input interfaces]]: RecordBatch export and native Arrow
   virtual-table input. Behavior is qualified against the immutable SDK pin.
 - [[https://arrow.apache.org/docs/format/CStreamInterface.html][Apache Arrow C Stream interface]]: schema, stream/buffer ownership and release.
@@ -414,7 +415,7 @@ revocation integration.
 | Order | Owner / code seam | Gate before claiming completion |
 |-------+-------------------+----------------------------------|
 | 1 | Backend query/output and dispatch | Explicit successful terminal; late failure/panic stays failure; leases/backpressure/cancellation; recovery during stalled resource work |
-| 2 | Optional DuckDB driver | Materialized row-count qualification, schema/null/binary preservation and native interrupt; a true streaming driver must expose late errors |
+| 2 | Optional DuckDB driver | Both materialized and native streaming drivers; schema/null/binary preservation, late native fetch errors, exact-limit EOF, native interrupt and retained buffer teardown |
 | 3 | Facade Production composition | Real native publication/CAS/reopen/cold-read/query/MRR admission on both providers and OS, bound to exact source/pins |
 | 4 | Host/domain authority integration | Actual policy/key snapshot enrollment and retirement synchronized with fresh effects and final protected disclosure |
 | 5 | Fault injection at every publication phase | Original-operation recovery after child/root ACK loss and process crash; no partial head; separate power-loss and deployed-store receipts |
@@ -429,18 +430,27 @@ output, sticky refusal and cancellation before an EOF fetch blocked by retained
 bytes. These fixtures qualify the portable protocol, not a native streaming
 DuckDB driver.
 
-The pinned =duckdb 1.10502.0= remains on the materialized driver. Its safe
-=stream_step= folds failed fetches into =None= and cannot supply this contract.
-Upstream [[https://github.com/duckdb/duckdb-rs/pull/800][PR 800]] changes =Statement::step= to
-=Result<Option<StructArray>>=. The released
-[[https://github.com/duckdb/duckdb-rs/blob/v1.10506.0/crates/duckdb/src/statement.rs][1.10506.0 statement API]] provides a candidate safe streaming path: execute
-=stream_arrow=, capture the executed schema, then call fallible =step= directly.
-The ordinary Arrow iterator still panics on fetch errors; its iterator type is
-not a fallible-source guarantee. That release's
-[[https://github.com/duckdb/duckdb-rs/blob/v1.10506.0/Cargo.toml][workspace manifest]] declares Rust 1.85.1 and Arrow 58; qualify the published
-crate and lock resolution against our Rust 1.95 gate before changing pins.
-Upstream explicitly permits internal materialization for some statements, so a
-safe streaming API is not sufficient evidence of bounded native RSS.
+The workspace now pins the published =duckdb= and =libduckdb-sys= crates to
+=1.10506.0=. The downloaded SDK manifest declares Rust 1.85.1; our Rust 1.95
+and Arrow 58.4.0 contracts remain in place. All Turso packages remain 0.8.1.
+The published crate records upstream source
+[[https://github.com/duckdb/duckdb-rs/tree/0fec186cdd4ada2f7703a2df5ee18f9f78d95f8e][0fec186cdd4ada2f7703a2df5ee18f9f78d95f8e]].
+
+=emit_duckdb_arrow_stream= executes =stream_arrow=, captures the executed schema,
+and calls =Statement::step= directly under =emit_next= reservations. The safe
+SDK checks the native result error before accepting null/empty chunks as EOF;
+Arrow conversion errors also return =Err=. The adapter maps those errors to
+sanitized =Driver= and makes execution/schema refusals sticky. It does not use
+the SDK Arrow iterator, which panics on fetch errors. The materialized driver
+remains available and also uses the new fallible =step=.
+
+Native fixtures exercise both drivers with 4,097 Int64/Utf8/Binary rows and
+null/empty/Unicode/raw bytes, both native interrupt paths, a delivered prefix
+followed by a native execution error during fetching, exact-limit/empty EOF,
+schema/row refusal and leased buffers after statement/connection teardown.
+These are functional conformance gates, not deployed authorization, crash or
+RSS/performance receipts. Upstream allows internal materialization for some
+statements, so native streaming is not sufficient evidence of bounded RSS.
 
 The resource reservation is a Host estimate. Maximum batch and retained output
 bytes do not constrain native query materialization, compression scratch, caches
