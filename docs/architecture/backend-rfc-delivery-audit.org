@@ -8,7 +8,8 @@ This section is the current delivery plan. Later dated receipts describe their
 original slices and do not independently define current completion. The initial
 audit used PR #12 at =aacc25511367391262f4639e5485701406089b21=. The consolidated
 source/dispatch composition is published at
-=f949c4f5bdbceb93e590ec7408912c2dd66e55cc=. Its local qualification is recorded
+=707f435320008df6799be8e8be1cfede5aad71cb= with MRR owner
+=d5beb4030bf875fa851cddc27789030c551154c3=. Its qualification is recorded
 below. Platform results must refer to that exact head; earlier-head green checks
 do not establish all-platform closure.
 
@@ -31,7 +32,7 @@ The graph facade and semantic-only consumers need not enable that native fronten
 
 | Composition | Owner and supported scope | Acceptance gate |
 |-------------+---------------------------+-----------------|
-| Root, fuzz and =mrr-property-source= | One MRR revision =8f389fd0aede8d8000197c959da69b6ba3e9bb86=; source digest, catalog binding, dispatch and final result admission remain MRR-owned | Locked pin guard; native =source-handoff= Linux/macOS CI |
+| Root, fuzz and =mrr-property-source= | One MRR revision =d5beb4030bf875fa851cddc27789030c551154c3=; source digest, catalog binding, dispatch and final result admission remain MRR-owned | Locked pin guard; native =source-handoff= Linux/macOS CI |
 | GraphAr =native-graphar,source-handoff,backend= with DataFusion =source-handoff= | Combined Healthcare property/relation closure; original GQL, four rows including duplicate/null, cold and same-cache warm restoration on one Backend | Canonical source-handoff Rust caller and separate drift/refusal tests |
 | Shared Backend | Provider-independent admission, transaction authority/history and retained resource drain; simulated metadata in canonical caller | Positive, retirement, lost-ACK and final-clone assertions; native process-exit receipts remain separate |
 | GraphAr =selective-graphar= | Authenticated selective outgoing-range materialization under the declared schema | Paired full-source equivalence; end-to-end performance remains M3 |
@@ -50,7 +51,31 @@ does not establish process-exit or power-loss durability and does not replace
 the native provider recovery matrix. Resource bytes are declared reservations,
 not a native RSS cap. Local and platform qualification remain explicit gates.
 
-** Qualification boundary after concurrent dispatch integration
+** Current owner and platform qualification at 707f4353
+
+The root, fuzz and optional source frontend now share the published MRR owner
+=d5beb403=. The previous =8f389fd0= binaries and receipts below remain historical.
+No earlier binary qualifies the changed owner, even when its MRR Data source is
+otherwise unchanged.
+
+Exact-head [[https://github.com/tao3k/mrr-data/actions/runs/37204680399][CI run 37204680399]] has passed Python qualification, Linux S3 and
+Arrow fuzz. Linux native Source, maintained GraphAr, typed DuckGQL, general Rust
+and MSRV qualification remain in progress; macOS jobs are queued. Python now
+explicitly installs Rust =1.95.0= and verifies the native compiler before the
+process tests. Its prior plain-Rust cold compilation timeout is resolved in this
+run without changing the fixture's ten-second limit. Local checks at this head
+also pass =33 Python tests=, strict Ruff, formatting and documentation checks.
+This does not establish completed native platform or M0/M1 acceptance.
+
+The previous =56b7057a= run passed Linux original Source: DataFusion =2 tests=
+and GraphAr =2 tests=, including the canonical shared Backend caller, under
+unchanged five-second inactivity supervision. Linux DuckGQL passed its library
+test, five integration tests, three-size comparison and nine resource cases.
+Those positive results apply to =8f389fd0= only. Remaining jobs in that run were
+cancelled when the branch advanced; cancellation is not a native test failure.
+The separate local initialization timeouts remain recorded below.
+
+** Qualification boundary after concurrent dispatch integration (historical)
 
 Before publication, the remote advanced to =f9be539f= with the MRR-owned
 =PropertyQueryBackend= dispatch port and =export_execution= preserving its
@@ -947,7 +972,7 @@ digests. Python glue tests cover discovery, malformed/missing protocol output,
 capture limits and descendant cleanup. Semantic and resource assertions remain
 in Rust. CI publishes the checked matrix for both native platforms.
 
-The current [[file:../../python/src/mrr_data_testing/duckgql/receipts/macos-resources.jsonl][macOS ARM64 phase receipt]] passes all nine cases in 19.67 seconds.
+The historical [[file:../../python/src/mrr_data_testing/duckgql/receipts/macos-resources.jsonl][macOS ARM64 phase receipt]] passes all nine cases in 19.67 seconds.
 The [[file:../../python/src/mrr_data_testing/duckgql/receipts/macos-build.json][source build receipt]] records the unsigned SDK artifact digest
 =0bbeaac46695077931b2c526d29a62673083373afe45db007e2ede15d5f268a3=,
 13 generated parser units and their digests, with upstream Release optimization.
@@ -967,6 +992,6 @@ prepare; DataFusion observes the first nonempty Arrow batch from execution
 start. Native buffering can precede those observations. These boundaries do
 not qualify operator-only first-result latency, spill peaks or cache effects.
 Original Healthcare source qualification remains a separate native frontend
-gate. The current root, fuzz and source frontend share MRR pin =8f389fd0=.
-The unified native dependency build passed with the published owner; original
-source runtime acceptance remains open as recorded above.
+gate. This receipt uses MRR pin =8f389fd0=; the current root, fuzz and source
+frontend share =d5beb403=. The old unified native dependency build passed with
+its published owner; current-pin native acceptance remains open as recorded above.

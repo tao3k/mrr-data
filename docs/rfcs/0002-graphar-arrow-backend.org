@@ -10,8 +10,16 @@ boundaries; later code must not be judged only from an earlier capability table.
 
 * Status and scope
 
-Status: proposed; implementation gates below distinguish current code from
-planned capability. Written 2026-10-03 against the MRR Data interfaces at
+Status: partially implemented on [[https://github.com/tao3k/mrr-data/pull/12][MRR Data PR #12]]; the delivery ledger
+distinguishes qualified slices from remaining platform and performance gates.
+The shared Backend now composes combined relation/property publication, bounded
+cold restoration, native capture, physical execution and retained consumer
+transport for the declared Healthcare schema. Optional original-source
+compilation delegates to the pinned MRR owner. Authenticated selective outgoing
+range access is implemented for its declared binary-Entity scope; arbitrary
+property layouts and a general selective query planner remain outside that scope.
+
+Originally written 2026-10-03 against the MRR Data interfaces at
 =8704d46a7c4d2af3749726dac3e583a3d1725c50=. This RFC extends
 [[file:../architecture/0001-mrr-data-plane.org][RFC 0001]] and [[file:../architecture/shared-backend.org][the shared Backend contract]]. It covers all Production
 profiles using graph snapshots, rather than one Example or application.
@@ -37,8 +45,9 @@ independent of that extension and of database-query benchmark results.
 
 [[file:../architecture/0001-mrr-data-plane.org][The canonical data-plane ownership table]] fixes MRR semantics/admission,
 GraphAr graph representation, Arrow interchange and shared Backend lifecycle.
-Native GraphAr packaging remains opt-in; current binary-Entity qualification
-does not establish arbitrary property layouts or selective graph scanning.
+Native GraphAr packaging remains opt-in. Binary-Entity selective range receipts
+and combined Healthcare property receipts are separate qualifications; neither
+establishes arbitrary property layouts or general selective graph scanning.
 
 * Current interfaces and specific gaps
 

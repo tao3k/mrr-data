@@ -29,9 +29,12 @@ snapshot-drift refusal and MRR admission. The follow-on
 =execute_turso_graphar_on_backend= entrypoint uses
 =Backend::run_resource= on its shared bounded blocking worker and the
 Host-supplied runtime. Queued cancellation skips work; running cancellation
-retains the lease until execution and rollback finish. Native interrupt, hard
-native-call deadlines, additional shapes, other SQL dialects and the DuckGQL
-typed bridge remain open. The retained-output entrypoint
+retains the lease until execution and rollback finish. Turso native interrupt,
+hard native-call deadlines, additional shapes and other SQL dialects remain open.
+The separate DuckGQL typed bridge is implemented for the declared single-hop
+slice, including retained output and DuckDB interrupt signaling. Its native
+qualification remains separate from Turso and from arbitrary GQL coverage.
+The retained-output entrypoint
 =execute_turso_graphar_retained_on_backend= uses shared
 =prepare_resource_fallible= admission and returns a =ResourceHandle= rather
 than releasing its reservation when execution ends. Typed driver refusals
