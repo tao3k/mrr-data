@@ -11,6 +11,7 @@ use crate::tests::entity_properties::{
     fixture as properties,
 };
 use crate::{CapturedGraphArRelation, GraphArAdjacency, GraphArChunkLayout, GraphArWriteOptions};
+use arrow_array::{ArrayRef, RecordBatch, StringArray};
 use meta_relational_reasoning as mrr;
 use mrr_data_backend::{Backend, BackendConfig, ResourceControl};
 use mrr_data_content::MemoryContentStore;
@@ -18,9 +19,72 @@ use std::sync::Arc;
 
 #[tokio::test]
 async fn original_source_handoff_selective_dataset_matches_full_reference() {
+    verify_dataset(source_fixture(), "reference").await;
+}
+
+#[tokio::test]
+async fn original_source_handoff_uniform_and_skewed_selective_dataset_match_full_reference() {
+    for skewed in [false, true] {
+        let shape = if skewed { "skewed" } else { "uniform" };
+        verify_dataset(shaped_fixture(skewed), shape).await;
+    }
+}
+
+fn shaped_fixture(skewed: bool) -> properties::Fixture {
+    let mut original = source_fixture();
+    let extra = (0..4)
+        .map(|index| properties::entity(&format!("other-scenario-{index}")))
+        .collect::<Vec<_>>();
+    let ids = extra.iter().map(ToString::to_string).collect::<Vec<_>>();
+    let other = vec!["other".to_owned(); extra.len()];
+    append(&mut original.entities[0].batch, &[ids.clone(), other]);
+    let sources = if skewed {
+        vec![properties::entity("s2").to_string(); extra.len()]
+    } else {
+        ids
+    };
+    let cases = vec![properties::entity("c3").to_string(); extra.len()];
+    append(&mut original.relations[0].batch, &[sources, cases.clone()]);
+    append(
+        &mut original.relations[1].batch,
+        &[
+            cases,
+            vec![properties::entity("p1").to_string(); extra.len()],
+        ],
+    );
+    let join_bound = original
+        .relations
+        .iter()
+        .map(|table| table.batch.num_rows())
+        .product::<usize>();
+    assert!(join_bound <= properties::limits().max_join_rows);
+    original
+}
+
+fn append(batch: &mut RecordBatch, added: &[Vec<String>]) {
+    assert_eq!(batch.num_columns(), added.len());
+    let columns = batch
+        .columns()
+        .iter()
+        .zip(added)
+        .map(|(column, added)| {
+            let strings = column.as_any().downcast_ref::<StringArray>().unwrap();
+            let values = strings
+                .iter()
+                .map(|value| value.map(str::to_owned))
+                .chain(added.iter().cloned().map(Some))
+                .collect::<Vec<_>>();
+            Arc::new(StringArray::from(values)) as ArrayRef
+        })
+        .collect();
+    *batch = RecordBatch::try_new(batch.schema(), columns).unwrap();
+}
+
+async fn verify_dataset(original: properties::Fixture, shape: &str) {
+    println!("original-source selective Dataset shape={shape} preparation started");
     let layout = GraphArChunkLayout::new(2, 2).unwrap();
     let f = Fixture::with_original_options(
-        source_fixture(),
+        original,
         GraphArWriteOptions {
             adjacency: GraphArAdjacency::OrderedBySource,
             layout,

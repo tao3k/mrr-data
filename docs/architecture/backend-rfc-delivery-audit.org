@@ -1217,8 +1217,14 @@ plain selective tests alone do not qualify the original MRR query.
   while authority retirement/recovery still progresses. Complete cache restoration, retained
   consumers, shutdown drain and reopened metadata are checked in that caller.
   Reopening is still in-process metadata reuse, not a process-crash claim.
-  Original-source queue cancellation, deadline and abandonment composition
-  remains an M2 gate; generic Backend lifecycle tests alone do not close it.
+  Original-source queue cancellation, deadline and abandonment now have three
+  dedicated Rust integration tests. They retain actual captured Arrow data,
+  dispatch actual DataFusion work, and require MRR final admission before
+  cooperative stop refuses consumer delivery. Queued requests must never reach
+  the physical port; an abandoned waiter keeps source/result reservations until
+  owned cleanup completes, and shutdown must wait for that cleanup. These three
+  cases passed locally on =023a6db=; latest-pin native execution remains a
+  separate qualification gate.
 - =CapturedCombinedGraphArSelective= authenticates the complete Dataset and each
   declared member. It retains immutable Arrow properties and ordered relation
   descriptors/indexes, and checks complete scope before range reads. It does not
@@ -1349,3 +1355,39 @@ end to end. Published-pin original-query tests and current-head CI remain gates.
 The earlier GSC =5a3bf1d= Ubuntu CI completed successfully; its macOS CI remained
 in progress at observation. These checks do not qualify the later =09fcfbf=
 follow-up or all downstream Data profiles.
+
+* Original-source lifecycle and distribution qualification
+
+The original Healthcare caller now includes queued cancellation/deadline,
+running cooperative stop, and abandoned-waiter/drain acceptance. These tests do
+not claim hard interruption of an in-flight native engine call. The selective
+Dataset test additionally applies matched irrelevant rows with uniform and
+skewed outgoing sources, while preserving independently expected Healthcare
+NULL and duplicate result rows. This is bounded correctness coverage; it is not
+an original-query performance comparison or a claimed speedup.
+
+The =023a6db= Source composition compiled successfully on this macOS host. Both
+initial DataFusion and GraphAr invocations then hit the unchanged five-second
+idle gate inside Gerbil runtime initialization, before the new lifecycle bodies
+ran. The subsequently compiled GraphAr distribution/lifecycle suite entered the
+runtime and passed 7/8 cases; its eighth case was correctly refused by the
+100-row conservative join bound. Reducing each fixture's irrelevant background
+from eight to four edges keeps the declared bound at 63 without raising the
+limit. The final GraphAr original-source suite passed 8/8 in 5.11s, including
+all three lifecycle cases and both uniform/skewed fixtures, under the unchanged
+five-second idle policy. The independently supervised DataFusion original-source
+pair subsequently passed 2/2 in 3.56s. The earlier startup failures remain retained.
+The public =backend-graphar-combined,datafusion= facade check passed in 39.08s
+under the unchanged build policy. Source-composed strict Clippy attempts hit the
+30-second idle build gate while checking DataFusion metadata, including the
+attempt after that facade check. The latest upstream dependency pin and CI must
+be qualified separately.
+
+Frozen =ceccf19a= macOS GraphAr and Rust failures match the Ubuntu
+=RUST-MOD-R010= glob-import defects already repaired in =eb35343e=. Ubuntu
+DuckGQL failed the unchanged 1,200-second total SDK-build budget, just after
+finishing =duckdb_static= and entering the extension compilation. The Linux
+SDK build now uses four workers on its four-CPU public runner; macOS keeps two.
+The deadline and compiler optimization settings are unchanged. A fresh CI pass
+is required to establish whether this composition fits that budget; no
+controlled A/B performance improvement is asserted.

@@ -300,6 +300,8 @@ async fn drain(
 
 #[path = "cross_profile.rs"]
 mod cross_profile;
+#[path = "request_controls.rs"]
+mod request_controls;
 
 #[cfg(feature = "selective-graphar")]
 #[path = "selective.rs"]
