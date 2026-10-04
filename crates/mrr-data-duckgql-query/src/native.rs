@@ -5,7 +5,32 @@ use meta_relational_reasoning::{EntityId, FactId};
 use mrr_data_core::{BoundDataQuery, PhysicalQueryOutput};
 use mrr_data_graphar::{BinaryEntityProjection, CapturedGraphArSnapshot};
 use sha2::{Digest, Sha256};
-use std::{collections::BTreeMap, io::Read, path::Path, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    io::Read,
+    path::Path,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
+/// Exclusive adapter phase durations, except the overlapping first-row clock.
+/// Native execute may buffer results before its safe cursor exposes a row.
+/// These observations do not measure operator-only latency, RSS or spill.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DuckGqlExecutionTimings {
+    pub program_compile: Duration,
+    pub source_projection: Duration,
+    pub connection_setup: Duration,
+    pub extension_load: Duration,
+    pub derived_image_load: Duration,
+    pub graph_registration: Duration,
+    pub native_prepare: Duration,
+    pub bind_and_execute: Duration,
+    pub first_cursor_row_from_prepare: Option<Duration>,
+    pub fetch_and_decode: Duration,
+    pub connection_cleanup: Duration,
+    pub total: Duration,
+}
 
 /// Host-prepared immutable artifact, shared across invocations and clones.
 /// `DuckDB` retains loaded code for the process lifetime. Reuse one artifact
@@ -174,6 +199,29 @@ pub fn execute_duckgql_graphar_single_hop(
         &|_| Ok(()),
     )
 }
+
+/// Observe the same bounded execution, including connection cleanup.
+/// The first-row clock starts at statement preparation and ends when the safe
+/// native cursor exposes its first row; it does not identify an operator event.
+/// # Errors
+/// Uses the same source, artifact, query, budget and cleanup refusals as the
+/// ordinary executor. Failed execution yields no output or successful timing receipt.
+pub fn execute_duckgql_graphar_single_hop_observed(
+    artifact: &DuckGqlArtifact,
+    query: &BoundDataQuery,
+    source: &CapturedGraphArSnapshot,
+    projection: &BinaryEntityProjection,
+    limits: &DuckGqlLimits,
+) -> Result<(PhysicalQueryOutput, DuckGqlExecutionTimings), DuckGqlError> {
+    NativeRequest {
+        artifact,
+        query,
+        source,
+        projection,
+        limits,
+    }
+    .execute(&|| Ok(()), &|_| Ok(()))
+}
 pub(crate) fn execute_checked<G>(
     artifact: &DuckGqlArtifact,
     query: &BoundDataQuery,
@@ -183,37 +231,90 @@ pub(crate) fn execute_checked<G>(
     checkpoint: &impl Fn() -> Result<(), DuckGqlError>,
     monitor: &impl Fn(&Connection) -> Result<G, DuckGqlError>,
 ) -> Result<PhysicalQueryOutput, DuckGqlError> {
-    checkpoint()?;
-    let program = DuckGqlSingleHopProgram::compile(query, projection)?;
-    if program.outputs().len() > limits.max_output_cells {
-        return Err(DuckGqlError::Limit("output width"));
+    NativeRequest {
+        artifact,
+        query,
+        source,
+        projection,
+        limits,
     }
-    let image = prepare_image(query, source, projection, limits, checkpoint)?;
-    checkpoint()?;
-    let mut config = duckdb::Config::default()
-        .enable_autoload_extension(false)
-        .map_err(|_| DuckGqlError::Native)?;
-    let threads =
-        i64::try_from(limits.native_threads).map_err(|_| DuckGqlError::Limit("native threads"))?;
-    config = config
-        .max_memory(&limits.native_memory_limit)
-        .and_then(|config| config.threads(threads))
-        .map_err(|_| DuckGqlError::Limit("native settings"))?;
-    if artifact.allow_unsigned {
+    .execute(checkpoint, monitor)
+    .map(|(output, _)| output)
+}
+
+struct NativeRequest<'a> {
+    artifact: &'a DuckGqlArtifact,
+    query: &'a BoundDataQuery,
+    source: &'a CapturedGraphArSnapshot,
+    projection: &'a BinaryEntityProjection,
+    limits: &'a DuckGqlLimits,
+}
+
+impl NativeRequest<'_> {
+    fn execute<G>(
+        &self,
+        checkpoint: &impl Fn() -> Result<(), DuckGqlError>,
+        monitor: &impl Fn(&Connection) -> Result<G, DuckGqlError>,
+    ) -> Result<(PhysicalQueryOutput, DuckGqlExecutionTimings), DuckGqlError> {
+        let Self {
+            artifact,
+            query,
+            source,
+            projection,
+            limits,
+        } = *self;
+        let started = Instant::now();
+        let mut timings = DuckGqlExecutionTimings::default();
+        checkpoint()?;
+        let phase = Instant::now();
+        let program = DuckGqlSingleHopProgram::compile(query, projection)?;
+        timings.program_compile = phase.elapsed();
+        if program.outputs().len() > limits.max_output_cells {
+            return Err(DuckGqlError::Limit("output width"));
+        }
+        let phase = Instant::now();
+        let image = prepare_image(query, source, projection, limits, checkpoint)?;
+        timings.source_projection = phase.elapsed();
+        checkpoint()?;
+        let phase = Instant::now();
+        let mut config = duckdb::Config::default()
+            .enable_autoload_extension(false)
+            .map_err(|_| DuckGqlError::Native)?;
+        let threads = i64::try_from(limits.native_threads)
+            .map_err(|_| DuckGqlError::Limit("native threads"))?;
         config = config
-            .allow_unsigned_extensions()
-            .map_err(|_| DuckGqlError::Artifact)?;
+            .max_memory(&limits.native_memory_limit)
+            .and_then(|config| config.threads(threads))
+            .map_err(|_| DuckGqlError::Limit("native settings"))?;
+        if artifact.allow_unsigned {
+            config = config
+                .allow_unsigned_extensions()
+                .map_err(|_| DuckGqlError::Artifact)?;
+        }
+        let connection =
+            Connection::open_in_memory_with_flags(config).map_err(|_| DuckGqlError::Native)?;
+        timings.connection_setup = phase.elapsed();
+        let guard = monitor(&connection)?;
+        let result = execute_native(
+            &connection,
+            artifact,
+            &program,
+            image,
+            limits,
+            checkpoint,
+            &mut timings,
+        );
+        drop(guard);
+        // A private connection owns its graph catalog and all derived tables. Close
+        // before returning any successful output or cancellation refusal.
+        let phase = Instant::now();
+        connection.close().map_err(|_| DuckGqlError::Cleanup)?;
+        timings.connection_cleanup = phase.elapsed();
+        checkpoint()?;
+        let output = result?;
+        timings.total = started.elapsed();
+        Ok((output, timings))
     }
-    let connection =
-        Connection::open_in_memory_with_flags(config).map_err(|_| DuckGqlError::Native)?;
-    let guard = monitor(&connection)?;
-    let result = execute_native(&connection, artifact, &program, image, limits, checkpoint);
-    drop(guard);
-    // A private connection owns its graph catalog and all derived tables. Close
-    // before returning any successful output or cancellation refusal.
-    connection.close().map_err(|_| DuckGqlError::Cleanup)?;
-    checkpoint()?;
-    result
 }
 fn execute_native(
     connection: &Connection,
@@ -222,7 +323,9 @@ fn execute_native(
     image: Image,
     limits: &DuckGqlLimits,
     checkpoint: &impl Fn() -> Result<(), DuckGqlError>,
+    timings: &mut DuckGqlExecutionTimings,
 ) -> Result<PhysicalQueryOutput, DuckGqlError> {
+    let phase = Instant::now();
     let schema = crate::program::schema()?;
     let version: String = checked(
         connection.query_row("SELECT version()", [], |row| row.get(0)),
@@ -244,13 +347,22 @@ fn execute_native(
     if Some(extension.as_str()) != schema["properties"]["extension_version"]["const"].as_str() {
         return Err(DuckGqlError::Artifact);
     }
+    timings.extension_load = phase.elapsed();
     let row_count = image.edges.len();
+    let phase = Instant::now();
     load_image(connection, image, checkpoint)?;
+    timings.derived_image_load = phase.elapsed();
+    let phase = Instant::now();
     checked(
         connection.execute_batch(include_str!("register.sql")),
         checkpoint,
     )?;
+    timings.graph_registration = phase.elapsed();
+    let first_row_clock = Instant::now();
+    let phase = Instant::now();
     let mut statement = checked(connection.prepare(program.statement()), checkpoint)?;
+    timings.native_prepare = phase.elapsed();
+    let phase = Instant::now();
     let bindings = program.parameters();
     let mut cursor = checked(
         statement.query(params![
@@ -262,8 +374,33 @@ fn execute_native(
         ]),
         checkpoint,
     )?;
+    timings.bind_and_execute = phase.elapsed();
+    fetch_output(
+        &mut cursor,
+        program,
+        limits,
+        row_count,
+        checkpoint,
+        first_row_clock,
+        timings,
+    )
+}
+
+fn fetch_output(
+    cursor: &mut duckdb::Rows<'_>,
+    program: &DuckGqlSingleHopProgram,
+    limits: &DuckGqlLimits,
+    row_count: usize,
+    checkpoint: &impl Fn() -> Result<(), DuckGqlError>,
+    first_row_clock: Instant,
+    timings: &mut DuckGqlExecutionTimings,
+) -> Result<PhysicalQueryOutput, DuckGqlError> {
+    let phase = Instant::now();
     let mut output = Vec::new();
     while let Some(row) = checked(cursor.next(), checkpoint)? {
+        if output.is_empty() {
+            timings.first_cursor_row_from_prepare = Some(first_row_clock.elapsed());
+        }
         if output.len() >= limits.max_output_rows {
             return Err(DuckGqlError::Limit("output rows"));
         }
@@ -290,6 +427,7 @@ fn execute_native(
     if output.len() != row_count {
         return Err(DuckGqlError::CorruptOutput);
     }
+    timings.fetch_and_decode = phase.elapsed();
     Ok(program.output(output))
 }
 fn load_image(

@@ -4,6 +4,8 @@ mod backend_lifecycle;
 mod comparison;
 #[path = "../../../mrr-data-graphar/tests/support/query_fixture.rs"]
 mod query_fixture;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod resources;
 use meta_relational_reasoning as mrr;
 use mrr_data_core as core;
 use mrr_data_duckgql_query::{

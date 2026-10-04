@@ -60,9 +60,9 @@ async fn native_load_and_fetch_stops_roll_back_without_partial_output() {
         .await
         .unwrap();
     let connection = database.connect().unwrap();
-    // Checkpoint 2 is after the first INSERT; checkpoint 6 is after the first
-    // result row has been decoded. Both exercise a live native transaction.
-    for stop_at in [2, 6] {
+    // Checkpoint 2 is after the first INSERT; 4 is after statement preparation;
+    // 7 is after the first decoded row. Each owns a live native transaction.
+    for stop_at in [2, 4, 7] {
         for reason in [SqlQueryError::Cancelled, SqlQueryError::Deadline] {
             connection.execute("BEGIN", ()).await.unwrap();
             let calls = Cell::new(0);

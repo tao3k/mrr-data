@@ -13,7 +13,10 @@ pub use plan::{SqlQueryError, TursoSingleHopSql, turso_graphar_engine_profile};
 #[cfg(feature = "turso-graphar")]
 mod turso_graphar;
 #[cfg(feature = "turso-graphar")]
-pub use turso_graphar::{SqlQueryLimits, execute_turso_graphar_single_hop};
+pub use turso_graphar::{
+    SqlQueryLimits, TursoExecutionTimings, execute_turso_graphar_single_hop,
+    execute_turso_graphar_single_hop_observed,
+};
 #[cfg(feature = "backend-worker")]
 pub use turso_graphar::{
     TursoBackendQuery, execute_turso_graphar_controlled_on_backend,

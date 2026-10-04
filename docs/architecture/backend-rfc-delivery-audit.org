@@ -34,7 +34,7 @@ See [[file:0001-mrr-data-plane.org][the canonical data plane]], [[file:shared-ba
 |------+----------------------+--------------------|
 | Shared execution | Shared worker admission, reserved recovery, retained handles, typed driver refusals, cooperative controls and queued explicit stop | Long native-call interrupt/hard deadline; comprehensive mixed-workload evidence |
 | Turso query | Captured binary-Entity outgoing single hop, distinct endpoint bindings, parameterized SQL, FactId row order, rollback, retained output, MRR admission | General properties/paths, production source reuse, running native load/fetch stop receipts |
-| DuckDB Arrow | Checked/appender input, materialized and fallible streaming output, late error, native interrupt, leased output | Graph-query extension bridge, native RSS/spill; releasable VTab registration |
+| DuckDB Arrow / DuckGQL | Checked/appender input, fallible streaming output, native interrupt, leased output; pinned typed DuckGQL single-hop bridge with final MRR admission | General properties/paths, native RSS/spill; releasable VTab registration and extension platform qualification |
 | GraphAr | Native bounded projection, complete inventory binding, verified capture, publication/cold restore; ordered snapshot-pinned outgoing topology/property ranges | Broader lossless physical profiles, incoming/path execution and MRR result admission for selective plans |
 | Authority/durability | Authority/version checks, simulated Host policy/key rotation/retirement/disclosure and publication-phase process exit/recovery | Native in-transaction fault expansion; remote exact-head acceptance |
 
@@ -101,10 +101,13 @@ each expansion to an MRR semantic slice and independent expected rows.
 
 ** Independent research gate: DuckGQL
 
-Upstream typed-plan entrypoint, extension ABI/binary compatibility and canonical
-identity/result ordering require separate prototypes. No qualified bridge is
-implemented. Keep that work independent of GraphAr and Turso delivery. Do not
-replay source GQL into a second semantic binder to manufacture completion.
+The pinned =gql_match_relational= typed entrypoint now has an optional Rust
+single-hop bridge. It uses scalar-bound typed programs, canonical MRR identities,
+FactId ordering, independent expected rows and final MRR result admission. Native
+macOS fixtures qualify the implemented slice. Linux/macOS source-build and
+exact-head CI remain separate gates; no general external API stability is claimed.
+Keep broader properties/paths independent of GraphAr and Turso delivery. Source
+GQL is never replayed into the plugin's semantic binder.
 
 * Delivery order and acceptance
 
@@ -536,3 +539,33 @@ After explicit local SDK discovery, the isolated facade
 compilation check. The facade with selective GraphAr also passes. CI now checks
 the isolated composition after SDK provisioning, in addition to all combined
 native functional tests and strict all-target Clippy.
+
+** Query resource matrix: Rust assertions with Python collection
+
+The Rust =resources::matrix::isolated_engine_scale_matrix= test now dispatches
+DuckGQL, Turso and DataFusion in isolated processes at 2, 128 and 1024 rows.
+For each size, all engines capture the same published GraphAr inventory and
+must return the same snapshot root, expected rows and admitted MRR candidates.
+The matrix refuses wrong engine/source identity or unadmitted results. Its
+Schema owns versions and matrix dimensions; filenames and namespaces do not
+carry version suffixes.
+
+Python only discovers the Cargo-produced binary, supervises subprocess output
+progress and collects the Rust protocol with source, Schema and artifact
+digests. Python glue tests cover discovery, malformed/missing protocol output,
+capture limits and descendant cleanup. Semantic and resource assertions remain
+in Rust. CI publishes the checked matrix for both native platforms.
+
+A local macOS ARM64 run passed all nine cases in 13.64 seconds using the earlier
+Schema-pinned unsigned SDK artifact with digest
+=c73ac0bf2b61738ec07cd1bf5c9b054825deec30d195ef512167ea06d5ffda68=.
+This was an uncommitted working-tree measurement, not exact-head CI acceptance.
+OS peak RSS includes source capture, Rust and the active native engine. The
+measurement is a process high-water mark, not an enforced operator memory cap.
+That earlier run predates phase decomposition. The current adapters record
+disjoint preparation, load, execution, fetch/decode and cleanup durations;
+DuckGQL/Turso observe the first safe SDK cursor row from prepare, and DataFusion
+observes the first nonempty Arrow batch from execution start. These boundaries
+can follow native buffering and do not qualify operator-only first-result or
+spill peaks. Latest phase receipts and original Healthcare source qualification
+are recorded separately below when accepted.

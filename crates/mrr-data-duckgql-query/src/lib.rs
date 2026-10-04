@@ -7,7 +7,10 @@ pub use program::{DuckGqlError, DuckGqlSingleHopProgram, duckgql_graphar_engine_
 #[cfg(feature = "duckgql-graphar")]
 mod native;
 #[cfg(feature = "duckgql-graphar")]
-pub use native::{DuckGqlArtifact, DuckGqlLimits, execute_duckgql_graphar_single_hop};
+pub use native::{
+    DuckGqlArtifact, DuckGqlExecutionTimings, DuckGqlLimits, execute_duckgql_graphar_single_hop,
+    execute_duckgql_graphar_single_hop_observed,
+};
 #[cfg(feature = "backend-worker")]
 mod backend;
 #[cfg(feature = "backend-worker")]

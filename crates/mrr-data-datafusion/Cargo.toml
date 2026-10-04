@@ -7,20 +7,29 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+# Optional qualification of the MRR-owned native GQL frontend handoff.
+source-handoff = ["dep:mrr-property-source"]
+graphar-source-handoff = ["source-handoff", "dep:mrr-data-graphar", "mrr-data-graphar/native-graphar"]
+
 [dependencies]
 arrow-array.workspace = true
 arrow-ipc.workspace = true
 arrow-schema.workspace = true
 datafusion.workspace = true
+futures.workspace = true
 meta-relational-reasoning.workspace = true
 mrr-data-content = { workspace = true, features = ["snapshot"] }
 mrr-data-core.workspace = true
+mrr-property-source = { workspace = true, optional = true }
+mrr-data-graphar = { workspace = true, optional = true }
 
 [dev-dependencies]
 cid.workspace = true
 mrr-data-arrow.workspace = true
 mrr-data-asp-rust-build-support.workspace = true
 tokio.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true

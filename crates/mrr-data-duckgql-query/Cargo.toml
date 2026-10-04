@@ -33,6 +33,9 @@ tempfile.workspace = true
 tokio.workspace = true
 turso.workspace = true
 
+[target.'cfg(unix)'.dev-dependencies]
+nix.workspace = true
+
 [lints]
 workspace = true
 
