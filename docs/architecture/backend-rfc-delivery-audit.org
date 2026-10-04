@@ -1404,7 +1404,7 @@ GSC PR #19 merged into PR #18's development branch at
 =f47b6a6ee3d323558acc0171440c13db1d552ac3=. #18 is the sole open GSC PR;
 main was not released. Data's pinned =09fcfbf= implementation is included in
 that merge. The source-grounded ABI/AoT/FFI audit and staged qualification plan
-now live in GSC design RFC =10.02.90=, linked by engineering standard =40.014=.
+now live in GSC design RFC =10.02.100=, linked by engineering standard =40.014=.
 
 The true published-pin build at Data =d75d1aa= (no local patch) failed idle30
 in the cold module-object phase. Large object completions were recorded,
