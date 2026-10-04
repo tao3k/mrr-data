@@ -397,3 +397,101 @@ async fn datafusion_memory_budget_is_enforced() {
         Err(DataFusionQueryError::Engine(_))
     ));
 }
+
+fn integer_fixture() -> Fixture {
+    integer_fixture_with_nullable(true)
+}
+
+fn integer_fixture_with_nullable(nullable: bool) -> Fixture {
+    let mut f = fixture();
+    f.entities[1].schema = mrr::EntitySchema::new(
+        entity("Case"),
+        "Case",
+        vec![mrr::RelationField::new("id", mrr::ValueSchema::Integer, nullable).unwrap()],
+    )
+    .unwrap();
+    f.entities[1].batch = RecordBatch::try_new(
+        Arc::new(Schema::new(vec![
+            Field::new("entity_id", DataType::Utf8, false),
+            Field::new("id", DataType::Int64, true),
+        ])),
+        vec![
+            Arc::new(StringArray::from(ids(&["c1", "c2", "c3"]))),
+            Arc::new(arrow_array::Int64Array::from(vec![
+                Some(i64::MIN),
+                Some(i64::MAX),
+                None,
+            ])),
+        ],
+    )
+    .unwrap();
+    f.entities[0].batch = batch(
+        &["entity_id", "identity"],
+        vec![ids(&["s1", "s2"]), values(&["healthcare", "healthcare"])],
+    );
+    let schemas = f
+        .entities
+        .iter()
+        .map(|t| t.schema.clone())
+        .collect::<Vec<_>>();
+    let relations = f
+        .relations
+        .iter()
+        .map(|t| t.schema.clone())
+        .collect::<Vec<_>>();
+    let ir = query_ir(&schemas, &relations);
+    let qid = ir.id();
+    let bundle = mrr::ReasoningBundle::admit(mrr::ReasoningBundleDeclaration {
+        entities: schemas,
+        relations,
+        query_templates: vec![mrr::QueryTemplate::new(ir, vec![])],
+        ..Default::default()
+    })
+    .unwrap();
+    f.query = mrr::bind_query_to_catalog(&bundle, qid, &f.semantic).unwrap();
+    f
+}
+
+#[tokio::test]
+async fn integer_properties_preserve_extremes_and_null_without_coercion() {
+    let non_nullable = integer_fixture_with_nullable(false);
+    assert!(matches!(
+        execute_property_path_query(
+            &non_nullable.query,
+            &non_nullable.entities,
+            &non_nullable.relations,
+            limits()
+        )
+        .await,
+        Err(DataFusionQueryError::InvalidArrowBatch(
+            "null non-nullable property"
+        ))
+    ));
+    let mut f = integer_fixture();
+    let output = execute_property_path_query(&f.query, &f.entities, &f.relations, limits())
+        .await
+        .unwrap();
+    for value in [i64::MIN, i64::MAX] {
+        assert!(output.rows().iter().any(|row| row[1]
+            == mrr::QueryResultValue::scalar(
+                mrr::ValueSchema::Integer,
+                mrr::Value::Integer(value)
+            )));
+    }
+    assert!(
+        output
+            .rows()
+            .iter()
+            .any(|row| row[1] == mrr::QueryResultValue::Null)
+    );
+    f.entities[1].batch = batch(
+        &["entity_id", "id"],
+        vec![ids(&["c1", "c2", "c3"]), values(&["1", "2", "3"])],
+    );
+    assert!(matches!(
+        execute_property_path_query(&f.query, &f.entities, &f.relations, limits()).await,
+        Err(DataFusionQueryError::InvalidArrowBatch(
+            "property Arrow type mismatch"
+        ))
+    ));
+}

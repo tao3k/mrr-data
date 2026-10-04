@@ -1,7 +1,7 @@
-//! Bounded catalog-backed path joins and string-property projections.
+//! Bounded catalog-backed path joins and typed property projections.
 use std::collections::BTreeMap;
 
-use arrow_array::{Array, RecordBatch, StringArray};
+use arrow_array::{Array, Int64Array, RecordBatch, StringArray};
 use datafusion::{
     common::Column,
     execution::runtime_env::RuntimeEnvBuilder,
@@ -20,7 +20,7 @@ use crate::DataFusionQueryError;
 pub(super) type Result<T> = std::result::Result<T, DataFusionQueryError>;
 
 /// An entity table: canonical entity ID first, then catalog properties in order.
-/// All columns in this bounded slice are Utf8; nullable properties retain nulls.
+/// IDs are Utf8; properties are native Utf8 or Int64 and retain nulls.
 pub struct EntityPropertyTable {
     pub schema: EntitySchema,
     pub batch: RecordBatch,
@@ -118,26 +118,37 @@ fn decode_properties(
 ) -> Result<PhysicalQueryOutput> {
     let mut rows = Vec::new();
     for batch in batches {
-        let columns = batch
-            .columns()
-            .iter()
-            .map(|a| strings(a.as_ref()))
-            .collect::<Result<Vec<_>>>()?;
         for row in 0..batch.num_rows() {
             rows.push(
-                columns
+                batch
+                    .columns()
                     .iter()
-                    .map(|c| {
-                        if c.is_null(row) {
-                            QueryResultValue::Null
-                        } else {
-                            QueryResultValue::Scalar {
-                                schema: ValueSchema::String,
-                                value: Value::String(c.value(row).to_owned()),
-                            }
+                    .map(|array| {
+                        if array.is_null(row) {
+                            return Ok(QueryResultValue::Null);
                         }
+                        let (schema, value) = match array.data_type() {
+                            arrow_schema::DataType::Utf8 => (
+                                ValueSchema::String,
+                                Value::String(strings(array.as_ref())?.value(row).to_owned()),
+                            ),
+                            arrow_schema::DataType::Int64 => (
+                                ValueSchema::Integer,
+                                Value::Integer(
+                                    array
+                                        .as_any()
+                                        .downcast_ref::<Int64Array>()
+                                        .ok_or(DataFusionQueryError::InvalidArrowBatch(
+                                            "Int64 column required",
+                                        ))?
+                                        .value(row),
+                                ),
+                            ),
+                            _ => return unsupported("unsupported property output type"),
+                        };
+                        Ok(QueryResultValue::Scalar { schema, value })
                     })
-                    .collect(),
+                    .collect::<Result<Vec<_>>>()?,
             );
         }
     }
@@ -348,4 +359,13 @@ fn property_column(
         .position(|f| f.name() == key.as_str())
         .ok_or(DataFusionQueryError::UnsupportedShape("unknown property"))?;
     Ok(format!("n{index}_p{property}"))
+}
+
+/// Exact catalog-to-Arrow mapping; no text or floating-point coercion.
+pub(super) fn property_arrow_type(schema: &ValueSchema) -> Result<arrow_schema::DataType> {
+    match schema {
+        ValueSchema::String => Ok(arrow_schema::DataType::Utf8),
+        ValueSchema::Integer => Ok(arrow_schema::DataType::Int64),
+        _ => unsupported("only string and integer properties supported"),
+    }
 }

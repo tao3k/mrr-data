@@ -130,3 +130,20 @@ that only reordered canonical inputs. Both were corrected before the final
 36-test run. No thresholds were relaxed. POO's separate Scheme v2 native
 Temporal receiver passed at =662a20620b4155c5d2fa50e70ba8d8c67bd2f392=.
 Remote CI and the joined original-GQL Temporal roundtrip remain separate gates.
+
+* Native integer properties — 2026-10-04
+
+The bounded DataFusion property path now accepts exact Utf8/String and
+Int64/Integer catalog mappings. Input validation rejects mismatched physical
+types and null non-nullable properties. Verified IPC restoration derives each
+property's Arrow type from the original catalog; result decoding retains typed
+integers without text or float conversion. Other property types and integer
+filter expressions remain unsupported by this slice.
+
+Tests cover signed 64-bit extrema, nullable values, non-nullable rejection,
+text substitution and cold/warm restored integer results through the original
+Scheme v2 handoff. These enable Temporal's event:String/position:Integer
+projection, but do not independently qualify the joined original GQL scenario.
+
+Final integer-path local qualification: 20/20 tests in 0.17s under the five-second
+genuine-output watchdog; all-target DataFusion Clippy passed with =-D warnings=.

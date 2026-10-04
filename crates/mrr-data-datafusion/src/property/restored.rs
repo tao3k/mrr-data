@@ -240,9 +240,18 @@ fn decode_entity_tables(
         .map(|entity| {
             let mut fields = vec![Field::new("entity_id", DataType::Utf8, false)];
             fields.extend(
-                entity.schema().properties().iter().map(|property| {
-                    Field::new(property.name(), DataType::Utf8, property.nullable())
-                }),
+                entity
+                    .schema()
+                    .properties()
+                    .iter()
+                    .map(|property| {
+                        Ok(Field::new(
+                            property.name(),
+                            super::execution::property_arrow_type(property.schema())?,
+                            property.nullable(),
+                        ))
+                    })
+                    .collect::<Result<Vec<_>>>()?,
             );
             Ok(EntityPropertyTable {
                 schema: entity.schema().clone(),

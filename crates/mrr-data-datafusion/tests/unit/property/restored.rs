@@ -66,6 +66,14 @@ enum EntityChildMode {
     Compressed,
 }
 
+fn test_property_type(schema: &mrr::ValueSchema) -> DataType {
+    match schema {
+        mrr::ValueSchema::String => DataType::Utf8,
+        mrr::ValueSchema::Integer => DataType::Int64,
+        _ => panic!("unsupported test property"),
+    }
+}
+
 fn snapshot(
     f: &Fixture,
     mode: EntityChildMode,
@@ -104,7 +112,11 @@ fn snapshot(
                     matches!(mode, EntityChildMode::NullableDrift) && index == 0,
                 )];
                 fields.extend(table.schema.properties().iter().map(|property| {
-                    Field::new(property.name(), DataType::Utf8, property.nullable())
+                    Field::new(
+                        property.name(),
+                        test_property_type(property.schema()),
+                        property.nullable(),
+                    )
                 }));
                 ipc(
                     &table.batch,
@@ -227,7 +239,7 @@ async fn restored(
 
 #[tokio::test]
 async fn verified_cold_and_warm_property_snapshots_reach_the_existing_mrr_admission() {
-    let f = fixture();
+    let f = super::integer_fixture();
     let (cold, warm, relations, entities) = restored(&f, EntityChildMode::Valid).await;
     println!("Cold and warm immutable property snapshots restored");
     assert!(
