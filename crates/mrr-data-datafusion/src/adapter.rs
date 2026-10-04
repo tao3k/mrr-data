@@ -1,7 +1,9 @@
 //! `DataFusion` execution for the admitted single-hop binary Entity query slice.
 
+use futures::TryStreamExt;
 use std::fmt;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use arrow_array::{Array, RecordBatch, StringArray};
 use datafusion::datasource::MemTable;
@@ -103,18 +105,72 @@ pub async fn execute_binary_entity_query(
     relation: &RelationSchema,
     batch: RecordBatch,
 ) -> Result<PhysicalQueryOutput, DataFusionQueryError> {
+    execute_binary_entity_query_observed(query, relation, batch)
+        .await
+        .map(|(output, _)| output)
+}
+
+/// Safe Arrow-stream boundary timings; first batch may contain buffered rows.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DataFusionExecutionTimings {
+    pub plan_admission: Duration,
+    pub source_registration: Duration,
+    pub logical_plan: Duration,
+    pub physical_plan_and_start: Duration,
+    pub first_batch_from_start: Option<Duration>,
+    pub fetch_batches: Duration,
+    pub decode_output: Duration,
+    pub cleanup: Duration,
+    pub total: Duration,
+}
+/// Execute the same admitted binary-Entity slice and return measured phases.
+/// # Errors
+/// Returns the same plan, Arrow, identity and engine refusals as normal execution.
+pub async fn execute_binary_entity_query_observed(
+    query: &CatalogBoundQuery,
+    relation: &RelationSchema,
+    batch: RecordBatch,
+) -> Result<(PhysicalQueryOutput, DataFusionExecutionTimings), DataFusionQueryError> {
+    let total = Instant::now();
+    let mut timings = DataFusionExecutionTimings::default();
+    let started = Instant::now();
     let plan = admit_plan(query, relation)?;
+    timings.plan_admission = started.elapsed();
+    let started = Instant::now();
     let table = MemTable::try_new(batch.schema(), vec![vec![batch]])?;
     let context = SessionContext::new();
     context.register_table("mrr_relation", Arc::new(table))?;
+    timings.source_registration = started.elapsed();
+    let started = Instant::now();
     let frame = context.table("mrr_relation").await?.select(
         plan.projections
             .iter()
             .map(|projection| col(&projection.field).alias(projection.output.as_str()))
             .collect::<Vec<_>>(),
     )?;
-    let batches = frame.collect().await?;
-    decode_output(&plan, &batches)
+    timings.logical_plan = started.elapsed();
+    let execute = Instant::now();
+    let mut stream = frame.execute_stream().await?;
+    timings.physical_plan_and_start = execute.elapsed();
+    let started = Instant::now();
+    let mut batches = Vec::new();
+    while let Some(batch) = stream.try_next().await? {
+        if batch.num_rows() != 0 && timings.first_batch_from_start.is_none() {
+            timings.first_batch_from_start = Some(execute.elapsed());
+        }
+        batches.push(batch);
+    }
+    timings.fetch_batches = started.elapsed();
+    let started = Instant::now();
+    let output = decode_output(&plan, &batches)?;
+    timings.decode_output = started.elapsed();
+    let started = Instant::now();
+    drop(stream);
+    drop(batches);
+    drop(context);
+    timings.cleanup = started.elapsed();
+    timings.total = total.elapsed();
+    Ok((output, timings))
 }
 
 struct AdmittedPlan {

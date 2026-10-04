@@ -5,7 +5,22 @@ use mrr_data_core::{BoundDataQuery, PhysicalQueryOutput};
 use mrr_data_graphar::{BinaryEntityProjection, CapturedGraphArSnapshot};
 #[cfg(feature = "backend-worker")]
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+/// Timings of the safe SDK boundary; native calls may buffer before cursor fetch.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TursoExecutionTimings {
+    pub program_compile: Duration,
+    pub source_projection: Duration,
+    pub connection_setup: Duration,
+    pub derived_image_load: Duration,
+    pub native_prepare: Duration,
+    pub bind_and_execute: Duration,
+    pub first_cursor_row_from_prepare: Option<Duration>,
+    pub fetch_and_decode: Duration,
+    pub connection_cleanup: Duration,
+    pub total: Duration,
+}
 
 /// Preflight and result bounds. These do not constrain Turso native RSS.
 #[derive(Clone, Copy, Debug)]
@@ -114,10 +129,42 @@ async fn execute_checked(
     limits: SqlQueryLimits,
     checkpoint: &impl Fn() -> Result<(), SqlQueryError>,
 ) -> Result<PhysicalQueryOutput, SqlQueryError> {
+    execute_observed(database, query, source, projection, limits, checkpoint)
+        .await
+        .map(|(output, _)| output)
+}
+
+/// Execute the same checked transaction and return measured safe-SDK phases.
+/// # Errors
+/// Uses the same query, source, result and cleanup refusals as normal execution.
+pub async fn execute_turso_graphar_single_hop_observed(
+    database: &turso::Database,
+    query: &BoundDataQuery,
+    source: &CapturedGraphArSnapshot,
+    projection: &BinaryEntityProjection,
+    limits: SqlQueryLimits,
+) -> Result<(PhysicalQueryOutput, TursoExecutionTimings), SqlQueryError> {
+    execute_observed(database, query, source, projection, limits, &|| Ok(())).await
+}
+async fn execute_observed(
+    database: &turso::Database,
+    query: &BoundDataQuery,
+    source: &CapturedGraphArSnapshot,
+    projection: &BinaryEntityProjection,
+    limits: SqlQueryLimits,
+    checkpoint: &impl Fn() -> Result<(), SqlQueryError>,
+) -> Result<(PhysicalQueryOutput, TursoExecutionTimings), SqlQueryError> {
+    let total = Instant::now();
+    let mut timings = TursoExecutionTimings::default();
     checkpoint()?;
+    let started = Instant::now();
     let plan = TursoSingleHopSql::compile(query, projection)?;
+    timings.program_compile = started.elapsed();
+    let started = Instant::now();
     let rows = prepare_rows(query, source, projection, limits, checkpoint)?;
+    timings.source_projection = started.elapsed();
     checkpoint()?;
+    let started = Instant::now();
     let connection = database.connect().map_err(|_| SqlQueryError::Native)?;
     connection
         .busy_timeout(Duration::from_millis(250))
@@ -126,10 +173,17 @@ async fn execute_checked(
         .execute("BEGIN", ())
         .await
         .map_err(|_| SqlQueryError::Native)?;
-    let result = execute_in_transaction(&connection, &plan, rows, limits, checkpoint).await;
+    timings.connection_setup = started.elapsed();
+    let result =
+        execute_transaction_observed(&connection, &plan, rows, limits, checkpoint, &mut timings)
+            .await;
+    let started = Instant::now();
     let output = finish_transaction(&connection, result).await?;
+    drop(connection);
+    timings.connection_cleanup = started.elapsed();
     checkpoint()?;
-    Ok(output)
+    timings.total = total.elapsed();
+    Ok((output, timings))
 }
 pub(super) async fn finish_transaction<T>(
     connection: &turso::Connection,
@@ -243,6 +297,7 @@ fn run_backend_request(
         request.limits,
     ))
 }
+#[cfg(test)]
 pub(super) async fn execute_in_transaction(
     connection: &turso::Connection,
     plan: &TursoSingleHopSql,
@@ -250,6 +305,25 @@ pub(super) async fn execute_in_transaction(
     limits: SqlQueryLimits,
     checkpoint: &impl Fn() -> Result<(), SqlQueryError>,
 ) -> Result<PhysicalQueryOutput, SqlQueryError> {
+    execute_transaction_observed(
+        connection,
+        plan,
+        rows,
+        limits,
+        checkpoint,
+        &mut TursoExecutionTimings::default(),
+    )
+    .await
+}
+async fn execute_transaction_observed(
+    connection: &turso::Connection,
+    plan: &TursoSingleHopSql,
+    rows: Vec<EdgeRow>,
+    limits: SqlQueryLimits,
+    checkpoint: &impl Fn() -> Result<(), SqlQueryError>,
+    timings: &mut TursoExecutionTimings,
+) -> Result<PhysicalQueryOutput, SqlQueryError> {
+    let started = Instant::now();
     checkpoint()?;
     connection
         .execute(
@@ -274,24 +348,35 @@ pub(super) async fn execute_in_transaction(
             .await
             .map_err(|_| SqlQueryError::Native)?;
     }
+    timings.derived_image_load = started.elapsed();
     checkpoint()?;
     let [relation, generation] = plan.bindings();
-    let mut cursor = connection
-        .query(
-            plan.statement(),
-            [
-                turso::Value::Text(relation.to_owned()),
-                turso::Value::Text(generation.to_owned()),
-            ],
-        )
+    let prepare = Instant::now();
+    let mut statement = connection
+        .prepare(plan.statement())
         .await
         .map_err(|_| SqlQueryError::Native)?;
+    timings.native_prepare = prepare.elapsed();
+    checkpoint()?;
+    let started = Instant::now();
+    let mut cursor = statement
+        .query([
+            turso::Value::Text(relation.to_owned()),
+            turso::Value::Text(generation.to_owned()),
+        ])
+        .await
+        .map_err(|_| SqlQueryError::Native)?;
+    timings.bind_and_execute = started.elapsed();
+    let started = Instant::now();
     let mut output: Vec<Vec<QueryResultValue>> = Vec::new();
     loop {
         checkpoint()?;
         let Some(row) = cursor.next().await.map_err(|_| SqlQueryError::Native)? else {
             break;
         };
+        if timings.first_cursor_row_from_prepare.is_none() {
+            timings.first_cursor_row_from_prepare = Some(prepare.elapsed());
+        }
         checkpoint()?;
         if output.len() >= limits.max_output_rows
             || output
@@ -310,5 +395,6 @@ pub(super) async fn execute_in_transaction(
             .collect::<Result<Vec<_>, _>>()?;
         output.push(plan.decode(&values)?);
     }
+    timings.fetch_and_decode = started.elapsed();
     Ok(plan.output(output))
 }

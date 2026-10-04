@@ -9,7 +9,10 @@ pub use property::{
     execute_restored_property_query_handoff,
 };
 
-pub use adapter::{DataFusionQueryError, datafusion_engine_profile, execute_binary_entity_query};
+pub use adapter::{
+    DataFusionExecutionTimings, DataFusionQueryError, datafusion_engine_profile,
+    execute_binary_entity_query, execute_binary_entity_query_observed,
+};
 
 #[cfg(test)]
 #[path = "../tests/unit/mod.rs"]

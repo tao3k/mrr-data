@@ -11,6 +11,7 @@ COMMANDS = {
     "check-spec-fixtures": "checks.spec_fixtures",
     "duckgql-build": "duckgql.build",
     "duckgql-qualify": "duckgql.qualify",
+    "query-resources": "duckgql.resources",
     "s3-conformance": "s3.run",
     "kache-probe": "kache.run",
 }
