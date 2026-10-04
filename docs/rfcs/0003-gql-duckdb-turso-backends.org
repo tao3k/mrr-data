@@ -3,24 +3,27 @@
 
 * Status
 
-Proposed against [[https://github.com/tao3k/mrr-data/pull/12][MRR Data PR #12]] at
-=62663692ebfcd7a21f3d2e9d7570a14e1c55d001=. That PR has one generic
-=mrr-data-backend= with optional Turso =0.8.1= and DuckDB =1.10502.0=
-metadata providers, a provider-neutral =backend-arrow-query= output protocol,
-and a DuckDB adapter for a Host-prepared statement. The Turso provider currently
-uses SQL only for bounded metadata records. Neither provider executes MRR's
-graph queries at that head, and the DuckDB adapter does not load DuckGQL.
+Partially implemented on [[https://github.com/tao3k/mrr-data/pull/12][MRR Data PR #12]]. The shared
+=mrr-data-backend= has optional Turso =0.8.1= and DuckDB =1.10506.0=
+metadata providers. The provider-neutral =backend-arrow-query= protocol and
+DuckDB Host-prepared statement adapter support materialized and fallible native
+streaming output. Native streaming does not imply bounded engine RSS. The
+DuckDB adapter does not load DuckGQL.
 
-This RFC's first local implementation adds the optional =mrr-data-turso-query=
-crate and =backend-turso-query= facade feature. It compiles one already bound,
-outgoing binary-Entity query to a parameterized Turso statement, loads facts
-from a captured GraphAr snapshot into a temporary relation, returns bounded
-=PhysicalQueryOutput=, and leaves final MRR admission to the caller. A native
-fixture proves duplicate-edge preservation, snapshot-drift refusal and MRR
-admission. The follow-on local slice runs that query through Backend's bounded
-resource worker lane and verifies lease release. Native interrupt/deadline,
-additional query shapes, other SQL engines and the DuckGQL bridge remain
-proposed gates.
+The optional =mrr-data-turso-query= crate and =backend-turso-query= facade
+feature compile one already bound, outgoing binary-Entity query to a
+parameterized Turso statement, load captured GraphAr facts into a temporary
+relation, and return bounded =PhysicalQueryOutput=. Final MRR admission belongs
+to the caller. The native fixture covers duplicate-edge preservation,
+snapshot-drift refusal and MRR admission. The follow-on
+=execute_turso_graphar_on_backend= entrypoint uses
+=Backend::run_resource= on its shared bounded blocking worker and the
+Host-supplied runtime. Queued cancellation skips work; running cancellation
+retains the lease until execution and rollback finish. Native interrupt,
+deadline, retained-output accounting, additional shapes, other SQL dialects
+and the DuckGQL typed bridge remain open.
+This status records implemented interfaces, not a claim that all acceptance
+gates or current-head CI have passed.
 
 * Decision and ownership
 
@@ -56,9 +59,11 @@ same source, semantics and receipt. Even then, prefer a narrow GraphAr scan or
 operator capability over a second general DuckDB SQL compiler.
 
 The existing [[file:../architecture/0001-mrr-data-plane.org][data-plane RFC]] leaves SQL to a downstream package.
-The implemented opt-in Turso adapter narrows that decision for this repository.
-=mrr-data-core=, =mrr-data-graphar=, the generic =mrr-data-backend=
-transaction engine and default facade features remain provider-neutral.
+Acceptance of this RFC narrows that decision for optional query adapters in
+this repository. =mrr-data-core=, =mrr-data-graphar=, the generic
+=mrr-data-backend= transaction engine and default facade features remain
+provider-neutral. The architecture document records the delivered optional Turso slice.
+The shared Backend still exposes no generic SQL entrypoint.
 
 * Two execution paths
 
@@ -217,9 +222,91 @@ than maintaining another graph planner.
 |-------------+---------------------+----------------------|
 | Identity/publication | Inventory, binding, child/root ACK and cold restore | Bind every graph/table cache to exact root, generation, catalogs and projection version |
 | Semantic capture | Verified binary-Entity facts and Backend lease | Lossless fact-to-vertex/edge mapping and lifetime rules |
-| DuckDB | Checked Arrow input and materialized Arrow output | DuckGQL binary compatibility, graph registration, external typed-plan bridge and result conversion |
-| Turso | Protected metadata transactions | Bounded graph-table load, indexes, rollback/cleanup and typed output bridge |
+| DuckDB | Checked Arrow input, releasable appender input and materialized/native streaming Arrow output | DuckGQL binary compatibility, graph registration, external typed-plan bridge and result conversion |
+| Turso | Protected metadata transactions and bounded single-hop query on shared Backend workers | Native interrupt/deadline, retained output accounting, source reuse and additional typed query shapes |
 | Selective access | Native GraphAr read and Arrow C Stream import during preparation | Snapshot-pinned adjacency/property scan with measured pushdown and resources |
+
+* Shared execution lifecycle contract
+
+Shared worker admission is implemented by =execute_turso_graphar_on_backend=
+and =Backend::run_resource=. The remaining contract below is an implementation
+gate, especially native interrupt/deadline and output retention. The standalone
+=execute_turso_graphar_single_hop= entrypoint does not enforce Backend admission.
+
+** One scheduler and one Host runtime
+
+Optional query adapters depend on the shared Backend execution capability;
+the Backend does not depend on Turso query plans, DuckGQL or MRR query types.
+The existing resource admission and =max_shared_workers= pool remain the
+common admission boundary for writes, source preparation and physical queries.
+Recovery keeps its existing reserved lane. No adapter creates a runtime,
+provider-specific scheduler or separate lifecycle state machine.
+
+The current =run_resource= adapter accepts a synchronous closure and drives
+Turso with the Host runtime handle on a bounded blocking worker. This is
+accounted execution, but occupies that worker for the complete driver future.
+A future native-async dispatch path must preserve the same shared admission
+and drain invariants. A Turso async query must not be launched in an
+unaccounted =tokio::spawn= task and called
+integrated merely because its source has a resource handle. Any shared
+execution API must retain the admitted lease while waiting for the common
+worker permit, executing the async driver, cleaning up and retaining output.
+The Host-supplied runtime drives that future. Native synchronous work still
+uses the bounded blocking executor. Moving Turso onto native async dispatch is
+a separate measured optimization; the current blocking bridge is not evidence
+of that optimization.
+
+** Request and retained-result ownership
+
+The adapter preflights the exact bound query, captured-source binding, supported
+shape and checked limits before opening a connection or creating a table.
+Its owned request retains the authenticated source handle throughout execution.
+The resource reservation includes captured input, temporary conversion buffers,
+Host-estimated native state and bounded output. Existing row/cell/string-byte
+limits are application bounds; they do not measure native allocator RSS.
+
+The admitted request has queued, running and cleanup phases. Cancellation before
+execution releases the reservation without opening a connection. The current
+running worker completes even if its caller is dropped. The next
+interrupt-capable path must signal the driver on running cancellation and
+retain its lease until the driver stops
+and cleanup completes. A deadline enters the same cancellation path; it cannot
+release admission while a native operation still owns physical resources.
+Driver failure, source drift, malformed output and cleanup failure are terminal
+refusals. No partial output becomes a successful physical result.
+
+Turso owns one invocation connection and its temporary transaction. Successful
+completion requires rollback before returning output. Cancellation and errors
+must close the cursor/transaction/connection in driver order; dropping the
+future alone is not evidence of completed native cleanup. A cleanup failure
+must not publish a success result. Native connection isolation and cancellation
+behavior need executable receipts under the pinned SDK.
+
+The current =run_resource= path releases its lease before returning the owned
+physical output. It therefore budgets execution but does not account for output
+retained by the caller. The next retained-result path must instead return a
+Backend resource handle while the caller borrows physical output for MRR projection/admission. Worker permits are released after
+cleanup, but the byte/count reservation remains until the final output handle
+is dropped. Retained results therefore participate in Backend drain. The
+adapter must not export an unaccounted owned clone of large output buffers.
+Result admission does not itself release those physical buffers.
+
+** Required integration receipts
+
+- With one shared worker, a held write prevents a Turso query from opening its
+  connection; reserved recovery still progresses on the Host runtime.
+- Cancel a queued query and prove no table/connection was created. Cancel a
+  running load and result fetch, then prove cleanup completes before drain.
+- Retain successful output after worker completion: another worker may run,
+  while shutdown waits until the last output handle is dropped.
+- Exercise row/cell/byte refusals, native failure and cleanup failure. Each
+  releases its resources and yields no MRR-admitted candidate.
+- Repeat on Linux/macOS with exact Turso =0.8.1=. Keep admission/result identity
+  parity with the existing captured-fact fixture and record current-head CI.
+
+These receipts qualify lifecycle integration. Process-crash durability,
+deployed authorization and native RSS/performance measurements remain separate
+RFC 0002 gates.
 
 * First slices and evidence
 

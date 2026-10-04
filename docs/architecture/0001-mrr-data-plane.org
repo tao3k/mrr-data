@@ -314,14 +314,17 @@ engine cannot supply or replace this identity.  The output remains a
 owners admit it through =admit_query_result_candidate=.  This protocol is
 implemented.  The first opt-in engine adapter lowers the admitted single-hop
 binary-Entity slice directly to DataFusion expressions without reparsing SQL.
-It owns no async runtime and rejects every undeclared shape before execution;
-general query execution remains a later engine-specific feature.
-The opt-in =mrr-data-turso-query= adapter compiles only a bound outgoing
-binary-Entity single hop to parameterized Turso SQL. It reads a captured
-GraphAr snapshot through Backend's bounded resource worker and returns physical
-rows for final MRR admission. This adds no query-language frontend or default
-database dependency; native interrupt/deadline and broader query shapes remain
-unqualified. [[file:../rfcs/0003-gql-duckdb-turso-backends.org][RFC 0003]] separates this Turso path from the proposed DuckGQL bridge.
+It owns no async runtime and rejects every undeclared shape before execution.
+An additional opt-in =mrr-data-turso-query= adapter executes the captured
+binary-Entity outgoing single-hop slice through parameterized Turso statements
+and a temporary transaction. It returns physical output for the same MRR
+admission bridge. Its =execute_turso_graphar_on_backend= entrypoint uses
+=Backend::run_resource= and the Host runtime on shared bounded workers. Queued
+cancellation skips execution; running work retains its lease through completion.
+Native interruption/deadline and retained-output accounting remain gates in
+[[file:../rfcs/0003-gql-duckdb-turso-backends.org][RFC 0003]]; the standalone executor does not enforce Backend admission.
+Shared scheduling does not complete all query lifecycle gates. General query
+execution remains a later engine-specific feature.
 
 The native GraphAr contract suite covers the first differential engine slice.
 It sends the same admitted binary-Entity facts through an Arrow =RecordBatch=
@@ -337,8 +340,11 @@ Native GraphAr publication and prepared import project a
 canonical GraphAr metadata entry point, admitted relation and endpoint roles,
 semantic identity property names, and bounded row counts.  It deliberately
 contains no SQL, connection, mutable catalog, or engine execution trait.  A
-downstream package can combine this crate with DuckDB/DuckGQL or another engine
-without adding that database to =mrr-data=.  Its catalog, indexes, statistics,
+Host can compose this source with optional engine adapter crates. RFC 0003
+allows bounded SQL adapters in this repository behind explicit features;
+DuckDB graph planning belongs to the separately gated DuckGQL typed bridge.
+The core, GraphAr descriptor and default facade remain provider-neutral, and
+the shared Backend has no generic SQL API.  Its catalog, indexes, statistics,
 and CSR caches are derived state and must be rebuildable from the GraphAr
 source plus the MRR snapshot manifest.
 
