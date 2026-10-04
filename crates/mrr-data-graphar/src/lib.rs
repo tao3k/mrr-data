@@ -95,3 +95,6 @@ pub use combined::{
     CombinedGraphArContentRequest, prepare_combined_graph_content,
     prepare_combined_graphar_from_content,
 };
+
+#[cfg(all(feature = "combined-graph", feature = "backend"))]
+pub use combined::{CombinedGraphArRestoreRequest, restore_combined_graph_content};

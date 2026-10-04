@@ -144,6 +144,40 @@ impl Backend {
         cancellation.disarm();
         result
     }
+    /// Prepare retained resources using async provider I/O on the borrowed Host runtime.
+    /// Admission and worker permits are shared with physical preparation. Dropping
+    /// the waiter signals cancellation; started work keeps its lease through driver
+    /// cleanup and must check control between provider calls. No task is aborted.
+    /// # Errors
+    /// Preserves typed driver stops and shared admission/worker failures.
+    pub async fn prepare_resource_async_controlled<T, E, F>(
+        &self,
+        reserved_bytes: usize,
+        control: crate::ResourceControl,
+        prepare: impl FnOnce(crate::ResourceControl) -> F + Send + 'static,
+    ) -> Result<crate::ResourceHandle<T>, crate::ResourcePreparationError<E>>
+    where
+        T: Send + Sync + 'static,
+        E: From<crate::ResourceStop> + Send + 'static,
+        F: std::future::Future<Output = Result<T, E>> + Send + 'static,
+    {
+        use crate::ResourcePreparationError;
+        let mut cancellation = crate::control::CancelOnDrop::new(control.clone());
+        let lease = self
+            .inner
+            .scheduler
+            .admit_resource(reserved_bytes)
+            .map_err(ResourcePreparationError::Backend)?;
+        let result = self
+            .inner
+            .dispatcher
+            .prepare_async(lease, control, prepare)
+            .await
+            .map_err(|_| ResourcePreparationError::Backend(BackendError::WorkerLost))?
+            .map_err(ResourcePreparationError::Preparation);
+        cancellation.disarm();
+        result
+    }
     /// Run one physical operation on the bounded resource worker lane and
     /// return its owned result. The reservation covers the worker, not the
     /// returned value; the Host must bound result size before returning it.

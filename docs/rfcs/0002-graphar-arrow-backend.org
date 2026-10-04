@@ -703,6 +703,25 @@ Each read-through comprises local lookup, optional remote fetch, CID verificatio
 and optional cache admission. Checks bracket that entire operation; they do not
 interrupt an in-flight operation or roll back already cached immutable blocks.
 A stopped restore exposes no complete closure. The caller must retain resource
-admission across async acquisition and the returned payload. This checkpoint
-primitive alone does not add an automatic shared Backend async reservation path.
+admission across async acquisition and the returned payload. The checkpoint
+primitive itself is runtime-neutral; the optional Backend adapter below supplies
+that reservation.
 Original GQL compilation and result admission remain MRR-owned.
+
+** Shared async cold-restore admission
+
+=Backend::prepare_resource_async_controlled= uses the borrowed Host runtime and
+the existing resource/shared worker permits. Admission precedes driver invocation;
+queued cancellation and deadlines skip the driver. Started async work remains
+owned by the dispatcher after caller abandonment and must check cooperative
+control between provider operations. Its reservation survives until cleanup or
+the returned =ResourceHandle='s final clone. Async I/O does not increment the
+blocking-worker counter. Blocking preparation and async preparation share worker
+limits; neither provider creates an independent runtime.
+
+=CombinedGraphArRestoreRequest= and =restore_combined_graph_content= combine this
+primitive with the checked cold transfer. They cap the complete payload by both
+transfer and reservation limits before cache/remote reads. The returned immutable
+closure retains its shared Backend drain barrier. Cache copies and provider
+scratch remain additional Host headroom; this is not a hard RSS guarantee. Native
+capture remains a separate blocking phase and must retain appropriate admission.

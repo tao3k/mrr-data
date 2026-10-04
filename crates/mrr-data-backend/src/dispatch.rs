@@ -91,6 +91,68 @@ impl Dispatcher {
         });
         rx
     }
+    pub(crate) fn prepare_async<T, E, F>(
+        &self,
+        lease: ResourceLease,
+        control: crate::ResourceControl,
+        run: impl FnOnce(crate::ResourceControl) -> F + Send + 'static,
+    ) -> oneshot::Receiver<Result<ResourceHandle<T>, E>>
+    where
+        T: Send + Sync + 'static,
+        E: From<crate::ResourceStop> + Send + 'static,
+        F: std::future::Future<Output = Result<T, E>> + Send + 'static,
+    {
+        let (mut tx, rx) = oneshot::channel();
+        let slots = self.resources.clone();
+        let shared = self.shared.clone();
+        self.runtime.spawn(async move {
+            let stopped = control.stopped();
+            tokio::pin!(stopped);
+            let permit = tokio::select! {
+                biased;
+                () = tx.closed() => return,
+                reason = &mut stopped => {
+                    drop(run);
+                    drop(lease);
+                    let _ = tx.send(Err(E::from(reason)));
+                    return;
+                },
+                permit = slots.acquire_owned() => permit.expect("resource slots never closed"),
+            };
+            let shared_permit = tokio::select! {
+                biased;
+                () = tx.closed() => return,
+                reason = &mut stopped => {
+                    drop(run);
+                    drop(lease);
+                    drop(permit);
+                    let _ = tx.send(Err(E::from(reason)));
+                    return;
+                },
+                permit = shared.acquire_owned() => permit.expect("shared slots never closed"),
+            };
+            // Once started, keep driver cleanup and the reservation owned even if
+            // the waiter disappears. Async I/O never counts as a blocking worker.
+            let result = async {
+                control.check().map_err(E::from)?;
+                let value = run(control.clone()).await?;
+                control.check().map_err(E::from)?;
+                Ok(value)
+            }
+            .await;
+            let result = match result {
+                Ok(value) => Ok(ResourceHandle::new(value, lease)),
+                Err(error) => {
+                    drop(lease);
+                    Err(error)
+                }
+            };
+            drop(shared_permit);
+            drop(permit);
+            let _ = tx.send(result);
+        });
+        rx
+    }
     pub(crate) fn run_resource<T: Send + 'static>(
         &self,
         lease: ResourceLease,

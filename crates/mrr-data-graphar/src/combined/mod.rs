@@ -17,3 +17,8 @@ pub use content::{
     CombinedGraphArContentRequest, prepare_combined_graph_content,
     prepare_combined_graphar_from_content,
 };
+
+#[cfg(feature = "backend")]
+mod restore;
+#[cfg(feature = "backend")]
+pub use restore::{CombinedGraphArRestoreRequest, restore_combined_graph_content};

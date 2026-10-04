@@ -590,8 +590,40 @@ five-second inactivity / 120-second test limits and default Cargo jobs.
 Strict Content/GraphAr all-target Clippy, Rust formatting and the documentation
 checker (=21 Org documents, 7 Org READMEs=) pass.
 
-This transfer primitive does not yet provide automatic shared Backend admission
-for async cold restoration: callers must retain admission across acquisition and
-the returned payload. That orchestration and original GQL frontend qualification
-remain explicit gates. No new throughput, hard RSS ceiling or deployment claim
+At the checkpoint-only slice, async cold restoration still required caller-owned
+admission. The shared orchestration below now supplies that admission; original
+GQL frontend qualification remains a separate gate. No new throughput, hard RSS ceiling or deployment claim
 follows from these checks.
+
+** P1/P2: shared async cold-restore reservation and drain
+
+The Backend now provides =prepare_resource_async_controlled= on its borrowed
+Host runtime. It acquires the existing resource reservation before invocation
+and shares resource/shared worker permits with blocking preparation. Queued
+cancellation and deadlines skip the driver. Running work retains its reservation
+through cleanup after caller abandonment; successful output retains that lease
+until its final clone is dropped. Async work does not inflate blocking counters.
+
+The optional GraphAr =restore_combined_graph_content= entry point caps cold
+payload by transfer and reservation bounds before local/remote reads. Its
+=CombinedGraphArRestoreRequest= supplies externally configured providers, the
+MRR-bound query and admitted catalogs. This closes the automatic async admission
+gate from the preceding slice without adding a runtime per provider or moving
+query admission out of MRR. Native capture remains a separately admitted blocking
+phase; cache/provider copies and native scratch require Host headroom.
+
+Backend resource qualification =8 passed= (=0.12s=) includes a held async driver,
+queued cancellation/deadline refusal, and a blocking driver waiting on the same
+worker lane. Native GraphAr qualification =68 passed, 3 ignored= (=0.93s=), with
+its bounded child =1 passed= (=0.05s=), includes zero cache reads on stopped or
+saturated admission, retained final-clone shutdown, abandonment during a real
+async read, cooperative stop, aggregate payload refusal and undersized reservation.
+Strict Backend/GraphAr all-target Clippy and Rust formatting pass. The existing
+five-second inactivity / 120-second test supervision and default Cargo jobs are
+unchanged. Simulation is the acceptance environment; no deployment, hard RSS or
+new A/B performance gain is asserted. Original GQL qualification remains open.
+
+The isolated =backend-graphar-combined= facade passes locked offline compilation
+under the optimized test profile. Documentation validation passes for =21 Org
+documents, 7 Org READMEs=. The MRR pin and all nine Turso =0.8.1= packages remain
+unchanged in this slice.

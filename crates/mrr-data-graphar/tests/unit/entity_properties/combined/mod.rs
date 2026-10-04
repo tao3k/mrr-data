@@ -12,3 +12,6 @@ mod content;
 mod content_store;
 
 mod restore_control;
+
+#[cfg(feature = "backend")]
+mod restore_backend;

@@ -368,3 +368,5 @@ async fn consuming_conversion_transfers_lease_and_refuses_shared_input() {
     assert_eq!(backend.status().resource_bytes, 0);
     backend.shutdown().await.unwrap();
 }
+
+mod async_resources;
