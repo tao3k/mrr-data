@@ -27,12 +27,12 @@ impl SqlQueryLimits {
         Ok(())
     }
 }
-struct EdgeRow {
-    fact_id: String,
-    relation_id: String,
-    generation_id: String,
-    source_entity: String,
-    target_entity: String,
+pub(super) struct EdgeRow {
+    pub(super) fact_id: String,
+    pub(super) relation_id: String,
+    pub(super) generation_id: String,
+    pub(super) source_entity: String,
+    pub(super) target_entity: String,
 }
 fn prepare_rows(
     query: &BoundDataQuery,
@@ -131,7 +131,7 @@ async fn execute_checked(
     checkpoint()?;
     Ok(output)
 }
-async fn finish_transaction<T>(
+pub(super) async fn finish_transaction<T>(
     connection: &turso::Connection,
     result: Result<T, SqlQueryError>,
 ) -> Result<T, SqlQueryError> {
@@ -141,10 +141,6 @@ async fn finish_transaction<T>(
         .map_err(|_| SqlQueryError::Cleanup)?;
     result
 }
-
-#[cfg(test)]
-#[path = "../tests/unit/turso_cleanup.rs"]
-mod cleanup_tests;
 
 /// Inputs owned by a Backend worker while a bounded Turso query runs.
 /// The Host supplies a database and captured, authenticated source. The byte
@@ -247,7 +243,7 @@ fn run_backend_request(
         request.limits,
     ))
 }
-async fn execute_in_transaction(
+pub(super) async fn execute_in_transaction(
     connection: &turso::Connection,
     plan: &TursoSingleHopSql,
     rows: Vec<EdgeRow>,

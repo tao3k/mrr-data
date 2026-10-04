@@ -10,6 +10,10 @@ use mrr_data_core::PhysicalQueryOutput;
 use mrr_data_core::{BoundDataQuery, DataEngineProfile};
 use mrr_data_graphar::BinaryEntityProjection;
 
+#[cfg(all(test, feature = "turso-graphar"))]
+#[path = "../tests/unit/turso_cleanup.rs"]
+mod cleanup_tests;
+
 /// A rejected physical query shape or execution boundary. No variant grants
 /// semantic admission, even if the native statement completed.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

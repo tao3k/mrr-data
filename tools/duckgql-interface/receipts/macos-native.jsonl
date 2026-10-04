@@ -1,0 +1,4 @@
+{"stage": "artifact-identity", "duckdb_version": "v1.5.5", "extension_version": "0.2.0", "duckdb_sha256": "d0610710dd30667aa6c76709299b6822e55dc9199803350aa2e1b06e3346943b", "extension_sha256": "e0ce71f02bd23508cdfc612a330455c1bce853001f9f63846897492662478b30", "fixture_sha256": "22c5e956305867f31b0081396c7b91dee6cf96edb5f08adbe5f2d82b3f21e53f", "schema_sha256": "d460ddbcae6cb095b388b905b1cd97f8858f4f9bdb38527925ea31f38aa822ae"}
+{"stage": "native-program-probe", "program_version": 2, "rows": 3, "elapsed_ms": 1761.081}
+{"stage": "version-refusal", "passed": true}
+{"stage": "labelled-program-parity", "passed": true, "typed_rows": 3, "control_rows": 3}

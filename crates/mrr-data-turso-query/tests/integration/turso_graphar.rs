@@ -1,4 +1,6 @@
 #![cfg(feature = "turso-graphar")]
+#[cfg(feature = "backend-worker")]
+mod backend_lifecycle;
 use std::num::NonZeroUsize;
 #[cfg(feature = "backend-worker")]
 use std::sync::Arc;
@@ -31,12 +33,15 @@ fn entity(name: &str) -> mrr::EntityId {
     mrr::EntityId::from_canonical_bytes(name).unwrap()
 }
 fn fact(id: &str) -> mrr::Fact {
+    fact_with_endpoints(id, "alice", "bob")
+}
+fn fact_with_endpoints(id: &str, source: &str, target: &str) -> mrr::Fact {
     mrr::Fact::new(
         mrr::FactId::from_canonical_bytes(id).unwrap(),
         relation().id(),
         vec![
-            mrr::Value::Entity(entity("alice")),
-            mrr::Value::Entity(entity("bob")),
+            mrr::Value::Entity(entity(source)),
+            mrr::Value::Entity(entity(target)),
         ],
         mrr::RelationContext::new(
             mrr::GenerationId::from_canonical_bytes("generation").unwrap(),
@@ -56,6 +61,23 @@ fn bound_query_with_target(
     generation: &str,
     target_binding: &str,
 ) -> core::BoundDataQuery {
+    bound_query_shape(inventory, generation, target_binding, None).unwrap()
+}
+#[derive(Clone, Copy)]
+enum RefusedShape {
+    Filter,
+    Distinct,
+    Paging,
+    Incoming,
+    VariableLength,
+    EdgeBinding,
+}
+fn bound_query_shape(
+    inventory: &core::GraphDatasetInventory,
+    generation: &str,
+    target_binding: &str,
+    shape: Option<RefusedShape>,
+) -> Result<core::BoundDataQuery, core::DataQueryBindingError> {
     let generation = mrr::GenerationId::from_canonical_bytes(generation).unwrap();
     let snapshot = mrr::SemanticSnapshot::admit(
         generation,
@@ -80,11 +102,19 @@ fn bound_query_with_target(
                 mrr::NodePattern::new(binding("source"), vec![node_type]),
                 vec![mrr::PathSegment::new(
                     mrr::RelationPattern::new(
-                        None,
+                        matches!(shape, Some(RefusedShape::EdgeBinding)).then(|| binding("edge")),
                         vec![relation().id()],
-                        mrr::Direction::Outgoing,
+                        if matches!(shape, Some(RefusedShape::Incoming)) {
+                            mrr::Direction::Incoming
+                        } else {
+                            mrr::Direction::Outgoing
+                        },
                         1,
-                        Some(1),
+                        Some(if matches!(shape, Some(RefusedShape::VariableLength)) {
+                            2
+                        } else {
+                            1
+                        }),
                     )
                     .unwrap(),
                     mrr::NodePattern::new(binding(target_binding), vec![node_type]),
@@ -92,8 +122,20 @@ fn bound_query_with_target(
             )],
         )
         .unwrap(),
-        vec![],
-        mrr::QueryResult::returning(mrr::SetQuantifier::All).with_projections(vec![
+        if matches!(shape, Some(RefusedShape::Filter)) {
+            vec![mrr::Filter::new(
+                op("filter"),
+                mrr::Expression::Literal(mrr::Value::Boolean(true)),
+            )]
+        } else {
+            vec![]
+        },
+        mrr::QueryResult::returning(if matches!(shape, Some(RefusedShape::Distinct)) {
+            mrr::SetQuantifier::Distinct
+        } else {
+            mrr::SetQuantifier::All
+        })
+        .with_projections(vec![
             mrr::Projection::new(
                 op("return-source"),
                 mrr::Expression::Binding(binding("source")),
@@ -104,7 +146,10 @@ fn bound_query_with_target(
                 mrr::Expression::Binding(binding(target_binding)),
                 binding("to"),
             ),
-        ]),
+        ])
+        .with_limit(
+            matches!(shape, Some(RefusedShape::Paging)).then_some(mrr::PageValue::Literal(1)),
+        ),
     )
     .unwrap();
     let entity_schema = mrr::EntitySchema::new(node_type, "Node", vec![]).unwrap();
@@ -148,9 +193,18 @@ fn bound_query_with_target(
         &core::SnapshotBlock::encode(manifest).unwrap(),
         &turso_graphar_engine_profile().unwrap(),
     )
-    .unwrap()
 }
 fn captured() -> (
+    core::BoundDataQuery,
+    graphar::BinaryEntityProjection,
+    graphar::CapturedGraphArSnapshot,
+    core::GraphDatasetInventory,
+) {
+    captured_facts(&[fact("edge-a"), fact("edge-b")])
+}
+fn captured_facts(
+    facts: &[mrr::Fact; 2],
+) -> (
     core::BoundDataQuery,
     graphar::BinaryEntityProjection,
     graphar::CapturedGraphArSnapshot,
@@ -166,10 +220,10 @@ fn captured() -> (
     let receipt = graphar::write_graphar_dataset(
         &source,
         &projection,
-        &[
-            projection.project(&fact("edge-a")).unwrap(),
-            projection.project(&fact("edge-b")).unwrap(),
-        ],
+        &facts
+            .iter()
+            .map(|fact| projection.project(fact).unwrap())
+            .collect::<Vec<_>>(),
     )
     .unwrap();
     let inventory = receipt.inventory().clone();
@@ -189,12 +243,127 @@ fn captured() -> (
     .unwrap();
     (query, projection, captured, inventory)
 }
+#[tokio::test]
+async fn canonical_fact_order_and_all_budgets_are_qualified() {
+    // Input order and endpoint lexical order both disagree with FactId order.
+    let mut facts = [
+        fact_with_endpoints("edge-b", "alice", "bob"),
+        fact_with_endpoints("edge-a", "zoe", "yan"),
+    ];
+    let first = facts.iter().min_by_key(|fact| fact.id()).unwrap();
+    let expected_first = first.values().to_vec();
+    let (query, projection, source, _) = captured_facts(&facts);
+    let dir = tempfile::tempdir().unwrap();
+    let database = turso::Builder::new_local(dir.path().join("ordering.db").to_str().unwrap())
+        .build()
+        .await
+        .unwrap();
+    let output =
+        execute_turso_graphar_single_hop(&database, &query, &source, &projection, limits())
+            .await
+            .unwrap();
+    let expected_node = |value: &mrr::Value| match value {
+        mrr::Value::Entity(id) => mrr::QueryResultValue::node(*id, entity("node")),
+        _ => panic!("fixture has only Entity endpoints"),
+    };
+    assert_eq!(
+        output.rows()[0],
+        expected_first.iter().map(expected_node).collect::<Vec<_>>()
+    );
+    facts.sort_by_key(mrr::Fact::id);
+    let expected = facts
+        .iter()
+        .map(|fact| fact.values().iter().map(expected_node).collect::<Vec<_>>())
+        .collect::<Vec<_>>();
+    assert_eq!(output.rows(), expected);
+    let candidate = core::project_data_query_output(&query, query.engine(), output).unwrap();
+    mrr::admit_query_result_candidate(
+        query.query(),
+        &candidate,
+        mrr::QueryResultLimits::new(NonZeroUsize::new(2).unwrap(), NonZeroUsize::new(4).unwrap()),
+    )
+    .unwrap();
+    for (budget, reason) in [
+        (
+            SqlQueryLimits {
+                max_input_rows: 1,
+                ..limits()
+            },
+            "input rows",
+        ),
+        (
+            SqlQueryLimits {
+                max_input_bytes: 1,
+                ..limits()
+            },
+            "input bytes",
+        ),
+        (
+            SqlQueryLimits {
+                max_output_rows: 1,
+                ..limits()
+            },
+            "output rows or cells",
+        ),
+        (
+            SqlQueryLimits {
+                max_output_cells: 3,
+                ..limits()
+            },
+            "output rows or cells",
+        ),
+        (
+            SqlQueryLimits {
+                max_output_cells: 0,
+                ..limits()
+            },
+            "zero query budget",
+        ),
+    ] {
+        assert!(
+            matches!(execute_turso_graphar_single_hop(&database, &query, &source, &projection, budget).await, Err(SqlQueryError::Limit(actual)) if actual == reason)
+        );
+    }
+    assert_eq!(
+        execute_turso_graphar_single_hop(&database, &query, &source, &projection, limits())
+            .await
+            .unwrap()
+            .rows(),
+        expected
+    );
+}
 fn limits() -> SqlQueryLimits {
     SqlQueryLimits {
         max_input_rows: 2,
         max_input_bytes: 1024,
         max_output_rows: 2,
         max_output_cells: 4,
+    }
+}
+#[test]
+fn unsupported_admitted_shapes_are_refused_without_weaker_queries() {
+    let (_, projection, _, inventory) = captured();
+    for shape in [
+        RefusedShape::Filter,
+        RefusedShape::Distinct,
+        RefusedShape::Paging,
+        RefusedShape::Incoming,
+        RefusedShape::VariableLength,
+        RefusedShape::EdgeBinding,
+    ] {
+        let query = bound_query_shape(&inventory, "generation", "target", Some(shape));
+        if matches!(shape, RefusedShape::VariableLength) {
+            assert!(matches!(
+                query,
+                Err(core::DataQueryBindingError::UnsupportedFeature(_))
+            ));
+            continue;
+        }
+        let query = query.unwrap();
+        assert!(matches!(
+            TursoSingleHopSql::compile(&query, &projection),
+            Err(SqlQueryError::UnsupportedShape(_))
+        ));
     }
 }
 #[tokio::test]
