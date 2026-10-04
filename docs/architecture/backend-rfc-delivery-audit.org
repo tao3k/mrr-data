@@ -571,3 +571,27 @@ completes locked offline compilation; its native executable again reports
 The isolated =backend-graphar-combined= facade passes locked offline compilation
 under the optimized test profile. Elapsed observations are functional receipts,
 not controlled A/B performance gains. All local preparation jobs complete.
+
+** P1/P2: cooperative cold-transfer lifecycle
+
+Cold combined restoration now exposes =restore_combined_graph_checked= with a
+caller-owned typed checkpoint around complete read-through operations and final
+closure verification. Existing restoration delegates to it. The checkpoint is
+runtime-neutral, preserves transfer errors, and checks stops even after failed
+reads. It prevents further block acquisition or returning a complete closure after
+a stop; it does not interrupt an in-flight read-through or remove cached blocks.
+
+The native fixture qualifies refusal before the first remote read and after each
+of all 31 real remote block reads, plus stopped failed reads, preserved remote
+errors, and an uninterrupted complete restore. Native GraphAr qualification is
+=65 passed, 3 ignored= (=0.76s=); the bounded descriptor child separately reports
+=1 passed= (=0.02s=). These are simulated functional receipts with unchanged
+five-second inactivity / 120-second test limits and default Cargo jobs.
+Strict Content/GraphAr all-target Clippy, Rust formatting and the documentation
+checker (=21 Org documents, 7 Org READMEs=) pass.
+
+This transfer primitive does not yet provide automatic shared Backend admission
+for async cold restoration: callers must retain admission across acquisition and
+the returned payload. That orchestration and original GQL frontend qualification
+remain explicit gates. No new throughput, hard RSS ceiling or deployment claim
+follows from these checks.

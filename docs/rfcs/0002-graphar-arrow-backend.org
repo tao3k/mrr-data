@@ -689,3 +689,20 @@ releases partial input and prevents later native phases. Backend shutdown waits
 for that cleanup. Provider/cache storage, decoded metadata and native scratch
 remain separate Host headroom; these payload limits do not enforce a hard RSS
 ceiling. Original-query compilation and result admission remain MRR-owned.
+
+** Cooperative cold restoration
+
+=restore_combined_graph_checked= extends the low-level cold transfer with a
+caller-owned typed checkpoint. Checks run before acquisition, before and after
+snapshot/descriptor/child read-throughs (including failures), and around complete
+closure verification. The existing =restore_combined_graph= delegates to this
+implementation with an always-successful checkpoint; wire formats and admission
+semantics remain unchanged.
+
+Each read-through comprises local lookup, optional remote fetch, CID verification
+and optional cache admission. Checks bracket that entire operation; they do not
+interrupt an in-flight operation or roll back already cached immutable blocks.
+A stopped restore exposes no complete closure. The caller must retain resource
+admission across async acquisition and the returned payload. This checkpoint
+primitive alone does not add an automatic shared Backend async reservation path.
+Original GQL compilation and result admission remain MRR-owned.
