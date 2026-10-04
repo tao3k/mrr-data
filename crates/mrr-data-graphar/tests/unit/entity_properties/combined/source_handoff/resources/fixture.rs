@@ -1,5 +1,5 @@
 //! Each shape shares one immutable payload closure across isolated mode processes.
-use super::super::shaped_fixture;
+use crate::tests::entity_properties::combined::source_handoff::backend::selective::shaped_fixture;
 use crate::tests::entity_properties::{
     acceptance::inputs,
     combined::{

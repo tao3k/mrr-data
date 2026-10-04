@@ -1,6 +1,9 @@
 //! Matched original-source measurements; cold means an empty verified cache.
-use super::super::{RESERVED, compile, execution_transport};
 use super::{authority, executor, metadata, restore};
+use crate::tests::entity_properties::combined::source_handoff::{
+    backend::{RESERVED, execution_transport},
+    compile,
+};
 use crate::tests::entity_properties::{
     combined::{
         fixture::{Fixture, capture_limits},
