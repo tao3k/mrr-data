@@ -1,9 +1,10 @@
 ;;; SPDX-FileCopyrightText: 2026 tao3k team and Contributors
 ;;; SPDX-License-Identifier: LGPL-2.1-or-later
-(backend-native-scheme-v2-merged-qualification
+(backend-native-scheme-merged-qualification
+  (schema (metadata-format-version 2))
   (source-base "facd22fcd6744cf28ca2662e94596103b5510a92")
   (original-qualified-commit "9db8c41eed07513808e4ce1278a01b4b33e52334")
-  (original-receipt "evidence/qualifications/backend-scheme-v2.ss")
+  (original-receipt "evidence/qualifications/backend-scheme.ss")
   (merged-remote-head "e9811693f2eab83903b102d7660f321e164dcc38")
   (mrr-pin "d137b6d536136982ad0c6d2f0d1bc30c19159899")
   (gerbil-scheme-rust-pin "5f4ca683e3635b89fa791233147e272699b72321")

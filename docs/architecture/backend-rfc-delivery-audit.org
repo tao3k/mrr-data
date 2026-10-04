@@ -1740,7 +1740,7 @@ each shape and zero final reservations. Python collected the successful Rust
 records. The clean collection checkout was
 =65dc8f8a0e18fc5a15c72360d9bba1b550f4081e=; its compiled Rust source is unchanged
 by the intervening documentation commit. The retained receipt is
-[[file:../../evidence/original-source/original-source-d137-macos.jsonl][the macOS original-source resource envelope]].
+[[file:../../evidence/original-source/original-source-before-backend-integration-macos.jsonl][the macOS original-source resource envelope]].
 Its executable SHA-256 is
 =089c9d10920272686f27fc4f958b8de7a62dff21aa813a87258886f83db9034f=;
 successful Cargo artifact collection SHA-256 is
@@ -1795,7 +1795,7 @@ The matrix also passed in =38.65s= while incremental lint overlapped; this run
 is retained locally as correctness evidence only. A subsequent standalone
 matrix passed in =29.66s= with all eight modes and unchanged supervision.
 
-[[file:../../evidence/original-source/original-source-d137-scheme-v2-macos.jsonl][The standalone merged-source envelope]]
+[[file:../../evidence/original-source/original-source-macos.jsonl][The standalone merged-source envelope]]
 records that clean collection head, executable SHA-256
 =1256f8e893be4caa6bd405216f7c6393bfd1054fd61d36d466279e5f1d49d9e4= and Cargo
 artifact SHA-256 =130ee0cd44cb897e31f0872c31b1b896997006de7ae5a1284f730ba26273c55c=.
@@ -1809,4 +1809,6 @@ which failed the existing Org-only documentation gate. Moving the unchanged
 original receipt and the merged receipt into =evidence/qualifications=, updating
 their references, restores the =21= Org document / =7= README check. The merged
 receipt's original-receipt path changes; its historical source hashes remain
-historical inputs. This path repair changes no backend runtime source.
+historical inputs. Receipt filenames and root symbols omit format versions;
+the qualification schema declares =metadata-format-version= separately.
+This path and schema-label repair changes no backend runtime source.

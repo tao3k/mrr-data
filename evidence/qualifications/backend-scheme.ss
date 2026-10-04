@@ -1,6 +1,7 @@
 ;;; SPDX-FileCopyrightText: 2026 tao3k team and Contributors
 ;;; SPDX-License-Identifier: LGPL-2.1-or-later
-(backend-native-scheme-v2-qualification
+(backend-native-scheme-qualification
+  (schema (metadata-format-version 2))
   (source-base "dd3bff986b2b76c4ea6b4289fd2aff0867d66583")
   (mrr-pin "685459849876f84addc0a8bad40de4c00caede7d")
   (status local-native-qualified)
