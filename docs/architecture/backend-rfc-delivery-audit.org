@@ -7,9 +7,10 @@
 This section is the current delivery plan. Later dated receipts describe their
 original slices and do not independently define current completion. The initial
 audit used PR #12 at =aacc25511367391262f4639e5485701406089b21=. The consolidated
-source/dispatch composition is published at
-=f949c4f5bdbceb93e590ec7408912c2dd66e55cc=. Its local qualification is recorded
-below. Platform results must refer to that exact head; earlier-head green checks
+source/dispatch composition was first published at
+=f949c4f5bdbceb93e590ec7408912c2dd66e55cc=. The current frozen platform baseline
+is =56b7057ab3ba15b73123da74e5ce326a36844e8a=. Local qualification is recorded
+below. Platform results must refer to their exact head; earlier-head green checks
 do not establish all-platform closure.
 
 ** Overall assessment
@@ -147,6 +148,45 @@ temporarily unavailable= before tests start; they are not semantic test results.
 The later successful checks are recorded separately. The earlier Turso =5= and
 DuckDB =6= dispatch receipts cover unchanged lifecycle code and binaries; they
 do not requalify the modified source fixtures or the new platform head.
+
+** Retained original-source reuse: native acceptance remains open
+
+The canonical simulated Healthcare caller now retains one immutable native
+GraphAr capture across successive MRR-owned original-query executions. Every
+execution binds the original compilation again, checks the same expected rows
+(including duplicates/null), refuses insufficient result-admission limits and
+exports a newly admitted transport. The retained capture rejects a substituted
+physical snapshot even when its projection descriptor is unchanged. Each result
+adds its own shared Backend reservation; dropping it leaves the source reservation
+alive. No global cache or stored authorization decision is introduced.
+
+After simulated policy retirement, the same physical source can still produce
+an internal admitted result, but a fresh disclosure check refuses access. Source
+and refused consumer release their reservations before the previously accepted
+consumer's final-clone drain. These assertions cover immutable physical source
+reuse and fresh admission/disclosure; separate catalog/generation/schema refusal
+tests remain necessary. This is not cross-profile query equivalence or M3
+performance qualification.
+
+The modified caller passes strict all-target, test-profile Clippy for the five
+selected crates with =source-handoff,backend,selective-graphar= enabled. Python
+passes =33 tests= locally; strict Ruff and formatting pass. Two local native
+executable builds fail the unchanged =30s= inactivity policy before successful
+=build-finished= records: the first has no compiler-event wrapper, and the second
+uses the existing real LLVM-event wrapper. Neither starts a test; neither is
+reported as a runtime pass. Native acceptance of the expanded caller remains open.
+
+Frozen [[https://github.com/tao3k/mrr-data/actions/runs/37202100315][CI run 37202100315]] at =56b7057a= has one completed Python failure and
+one Arrow-fuzz success as of =2026-10-04 12:34 UTC=; the other jobs are pending.
+The Python failure is the plain Rust compiler fixture exceeding its existing
+=10s= deadline (=32 passed, 1 failed=). This job did not explicitly prepare a
+Rust toolchain. It now declares the same stable-toolchain action as the other
+Rust qualification jobs, before executing tests. The log does not establish
+whether rustup startup, compilation or runner contention caused the timeout;
+the prerequisite repair needs a new exact-head platform result. All test and
+build limits, compiler optimization and Cargo default concurrency are unchanged.
+Keep the frozen run available while this batch is qualified locally; do not
+replace its pending results with an earlier green head.
 
 ** Concurrent compiler and native engine qualification at c54acd27 (historical)
 

@@ -274,7 +274,7 @@ pub(super) fn relation_tables(
         .collect::<Vec<_>>()
 }
 
-fn alternate_root(f: &Fixture) -> mrr_data_core::BoundDataQuery {
+pub(super) fn alternate_root(f: &Fixture) -> mrr_data_core::BoundDataQuery {
     use mrr_data_core::{
         CoverageDescriptor, CoverageKind, SnapshotBlock, SnapshotManifest, SnapshotManifestRequest,
         bind_data_query, raw_cid,
