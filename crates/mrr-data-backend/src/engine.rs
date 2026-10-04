@@ -104,6 +104,34 @@ impl Backend {
             .map_err(|_| ResourcePreparationError::Backend(BackendError::WorkerLost))?
             .map_err(ResourcePreparationError::Preparation)
     }
+    /// Prepare retained output with cooperative stop checkpoints.
+    /// Dropping the waiter signals cancellation. Running driver work owns its
+    /// lease through cleanup. The driver must check control between native calls;
+    /// no deadline timer or forced native interruption is created here.
+    /// # Errors
+    /// Returns typed stops/refusals or shared Backend admission/worker failures.
+    pub async fn prepare_resource_controlled<T, E>(
+        &self,
+        reserved_bytes: usize,
+        control: crate::ResourceControl,
+        prepare: impl FnOnce(&crate::ResourceControl) -> Result<T, E> + Send + 'static,
+    ) -> Result<crate::ResourceHandle<T>, crate::ResourcePreparationError<E>>
+    where
+        T: Send + Sync + 'static,
+        E: From<crate::ResourceStop> + Send + 'static,
+    {
+        let mut cancellation = crate::control::CancelOnDrop::new(control.clone());
+        let result = self
+            .prepare_resource_fallible(reserved_bytes, move || {
+                control.check().map_err(E::from)?;
+                let value = prepare(&control)?;
+                control.check().map_err(E::from)?;
+                Ok(value)
+            })
+            .await;
+        cancellation.disarm();
+        result
+    }
     /// Run one physical operation on the bounded resource worker lane and
     /// return its owned result. The reservation covers the worker, not the
     /// returned value; the Host must bound result size before returning it.

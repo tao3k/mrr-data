@@ -1,4 +1,4 @@
-#+title: RFC 0003: DuckGQL execution and portable SQL adapters in MRR Data
+#+title: RFC 0003: GraphAr graph foundation and optional execution adapters
 #+options: toc:2
 
 * Status
@@ -20,9 +20,9 @@ snapshot-drift refusal and MRR admission. The follow-on
 =execute_turso_graphar_on_backend= entrypoint uses
 =Backend::run_resource= on its shared bounded blocking worker and the
 Host-supplied runtime. Queued cancellation skips work; running cancellation
-retains the lease until execution and rollback finish. Native interrupt,
-deadline, additional shapes, other SQL dialects and the DuckGQL typed bridge
-remain open. The retained-output entrypoint
+retains the lease until execution and rollback finish. Native interrupt, hard
+native-call deadlines, additional shapes, other SQL dialects and the DuckGQL
+typed bridge remain open. The retained-output entrypoint
 =execute_turso_graphar_retained_on_backend= uses shared
 =prepare_resource_fallible= admission and returns a =ResourceHandle= rather
 than releasing its reservation when execution ends. Typed driver refusals
@@ -31,6 +31,21 @@ This status records implemented interfaces, not a claim that all acceptance
 gates or current-head CI have passed.
 The dedicated Turso connection has a 250 ms busy timeout; this only bounds
 lock contention and is not a query execution deadline.
+
+* GraphAr strategic role
+
+GraphAr is the provider-independent graph physical-data foundation for
+Production graph workloads: vertices, edges, adjacency/offset chunks, property
+groups and metadata. Native Turso and DuckDB provide optional transactions and
+relational/columnar execution. Their SQL tables are derived execution images;
+this design assigns neither provider a built-in graph model or graph authority.
+DuckGQL is a separately qualified extension capability. GraphAr's position is
+independent of that extension and of database-query benchmark results.
+
+[[file:../architecture/0001-mrr-data-plane.org][The canonical data-plane ownership table]] fixes MRR semantics/admission,
+GraphAr graph representation, Arrow interchange and shared Backend lifecycle.
+Native GraphAr packaging remains opt-in; current binary-Entity qualification
+does not establish arbitrary property layouts or selective graph scanning.
 
 * Decision and ownership
 
@@ -45,7 +60,8 @@ unsupported shape is refused, never rewritten as a weaker "compatible" query.
 MRR's catalog binder then admits the IR. The physical adapters consume that
 admitted contract without inspecting source-language spelling.
 
-- The *DuckDB path uses DuckGQL* for graph planning and execution. MRR Data
+- The optional *DuckGQL extension path on DuckDB* supplies graph operators.
+  Native DuckDB supplies relational/columnar execution, not this extension capability. MRR Data
   does not generate DuckDB SQL for graph patterns or duplicate DuckGQL's
   lowering/CSR algorithms. It provides authenticated graph registration,
   a typed bridge from MRR's admitted query, bounded execution and result
@@ -58,16 +74,16 @@ admitted contract without inspecting source-language spelling.
   physical identity mapping, Backend lifecycle and final MRR result admission.
   They do not need to share an implementation of graph lowering.
 
-There is no MRR Data-owned DuckDB graph compiler or executor in the baseline.
-GraphAr's presence alone does not justify maintaining one. A direct GraphAr
-query path is considered only after a matched comparison demonstrates a
-material advantage over DuckGQL for an admitted workload and preserves the
-same source, semantics and receipt. Even then, prefer a narrow GraphAr scan or
-operator capability over a second general DuckDB SQL compiler.
+GraphAr is the common graph foundation independent of either execution path.
+The optional DuckGQL bridge and Turso SQL emitter consume derived, verified
+images of that foundation. There is no MRR Data-owned general DuckDB graph
+compiler in the baseline. A new engine-specific planner requires independent
+semantic/resource evidence; GraphAr storage and selective access do not require
+DuckGQL adoption or comparative authorization.
 
-The existing [[file:../architecture/0001-mrr-data-plane.org][data-plane RFC]] leaves SQL to a downstream package.
-Acceptance of this RFC narrows that decision for optional query adapters in
-this repository. =mrr-data-core=, =mrr-data-graphar=, the generic
+The [[file:../architecture/0001-mrr-data-plane.org][data-plane RFC]] keeps SQL out of the core physical descriptor.
+Optional query adapters in this repository consume that descriptor through
+explicit feature boundaries. =mrr-data-core=, =mrr-data-graphar=, the generic
 =mrr-data-backend= transaction engine and default facade features remain
 provider-neutral. The architecture document records the delivered optional Turso slice.
 The shared Backend still exposes no generic SQL entrypoint.
@@ -81,7 +97,7 @@ GQL/Cypher --MRR parser/catalog--> CatalogBoundQuery
               |                                |
               v                                v
      DuckGQL plugin bridge             MRR Data Rust SQL plan
-     (DuckDB graph engine)             -> Turso SQL emitter
+     (optional graph extension on DuckDB)             -> Turso SQL emitter
               |                         -> later SQL dialects
               +--------------+-----------------+
                              v
@@ -205,10 +221,11 @@ that path through a suitable graph-table registration; Turso could load only
 needed relations. Neither outcome follows from the current capture API. No
 zero-copy, pushdown or bounded native-RSS claim follows from Arrow import alone.
 
-** Decision gate for a custom DuckDB path
+** Decision gate for additional execution optimizations
 
-The baseline is DuckGQL over authenticated, read-only DuckDB graph tables.
-Compare it with a proposed GraphAr-native scan on the *same* published binding,
+GraphAr remains the graph source in every comparison. Once a qualified DuckGQL
+bridge is available, compare its derived-table execution with selective
+GraphAr-backed operators on the *same* published binding,
 generation, catalog, fact set, query corpus and result order. Include plugin
 graph registration and CSR build/invalidation, GraphAr capture/verification,
 Arrow conversion, warm and cold execution, native peak RSS, retained bytes,
@@ -218,12 +235,13 @@ queries; measure simple scans too, where extra GraphAr conversion may lose.
 
 The existing 10k prepared-GraphAr scenario measures reuse of already decoded
 facts. It is not a DuckGQL comparison and cannot authorize a second executor.
-Proceed only when a fixed workload shows a meaningful, repeatable advantage
+Adopt an additional engine-specific planner only when a fixed workload shows
+a meaningful, repeatable advantage
 after all setup and copy costs, exact typed results and MRR receipts match, and
-the required native resource/error contract is qualified. Otherwise keep
-DuckGQL as the sole DuckDB graph executor. If the advantage is confined to
-loading or selective I/O, expose only that source adapter to the plugin rather
-than maintaining another graph planner.
+the required native resource/error contract is qualified. The comparison governs optional execution complexity. It does not gate GraphAr
+persistence, the portable graph contract or provider-independent selective
+access. If the advantage is confined to loading or selective I/O, expose that
+source capability to qualified engines without introducing another planner.
 
 | Reuse layer | Available in PR #12 | New graph-query gate |
 |-------------+---------------------+----------------------|
@@ -238,8 +256,9 @@ than maintaining another graph planner.
 Shared worker admission is implemented by =execute_turso_graphar_on_backend=
 and =Backend::run_resource=. Retained output uses
 =execute_turso_graphar_retained_on_backend= and
-=Backend::prepare_resource_fallible=. Native interrupt/deadline and driver
-cleanup fault injection remain implementation gates. The standalone
+=Backend::prepare_resource_fallible=. Cooperative stop checkpoints use
+=ResourceControl= and =Backend::prepare_resource_controlled=. Native interrupt, hard in-flight-call
+timeouts and process-crash cleanup remain implementation gates. The standalone
 =execute_turso_graphar_single_hop= entrypoint does not enforce Backend admission.
 
 ** One scheduler and one Host runtime
@@ -275,11 +294,12 @@ Host-estimated native state and bounded output. Existing row/cell/string-byte
 limits are application bounds; they do not measure native allocator RSS.
 
 The admitted request has queued, running and cleanup phases. Cancellation before
-execution releases the reservation without opening a connection. The current
-running worker completes even if its caller is dropped. The next
-interrupt-capable path must signal the driver on running cancellation and
-retain its lease until the driver stops
-and cleanup completes. A deadline enters the same cancellation path; it cannot
+execution releases the reservation without opening a connection. The controlled path signals a sticky stop when its waiter is dropped, or
+accepts an explicit Host cancellation/monotonic deadline. The adapter checks
+that control during row conversion and between native load/fetch calls.
+In-flight native calls still finish; rollback and connection teardown complete
+before worker admission is returned. A future native interrupt path must
+preserve these same cleanup and accounting rules. A cooperative deadline refuses at the next checkpoint; it cannot
 release admission while a native operation still owns physical resources.
 Driver failure, source drift, malformed output and cleanup failure are terminal
 refusals. No partial output becomes a successful physical result.
@@ -287,9 +307,15 @@ refusals. No partial output becomes a successful physical result.
 Turso owns one invocation connection and its temporary transaction. Successful
 completion requires rollback before returning output. Cancellation and errors
 must close the cursor/transaction/connection in driver order; dropping the
-future alone is not evidence of completed native cleanup. A cleanup failure
-must not publish a success result. Native connection isolation and cancellation
-behavior need executable receipts under the pinned SDK.
+future alone is not evidence of completed native cleanup. A cleanup failure produces =SqlQueryError::Cleanup= and overrides successful
+output or an earlier cancellation/deadline refusal. The native transaction
+fixture proves rollback removes temporary input and verifies cleanup failure
+using an actual ROLLBACK with no active transaction.
+The safe Rust =Connection= API in pinned Turso =0.8.1= does not expose native
+interrupt (published source revision
+=8549c16595d2faf1bdd6ee24aee0be8bfabb3d4a=, =bindings/rust/src/connection.rs=).
+These checkpoints therefore qualify cooperative stopping, not a hard execution
+time bound. The 250 ms busy timeout only limits lock contention.
 
 The current =run_resource= path releases its lease before returning the owned
 physical output. It therefore budgets execution but does not account for output
@@ -318,6 +344,13 @@ worker accounting finishes while retained byte/count admission remains active;
 a second resource is refused at saturation; shutdown waits for the final clone.
 The fixture qualifies a bounded two-edge result, not native interruption,
 process-crash cleanup, general query shapes or measured RSS.
+
+The controlled integration fixture refuses pre-cancelled and expired-deadline
+requests with no output handle and no remaining resource charge. The portable
+worker fixture aborts a running waiter and proves cancellation is signalled
+while admission stays charged until cleanup completes. Interruption inside a
+long-running native call and deterministic cancellation during a large native
+load/fetch remain separate qualification gates.
 
 ** Remaining and extended integration receipts
 

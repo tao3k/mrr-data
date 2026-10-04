@@ -25,6 +25,21 @@ Cedar pin. Production does not depend on an Example. MRR owns semantic admission
 MRR Data owns physical execution; the Host/POO Flow owns the runtime and semantic
 enrollment. Profile/schema changes must preserve canonical coordination homes.
 
+* GraphAr strategic role
+
+GraphAr is the provider-independent graph physical-data foundation for
+Production graph workloads: vertices, edges, adjacency/offset chunks, property
+groups and metadata. Native Turso and DuckDB provide optional transactions and
+relational/columnar execution. Their SQL tables are derived execution images;
+this design assigns neither provider a built-in graph model or graph authority.
+DuckGQL is a separately qualified extension capability. GraphAr's position is
+independent of that extension and of database-query benchmark results.
+
+[[file:0001-mrr-data-plane.org][The canonical data-plane ownership table]] fixes MRR semantics/admission,
+GraphAr graph representation, Arrow interchange and shared Backend lifecycle.
+Native GraphAr packaging remains opt-in; current binary-Entity qualification
+does not establish arbitrary property layouts or selective graph scanning.
+
 * Common engine and lifecycle
 
 - Explicit async open borrows a Tokio Handle. The provider finishes opening before
@@ -385,12 +400,15 @@ registers its interrupt before execution and owns engine memory/cache/spill.
 Internal materialization for some statements and full semantic type mapping
 remain separate qualifications; streaming output does not establish bounded RSS.
 
-The opt-in [[file:../../crates/mrr-data-turso-query/src/turso_graphar.rs][Turso GraphAr adapter]] uses =run_resource= for its row output. It checks an exact
+The opt-in [[file:../../crates/mrr-data-turso-query/src/turso_graphar.rs][Turso GraphAr adapter]] offers an owned-result =run_resource= path and
+a retained-result =prepare_resource_controlled= path. It checks an exact
 =BoundDataQuery=, captured GraphAr scope, input/output limits and fixed SQL
 identifiers; the Host supplies the Turso database, runtime and native-work byte
 reservation. The worker finishes or rolls back the temporary table before it
-returns =PhysicalQueryOutput=. This path has no native interrupt/deadline yet;
-final semantic admission remains with MRR.
+returns physical output. Retained output holds its Backend reservation through
+the final handle clone. Cooperative control checks cancellation/deadlines
+between native operations; native interrupt and hard in-flight-call deadlines
+remain open. Final semantic admission remains with MRR.
 
 [[file:../../crates/mrr-data-backend/tests/integration/arrow_query.rs][Query tests]] cover successful terminal output, late failure, panic, sticky schema
 refusal, retained final clones, row/buffer refusal, pre-fetch byte backpressure,
@@ -439,6 +457,8 @@ The optional Turso query adapter exposes
 participate in drain. Its reservation is a Host estimate including conversion
 scratch space, not native RSS. Keep the output handle through MRR projection
 and admission. An exported owned clone requires separate Host accounting.
-The existing owned-result entrypoint budgets execution only. Both paths still
-finish running work after caller cancellation; native interrupt/deadline are
-separate RFC 0003 gates.
+The existing owned-result entrypoint budgets execution only. The retained path now uses cooperative control: waiter cancellation signals a
+stop, and row/load/fetch checkpoints observe it. Cleanup still owns the lease.
+An explicit =ResourceControl= accepts a monotonic deadline through
+=execute_turso_graphar_controlled_on_backend=. Native interrupt and hard
+in-flight-call deadlines remain separate RFC 0003 gates.

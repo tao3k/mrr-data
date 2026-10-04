@@ -39,6 +39,7 @@ fn prepare_rows(
     source: &CapturedGraphArSnapshot,
     projection: &BinaryEntityProjection,
     limits: SqlQueryLimits,
+    checkpoint: &impl Fn() -> Result<(), SqlQueryError>,
 ) -> Result<Vec<EdgeRow>, SqlQueryError> {
     limits.check()?;
     if source.binding().relation() != projection.relation_id() {
@@ -54,6 +55,7 @@ fn prepare_rows(
     let mut rows = Vec::with_capacity(facts.len());
     let mut previous: Option<FactId> = None;
     for fact in facts {
+        checkpoint()?;
         let edge = projection
             .project(fact)
             .map_err(|_| SqlQueryError::SourceMismatch)?;
@@ -102,8 +104,20 @@ pub async fn execute_turso_graphar_single_hop(
     projection: &BinaryEntityProjection,
     limits: SqlQueryLimits,
 ) -> Result<PhysicalQueryOutput, SqlQueryError> {
+    execute_checked(database, query, source, projection, limits, &|| Ok(())).await
+}
+async fn execute_checked(
+    database: &turso::Database,
+    query: &BoundDataQuery,
+    source: &CapturedGraphArSnapshot,
+    projection: &BinaryEntityProjection,
+    limits: SqlQueryLimits,
+    checkpoint: &impl Fn() -> Result<(), SqlQueryError>,
+) -> Result<PhysicalQueryOutput, SqlQueryError> {
+    checkpoint()?;
     let plan = TursoSingleHopSql::compile(query, projection)?;
-    let rows = prepare_rows(query, source, projection, limits)?;
+    let rows = prepare_rows(query, source, projection, limits, checkpoint)?;
+    checkpoint()?;
     let connection = database.connect().map_err(|_| SqlQueryError::Native)?;
     connection
         .busy_timeout(Duration::from_millis(250))
@@ -112,13 +126,26 @@ pub async fn execute_turso_graphar_single_hop(
         .execute("BEGIN", ())
         .await
         .map_err(|_| SqlQueryError::Native)?;
-    let result = execute_in_transaction(&connection, &plan, rows, limits).await;
-    let rollback = connection.execute("ROLLBACK", ()).await;
-    if rollback.is_err() {
-        return Err(SqlQueryError::Native);
-    }
+    let result = execute_in_transaction(&connection, &plan, rows, limits, checkpoint).await;
+    let output = finish_transaction(&connection, result).await?;
+    checkpoint()?;
+    Ok(output)
+}
+async fn finish_transaction<T>(
+    connection: &turso::Connection,
+    result: Result<T, SqlQueryError>,
+) -> Result<T, SqlQueryError> {
+    connection
+        .execute("ROLLBACK", ())
+        .await
+        .map_err(|_| SqlQueryError::Cleanup)?;
     result
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/turso_cleanup.rs"]
+mod cleanup_tests;
+
 /// Inputs owned by a Backend worker while a bounded Turso query runs.
 /// The Host supplies a database and captured, authenticated source. The byte
 /// reservation is a Host estimate of native work, not a measured RSS ceiling.
@@ -157,7 +184,8 @@ pub async fn execute_turso_graphar_on_backend(
 /// The Host reservation includes input/native state, output and conversion
 /// scratch space. Keep the returned handle through MRR projection/admission;
 /// output clones must not escape that reservation without separate Host accounting.
-/// Native cancellation/deadline are not implemented by this entrypoint.
+/// Waiter cancellation is observed cooperatively at driver checkpoints.
+/// Native interrupt and hard in-flight-call deadlines remain unimplemented.
 /// # Errors
 /// Refuses admission, unsupported query/source, driver failure or lost worker.
 #[cfg(feature = "backend-worker")]
@@ -166,10 +194,39 @@ pub async fn execute_turso_graphar_retained_on_backend(
     runtime: tokio::runtime::Handle,
     request: TursoBackendQuery,
 ) -> Result<mrr_data_backend::ResourceHandle<PhysicalQueryOutput>, SqlQueryError> {
+    execute_turso_graphar_controlled_on_backend(
+        backend,
+        runtime,
+        request,
+        mrr_data_backend::ResourceControl::default(),
+    )
+    .await
+}
+
+/// Retain results with explicit cooperative cancellation and monotonic deadline.
+/// Stops are observed before/after native calls and while converting/loading rows.
+/// Cleanup completes before the worker releases admission. This does not impose
+/// a hard native-call timeout or provide Turso native interrupt.
+/// # Errors
+/// Returns sticky stops, driver/cleanup refusals or Backend admission failure.
+#[cfg(feature = "backend-worker")]
+pub async fn execute_turso_graphar_controlled_on_backend(
+    backend: &mrr_data_backend::Backend,
+    runtime: tokio::runtime::Handle,
+    request: TursoBackendQuery,
+    control: mrr_data_backend::ResourceControl,
+) -> Result<mrr_data_backend::ResourceHandle<PhysicalQueryOutput>, SqlQueryError> {
     use mrr_data_backend::ResourcePreparationError;
     backend
-        .prepare_resource_fallible(request.reserved_bytes, move || {
-            run_backend_request(&runtime, &request)
+        .prepare_resource_controlled(request.reserved_bytes, control, move |control| {
+            runtime.block_on(execute_checked(
+                &request.database,
+                &request.query,
+                &request.source,
+                &request.projection,
+                request.limits,
+                &|| control.check().map_err(SqlQueryError::from),
+            ))
         })
         .await
         .map_err(|error| match error {
@@ -195,7 +252,9 @@ async fn execute_in_transaction(
     plan: &TursoSingleHopSql,
     rows: Vec<EdgeRow>,
     limits: SqlQueryLimits,
+    checkpoint: &impl Fn() -> Result<(), SqlQueryError>,
 ) -> Result<PhysicalQueryOutput, SqlQueryError> {
+    checkpoint()?;
     connection
         .execute(
             "CREATE TEMP TABLE mrr_query_edges (fact_id TEXT PRIMARY KEY NOT NULL, relation_id TEXT NOT NULL, generation_id TEXT NOT NULL, source_entity TEXT NOT NULL, target_entity TEXT NOT NULL)",
@@ -204,6 +263,7 @@ async fn execute_in_transaction(
         .await
         .map_err(|_| SqlQueryError::Native)?;
     for row in rows {
+        checkpoint()?;
         connection
             .execute(
                 "INSERT INTO mrr_query_edges (fact_id, relation_id, generation_id, source_entity, target_entity) VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -218,6 +278,7 @@ async fn execute_in_transaction(
             .await
             .map_err(|_| SqlQueryError::Native)?;
     }
+    checkpoint()?;
     let [relation, generation] = plan.bindings();
     let mut cursor = connection
         .query(
@@ -230,7 +291,12 @@ async fn execute_in_transaction(
         .await
         .map_err(|_| SqlQueryError::Native)?;
     let mut output: Vec<Vec<QueryResultValue>> = Vec::new();
-    while let Some(row) = cursor.next().await.map_err(|_| SqlQueryError::Native)? {
+    loop {
+        checkpoint()?;
+        let Some(row) = cursor.next().await.map_err(|_| SqlQueryError::Native)? else {
+            break;
+        };
+        checkpoint()?;
         if output.len() >= limits.max_output_rows
             || output
                 .len()

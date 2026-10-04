@@ -19,6 +19,9 @@ pub enum SqlQueryError {
     UnsupportedShape(&'static str),
     Limit(&'static str),
     Native,
+    Cleanup,
+    Cancelled,
+    Deadline,
     CorruptOutput,
     #[cfg(feature = "backend-worker")]
     Backend(mrr_data_backend::BackendError),
@@ -29,6 +32,16 @@ impl std::fmt::Display for SqlQueryError {
     }
 }
 impl std::error::Error for SqlQueryError {}
+
+#[cfg(feature = "backend-worker")]
+impl From<mrr_data_backend::ResourceStop> for SqlQueryError {
+    fn from(stop: mrr_data_backend::ResourceStop) -> Self {
+        match stop {
+            mrr_data_backend::ResourceStop::Cancelled => Self::Cancelled,
+            mrr_data_backend::ResourceStop::Deadline => Self::Deadline,
+        }
+    }
+}
 
 /// Exact physical profile for the qualified Turso binary-Entity slice.
 /// # Errors

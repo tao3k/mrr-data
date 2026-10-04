@@ -223,7 +223,7 @@ jobs:
           cargo check -p mrr-data --no-default-features --features backend-graphar --locked
       - name: Qualify Turso query over captured GraphAr
         run: |
-          cargo test -p mrr-data-turso-query --features backend-worker --test turso_graphar --locked
+          cargo test -p mrr-data-turso-query --features backend-worker --locked
           cargo check -p mrr-data --no-default-features --features backend-turso-query --locked
           cargo clippy -p mrr-data-turso-query --all-targets --features backend-worker --locked -- -D warnings
       - name: Qualify native graph publication, cold restore and final MRR admission

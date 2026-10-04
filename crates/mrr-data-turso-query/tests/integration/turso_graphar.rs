@@ -422,3 +422,53 @@ async fn qualify_retained_output(
         .unwrap();
     assert_eq!(backend.status().resource_bytes, 0);
 }
+
+#[cfg(feature = "backend-worker")]
+#[tokio::test]
+async fn controlled_turso_stops_publish_no_output_and_release_budget() {
+    use mrr_data_backend::{Backend, BackendConfig, ResourceControl, providers::TursoProvider};
+    use mrr_data_turso_query::execute_turso_graphar_controlled_on_backend;
+    let (query, projection, source, _) = captured();
+    let dir = tempfile::tempdir().unwrap();
+    let runtime = tokio::runtime::Handle::current();
+    let backend = Backend::open(
+        BackendConfig::default(),
+        TursoProvider::new(dir.path().join("control-metadata.db"), runtime.clone()),
+        runtime.clone(),
+    )
+    .await
+    .unwrap();
+    let database = Arc::new(
+        turso::Builder::new_local(dir.path().join("control-query.db").to_str().unwrap())
+            .build()
+            .await
+            .unwrap(),
+    );
+    let source = Arc::new(source);
+    let cancelled = ResourceControl::default();
+    cancelled.cancel();
+    let expired = ResourceControl::new(Some(std::time::Instant::now()));
+    for (control, expected) in [
+        (cancelled, SqlQueryError::Cancelled),
+        (expired, SqlQueryError::Deadline),
+    ] {
+        let result = execute_turso_graphar_controlled_on_backend(
+            &backend,
+            runtime.clone(),
+            TursoBackendQuery {
+                database: database.clone(),
+                query: query.clone(),
+                source: source.clone(),
+                projection: projection.clone(),
+                limits: limits(),
+                reserved_bytes: 2048,
+            },
+            control,
+        )
+        .await;
+        assert!(matches!(result, Err(error) if error == expected));
+        assert_eq!(backend.status().active_resources, 0);
+        assert_eq!(backend.status().resource_bytes, 0);
+    }
+    backend.shutdown().await.unwrap();
+}

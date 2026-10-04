@@ -3,6 +3,8 @@
 #![forbid(unsafe_code)]
 mod authority;
 mod config;
+mod control;
+pub use control::{ResourceControl, ResourceStop};
 mod dispatch;
 mod engine;
 pub mod providers;

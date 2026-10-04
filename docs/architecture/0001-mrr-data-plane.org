@@ -53,6 +53,41 @@ flowchart LR
 second source of truth.  It must not redefine MRR types and MRR must not import
 Arrow, GraphAr, IPLD, CAR, or storage-provider types.
 
+* GraphAr strategic role
+
+GraphAr is the graph physical-data foundation for Production graph workloads.
+Native Turso and DuckDB are optional relational/transactional execution engines;
+this architecture assigns neither a built-in graph model, graph persistence
+contract nor graph-query semantic authority to either provider. A relational
+edge table is a derived execution image, not a replacement graph data plane.
+
+| Layer | Architectural responsibility |
+|-------+------------------------------|
+| MRR | Admitted Entity/Relation/Fact identities, catalog, generations, graph-query semantics and result admission |
+| GraphAr | Provider-independent physical graph representation: vertices, edges, adjacency/offset chunks, property groups and metadata |
+| Arrow | Typed in-memory exchange, checked batches and engine interchange |
+| Shared Backend | One Host-owned lifecycle, publication/recovery, admission, leases, cancellation and drain across Profiles/Cases |
+| Turso/DuckDB | Optional metadata transactions and bounded native relational/columnar execution over derived images |
+| DuckGQL | Optional external graph-query operators on DuckDB; separately qualified extension capability |
+
+GraphAr's vertex/edge chunks, property groups and ordered adjacency follow the
+[[https://graphar.apache.org/docs/specification/format/][Apache GraphAr format]]. Ordered source/destination adjacency supports CSR/CSC
+physical views; those local indices never replace canonical MRR identities.
+The complete published graph inventory and its snapshot/root/generation/catalog
+binding govern verification, cold restoration and cache reuse across providers.
+Changing a database provider rebuilds its tables/indexes from the same verified
+graph source; it must not redefine or migrate the authoritative graph contract
+into engine-specific SQL schemas or plugin-local CSR identifiers.
+
+The pinned native library remains an explicit packaging feature. That choice
+controls C++ dependencies and deployment footprint, not GraphAr's architectural
+priority. Current code qualifies a bounded binary-Entity projection. General
+property layouts and selective snapshot-pinned adjacency scans remain concrete
+implementation gates; the format's support is not proof they are implemented.
+GraphAr is a storage representation, not a query engine or a replacement for MRR
+semantic admission. Its strategic role does not depend on DuckGQL availability
+or on winning a database-query benchmark.
+
 * Design objective
 
 The governing rule is:
@@ -323,7 +358,8 @@ admission bridge. Its =execute_turso_graphar_on_backend= entrypoint uses
 cancellation skips execution; running work retains its lease through completion.
 The retained entrypoint returns a Backend resource handle and retains its
 reservation through the final clone; driver refusals release admission.
-Native interruption/deadline remain gates in
+Cooperative cancellation/deadline checks are implemented; native interruption
+and hard in-flight-call timeouts remain gates in
 [[file:../rfcs/0003-gql-duckdb-turso-backends.org][RFC 0003]]; the standalone executor does not enforce Backend admission.
 Shared scheduling does not complete all query lifecycle gates. General query
 execution remains a later engine-specific feature.

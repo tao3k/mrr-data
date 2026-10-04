@@ -18,6 +18,21 @@ interchange, and DuckDB owns optional native execution. Existing metadata
 providers remain responsible for atomic head/operation/authority transactions.
 The graph file format alone cannot replace that transaction contract.
 
+* GraphAr strategic role
+
+GraphAr is the provider-independent graph physical-data foundation for
+Production graph workloads: vertices, edges, adjacency/offset chunks, property
+groups and metadata. Native Turso and DuckDB provide optional transactions and
+relational/columnar execution. Their SQL tables are derived execution images;
+this design assigns neither provider a built-in graph model or graph authority.
+DuckGQL is a separately qualified extension capability. GraphAr's position is
+independent of that extension and of database-query benchmark results.
+
+[[file:../architecture/0001-mrr-data-plane.org][The canonical data-plane ownership table]] fixes MRR semantics/admission,
+GraphAr graph representation, Arrow interchange and shared Backend lifecycle.
+Native GraphAr packaging remains opt-in; current binary-Entity qualification
+does not establish arbitrary property layouts or selective graph scanning.
+
 * Current interfaces and specific gaps
 
 | Interface | Implemented today | Remaining gate |

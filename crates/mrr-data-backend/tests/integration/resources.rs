@@ -179,3 +179,78 @@ async fn cancelled_queue_skips_work_and_running_cancellation_keeps_worker_lease(
     assert_eq!(backend.status().resource_bytes, 0);
     backend.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn controlled_stops_refuse_before_driver_and_keep_first_reason() {
+    use mrr_data_backend::{ResourceControl, ResourcePreparationError, ResourceStop};
+    let (backend, _) = open(BackendConfig::default()).await;
+    let cancelled = ResourceControl::default();
+    cancelled.cancel();
+    let expired = ResourceControl::new(Some(std::time::Instant::now()));
+    for (control, reason) in [
+        (cancelled, ResourceStop::Cancelled),
+        (expired, ResourceStop::Deadline),
+    ] {
+        let result = backend
+            .prepare_resource_controlled::<(), ResourceStop>(8, control.clone(), |_| {
+                panic!("stopped request reached physical driver")
+            })
+            .await;
+        assert!(
+            matches!(result, Err(ResourcePreparationError::Preparation(stop)) if stop == reason)
+        );
+        control.cancel();
+        assert_eq!(control.check(), Err(reason));
+        assert_eq!(backend.status().active_resources, 0);
+    }
+    backend.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn caller_abort_signals_running_control_but_cleanup_keeps_admission() {
+    use mrr_data_backend::{ResourceControl, ResourceStop};
+    let (backend, _) = open(BackendConfig::default()).await;
+    let control = ResourceControl::default();
+    let gate = Arc::new((Mutex::new(false), Condvar::new()));
+    let worker_gate = gate.clone();
+    let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+    let (cleanup_tx, cleanup_rx) = tokio::sync::oneshot::channel();
+    let running_backend = backend.clone();
+    let worker_control = control.clone();
+    let running = tokio::spawn(async move {
+        running_backend
+            .prepare_resource_controlled::<(), ResourceStop>(8, worker_control, move |control| {
+                entered_tx.send(()).unwrap();
+                // Simulate an in-flight native operation and its cleanup. The stop
+                // cannot release worker admission until this operation completes.
+                let (lock, changed) = &*worker_gate;
+                let mut released = lock.lock().unwrap();
+                while !*released {
+                    released = changed.wait(released).unwrap();
+                }
+                let refusal = control.check();
+                cleanup_tx.send(()).unwrap();
+                refusal
+            })
+            .await
+    });
+    tokio::time::timeout(Duration::from_secs(3), entered_rx)
+        .await
+        .unwrap()
+        .unwrap();
+    running.abort();
+    let _ = running.await;
+    assert_eq!(control.check(), Err(ResourceStop::Cancelled));
+    assert_eq!(backend.status().active_resources, 1);
+    assert_eq!(backend.status().blocking_resources, 1);
+    let (lock, changed) = &*gate;
+    *lock.lock().unwrap() = true;
+    changed.notify_all();
+    tokio::time::timeout(Duration::from_secs(3), cleanup_rx)
+        .await
+        .unwrap()
+        .unwrap();
+    until(|| backend.status().active_resources == 0).await;
+    assert_eq!(backend.status().resource_bytes, 0);
+    backend.shutdown().await.unwrap();
+}
