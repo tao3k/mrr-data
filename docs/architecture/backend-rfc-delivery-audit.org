@@ -1486,8 +1486,8 @@ remain retained; trace does not establish a startup performance improvement.
 
 ** Published diagnostic propagation and current CI boundary
 
-Data root/fuzz now pin MRR =ff3aa3eb57e9fffd94616fd70b6ecdd605959ef4=,
-which pins GSC =b20d209bc63fd6bfec00f5b69e5738971986daf1=. Registry versions
+Data root/fuzz now pin MRR =08f33e492c1154ccef354446cf55b572d56a6703=,
+which pins GSC =9175ae2c8ba2ac80abf9120030ee7ab13ba742de=. Registry versions
 are preserved. The CI original-query step enables =GERBIL_PARSER_LR_TRACE=1=.
 
 The candidate full-chain local-patch build failed idle30 during PackageSpec
@@ -1534,3 +1534,33 @@ receipts do not close the failed fresh-prefix or full current-pin source build.
 P0 full cold build and original-query execution remain the next acceptance
 boundary; P1 ABI/lifecycle and P2 paired release-query/memory evidence retain
 separate gates. No production release or performance gain is claimed here.
+
+** P0 shared SDK command isolation (2026-10-05)
+
+Data root/fuzz synchronize MRR =08f33e492c1154ccef354446cf55b572d56a6703=
+and GSC =9175ae2c8ba2ac80abf9120030ee7ab13ba742de=. MRR uses the public
+GSC =gerbil_command= for PackageSpec and program staging; its duplicate cleanup
+list is removed. The shared boundary now removes =DEVELOPER_DIR= along with
+=SDKROOT= and unrelated C flags, and filters Nix PATH entries. An owned cold
+process tree showed nested Nix =xcrun ld= invocations despite the selected
+Homebrew GCC, demonstrating that PATH cleanup alone was insufficient.
+
+The actual GSC Cargo test build succeeded in 44.82s; eight default regressions
+passed in 0.48s, including actual Darwin linker resolution under the inherited
+Nix developer directory. Four native fixtures remain explicitly ignored.
+Current GSC production-library metadata and the MRR helper passed strict
+direct lint/type checking using qualified cached dependencies. The first MRR
+metadata attempt used a test binary and was rejected (E0463); it was not a pass.
+
+Two fresh Scheme prefixes with the developer override removed gave one
+idle30 refusal and one successful exit under unchanged build limits. Sampling
+the successful run's quiet phase found only GXI, in Gambit dynamic-module
+cleanup and Darwin =dlclose= / unload notifications. This distinguishes
+compilation from process cleanup; it does not establish every earlier idle5
+failure's cause. No synthetic heartbeat, worker cap or relaxed timeout was
+introduced. Full Data native construction and current-pin original-query tests
+remain a separate acceptance gate; old-head CI does not qualify these pins.
+
+A separate GSC production Cargo build failed idle30 in Rust project-harness
+compilation. The successful direct production-library metadata checks do not
+replace that failed Cargo gate or admit a native integration artifact.
