@@ -60,6 +60,10 @@ def main():
         "schema_version": SCHEMA["schema_version"]["const"],
         "schema_sha256": digest(SCHEMA_PATH),
         "test_binary_sha256": digest(binary),
+        "cargo_artifacts_sha256": digest(args.cargo_artifacts)
+        if args.cargo_artifacts
+        else None,
+        "head_scope": "collection checkout; compiled source identity requires a matching build receipt",
         "base_source_head": subprocess.check_output(
             ["git", "-C", str(root), "rev-parse", "HEAD"], text=True
         ).strip(),

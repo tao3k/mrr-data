@@ -1580,9 +1580,9 @@ bridges front-end work before LLVM remarks start. These are real compiler
 events, grouped by the glue recorder; compiler flags, timeouts and heap settings
 retain their prior values. The GraphAr Source test program compiled successfully
 with this diagnostic selection and the prior successful build's exact dependency
-arguments. Its new Rust receiver refusal test passed in =0.01s=. Source execution
-and the resource matrix still hit the unchanged five-second runtime-init idle
-gate on this host, so no new admitted original-query measurement is reported.
+arguments. Its new Rust receiver refusal test passed in =0.01s=. Before parser artifact tracing was enabled, Source execution and the resource
+matrix hit the unchanged five-second runtime-init idle gate on this host.
+Those failures remain retained; the later diagnostic qualification follows below.
 
 The new Rust process matrix defines two source shapes and four modes:
 empty-verified-cache/full scan, warm-cache/full scan, warm-cache/selective read,
@@ -1599,7 +1599,49 @@ batches; compilation/binding and engine registration remain per request.
 
 Python's =source-resources= entry point supervises this Rust matrix and collects
 one checked envelope with code/binary/Schema identity. The native code compiled
-and strict own-crate lint passed; runtime-init refusal still prevents local
-eight-case acceptance. CI runs the matrix after Source correctness, facade and
+and strict own-crate lint passed. CI runs the matrix after Source correctness, facade and
 full Clippy, and uploads receipts only after success. M3 remains a qualification
 gate until the matched receipts and exact published-head CI actually pass.
+
+** 2026-10-05 matched original-source diagnostic qualification
+
+Enabling the parser's existing actual artifact decode/verification/admission
+trace resolved the local output-inactivity gate without changing idle5 or the
+120-second test deadline. The =68545984= dependency test binary passed all nine
+nonignored GraphAr Source cases in =14.03s=. These are cached-owner diagnostic
+receipts; they do not qualify the newly published =ff3aa3eb= dependency chain.
+
+The first resource-matrix execution correctly refused independently generated
+GraphAr snapshots: native writer output gave each process a different CID.
+The repaired Rust matrix creates one immutable payload closure per shape and
+passes the same authenticated blocks to all four isolated mode processes.
+Snapshot equality remains an admission requirement. Own-crate strict Clippy
+and fresh native test-program compilation passed; the complete eight-case
+matrix then passed in =58.46s=, with two warmups and three measured samples per
+case, expected original-source NULL/duplicate rows and zero final reservations.
+The collection checkout was =b23c46a0= with the fixture repair pending; the
+executable SHA-256 was
+=3ffaf6d9f2ccc7a7bc8885ebfe2b0e5e0d04f7d8adbc28c77867547b332af621=.
+The executable was rebuilt with the earlier successful =68545984= dependency
+arguments, not a full Cargo build against =ff3aa3eb=. Collection HEAD and binary
+hash are distinct evidence; the glue envelope makes that scope explicit.
+
+| Shape | Mode | Median request ms | Median CPU ms | Relation bytes | Decoded rows | Selected edges |
+|-------+------+-------------------+---------------+----------------+--------------+----------------|
+| uniform | cold/full | 199.59 | 70.00 | 49997 | 32 | 16 |
+| uniform | warm/full | 344.10 | 70.33 | 49997 | 32 | 16 |
+| uniform | warm/selective | 356.47 | 71.85 | 20213 | 14 | 6 |
+| uniform | retained/selective | 5.85 | 3.09 | 20213 | 14 | 6 |
+| skewed | cold/full | 446.73 | 66.82 | 45154 | 32 | 16 |
+| skewed | warm/full | 79.51 | 66.03 | 45154 | 32 | 16 |
+| skewed | warm/selective | 109.67 | 65.42 | 20213 | 14 | 6 |
+| skewed | retained/selective | 4.82 | 3.72 | 20213 | 14 | 6 |
+
+Cold remote reads were =92033= bytes (uniform) and =82540= bytes (skewed);
+warm modes read no remote payload bytes. Selectivity reduced relationship
+reads, but warm/selective request time regressed against warm/full in both
+shapes. Retained-source results include an already prepared source and do not
+establish a general runtime speedup. Tiny simulated-remote fixtures, uncontrolled
+OS cache and process RSS high-water marks bound these observations. Exact
+published-head platform acceptance and paired release-scale M3 evidence remain
+open; failed runs produce no admitted matrix envelope.

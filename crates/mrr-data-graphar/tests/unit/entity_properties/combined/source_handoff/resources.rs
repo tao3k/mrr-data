@@ -1,6 +1,6 @@
 //! Matched original-source measurements; cold means an empty verified cache.
 use super::super::{RESERVED, compile, execution_transport};
-use super::{authority, executor, metadata, restore, shaped_fixture};
+use super::{authority, executor, metadata, restore};
 use crate::tests::entity_properties::{
     combined::{
         fixture::{Fixture, capture_limits},
@@ -8,9 +8,7 @@ use crate::tests::entity_properties::{
     },
     fixture as properties,
 };
-use crate::{
-    CapturedCombinedGraphArSelective, GraphArAdjacency, GraphArChunkLayout, GraphArWriteOptions,
-};
+use crate::{CapturedCombinedGraphArSelective, GraphArChunkLayout};
 use meta_relational_reasoning as mrr;
 use mrr::PropertyQueryBackend;
 use mrr_data_backend::{Backend, BackendConfig, ResourceControl, ResourceHandle, ResourceStop};
@@ -27,6 +25,8 @@ use std::{
     },
     time::Instant,
 };
+#[path = "resources/fixture.rs"]
+mod fixture;
 #[path = "resources/matrix.rs"]
 mod matrix;
 #[path = "resources/reads.rs"]
@@ -223,14 +223,7 @@ async fn original_source_resource_case() {
     );
     println!("original-source resource fixture preparation started shape={shape} mode={mode}");
     let startup = Instant::now();
-    let f = Fixture::with_original_options(
-        shaped_fixture(shape == "skewed"),
-        GraphArWriteOptions {
-            adjacency: GraphArAdjacency::OrderedBySource,
-            layout: GraphArChunkLayout::new(2, 2).unwrap(),
-            ..GraphArWriteOptions::default()
-        },
-    );
+    let f = fixture::load(&shape);
     let backend = Backend::open(
         BackendConfig {
             max_resource_bytes: 3 * RESERVED,

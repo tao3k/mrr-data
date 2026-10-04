@@ -47,7 +47,7 @@ fn verify(receipt: &Value, shape: &str, mode: &str, snapshot: Option<&str>) -> b
                 })
         })
 }
-fn execute(shape: &str, mode: &str) -> Value {
+fn execute(shape: &str, mode: &str, fixture: &std::path::Path) -> Value {
     let mut child = Command::new(std::env::current_exe().unwrap())
         .args([
             CASE_TEST,
@@ -58,6 +58,7 @@ fn execute(shape: &str, mode: &str) -> Value {
         ])
         .env("MRR_DATA_SOURCE_SHAPE", shape)
         .env("MRR_DATA_SOURCE_MODE", mode)
+        .env("MRR_DATA_SOURCE_FIXTURE", fixture)
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .spawn()
@@ -78,19 +79,22 @@ fn execute(shape: &str, mode: &str) -> Value {
     receipts.pop().unwrap()
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "native original-source process matrix; use the glue progress supervisor"]
-fn original_source_resource_matrix() {
+async fn original_source_resource_matrix() {
     let schema = super::schema();
     let contract = &schema["properties"];
     let mut receipts = Vec::new();
     for shape in contract["shapes"]["const"].as_array().unwrap() {
         let shape = shape.as_str().unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let fixture = directory.path().join("fixture.json");
+        super::fixture::write(shape, &fixture).await;
         let mut snapshot = None;
         let mut full_rows = None;
         for mode in contract["modes"]["const"].as_array().unwrap() {
             let mode = mode.as_str().unwrap();
-            let receipt = execute(shape, mode);
+            let receipt = execute(shape, mode, &fixture);
             assert!(
                 verify(&receipt, shape, mode, snapshot.as_deref()),
                 "source/admission/resource receipt refused"
