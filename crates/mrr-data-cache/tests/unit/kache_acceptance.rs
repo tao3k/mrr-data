@@ -259,3 +259,24 @@ async fn upstream_maintenance_and_removal_races_recover_and_reopen() -> Result<(
     .await??;
     Ok(())
 }
+
+#[test]
+fn metadata_removal_is_a_miss_but_other_upstream_errors_remain_failures() {
+    let cid = ContentBlock::new(ContentCodec::Raw, b"missing metadata").cid();
+    for kind in [
+        std::io::ErrorKind::NotFound,
+        std::io::ErrorKind::PermissionDenied,
+        std::io::ErrorKind::InvalidData,
+    ] {
+        let failure =
+            anyhow::Error::new(std::io::Error::from(kind)).context("reading entry meta.json");
+        let mapped = super::entry_error(&cid, failure);
+        if kind == std::io::ErrorKind::NotFound {
+            assert!(matches!(mapped, ContentError::NotFound(missing) if *missing == cid));
+        } else {
+            assert!(
+                matches!(mapped, ContentError::Io { operation: "get Kache entry", kind: actual } if actual == kind)
+            );
+        }
+    }
+}
