@@ -69,6 +69,7 @@ async fn original_source_handoff_cross_profile_reuse_refuses_foreign_generation(
             .is_err()
     );
     assert_eq!(backend.status().resource_bytes, 4 * RESERVED);
+    refuse_over_budget_driver(&backend).await;
     authority::retire_and_recover(&first, &first_home, first_policy, &publication).await;
     assert!(!authority::disclose(&first_home, first_policy).await);
     assert!(authority::disclose(&second_home, second_policy).await);
@@ -97,4 +98,18 @@ async fn original_source_handoff_cross_profile_reuse_refuses_foreign_generation(
     let research = reopened.profile("research", "simulation").unwrap();
     assert!(authority::disclose(&research, second_policy).await);
     reopened.shutdown().await.unwrap();
+}
+
+// Actual original-query source/result consumers exhaust the common byte budget.
+// Refusal must precede the driver; authority recovery above remains independent.
+async fn refuse_over_budget_driver(backend: &Backend) {
+    let refusal = backend
+        .prepare_resource::<()>(1, || panic!("over-budget graph driver ran"))
+        .await;
+    assert!(matches!(
+        refusal,
+        Err(mrr_data_backend::BackendError::Saturated)
+    ));
+    assert_eq!(backend.status().resource_bytes, 4 * RESERVED);
+    assert_eq!(backend.status().blocking_resources, 0);
 }

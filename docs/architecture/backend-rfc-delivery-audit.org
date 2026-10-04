@@ -1137,3 +1137,76 @@ Original Healthcare source qualification remains a separate native frontend
 gate. The current root, fuzz and source frontend share MRR pin =8f389fd0=.
 The unified native dependency build passed with the published owner; original
 source runtime acceptance remains open as recorded above.
+
+* Consolidated M1-M3 integration: complete Dataset selective source
+
+The integration preserves remote =707f4353= and advances root/fuzz together
+to published MRR PR #9 commit =023a6dbdaa7d9d88ad129e22cb3abcd12231bc3b=.
+This is the native child-output forwarding fix on top of =d5beb403=.
+The Python prerequisite is
+Rust 1.95.0 with an explicit compiler version check. Original-source CI now
+selects =source-handoff,backend,selective-graphar= together for GraphAr;
+plain selective tests alone do not qualify the original MRR query.
+
+** Implemented correctness and ownership
+
+- Two simulated profiles execute the same original Healthcare source and catalogs
+  with distinct generation/revision/snapshot identities on one Backend. Both
+  directions reject foreign captures and consumer handoffs; retiring Healthcare
+  leaves Research disclosure active. Actual retained source/result consumers
+  exhaust the common byte budget; over-budget work is rejected before its driver
+  while authority retirement/recovery still progresses. Complete cache restoration, retained
+  consumers, shutdown drain and reopened metadata are checked in that caller.
+  Reopening is still in-process metadata reuse, not a process-crash claim.
+  Original-source queue cancellation, deadline and abandonment composition
+  remains an M2 gate; generic Backend lifecycle tests alone do not close it.
+- =CapturedCombinedGraphArSelective= authenticates the complete Dataset and each
+  declared member. It retains immutable Arrow properties and ordered relation
+  descriptors/indexes, and checks complete scope before range reads. It does not
+  relax =GraphDatasetBinding= or manufacture a single-relation query binding.
+- Cold preparation verifies all relation inventory files and performs full
+  contextual fact scans before discarding full facts. Aggregate vertex/edge
+  budgets still apply. Only subsequent reads are selective; full initial I/O,
+  native scratch and temporary copies remain charged to preparation.
+- The original MRR dispatch/final admission/typed transport checks independently
+  expected null and duplicate rows for full-reference and outgoing two-hop reads.
+  The caller declares its selected sources; this is not a generalized GQL planner.
+
+** Evidence and remaining qualification
+
+On the pre-integration =8f389fd0= dependency baseline, the GraphAr original-source
+suite passed 4/4 in 3.95s and the five-crate strict all-target test-profile Clippy
+composition passed in 9.66s. The unchanged-config initial link attempt failed
+with an Apple linker Bus error; a separately recorded retry succeeded. Neither
+that failed attempt nor pre-integration binaries qualify the new dependency pin.
+The published =023a6db= composition is rebuilt and requalified separately.
+Verbose mode now forwards actual child events before process exit. Three tests
+of the extracted actual process function passed, including a six-second child
+under the five-second idle test supervisor. This is function-level evidence;
+it does not qualify the complete native dependency build.
+
+The locally patched complete build emitted real Scheme compile events, then
+failed the unchanged 30-second idle build gate during package compilation.
+The native archive buffering defect is fixed; later native silence remains
+open. The published-pin rebuild completed package-build in 94,693ms and
+program-stage in 20,524ms, then failed the same idle gate during module C
+generation for =gerbil-parser/languages/gql/iso-39075-2024/grammar=.
+An owned-process sample before refusal identified the actual =gsc= child.
+The upstream native-build helper still buffers module subprocess output with
+=Command.output()=. A standalone invocation of the exact generated grammar
+source with Gambit =-verbose= also failed the unchanged 30-second idle gate.
+Consequently live forwarding alone is not evidence of sufficient compiler
+progress, and verbosity alone is not a demonstrated repair.
+CI uses =GERBIL_BUILD_VERBOSE=9= so actual module start/completion events
+are observable. No synthetic heartbeat or relaxed timeout is used.
+
+Small-fixture reads expose an actual tradeoff: the five-edge downstream reference
+read 15,122 bytes; two selected neighborhoods read 5,070 + 10,140 bytes. Footer and
+boundary overhead can outweigh reduced edge materialization. This closes a
+correctness slice, not the M3 speedup gate. Uniform/skewed original-query process
+CPU/wall/RSS and cold/warm/reuse comparisons remain explicit measurement work.
+
+Frozen =56b7057a= Linux DuckGQL CI passed. Other canceled platform checks are
+unqualified. The distribution aggregator failed because its required test job
+was canceled, rather than proving a distribution semantic failure. Current-head
+platform CI remains a release gate after integration and local qualification.
