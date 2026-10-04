@@ -315,7 +315,7 @@ source capability to qualified engines without introducing another planner.
 |-------------+---------------------+----------------------|
 | Identity/publication | Inventory, binding, child/root ACK and cold restore | Bind every graph/table cache to exact root, generation, catalogs and projection version |
 | Semantic capture | Verified binary-Entity facts and Backend lease | Lossless fact-to-vertex/edge mapping and lifetime rules |
-| DuckDB | Checked Arrow input, releasable appender input and materialized/native streaming Arrow output | DuckGQL binary compatibility, graph registration, external typed-plan bridge and result conversion |
+| DuckDB | Checked Arrow carriers plus optional typed DuckGQL binary-Entity bridge, private graph registration and MRR result conversion | Signed SDK/platform distribution, additional query shapes and measured resources |
 | Turso | Protected metadata transactions and bounded single-hop query on shared Backend workers | Native interrupt/deadline, source reuse and additional typed query shapes |
 | Selective access | Native GraphAr read and Arrow C Stream import during preparation | Snapshot-pinned adjacency/property scan with measured pushdown and resources |
 
@@ -325,8 +325,11 @@ Shared worker admission is implemented by =execute_turso_graphar_on_backend=
 and =Backend::run_resource=. Retained output uses
 =execute_turso_graphar_retained_on_backend= and
 =Backend::prepare_resource_fallible=. Cooperative stop checkpoints use
-=ResourceControl= and =Backend::prepare_resource_controlled=. Native interrupt, hard in-flight-call
-timeouts and process-crash cleanup remain implementation gates. The standalone
+=ResourceControl= and =Backend::prepare_resource_controlled=. DuckGQL uses the
+same dispatcher and retained-result contract; its Host monitor sends DuckDB
+native interrupt. The native SQL-driver fixture qualifies cancellation and
+deadline with teardown before admission release. Hard in-flight-call bounds
+for arbitrary plugin operators and process-crash cleanup remain open. The standalone
 =execute_turso_graphar_single_hop= entrypoint does not enforce Backend admission.
 
 ** One scheduler and one Host runtime
@@ -458,6 +461,38 @@ These receipts qualify lifecycle integration. Process-crash durability,
 deployed authorization and native RSS/performance measurements remain separate
 RFC 0002 gates.
 
+** Qualified native slice and comparison
+
+The SDK-compatible Rust fixture qualifies distinct endpoint ordering,
+duplicate-edge multiplicity, four application input/output limits, source and
+artifact refusal, unsupported-shape refusal and final MRR result admission.
+The retained-result fixture proves a free worker can run while output bytes
+remain reserved, consuming candidate conversion preserves the lease, shared
+conversion is refused and shutdown waits for the final candidate clone.
+The native SQL-driver fixture interrupts an actual long-running DuckDB call
+for cancellation and deadline, closes the connection and verifies subsequent
+work succeeds. This is driver interruption evidence, not a hard bound for every
+DuckGQL operator. Turso's safe driver still lacks native interrupt.
+
+[[file:../../python/src/mrr_data_testing/duckgql/receipts/macos-comparison.jsonl][The whole-request comparison receipt]] records three samples per engine on
+one authenticated capture at each size. All rows match independent expected
+values and all outputs pass MRR admission. Median milliseconds on the loaded
+macOS ARM64 host were:
+
+| Edges | DuckGQL | Turso | DataFusion |
+|-------+---------+-------+------------|
+| 2 | 670.773 | 1.799 | 0.537 |
+| 128 | 694.077 | 6.766 | 0.919 |
+| 1024 | 1455.527 | 252.853 | 3.356 |
+
+Shared artifact preparation (802.820 ms) and GraphAr fixture creation/capture
+are recorded separately. These are whole-request costs with private image
+setup and teardown, not operator timings, native RSS or representative query
+mixes. The DataFusion 1024-edge samples include a 96.514 ms outlier. This fixture
+provides no performance reason to promote the DuckGQL path to a default.
+Property predicates, one/two-edge Healthcare paths, phase breakdown, selective
+queries and large-graph/RSS qualification remain subsequent slices.
+
 * First slices and evidence
 
 1. Pin exact MRR, DuckDB, DuckGQL and Turso revisions. Define optional DuckGQL
@@ -498,8 +533,9 @@ RFC 0002 gates.
    physical graph contract and selective source delivery are independent.
 
 The RFC does not claim general ISO GQL conformance. The Turso SQL path is
-independently deliverable while the DuckGQL typed-plan bridge is gated on an
-extension interface. Neither path replaces MRR's semantic admission.
+independently deliverable. The pinned DuckGQL typed bridge now implements the
+same bounded slice; a stable upstream external API and broader query shapes
+remain separate gates. Neither path replaces MRR's semantic admission.
 
 * References
 

@@ -69,3 +69,7 @@ Turso includes image load/query/rollback; DataFusion includes Arrow conversion
 and execution. Fixture creation/capture is recorded separately. These are bounded
 engineering receipts, not standalone operator latency or representative production
 performance. Native RSS and general property/path shapes require separate evidence.
+
+[[file:../../python/src/mrr_data_testing/duckgql/receipts/macos-comparison.jsonl][The local comparison receipt]] records source/schema/binary identity and all
+three per-size samples. It establishes result/admission parity for this slice;
+its whole-request timings favor DataFusion on this workload.

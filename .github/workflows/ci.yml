@@ -319,7 +319,7 @@ jobs:
         run: |
           cargo test -p mrr-data-duckgql-query --features backend-worker,query-parity --locked --no-run
           uv run --locked --project python mrr-data-test run-process --phase test -- cargo test -p mrr-data-duckgql-query --features backend-worker,query-parity --locked -- --nocapture
-          cargo check -p mrr-data --no-default-features --features backend-duckgql-query --locked
+          cargo check -p mrr-data --no-default-features --features backend-duckgql-query --profile test --locked
           cargo clippy -p mrr-data-duckgql-query --all-targets --features backend-worker,query-parity --profile test --locked -- -D warnings
       - name: Record bounded whole-request query comparison
         run: uv run --locked --project python mrr-data-test run-process --phase test -- cargo test -p mrr-data-duckgql-query --features backend-worker,query-parity --locked same_source_scale_receipts -- --ignored --nocapture

@@ -72,18 +72,16 @@ async fn native_output_lease_survives_conversion_and_final_clone_drains_backend(
     let worker = backend.prepare_resource(1, || Ok(())).await.unwrap();
     drop(worker);
     let sibling = resource.clone();
-    let resource = match resource
-        .try_transform(|_| -> Result<(), ()> { panic!("shared conversion must not run") })
-    {
-        Err(ResourceTransformError::Shared(original)) => original,
-        _ => panic!("shared resource must be refused"),
+    let Err(ResourceTransformError::Shared(resource)) =
+        resource.try_transform(|_| -> Result<(), ()> { panic!("shared conversion must not run") })
+    else {
+        panic!("shared resource must be refused");
     };
     drop(sibling);
-    let candidate = match resource
+    let Ok(candidate) = resource
         .try_transform(|output| mrr_data_core::project_data_query_output(&query, &engine, output))
-    {
-        Ok(candidate) => candidate,
-        Err(_) => panic!("uniquely owned conversion must succeed"),
+    else {
+        panic!("uniquely owned conversion must succeed");
     };
     meta_relational_reasoning::admit_query_result_candidate(
         query.query(),
@@ -118,8 +116,11 @@ async fn stopped_queued_native_requests_release_source_and_publish_no_output() {
     let backend = open().await;
     let source = Arc::new(source);
     for deadline in [false, true] {
-        let control =
-            ResourceControl::new(deadline.then(|| Instant::now() - Duration::from_millis(1)));
+        let control = ResourceControl::new(deadline.then(|| {
+            Instant::now()
+                .checked_sub(Duration::from_millis(1))
+                .unwrap()
+        }));
         if !deadline {
             control.cancel();
         }

@@ -18,7 +18,7 @@ pub struct DuckGqlArtifact {
     allow_unsigned: bool,
 }
 
-/// Application bounds and native settings; `DuckDB` memory_limit is not an RSS cap.
+/// Application bounds and native settings; `DuckDB` `memory_limit` is not an RSS cap.
 #[derive(Clone, Debug)]
 pub struct DuckGqlLimits {
     pub max_input_rows: usize,

@@ -50,6 +50,12 @@ fn comparison_facts(rows: usize) -> (Vec<mrr::Fact>, Vec<Vec<mrr::QueryResultVal
         .collect();
     (facts, expected)
 }
+async fn comparison_database(directory: &std::path::Path) -> turso::Database {
+    turso::Builder::new_local(directory.join("comparison.db").to_str().unwrap())
+        .build()
+        .await
+        .unwrap()
+}
 #[tokio::test]
 #[ignore = "bounded native whole-request comparison; run explicitly"]
 async fn same_source_scale_receipts() {
@@ -84,11 +90,7 @@ async fn same_source_scale_receipts() {
         )
         .unwrap();
         let directory = tempfile::tempdir().unwrap();
-        let database =
-            turso::Builder::new_local(directory.path().join("comparison.db").to_str().unwrap())
-                .build()
-                .await
-                .unwrap();
+        let database = comparison_database(directory.path()).await;
         let duckgql_limits = DuckGqlLimits {
             max_input_rows: rows,
             max_input_bytes: rows * 512,
