@@ -58,14 +58,28 @@ The root, fuzz and optional source frontend now share the published MRR owner
 No earlier binary qualifies the changed owner, even when its MRR Data source is
 otherwise unchanged.
 
-Exact-head [[https://github.com/tao3k/mrr-data/actions/runs/37204680399][CI run 37204680399]] has passed Python qualification, Linux S3 and
-Arrow fuzz. Linux native Source, maintained GraphAr, typed DuckGQL, general Rust
-and MSRV qualification remain in progress; macOS jobs are queued. Python now
+Exact-head [[https://github.com/tao3k/mrr-data/actions/runs/37204680399][CI run 37204680399]] has passed Python qualification, both S3 jobs,
+Arrow fuzz, MSRV and Linux native Source. The Source job passes DataFusion
+=2 tests= and GraphAr =2 tests=, including the canonical shared Backend caller,
+with real module-initialization diagnostics under unchanged five-second
+inactivity and 120-second wall limits. Maintained GraphAr, typed DuckGQL and
+general Rust remain in progress; macOS Source remains queued. Python now
 explicitly installs Rust =1.95.0= and verifies the native compiler before the
 process tests. Its prior plain-Rust cold compilation timeout is resolved in this
 run without changing the fixture's ten-second limit. Local checks at this head
 also pass =33 Python tests=, strict Ruff, formatting and documentation checks.
 This does not establish completed native platform or M0/M1 acceptance.
+
+The local =fdf4f294= batch adds a pre-compilation guard for the Source declaration
+and both owner packages in the workspace lockfile, alongside the existing
+root/fuzz guard. Aligned checkout pins pass; Source and lockfile drift are
+refused. Python now passes =35 tests= with strict Ruff and formatting.
+New =d5beb403= native binaries pass Core =38 tests=, DataFusion =24 tests=,
+Turso =3 library + 6 integration tests= and DuckGQL =1 library + 5 integration
+tests, 3 explicit ignores=. Direct test execution preserves the five-second
+inactivity and 120-second wall limits. The separately invoked three-size
+comparison and nine-case resource matrix both pass. These local adapter tests
+do not include the optional original-source frontend.
 
 The previous =56b7057a= run passed Linux original Source: DataFusion =2 tests=
 and GraphAr =2 tests=, including the canonical shared Backend caller, under
@@ -185,7 +199,7 @@ optimization/debug flags and the real exit status. Python glue tests pass =25=.
 Turso passes =3= unit and =6= integration tests. DuckGQL passes =1= unit and
 =5= integration tests, with =3= explicit ignored native comparison workers.
 The separate 2/128/1024-row comparison passes in =11.68s=; all nine isolated
-resource cases pass in =19.67s=. The resource receipt identifies the clean
+resource cases pass in =19.67s=. The [[https://github.com/tao3k/mrr-data/blob/707f435320008df6799be8e8be1cfede5aad71cb/python/src/mrr_data_testing/duckgql/receipts/macos-resources.jsonl][frozen prior resource receipt]] identifies the clean
 =c54acd27= source and exact compiled binary, before the later integration of the
 shared Backend original-source caller. It does not qualify that added caller.
 
@@ -972,7 +986,7 @@ digests. Python glue tests cover discovery, malformed/missing protocol output,
 capture limits and descendant cleanup. Semantic and resource assertions remain
 in Rust. CI publishes the checked matrix for both native platforms.
 
-The historical [[file:../../python/src/mrr_data_testing/duckgql/receipts/macos-resources.jsonl][macOS ARM64 phase receipt]] passes all nine cases in 19.67 seconds.
+The current [[file:../../python/src/mrr_data_testing/duckgql/receipts/macos-resources.jsonl][macOS ARM64 phase receipt]] passes all nine cases in 14.86 seconds.
 The [[file:../../python/src/mrr_data_testing/duckgql/receipts/macos-build.json][source build receipt]] records the unsigned SDK artifact digest
 =0bbeaac46695077931b2c526d29a62673083373afe45db007e2ede15d5f268a3=,
 13 generated parser units and their digests, with upstream Release optimization.
@@ -981,7 +995,7 @@ scale comparison passed at all three sizes. Both test and matrix execution used
 five-second no-output and 120-second wall limits. The build used the unchanged
 30-second no-output and 1200-second wall limits.
 
-The resource receipt identifies the clean local source head =c54acd27978800a079c873954ba7965b89d118a8= and its
+The resource receipt identifies the clean local source head =fdf4f2946def197d2a386c89a2b980b2582735aa= and its
 compiled binary. It does not establish remote CI acceptance. Concurrent host compilation affects timing;
 these samples do not establish a performance improvement. OS peak RSS includes
 source capture, Rust and the active native engine. It is a process high-water
@@ -992,6 +1006,6 @@ prepare; DataFusion observes the first nonempty Arrow batch from execution
 start. Native buffering can precede those observations. These boundaries do
 not qualify operator-only first-result latency, spill peaks or cache effects.
 Original Healthcare source qualification remains a separate native frontend
-gate. This receipt uses MRR pin =8f389fd0=; the current root, fuzz and source
-frontend share =d5beb403=. The old unified native dependency build passed with
-its published owner; current-pin native acceptance remains open as recorded above.
+gate. This receipt and the current root, fuzz and source frontend use MRR pin
+=d5beb403=. Linux original-source qualification passes at =707f4353=;
+macOS Source and completed platform acceptance remain open as recorded above.
