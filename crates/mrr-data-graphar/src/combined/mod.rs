@@ -22,3 +22,14 @@ pub use content::{
 mod restore;
 #[cfg(feature = "backend")]
 pub use restore::{CombinedGraphArRestoreRequest, restore_combined_graph_content};
+
+#[cfg(feature = "selective-graphar")]
+mod selective;
+#[cfg(feature = "selective-graphar")]
+pub use selective::{
+    CapturedCombinedGraphArSelective, CombinedGraphArSelectiveMetrics,
+    capture_combined_graphar_selective,
+};
+
+#[cfg(all(feature = "backend", feature = "selective-graphar"))]
+pub use backend::prepare_combined_graphar_selective;

@@ -41,32 +41,7 @@ pub(super) fn capture_checked(
         .admit_query(query, limits.dataset)
         .map_err(|_| Error::Scope)?;
     let directory = tempfile::tempdir()?;
-    let property_path = directory.path().join("properties");
-    materialize(
-        closure,
-        dataset.properties().inventory(),
-        &property_path,
-        &mut check,
-    )?;
-    let property_bytes = dataset
-        .properties()
-        .canonical_bytes(limits.properties.inventory, limits.properties.max_rows)
-        .map_err(crate::GraphArInventoryError::from)?;
-    let receipt = GraphArEntityPropertyReceipt::decode_descriptor_checked(
-        property_path.clone(),
-        &dag_cbor_cid(&property_bytes),
-        &property_bytes,
-        properties,
-        limits.properties,
-    )?;
-    let captured = crate::entity_properties::read::capture_checked(
-        &property_path,
-        query.query(),
-        properties,
-        &receipt,
-        limits.properties,
-        &mut check,
-    )?;
+    let captured = capture_properties(closure, query, properties, limits, &mut check)?;
     let mut remaining_vertices = limits.topology.max_vertices();
     let mut remaining_edges = limits.topology.max_edges();
     let mut facts = Vec::with_capacity(dataset.relations().len());
@@ -106,7 +81,7 @@ pub(super) fn capture_checked(
         relations: facts,
     })
 }
-fn materialize(
+pub(super) fn materialize(
     closure: &PreparedCombinedGraph,
     inventory: &GraphDatasetInventory,
     destination: &Path,
@@ -124,4 +99,44 @@ fn materialize(
         std::fs::write(target, bytes)?;
     }
     Ok(())
+}
+
+pub(super) fn capture_properties(
+    closure: &PreparedCombinedGraph,
+    query: &BoundDataQuery,
+    properties: &GraphArEntityPropertyProjection,
+    limits: CombinedGraphArLimits,
+    mut check: impl FnMut() -> Result<(), Error>,
+) -> Result<crate::CapturedGraphArEntityProperties, Error> {
+    let dataset = closure.dataset();
+    let directory = tempfile::tempdir()?;
+    let property_path = directory.path().join("properties");
+    materialize(
+        closure,
+        dataset.properties().inventory(),
+        &property_path,
+        &mut check,
+    )?;
+    let property_bytes = dataset
+        .properties()
+        .canonical_bytes(limits.properties.inventory, limits.properties.max_rows)
+        .map_err(crate::GraphArInventoryError::from)?;
+    let receipt = GraphArEntityPropertyReceipt::decode_descriptor_checked(
+        property_path.clone(),
+        &dag_cbor_cid(&property_bytes),
+        &property_bytes,
+        properties,
+        limits.properties,
+    )?;
+    let captured = crate::entity_properties::read::capture_checked(
+        &property_path,
+        query.query(),
+        properties,
+        &receipt,
+        limits.properties,
+        &mut check,
+    )?;
+    check()?;
+    directory.close()?;
+    Ok(captured)
 }

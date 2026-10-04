@@ -51,6 +51,12 @@ impl Fixture {
         Self::with_original(properties::fixture())
     }
     pub(super) fn with_original(original: properties::Fixture) -> Self {
+        Self::with_original_options(original, crate::GraphArWriteOptions::default())
+    }
+    pub(super) fn with_original_options(
+        original: properties::Fixture,
+        options: crate::GraphArWriteOptions,
+    ) -> Self {
         let (projection, tables) = inputs(&original);
         let relations = mrr::RelationCatalog::admit(
             original
@@ -81,7 +87,7 @@ impl Fixture {
             limits().max_rows,
         )
         .unwrap();
-        properties::native_relations(&original, directory.path());
+        properties::native_relations_with_options(&original, directory.path(), options);
         let local = MemoryContentStore::default();
         let mut members = Vec::new();
         store_inventory(&local, receipt.root(), receipt.inventory());

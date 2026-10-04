@@ -234,9 +234,13 @@ pub(super) fn relation_tables(
     f: &Fixture,
     captured: &crate::CapturedCombinedGraphAr,
 ) -> Vec<mrr_data_datafusion::BinaryRelationTable> {
-    captured
-        .relations(&f.query)
-        .unwrap()
+    fact_tables(f, captured.relations(&f.query).unwrap())
+}
+pub(super) fn fact_tables(
+    f: &Fixture,
+    relations: &[crate::CapturedGraphArRelation],
+) -> Vec<mrr_data_datafusion::BinaryRelationTable> {
+    relations
         .iter()
         .map(|relation| {
             let id = &relation.relation;

@@ -8,7 +8,7 @@ use crate::{
 use arrow_array::{Array, Int64Array, RecordBatch};
 use graphar_rs::info::{GraphInfo, InfoVersion};
 use io::{ReadMeter, read_range};
-use meta_relational_reasoning::{EntityId, Fact};
+use meta_relational_reasoning::{EntityId, Fact, GenerationId};
 use mrr_data_core::{
     BoundDataQuery, GraphDatasetBinding, GraphDatasetInventory, GraphInventoryLimits,
 };
@@ -139,9 +139,15 @@ impl GraphArSelection {
 /// can escape. Blocking reads belong on Host workers; final drop closes only
 /// descriptors, with no recursive directory deletion or native query handles.
 pub struct GraphArSelectiveSnapshot {
+    binding: GraphDatasetBinding,
+    physical: SelectivePhysicalSnapshot,
+}
+
+/// Private physical storage shared by authenticated single and combined scopes.
+pub(crate) struct SelectivePhysicalSnapshot {
+    generation: GenerationId,
     files: HashMap<String, Arc<File>>,
     layout: GraphArChunkLayout,
-    binding: GraphDatasetBinding,
     entities: Vec<EntityId>,
     physical: HashMap<EntityId, usize>,
     offsets: Vec<Vec<usize>>,
@@ -150,17 +156,15 @@ pub struct GraphArSelectiveSnapshot {
 impl GraphArSelectiveSnapshot {
     #[must_use]
     pub const fn preparation_metrics(&self) -> GraphArSelectivePreparationMetrics {
-        self.metrics
+        self.physical.metrics
     }
     #[must_use]
     pub fn binding(&self) -> &GraphDatasetBinding {
         &self.binding
     }
-    /// Read only the offset-selected outgoing topology/property ranges. Current
-    /// scope supports the controlled ordered binary-Entity writer, not arbitrary
-    /// `GraphAr` layouts. Boundary probes refuse truncated or shifted ranges.
+    /// Read a neighborhood under the authenticated single-relation binding.
     /// # Errors
-    /// Refuses scope/projection drift, row budgets and malformed selected data.
+    /// Refuses scope, physical alignment and budget violations.
     pub fn outgoing(
         &self,
         query: &BoundDataQuery,
@@ -170,10 +174,6 @@ impl GraphArSelectiveSnapshot {
     ) -> Result<GraphArSelection, GraphArSelectiveError> {
         self.outgoing_checked(query, projection, source, max_edges, || Ok(()))
     }
-    /// The Host may check cancellation/deadline between chunk reads and before
-    /// fact conversion. This does not forcibly interrupt a running Parquet call.
-    /// # Errors
-    /// Preserves all outgoing refusals and the Host's sticky stop reason.
     pub(crate) fn outgoing_checked(
         &self,
         query: &BoundDataQuery,
@@ -182,9 +182,51 @@ impl GraphArSelectiveSnapshot {
         max_edges: usize,
         mut check: impl FnMut() -> Result<(), GraphArSelectiveError>,
     ) -> Result<GraphArSelection, GraphArSelectiveError> {
-        let started = Instant::now();
         check()?;
         validate_scope(query, &self.binding, projection)?;
+        self.physical
+            .outgoing_checked(projection, source, max_edges, check)
+    }
+    /// Matched full scan of the same authenticated physical source.
+    /// # Errors
+    /// Refuses scope, malformed rows and aggregate edge limits.
+    pub fn scan_all(
+        &self,
+        query: &BoundDataQuery,
+        projection: &BinaryEntityProjection,
+        max_edges: usize,
+    ) -> Result<GraphArSelection, GraphArSelectiveError> {
+        validate_scope(query, &self.binding, projection)?;
+        self.physical.scan_all(projection, max_edges)
+    }
+}
+impl SelectivePhysicalSnapshot {
+    #[cfg(feature = "combined-graph")]
+    pub(crate) const fn preparation_metrics(&self) -> GraphArSelectivePreparationMetrics {
+        self.metrics
+    }
+    #[cfg(feature = "combined-graph")]
+    pub(crate) fn vertex_count(&self) -> usize {
+        self.entities.len()
+    }
+    /// Read only the offset-selected outgoing topology/property ranges. Current
+    /// scope supports the controlled ordered binary-Entity writer, not arbitrary
+    /// `GraphAr` layouts. Boundary probes refuse truncated or shifted ranges.
+    /// # Errors
+    /// Refuses scope/projection drift, row budgets and malformed selected data.
+    /// The Host may check cancellation/deadline between chunk reads and before
+    /// fact conversion. This does not forcibly interrupt a running Parquet call.
+    /// # Errors
+    /// Preserves all outgoing refusals and the Host's sticky stop reason.
+    pub(crate) fn outgoing_checked(
+        &self,
+        projection: &BinaryEntityProjection,
+        source: EntityId,
+        max_edges: usize,
+        mut check: impl FnMut() -> Result<(), GraphArSelectiveError>,
+    ) -> Result<GraphArSelection, GraphArSelectiveError> {
+        let started = Instant::now();
+        check()?;
         let mut meter = ReadMeter::default();
         let facts = if let Some(&physical) = self.physical.get(&source) {
             let part = physical / self.layout.vertex_chunk_size();
@@ -199,7 +241,7 @@ impl GraphArSelectiveSnapshot {
         };
         if facts
             .iter()
-            .any(|f| f.context().generation() != self.binding.generation())
+            .any(|f| f.context().generation() != self.generation)
         {
             return Err(GraphArSelectiveError::Scope);
         }
@@ -221,12 +263,19 @@ impl GraphArSelectiveSnapshot {
     /// Refuses scope, total row limits or malformed physical/semantic data.
     pub fn scan_all(
         &self,
-        query: &BoundDataQuery,
         projection: &BinaryEntityProjection,
         max_edges: usize,
     ) -> Result<GraphArSelection, GraphArSelectiveError> {
+        self.scan_all_checked(projection, max_edges, || Ok(()))
+    }
+    pub(crate) fn scan_all_checked(
+        &self,
+        projection: &BinaryEntityProjection,
+        max_edges: usize,
+        mut check: impl FnMut() -> Result<(), GraphArSelectiveError>,
+    ) -> Result<GraphArSelection, GraphArSelectiveError> {
         let started = Instant::now();
-        validate_scope(query, &self.binding, projection)?;
+        check()?;
         let total = self.offsets.iter().try_fold(0usize, |sum, offsets| {
             sum.checked_add(*offsets.last().ok_or(GraphArSelectiveError::Layout)?)
                 .ok_or(GraphArSelectiveError::Limit)
@@ -240,6 +289,7 @@ impl GraphArSelectiveSnapshot {
         for (part, offsets) in self.offsets.iter().enumerate() {
             let count = *offsets.last().ok_or(GraphArSelectiveError::Layout)?;
             for chunk in 0..count.div_ceil(chunk_size) {
+                check()?;
                 let rows = (count - chunk * chunk_size).min(chunk_size);
                 let topology_name = format!("{PREFIX}/adj_list/part{part}/chunk{chunk}");
                 let topology = read_range(
@@ -268,14 +318,16 @@ impl GraphArSelectiveSnapshot {
                 batches.push(join_batches(&topology, &properties)?);
             }
         }
+        check()?;
         let facts = crate::reader::admit_selected_batches(&batches, &self.entities, projection)?;
         if facts.len() != total
             || facts
                 .iter()
-                .any(|f| f.context().generation() != self.binding.generation())
+                .any(|f| f.context().generation() != self.generation)
         {
             return Err(GraphArSelectiveError::Scope);
         }
+        check()?;
         Ok(GraphArSelection {
             metrics: GraphArSelectionMetrics {
                 read_bytes: meter.bytes.load(Ordering::Relaxed),
@@ -485,14 +537,33 @@ pub fn capture_graphar_selective_snapshot_checked(
         projection,
         options,
     } = request;
+    binding
+        .admit_query(query, inventory, options.inventory_limits)
+        .map_err(|_| GraphArSelectiveError::Scope)?;
+    validate_scope(query, &binding, projection)?;
+    let physical = capture_verified_physical(
+        source,
+        inventory,
+        options,
+        query.query().generation(),
+        &mut check,
+    )?;
+    Ok(GraphArSelectiveSnapshot { binding, physical })
+}
+pub(crate) fn capture_verified_physical(
+    source: &Path,
+    inventory: &GraphDatasetInventory,
+    options: GraphArSelectiveCaptureOptions,
+    generation: GenerationId,
+    mut check: impl FnMut() -> Result<(), GraphArSelectiveError>,
+) -> Result<SelectivePhysicalSnapshot, GraphArSelectiveError> {
     let started = Instant::now();
     check()?;
     let limits = options.inventory_limits;
     let layout = options.layout;
-    binding
-        .admit_query(query, inventory, limits)
-        .map_err(|_| GraphArSelectiveError::Scope)?;
-    validate_scope(query, &binding, projection)?;
+    inventory
+        .canonical_bytes(limits)
+        .map_err(GraphArCaptureError::from)?;
     let directory = tempfile::tempdir()?;
     crate::snapshot::check_entry(source, true)?;
     let mut verified_bytes = 0;
@@ -536,10 +607,10 @@ pub fn capture_graphar_selective_snapshot_checked(
         offset_read_bytes: meter.bytes.load(Ordering::Relaxed),
         elapsed: started.elapsed(),
     };
-    Ok(GraphArSelectiveSnapshot {
+    Ok(SelectivePhysicalSnapshot {
+        generation,
         files,
         layout,
-        binding,
         entities,
         physical,
         offsets,

@@ -230,9 +230,16 @@ pub(super) fn rebind(f: &Fixture, semantic: &mrr::SemanticSnapshot) -> mrr::Cata
 
 /// Both path relations round-trip through native `GraphAr` before physical execution.
 pub(super) fn native_relations(f: &Fixture, root: &std::path::Path) -> Vec<BinaryRelationTable> {
+    native_relations_with_options(f, root, crate::GraphArWriteOptions::default())
+}
+pub(super) fn native_relations_with_options(
+    f: &Fixture,
+    root: &std::path::Path,
+    options: crate::GraphArWriteOptions,
+) -> Vec<BinaryRelationTable> {
     use crate::{
-        BinaryEntityProjection, GraphArReadLimits, read_graphar_dataset, verify_graphar_directory,
-        write_graphar_dataset,
+        BinaryEntityProjection, GraphArReadLimits, prepare_graphar_source_with_adjacency,
+        verify_graphar_directory, write_graphar_dataset_with_options,
     };
     use arrow_array::Array;
     use std::str::FromStr;
@@ -284,16 +291,22 @@ pub(super) fn native_relations(f: &Fixture, root: &std::path::Path) -> Vec<Binar
                 })
                 .collect::<Vec<_>>();
             let source = root.join(format!("relation-{index}"));
-            let receipt = write_graphar_dataset(&source, &projection, &edges).unwrap();
+            let receipt =
+                write_graphar_dataset_with_options(&source, &projection, &edges, options).unwrap();
             verify_graphar_directory(
                 &source,
                 receipt.inventory(),
                 mrr_data_core::GraphInventoryLimits::default(),
             )
             .unwrap();
-            let restored =
-                read_graphar_dataset(&source, &projection, GraphArReadLimits::new(100, 100))
-                    .unwrap();
+            let restored = prepare_graphar_source_with_adjacency(
+                &source,
+                GraphArReadLimits::new(100, 100),
+                options.adjacency,
+            )
+            .unwrap()
+            .admit(&projection)
+            .unwrap();
             let mut values = [Vec::new(), Vec::new()];
             for fact in restored.facts() {
                 assert_eq!(fact.context().generation(), f.query.generation());
