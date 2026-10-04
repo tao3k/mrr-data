@@ -9,8 +9,8 @@ original slices and do not independently define current completion. The initial
 audit used PR #12 at =aacc25511367391262f4639e5485701406089b21=. The consolidated
 source/dispatch composition was first published at
 =f949c4f5bdbceb93e590ec7408912c2dd66e55cc=. The published integration is now
-=ceccf19a92e4233d1639a4e0d1ee1b23b0aae370= with MRR owner
-=023a6dbdaa7d9d88ad129e22cb3abcd12231bc3b=. Qualification is recorded
+based on =d75d1aa2= with MRR owner
+=685459849876f84addc0a8bad40de4c00caede7d=. Qualification is recorded
 below. Platform results must refer to their exact head; earlier-head green checks
 do not establish all-platform closure.
 
@@ -33,7 +33,7 @@ The graph facade and semantic-only consumers need not enable that native fronten
 
 | Composition | Owner and supported scope | Acceptance gate |
 |-------------+---------------------------+-----------------|
-| Root, fuzz and =mrr-property-source= | One MRR revision =023a6dbdaa7d9d88ad129e22cb3abcd12231bc3b=; source digest, catalog binding, dispatch and final result admission remain MRR-owned | Locked pin guard; native =source-handoff= Linux/macOS CI |
+| Root, fuzz and =mrr-property-source= | One MRR revision =685459849876f84addc0a8bad40de4c00caede7d=; source digest, catalog binding, dispatch and final result admission remain MRR-owned | Locked pin guard; native =source-handoff= Linux/macOS CI |
 | GraphAr =native-graphar,source-handoff,backend,selective-graphar= with DataFusion =source-handoff= | Combined Healthcare property/relation closure; original GQL, four rows including duplicate/null, cold and same-cache warm restoration on one Backend; complete Dataset binding for selective neighborhoods | Canonical source-handoff Rust caller, cross-profile reuse and separate drift/refusal tests |
 | Shared Backend | Provider-independent admission, transaction authority/history and retained resource drain; simulated metadata in canonical caller | Positive, retirement, lost-ACK and final-clone assertions; native process-exit receipts remain separate |
 | GraphAr =selective-graphar= | Authenticated selective outgoing-range materialization under the declared schema | Paired full-source equivalence; end-to-end performance remains M3 |
@@ -54,11 +54,13 @@ not a native RSS cap. Local and platform qualification remain explicit gates.
 
 ** Current integration and continuous qualification
 
-The =ceccf19a= composition retains complete-Dataset selective capture,
+The composition based on =d75d1aa2= retains complete-Dataset selective capture,
 cross-profile original-source reuse and supervised native Cargo builds with
 separate successful executable artifact records. Root, fuzz and optional Source
-agree on MRR =023a6dbd=. Current-pin original-source controls and uniform/skewed
-process measurements remain open as detailed in the final integration section.
+agree on MRR =68545984=. Original-source controls and uniform/skewed correctness
+are implemented and locally qualified against the preceding =023a6db= owner.
+The changed native-build dependency and exact-head platform composition require
+fresh qualification. Matched original-query process measurements remain open.
 Local Python qualification after merging passes =42 tests=; strict Ruff,
 formatting, the real checkout owner-pin guard and documentation checks pass.
 Native acceptance must refer to the rebuilt integration and its selected
@@ -1194,14 +1196,19 @@ start. Native buffering can precede those observations. These boundaries do
 not qualify operator-only first-result latency, spill peaks or cache effects.
 Original Healthcare source qualification remains a separate native frontend
 gate. This receipt uses MRR pin =d5beb403=; the current root, fuzz and optional
-source frontend use =023a6dbd=. Linux original-source qualification passes at
-=707f4353= for its prior pin. Current-pin native acceptance remains open.
+source frontend use =68545984=. Linux original-source qualification passes at
+=707f4353= and =ceccf19a= for their preceding pins. Current-pin native acceptance
+remains open.
 
 * Consolidated M1-M3 integration: complete Dataset selective source
 
 The integration preserves remote =707f4353= and advances root/fuzz together
 to published MRR PR #9 commit =023a6dbdaa7d9d88ad129e22cb3abcd12231bc3b=.
-This is the native child-output forwarding fix on top of =d5beb403=.
+This was the native child-output forwarding fix on top of =d5beb403=. The
+subsequent =bab7209e= integration advances all owner pins to =d2894c88=, whose
+native-build helper repair is described below. The =d75d1aa2= follow-up then
+advances the owner to =68545984= with compiler-written linker progress. Earlier
+=023a6db= runtime results remain historical evidence for the preceding composition.
 The Python prerequisite is
 Rust 1.95.0 with an explicit compiler version check. Original-source CI now
 selects =source-handoff,backend,selective-graphar= together for GraphAr;
