@@ -6,6 +6,7 @@ Native GraphAr is checked separately by the CI job that provisions its C++ SDK.
 """
 
 from mrr_data_testing.workspace import repository_root
+from mrr_data_testing.checks.pins import check_fuzz_mrr_pin
 import subprocess
 
 ROOT = repository_root()
@@ -45,6 +46,7 @@ CASES = [
 
 
 def main():
+    check_fuzz_mrr_pin(ROOT)
     backend_tree = subprocess.check_output(
         [
             "cargo",

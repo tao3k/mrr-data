@@ -157,6 +157,10 @@ fn property_descriptor_reopens_in_new_process() {
     loop {
         if let Some(status) = child.try_wait().unwrap() {
             assert!(status.success(), "property restore child failed: {status}");
+            assert_eq!(
+                std::fs::read(dir.path().join("restore-complete")).unwrap(),
+                b"8 complete rows"
+            );
             break;
         }
         // This short native slice must finish inside the strict 5-second gate.
@@ -199,6 +203,8 @@ fn property_descriptor_child_reopens() {
         // Native physical indices sort canonical IDs; compare complete logical rows.
         assert_eq!(rows(&table.batch), rows(&expected.batch));
     }
+    assert_eq!(actual.iter().map(|t| t.batch.num_rows()).sum::<usize>(), 8);
+    std::fs::write("restore-complete", b"8 complete rows").unwrap();
     println!("property restore: 8 complete rows admitted in fresh process");
 }
 

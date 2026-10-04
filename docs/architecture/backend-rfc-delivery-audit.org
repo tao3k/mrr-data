@@ -408,3 +408,14 @@ that root-cause diagnosis; new-head native CI still must qualify the fix. This
 slice preserves that parallel repair and removes the newly introduced
 =CARGO_BUILD_JOBS=2= setting from the DuckGQL CI job, restoring Cargo defaults.
 Immutable source pins and upstream static extension mode remain in place.
+
+** P0: isolated fuzz MRR pin drift
+
+Exact head =8d1bef1a02dd445d8027e14697c992e1f50924f2= failed Arrow IPC
+fuzz compilation in job =111372379834=: =Fact= and =RelationSchema= came
+from both =e9f87c3= and =9ee5ace=. The root workspace pin advanced while
+=fuzz/Cargo.toml= retained the older Git revision. The isolated fuzz manifest
+and lock now use the exact root workspace MRR pin. The Python qualification
+framework checks the fuzz manifest and lock before feature compilation, with
+negative fixtures for either source of drift. This fixes the typed source
+identity mismatch; the new-head nightly ASan campaign remains its CI gate.
