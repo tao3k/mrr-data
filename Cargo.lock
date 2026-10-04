@@ -3708,7 +3708,6 @@ dependencies = [
  "mrr-data-asp-rust-build-support",
  "mrr-data-content",
  "mrr-data-core",
- "serde",
  "serde_json",
  "tempfile",
  "tokio",

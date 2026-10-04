@@ -4,7 +4,7 @@ use crate::BackendError;
 use duckdb::{Connection, OptionalExt, params};
 use mrr_data_content::ConditionalCommitPortError as PortError;
 use std::{path::PathBuf, sync::Mutex};
-const SCHEMA: &str = "mrr-data-backend.duckdb.v1";
+const SCHEMA: &str = "mrr-data-backend.duckdb.v2";
 /// Local `DuckDB` metadata capability. Deploy within a single writer process;
 /// this adapter does not declare a distributed/multi-process write service.
 pub struct DuckDbProvider {

@@ -5,7 +5,7 @@ use crate::BackendError;
 use mrr_data_content::ConditionalCommitPortError as PortError;
 use std::{path::PathBuf, sync::Mutex, time::Duration};
 use tokio::runtime::Handle;
-const SCHEMA: &str = "mrr-data-backend.turso.v1";
+const SCHEMA: &str = "mrr-data-backend.turso.v2";
 /// Local Turso connections using the Host executor. No global allocator, remote
 /// replica, automatic runtime or process signal handler is enabled.
 pub struct TursoProvider {

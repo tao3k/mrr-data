@@ -2,10 +2,8 @@
 use crate::AuthorityExpectation;
 use cid::Cid;
 use mrr_data_content::{ConditionalContentWrite, ContentRevision};
-use serde::{Deserialize, Serialize};
 /// Complete revision/CID, retaining the protocol's full u64 revision range.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StoredRevision {
     pub revision: u64,
     pub root: Cid,
@@ -28,8 +26,7 @@ impl From<StoredRevision> for ContentRevision {
 }
 /// Profile and deployment namespace are independently configured. Scope and
 /// operation remain opaque exact protocol IDs; none is interpolated into SQL.
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StoredWrite {
     pub profile: String,
     pub namespace: String,
@@ -37,7 +34,6 @@ pub struct StoredWrite {
     pub operation_id: String,
     pub expected: Option<StoredRevision>,
     pub replacement: Cid,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub authorities: Vec<AuthorityExpectation>,
 }
 impl StoredWrite {

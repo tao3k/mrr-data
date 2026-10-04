@@ -489,3 +489,45 @@ Shared handles return the original handle without invoking conversion; failed
 conversion releases the reservation. The Turso integration consumes physical
 output into a leased MRR candidate and holds that lease through admission/drain.
 Host estimates include conversion scratch and transformed output bytes.
+
+* Native Scheme metadata v2
+
+Shared logical metadata keys and values use inert UTF-8 Scheme datums.
+The provider-reserved schema marker remains a plain UTF-8 version token. This is an
+internal persistence representation; public consumers retain the typed Rust
+Library ports. Metadata types have no Serde derives, and the Backend has no
+direct Serde or JSON runtime dependency. No JSON decoder, evaluator, or v1
+fallback is present.
+
+Keys are =("mrr.backend.key.v2" "kind" ("part" ...))= and are bounded to
+8192 encoded bytes. Values are bounded to 65536 encoded bytes before output
+allocation, with recursive datum depth at most 32 (root depth is zero). Authority inventories have at most
+16 entries. Unsigned numbers retain the complete =u64= range; booleans are
+=#t= and =#f=; missing optional records are =#f=. Strings use quoted Unicode,
+=\"=, =\\= and =\xHEX;= escapes. Symbols, executable forms, invalid UTF-8,
+trailing datums, overflow, and incorrect product arity or tags are rejected.
+
+Products have exact v2 string tags for revision, authority, expectation,
+write, authority-key, authority-proposal, authority-change, completion and
+authority-completion. Their positional fields follow the corresponding typed
+Rust records in =scheme_record.rs=. Commit and authority transactions retain
+the same atomic operation/head and home sequence logic.
+
+Turso and DuckDB schema markers are v2. Opening a v1 database fails before
+Ready; the Library does not delete, reset, or automatically migrate that store.
+Deployments must provision a separately qualified v2 store or perform an
+explicit offline migration outside this API.
+
+This closes the metadata representation boundary. Temporal currentness and
+atomic disclosure still require an upstream Source authority guard held until
+the Data transaction completes. A recovered operation receipt is historical
+and must not become current disclosure authority.
+
+Before joining the POO Temporal/MRR Context adapter to this Backend, the
+immutable MRR source revisions must agree across those consumers. Native
+acceptance then needs to exercise Source correction concurrently with Data
+commit, and prove that stale evidence cannot advance the logical head. Separate
+Context and Backend passes do not establish that combined property.
+
+Native qualification inputs, bounded runtime results and retained failures are
+recorded in [[file:../qualifications/backend-scheme-v2.ss][the Scheme v2 qualification receipt]].

@@ -19,6 +19,7 @@ pub use query::{
 mod resource;
 pub use resource::{ResourceHandle, ResourcePreparationError, ResourceTransformError};
 mod scheduler;
+mod scheme_record;
 mod transaction;
 pub use authority::{
     AuthorityChange, AuthorityExpectation, AuthorityKey, AuthorityProposal, AuthorityState,

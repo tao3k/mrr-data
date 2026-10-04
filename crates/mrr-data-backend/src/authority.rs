@@ -2,17 +2,15 @@
 //! are supplied by the Host; all profiles share this physical CAS boundary.
 use crate::BackendError;
 use cid::Cid;
-use serde::{Deserialize, Serialize};
 /// Retirement is terminal for one stable authority identity.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AuthorityStatus {
     Active,
     Retired,
 }
 /// Commitment binds the Host's exact key/policy/revocation snapshot. Generations
 /// advance even if that snapshot returns to the same bytes, preventing ABA.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AuthorityState {
     pub generation: u64,
     pub commitment: Cid,
@@ -20,16 +18,14 @@ pub struct AuthorityState {
 }
 /// Snapshot required by a content operation. Every enrolled authority in its
 /// profile/namespace/scope is mandatory; callers cannot omit a guard to bypass it.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthorityExpectation {
     pub authority_id: String,
     pub state: AuthorityState,
 }
 /// Host-authorized CAS proposal. No public method interprets this as semantic
 /// permission to enroll or retire; embedding applications control access.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthorityProposal {
     pub authority_id: String,
     pub expected: Option<AuthorityState>,
@@ -37,8 +33,7 @@ pub struct AuthorityProposal {
     pub status: AuthorityStatus,
 }
 /// Exact physical namespace tuple, never an interpolated SQL/path key.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthorityKey {
     pub profile: String,
     pub namespace: String,
@@ -46,8 +41,7 @@ pub struct AuthorityKey {
     pub authority_id: String,
 }
 /// Owned CAS request; its next generation is the stable update/recovery identity.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthorityChange {
     pub key: AuthorityKey,
     pub proposal: AuthorityProposal,
