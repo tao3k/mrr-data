@@ -37,8 +37,20 @@ independent of that extension and of database-query benchmark results.
 
 [[file:0001-mrr-data-plane.org][The canonical data-plane ownership table]] fixes MRR semantics/admission,
 GraphAr graph representation, Arrow interchange and shared Backend lifecycle.
-Native GraphAr packaging remains opt-in; current binary-Entity qualification
-does not establish arbitrary property layouts or selective graph scanning.
+Native GraphAr packaging remains opt-in. The current delivery ledger covers
+binary-Entity topology, declared entity-property tables, combined original-source
+capture and narrow ordered-outgoing selective access. It does not qualify all
+GraphAr layouts or end-to-end selective-query performance.
+
+Graph workload persistence uses one GraphAr representation contract across
+Production profiles. Typed profile descriptors select schemas, layout and scope;
+they do not create another Backend runtime. Native database tables, extension
+registrations and prepared engine state are derived, rebuildable execution images.
+The complete snapshot binds immutable graph metadata/chunks to MRR identities.
+Atomic head, authority history, uncertain-commit recovery and reclamation remain
+shared Backend/metadata responsibilities. A graph format alone supplies none of
+those transaction guarantees. The [[file:backend-rfc-delivery-audit.org][delivery audit]] records the strategic
+priorities and the single M0-M3 plan.
 
 * Common engine and lifecycle
 

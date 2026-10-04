@@ -316,6 +316,82 @@ Do not infer complete P0-P2 delivery from cumulative unit-test counts.
 
 ** Milestones, dependency order and exit criteria
 
+*** Strategic review: GraphAr and the complete next delivery
+
+Review baseline: clean local =c6e26f11=, with local original-source acceptance
+=DataFusion 2 / GraphAr 2= and Python =40=. Published =56b7057a= remains a
+separate frozen CI baseline. At this review its Linux original-source and
+maintained GraphAr jobs, MSRV, Arrow fuzz and both S3 jobs pass; Python fails,
+and macOS original-source/GraphAr, general Rust and both DuckGQL jobs remain
+pending. Local fixes and older platform passes do not close current-head gates.
+
+GraphAr is the common durable physical representation for Production graph
+workloads. Its strategic value follows from a graph-aware adjacency/offset layout,
+independently projected property groups, immutable chunk reuse and interoperable
+storage across execution engines. [[https://graphar.apache.org/docs/overview/concepts/][The official format concepts]] describe the
+source/destination adjacency layouts and chunk/property separation;
+[[https://arxiv.org/html/2312.09577v4][the GraphAr paper]] motivates neighbor access and label filtering as distinct
+physical operations. These support the architecture choice, not a performance
+claim about the current MRR implementation or a guarantee that every published
+feature exists in the pinned Rust/C++ SDK.
+
+| Architectural responsibility | Owner | Strategic delivery boundary |
+|------------------------------+-------+-----------------------------|
+| Original source, catalog/generation, semantic identities, final candidate admission | MRR | Engine output always returns through the original admitted query |
+| Graph metadata, vertex/edge properties, adjacency/offset layout | GraphAr adapter | One immutable representation contract; typed descriptors vary by profile |
+| Reservations, queues, cancellation, retained buffers, drain and close | Shared Production Backend | One runtime/admission model for all profiles and physical capabilities |
+| Immutable content, transfer/cache, root binding and publication closure | MRR Data content/snapshot layer | GraphAr metadata and native chunks bind to exact CIDs; the file format is not the authorization authority |
+| Atomic heads, authority versions and recovery history | Optional metadata transaction provider | Storage-independent transaction protocol; SQL stays inside optional implementations |
+| Columnar interchange | Arrow | Explicit schema, buffer lifetime/release and actual copy accounting |
+| Physical scan/join/filter and narrow extension dispatch | DataFusion/DuckDB/DuckGQL/Turso query adapters | Supported operators differ; execution images can be rebuilt from the admitted snapshot |
+
+GraphAr format selection does not supply MVCC, atomic publication, authority
+retirement or crash recovery. Those existing contracts must remain visible.
+The persistence contract serves every graph-using Production profile without
+forcing native GraphAr or a database onto consumers that only need semantic
+types or opaque metadata. No provider owns a second independent Backend.
+
+The main performance risk is paying full-snapshot verification and full fact
+materialization before every selective query. The current selective implementation
+has positioned Parquet reads, offsets and row selection; the canonical combined
+caller still captures its full physical closure. The next optimization must join
+those paths and measure authentication, cold acquisition, materialization and
+query independently. Global required coverage cannot be dropped to make a slice
+benchmark look faster. Reuse verified immutable source ownership first; selective
+cold acquisition requires an explicit integrity/coverage contract before release.
+
+GraphAr durable chunk size, Parquet row group size, Arrow batch byte limit and
+native engine vector capacity are separate parameters. Chunk/property layouts
+need measured workload selection, not a universal row count. Current native VTab
+copy/registry boundaries also prevent an end-to-end zero-copy claim. [[https://arrow.apache.org/docs/format/CDataInterface.html][Arrow's C Data
+ownership contract]] and [[https://duckdb.org/docs/current/clients/rust/result_handling][DuckDB's Rust result-handling contract]] require precise
+release and streaming behavior; iterating batches does not itself bound engine
+RSS or remove a blocking operator's internal materialization.
+
+| Priority / existing milestone | Complete delivery unit | Exit evidence |
+|-------------------------------+------------------------+---------------|
+| P0 / M0 | Reconcile RFC status and capabilities; finish frozen CI, integrate the locally qualified build/source batch and publish one coherent head | Same-head Linux/macOS/MSRV and required feature results; pins and receipt identities agree |
+| P1 / M1 | One original-query publication, cold/warm restore, capture, physical query, final admission and simulated disclosure/recovery caller | Expected rows/nulls/duplicates and source/scope/corruption/refusal cases pass; process-reopen evidence remains distinct from same-process reopen |
+| P1 / M2 | Retained immutable source plus independently admitted consumers; complete mixed-profile lifecycle and drift matrix | Every snapshot/profile/catalog/generation/schema change refuses stale reuse; cleanup precedes drain; native providers preserve reserved recovery |
+| P2 / M3 first | Integrate selective GraphAr access into the same admitted original-query caller | Full-reference and selective outputs agree; bounded bytes/rows/leases and coverage rules hold on uniform/skewed inputs |
+| P2 / M3 final | Matched cold/full, warm/full and warm/selective/reuse measurements, then supported-scope release | CPU and wall, verification/execution/transfer bytes, copies, peak RSS, first/total result and engine spill receipts; same-head release CI |
+
+The cross-profile acceptance must reuse real supported graph schemas with
+distinct profile bindings; differing metadata keys alone prove metadata isolation,
+not an entire second Production graph case. Incoming traversal, broad GQL,
+arbitrary property/n-ary profiles, specialized label encodings and further engines
+are deferred until a concrete Production query establishes need and its acceptance
+contract. Paper algorithms are research candidates, not implicitly implemented
+features. Prioritize graph correctness/lifetime and then measured scan/reuse gains
+ahead of expanding provider count.
+
+Keep one ledger and publish complete milestone batches. Native owner progress
+streaming, Python toolchain setup, exact-source platform acceptance and the Linux
+DuckGQL cold-build deadline are the present engineering gates. Simulated Host
+authorization remains sufficient; live deployment credentials, a universal SQL
+compiler, an independent graph runtime per provider or relaxed timeouts are not
+added to this plan.
+
 *** M0: one delivery baseline and one current status
 
 - Reconcile the published branch with separately developed original-source work;

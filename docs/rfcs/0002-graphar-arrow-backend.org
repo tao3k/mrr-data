@@ -10,8 +10,9 @@ boundaries; later code must not be judged only from an earlier capability table.
 
 * Status and scope
 
-Status: proposed; implementation gates below distinguish current code from
-planned capability. Written 2026-10-03 against the MRR Data interfaces at
+Status: architecture agreed; partially implemented, with platform and performance
+acceptance still open. Implementation gates below distinguish current code from
+planned capability. Initially written 2026-10-03 against the MRR Data interfaces at
 =8704d46a7c4d2af3749726dac3e583a3d1725c50=. This RFC extends
 [[file:../architecture/0001-mrr-data-plane.org][RFC 0001]] and [[file:../architecture/shared-backend.org][the shared Backend contract]]. It covers all Production
 profiles using graph snapshots, rather than one Example or application.
@@ -37,8 +38,10 @@ independent of that extension and of database-query benchmark results.
 
 [[file:../architecture/0001-mrr-data-plane.org][The canonical data-plane ownership table]] fixes MRR semantics/admission,
 GraphAr graph representation, Arrow interchange and shared Backend lifecycle.
-Native GraphAr packaging remains opt-in; current binary-Entity qualification
-does not establish arbitrary property layouts or selective graph scanning.
+Native GraphAr packaging remains opt-in. The current delivery ledger covers
+binary-Entity topology, declared entity-property tables, combined original-source
+capture and the narrow ordered-outgoing selective source. Broader layouts and
+end-to-end selective-query performance remain explicit acceptance gates.
 
 * Current interfaces and specific gaps
 
