@@ -180,7 +180,7 @@ fn control(deadline: bool) -> ResourceControl {
     ResourceControl::new(deadline.then(|| Instant::now() + Duration::from_millis(30)))
 }
 fn stopped(
-    result: Result<ResourceHandle<Execution>, ResourcePreparationError<ResourceStop>>,
+    result: &Result<ResourceHandle<Execution>, ResourcePreparationError<ResourceStop>>,
     deadline: bool,
 ) {
     let expected = if deadline {
@@ -189,7 +189,7 @@ fn stopped(
         ResourceStop::Cancelled
     };
     assert!(
-        matches!(result, Err(ResourcePreparationError::Preparation(reason)) if reason == expected)
+        matches!(result, Err(ResourcePreparationError::Preparation(reason)) if *reason == expected)
     );
 }
 
@@ -230,7 +230,7 @@ async fn original_source_handoff_queued_cancel_and_deadline_release_real_capture
         if !deadline {
             control.cancel();
         }
-        stopped(wait(queued).await.unwrap(), deadline);
+        stopped(&wait(queued).await.unwrap(), deadline);
         assert_eq!(
             backend.status().resource_bytes,
             if deadline { 1 } else { RESERVED + 1 }
@@ -264,7 +264,7 @@ async fn original_source_handoff_running_stop_refuses_consumer_after_physical_cl
         assert!(!running.is_finished());
         assert_eq!(backend.status().resource_bytes, 2 * RESERVED);
         gate.release.notify_one();
-        stopped(wait(running).await.unwrap(), deadline);
+        stopped(&wait(running).await.unwrap(), deadline);
         assert_eq!(gate.calls.load(Ordering::SeqCst), 1);
         assert_eq!(gate.admitted.load(Ordering::SeqCst), 1);
         assert_eq!(backend.status().resource_bytes, RESERVED);

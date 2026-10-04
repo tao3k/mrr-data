@@ -59,8 +59,13 @@ cross-profile original-source reuse and supervised native Cargo builds with
 separate successful executable artifact records. Root, fuzz and optional Source
 agree on MRR =68545984=. Original-source controls and uniform/skewed correctness
 are implemented and locally qualified against the preceding =023a6db= owner.
-The changed native-build dependency and exact-head platform composition require
-fresh qualification. Matched original-query process measurements remain open.
+The changed native-build dependency compiled locally and its DataFusion Source
+pair passed; GraphAr runtime initialization still hit the unchanged idle gate.
+Both Source test crates passed direct strict Clippy with the successful native
+build's exact dependency arguments after the lifecycle assertion helper was
+changed to borrow its result. Full Cargo Clippy and exact-head platform
+acceptance remain separate gates. Matched original-query process measurements
+remain open.
 Local Python qualification after merging passes =42 tests=; strict Ruff,
 formatting, the real checkout owner-pin guard and documentation checks pass.
 Native acceptance must refer to the rebuilt integration and its selected
@@ -1428,3 +1433,34 @@ P0 remains open for published-pin cold module compilation, cold artifact
 restoration and full Cargo Clippy progress. P1 requires rooted-GC, callback/error containment,
 thread ownership and lifecycle receipts. P2 performance work follows these
 correctness gates and separates startup, first query and steady-state calls.
+
+** Published MRR pin: native Source build and strict own-crate lint
+
+The =68545984= Source composition built successfully on macOS in =11m43s=,
+with real Cargo executable records for DataFusion =1dc8d727be6af130= and
+GraphAr =a26c1f66cab69c16=. The independently supervised DataFusion Source pair
+passed 2/2 in =4.30s= of test-body time. GraphAr hit the unchanged five-second
+idle gate during native runtime initialization, before its eight Source cases
+ran. These are current-pin local receipts, not exact-head CI acceptance.
+
+Direct strict Clippy used each test crate's captured successful Cargo rustc
+arguments and exact native-build dependencies, emitted metadata to isolated
+directories, and applied =-D warnings=. It identified a needless by-value
+argument in the lifecycle assertion helper; the helper and its two callers now
+borrow the result. Both Source test crates then passed this strict check. This
+qualifies the owned test crates, not Cargo's complete dependency-check path.
+
+A subsequent supervised Cargo rebuild and a direct owned GraphAr rustc
+recompile each hit the unchanged 30-second idle build gate. Neither produced
+a successful replacement executable receipt, so the borrowed-helper revision
+has strict metadata acceptance but no fresh local native execution acceptance.
+Concurrent Rust, Gerbil and C compiler processes were observed on the host;
+this observation does not establish the cause of the refusals. No timeout,
+heap, worker-count or optimization adjustment was made for these attempts.
+
+Frozen =ceccf19a= macOS Source CI passed its DataFusion 2/2 and GraphAr 4/4
+cases in =0.93s= and =1.41s=, respectively. That older composition does not
+qualify the four later GraphAr cases or the =68545984= dependency. The remote
+=18cf4df0= run =37211540167= was still pending native checks at this receipt;
+Python, Arrow IPC fuzz and Ubuntu S3/TLS had passed. Exact published-head
+platform acceptance and M3 original-query measurements remain open.
