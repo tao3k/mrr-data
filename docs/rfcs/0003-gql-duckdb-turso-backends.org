@@ -1,0 +1,259 @@
+#+title: RFC 0003: DuckGQL execution and portable SQL adapters in MRR Data
+#+options: toc:2
+
+* Status
+
+Proposed against [[https://github.com/tao3k/mrr-data/pull/12][MRR Data PR #12]] at
+=30dcf28f0314addd350aa0c7b690ee90dace84bb=. That PR has one generic
+=mrr-data-backend= with optional Turso =0.8.1= and DuckDB =1.10502.0=
+metadata providers, a provider-neutral =backend-arrow-query= output protocol,
+and a DuckDB adapter for a Host-prepared statement. The Turso provider currently
+uses SQL only for bounded metadata records. Neither provider executes MRR's
+GQL queries, and the DuckDB adapter does not load DuckGQL. Everything below
+that describes graph-query execution is proposed, not implemented.
+
+* Decision and ownership
+
+MRR remains the sole GQL/Cypher parser, semantic catalog and result-admission
+authority. MRR Data consumes an admitted =CatalogBoundQuery= / =BoundDataQuery=,
+binds it to an exact physical snapshot and runs optional native adapters.
+
+- The *DuckDB path uses DuckGQL* for graph planning and execution. MRR Data
+  does not generate DuckDB SQL for graph patterns or duplicate DuckGQL's
+  lowering/CSR algorithms. It provides authenticated graph registration,
+  a typed bridge from MRR's admitted query, bounded execution and result
+  conversion.
+- The *SQL path* is owned by MRR Data for Turso first and other SQL-capable
+  engines through explicit dialect adapters later. A bounded Rust
+  graph-to-relational plan produces one parameterized, read-only SQL artifact
+  per supported dialect. It does not import DuckGQL C++ lowering.
+- Both paths share the MRR query binding, verified GraphAr/Arrow source,
+  physical identity mapping, Backend lifecycle and final MRR result admission.
+  They do not need to share an implementation of graph lowering.
+
+There is no MRR Data-owned DuckDB graph compiler or executor in the baseline.
+GraphAr's presence alone does not justify maintaining one. A direct GraphAr
+query path is considered only after a matched comparison demonstrates a
+material advantage over DuckGQL for an admitted workload and preserves the
+same source, semantics and receipt. Even then, prefer a narrow GraphAr scan or
+operator capability over a second general DuckDB SQL compiler.
+
+The existing [[file:../architecture/0001-mrr-data-plane.org][data-plane RFC]] leaves SQL to a downstream package.
+Acceptance of this RFC narrows that decision for optional query adapters in
+this repository. =mrr-data-core=, =mrr-data-graphar=, the generic
+=mrr-data-backend= transaction engine and default facade features remain
+provider-neutral. Update that architecture document when implementation lands;
+this proposed RFC changes no public API by itself.
+
+* Two execution paths
+
+#+begin_src text
+GQL/Cypher --MRR parser/catalog--> CatalogBoundQuery
+           --mrr-data-core snapshot/profile binding--> BoundDataQuery
+           --verified GraphAr/Arrow source--> checked physical mapping
+              |                                |
+              v                                v
+     DuckGQL plugin bridge             MRR Data Rust SQL plan
+     (DuckDB graph engine)             -> Turso SQL emitter
+              |                         -> later SQL dialects
+              +--------------+-----------------+
+                             v
+                bounded physical output
+                 -> CandidateQueryResult
+                 -> MRR admission/receipt
+#+end_src
+
+PR #12's =TransactionProvider/MetadataTransaction= continues to own bounded
+opaque metadata records. Graph-query execution belongs in optional physical
+query adapters. =Backend::query_arrow= can carry a Host-prepared, authenticated
+physical producer through the existing worker, resource, cancellation and
+leased-output lifecycle. The current DuckDB prepared-statement/Arrow adapter
+is a possible result carrier, not a DuckGQL integration. Turso needs its own
+bounded row-to-typed-output bridge.
+
+* DuckGQL plugin integration boundary
+
+DuckGQL is an experimental C++ DuckDB extension with graph queries and CSR
+algorithms. Its documented execution path accepts GQL text, binds a selected
+graph and lowers its own logical plan to DuckDB structures and table functions.
+Its current source does not document an entry point for MRR's
+=CatalogBoundQuery= or =BoundDataQuery=. Sending the original source text to
+DuckGQL would invoke a second parser and binder; it would not preserve MRR as
+the sole query-admission authority. The required bridge is therefore an
+*implementation gate*, not a capability of PR #12 or the released extension.
+
+The bridge should translate only a declared MRR typed-query slice into a
+versioned DuckGQL external-plan interface that bypasses DuckGQL parsing and
+conflicting semantic binding while retaining its graph optimizer and native
+execution. Its contract needs typed patterns, property references, direction,
+filters, projections, parameter slots, feature refusal and an ordered output
+schema. The implementation may require a pinned extension change and a
+versioned C ABI or equivalent native boundary. MRR Data owns the Rust adapter;
+DuckGQL owns its graph operators. If such an interface is unavailable, report
+that the DuckDB graph path is gated. Do not silently substitute a second
+DuckDB SQL compiler or claim that reparsing GQL meets this design.
+
+DuckGQL's documented read-only graph projections over existing DuckDB tables
+suggest a registration seam. MRR Data must register only tables derived from
+a Host-authenticated =BoundDataQuery= source, map canonical Entity/Fact IDs to
+source-key properties, and verify graph schema and snapshot policy. DuckGQL's
+dense element IDs, adjacency offsets and CSR state are snapshot-local physical
+identities, not MRR identities. The extension currently targets a different
+DuckDB version from PR #12's pinned Rust SDK, so a compatible binary, platform,
+loading policy and end-to-end query fixture are separate release gates. A
+compatible =LOAD duckgql= alone does not prove the typed bridge or result
+admission.
+
+* SQL path for Turso and later engines
+
+A private optional Rust module or crate (provisionally =mrr-data-sql=) accepts
+only an exact =BoundDataQuery=, a checked physical table/column mapping, typed
+runtime parameters and explicit limits. Its bounded graph-to-relational plan
+records admitted relation/property accesses, joins, filters, projections and
+parameter slots. It contains no GQL tokens, DuckDB C++ objects, source-authority
+decision or result receipt. Turso is the first renderer; each later SQL engine
+gets a separately qualified dialect and output adapter. DuckDB is not a
+renderer of this plan.
+
+The emitter returns =PreparedSql=: one read-only statement, dialect and mapping
+profile versions, ordered typed binding slots and ordered output schema. Table
+and column identifiers come only from the validated mapping and are quoted for
+the selected dialect. GQL literals, runtime parameters and supported paging
+values use native placeholders and bind APIs; values are not interpolated into
+SQL. Missing, extra or wrong-typed parameters fail before execution. The same
+admitted query and mapping must produce a stable SQL shape and binding order.
+
+Unsupported patterns, unknown mappings, nonrepresentable values or unavailable
+engine features fail before prepare. No filter may be dropped and no absent
+property silently converted to SQL =NULL=. Each admitted slice specifies
+missing versus null, duplicate edges, direction, multiplicity, conversions and
+output nullability. The output adapter checks column count, order, types and
+canonical identities before making =PhysicalQueryOutput=. New SQL engines are
+admitted through their own syntax/placeholder/type/error tests, not by assuming
+Turso SQL is universally portable.
+
+MRR's result digest hashes an ordered row vector. Neither a Turso scan nor a
+DuckGQL/DuckDB plan gives receipt parity merely by returning the same set. The
+first slice must define and implement a common deterministic row-sequence rule
+before comparing receipts. Future =ORDER BY=, ties, null ordering and paging
+need separate typed contracts.
+
+* GraphAr as the common physical source
+
+GraphAr provides durable vertex/property groups and chunked edge adjacency. An
+=ordered_by_source= layout with offsets can support selective outgoing-edge
+reads; the destination layout can support incoming-edge reads. These positions
+are physical. Both execution paths must preserve the admitted =EntityId=,
+=FactId= and =RelationId= and required context fields. The current writer and
+reader qualify a fixed binary-Entity projection; arbitrary GraphAr layouts and
+MRR property paths require separately versioned lossless profiles.
+
+PR #12 already has =GraphDatasetInventory= for the declared file closure and
+=GraphDatasetBinding= for the snapshot root, generation, relation and catalog
+digests. Child/root ACK, protected head selection and cold restore provide a
+single published physical source. The Host must authenticate the binding root.
+=capture_graphar_snapshot= verifies declared children, imports native Arrow C
+Stream data and returns immutable facts under a Backend resource lease.
+=facts(query)= rechecks the exact query scope before reuse. Both query paths
+must use this source identity rather than treating native table names or row
+counts as authority.
+
+The captured object currently holds =Arc<[Fact]>= and deletes its private
+GraphAr files before return. It does not expose a retained Arrow stream,
+adjacency cursor or SQL table. The first qualified implementation should derive
+bounded typed vertex/edge relation images from one captured fact set, retaining
+canonical identities and an exact binding key. DuckGQL sees the registered
+DuckDB tables as a graph projection; Turso loads its relation image into
+bounded provider-owned tables with transactional rollback/cleanup. These are
+two engine representations of one authenticated source. The current DuckDB
+Arrow carrier qualifies only Int64/Utf8/Binary input and copies into native
+chunks; complete Fact mapping, plugin graph registration and Turso loading are
+all new gates.
+
+A later selective path may retain verified GraphAr chunks under a lease and
+scan topology/property groups into bounded Arrow batches. It must prove that
+native readers use the inventory-verified bytes, adjacency and property rows
+align, and each edge resolves to the exact semantic Fact. DuckGQL could consume
+that path through a suitable graph-table registration; Turso could load only
+needed relations. Neither outcome follows from the current capture API. No
+zero-copy, pushdown or bounded native-RSS claim follows from Arrow import alone.
+
+** Decision gate for a custom DuckDB path
+
+The baseline is DuckGQL over authenticated, read-only DuckDB graph tables.
+Compare it with a proposed GraphAr-native scan on the *same* published binding,
+generation, catalog, fact set, query corpus and result order. Include plugin
+graph registration and CSR build/invalidation, GraphAr capture/verification,
+Arrow conversion, warm and cold execution, native peak RSS, retained bytes,
+spill, first result and total time. Test selective neighborhoods, high-degree
+vertices, large graphs that exceed comfortable in-memory CSR size and repeated
+queries; measure simple scans too, where extra GraphAr conversion may lose.
+
+The existing 10k prepared-GraphAr scenario measures reuse of already decoded
+facts. It is not a DuckGQL comparison and cannot authorize a second executor.
+Proceed only when a fixed workload shows a meaningful, repeatable advantage
+after all setup and copy costs, exact typed results and MRR receipts match, and
+the required native resource/error contract is qualified. Otherwise keep
+DuckGQL as the sole DuckDB graph executor. If the advantage is confined to
+loading or selective I/O, expose only that source adapter to the plugin rather
+than maintaining another graph planner.
+
+| Reuse layer | Available in PR #12 | New graph-query gate |
+|-------------+---------------------+----------------------|
+| Identity/publication | Inventory, binding, child/root ACK and cold restore | Bind every graph/table cache to exact root, generation, catalogs and projection version |
+| Semantic capture | Verified binary-Entity facts and Backend lease | Lossless fact-to-vertex/edge mapping and lifetime rules |
+| DuckDB | Checked Arrow input and materialized Arrow output | DuckGQL binary compatibility, graph registration, external typed-plan bridge and result conversion |
+| Turso | Protected metadata transactions | Bounded graph-table load, indexes, rollback/cleanup and typed output bridge |
+| Selective access | Native GraphAr read and Arrow C Stream import during preparation | Snapshot-pinned adjacency/property scan with measured pushdown and resources |
+
+* First slices and evidence
+
+1. Pin exact MRR, DuckDB, DuckGQL and Turso revisions. Define optional DuckGQL
+   and SQL adapter features independently, without changing default features
+   or the generic metadata engine. Qualify extension binary compatibility on
+   supported Linux/macOS configurations.
+2. From one Host-authenticated captured binary-Entity source, derive checked
+   relation images. For Turso, implement one directed outgoing hop, two non-null
+   Entity endpoints, =RETURN ALL= and direct endpoint projection through one
+   parameterized SQL emitter. No filters, aggregation, ordering, paging,
+   variable-length/undirected paths, mutation, procedure or algorithm yet.
+3. For DuckDB, prove a typed MRR-to-DuckGQL external-plan bridge for that same
+   admitted slice, register the same captured source as a read-only graph and
+   execute through the plugin. Keep this gate distinct from Turso SQL delivery;
+   never replace it with generated DuckDB SQL. Decode both paths to
+   =PhysicalQueryOutput=, project with =project_data_query_output= and submit
+   to MRR result admission.
+4. Compare independent expected rows, DuckGQL, Turso and the overlapping
+   DataFusion slice. Define common row order before requiring receipt parity.
+   Exercise stale root/generation/catalog, source-table drift, typed parameter
+   errors, quoted values, injection attempts, duplicate edges, wrong output
+   types/order, cancellation, resource limits and every unsupported feature.
+   Rejected cases yield no admitted candidate.
+5. Add the one/two-edge property-path slice, including the original Healthcare
+   query, only after each path supports admitted property equality, nullable
+   outputs, exact catalog mapping and =RETURN ALL= multiplicity. DuckGQL-only
+   CSR algorithms are a separate DuckDB capability. Real Lambda/Marlin calls
+   and deployed behavior remain separate acceptance gates.
+6. Compare capture, fact-to-row conversion, plugin registration or Turso load,
+   planning, query, result conversion and MRR admission separately. Vary graph
+   size, degree skew, selectivity, property width and warm/cold reuse; record
+   native RSS, retained Arrow bytes, Turso table/index bytes and first-result
+   latency. Evaluate snapshot-pinned selective GraphAr scanning against the
+   DuckGQL baseline with exact fact/row parity and copy measurements. Maintain
+   an independent DuckDB execution path only if the decision gate above passes.
+
+The RFC does not claim general ISO GQL conformance. The Turso SQL path is
+independently deliverable while the DuckGQL typed-plan bridge is gated on an
+extension interface. Neither path replaces MRR's semantic admission.
+
+* References
+
+- [[file:../architecture/0001-mrr-data-plane.org][MRR Data Plane RFC]]
+- [[file:../architecture/shared-backend.org][Shared Production Backend]]
+- [[file:../architecture/current-implementation.org][Current implementation]]
+- [[file:../architecture/healthcare-query-audit.org][Healthcare query audit]]
+- [[file:0002-graphar-arrow-backend.org][GraphAr, Arrow and the shared Backend]]
+- [[file:../architecture/arrow-execution-practices.org][Arrow execution practices and transfer limits]]
+- [[https://graphar.apache.org/docs/specification/format/][Apache GraphAr format specification]]
+- [[https://github.com/rahul-iyer/duckdb-gql][DuckGQL overview and graph projections]]
+- [[https://github.com/rahul-iyer/duckdb-gql/blob/main/src/gql_lowerer.cpp][DuckGQL lowering source]]
