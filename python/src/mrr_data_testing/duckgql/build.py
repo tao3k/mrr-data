@@ -96,6 +96,7 @@ def main():
             "-B",
             antlr_build,
             "-DCMAKE_BUILD_TYPE=Release",
+            "-DCMAKE_POSITION_INDEPENDENT_CODE=ON",
             f"-DCMAKE_INSTALL_PREFIX={prefix}",
             "-DANTLR_BUILD_CPP_TESTS=OFF",
             "-DANTLR_BUILD_SHARED=OFF",
@@ -128,6 +129,10 @@ def main():
             "-B",
             build,
             "-DCMAKE_BUILD_TYPE=Release",
+            # DuckGQL requires C++17. Compile the linked DuckDB archive with
+            # the same constexpr linkage rules instead of its C++11 default.
+            "-DCMAKE_CXX_STANDARD=17",
+            "-DCMAKE_POSITION_INDEPENDENT_CODE=ON",
             f"-DCMAKE_PREFIX_PATH={prefix}",
             f"-DDUCKDB_EXTENSION_CONFIGS={config}",
             f"-DOVERRIDE_GIT_DESCRIBE={const('rust_engine_version')}",
