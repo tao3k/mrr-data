@@ -1,11 +1,22 @@
 //! One simulated original-source caller retains each phase on the common Backend.
-use super::*;
+use super::{SOURCE_DIGEST, compile, source_fixture};
 use crate::{
-    CapturedCombinedGraphAr, CombinedGraphArRestoreRequest, restore_combined_graph_content,
+    CapturedCombinedGraphAr, CombinedGraphArRestoreRequest, capture_combined_graphar,
+    restore_combined_graph_content,
+    tests::entity_properties::{
+        combined::{
+            acceptance::relation_tables,
+            fixture::{Fixture, capture_limits, transfer_limits},
+            remote::Remote,
+        },
+        fixture as properties,
+    },
 };
+use meta_relational_reasoning as mrr;
 use mrr_data_backend::{Backend, BackendConfig, ResourceControl, ResourceHandle, ResourceStop};
+use mrr_data_content::MemoryContentStore;
 use mrr_data_core::{DataQueryResultHandoff, PhysicalQueryOutput};
-use std::sync::Arc;
+use std::{num::NonZeroUsize, sync::Arc};
 #[path = "authority.rs"]
 mod authority;
 #[path = "metadata.rs"]
@@ -16,11 +27,12 @@ async fn restore(
     f: &Fixture,
     backend: &Backend,
     remote: Arc<Remote>,
+    cache: Arc<MemoryContentStore>,
 ) -> ResourceHandle<mrr_data_content::PreparedCombinedGraph> {
     restore_combined_graph_content(
         backend,
         CombinedGraphArRestoreRequest {
-            local: Arc::new(MemoryContentStore::default()),
+            local: cache,
             remote,
             query: f.query.clone(),
             relations: f.relations.clone(),
@@ -115,11 +127,54 @@ async fn original_source_handoff_shared_backend_reaches_retained_consumer_transp
     let remote = Arc::new(Remote::default());
     let (policy_home, policy, publication) =
         authority::publish(&f, &backend, remote.as_ref()).await;
-    let restored = restore(&f, &backend, remote).await;
+    let cache = Arc::new(MemoryContentStore::default());
+    let first = query_transport(
+        &f,
+        &backend,
+        remote.clone(),
+        cache.clone(),
+        &policy_home,
+        policy,
+    )
+    .await;
+    drop(first);
+    assert_eq!(backend.status().resource_bytes, 0);
+    remote.blocks.lock().unwrap().clear();
+    let transport = query_transport(&f, &backend, remote, cache, &policy_home, policy).await;
+    let limits = result_limits();
+    let cap = NonZeroUsize::new(1 << 20).unwrap();
+    authority::retire_and_recover(&f, &policy_home, policy, &publication).await;
+    drain(&backend, transport, &f.query, limits, cap).await;
+    let reopened = Backend::open(
+        BackendConfig::default(),
+        storage,
+        tokio::runtime::Handle::current(),
+    )
+    .await
+    .unwrap();
+    authority::verify_reopened_history(&f, &reopened, policy).await;
+    reopened.shutdown().await.unwrap();
+}
+
+fn result_limits() -> mrr::QueryResultLimits {
+    mrr::QueryResultLimits::new(
+        NonZeroUsize::new(100).unwrap(),
+        NonZeroUsize::new(300).unwrap(),
+    )
+}
+async fn query_transport(
+    f: &Fixture,
+    backend: &Backend,
+    remote: Arc<Remote>,
+    cache: Arc<MemoryContentStore>,
+    policy_home: &mrr_data_backend::ProfilePort,
+    policy: mrr_data_backend::AuthorityState,
+) -> ResourceHandle<DataQueryResultHandoff> {
+    let restored = restore(f, backend, remote, cache).await;
     assert_eq!(backend.status().resource_bytes, RESERVED);
-    let captured = capture(&f, &backend, restored).await;
+    let captured = capture(f, backend, restored).await;
     assert_eq!(backend.status().resource_bytes, RESERVED);
-    let output = execute(&f, &backend, captured).await;
+    let output = execute(f, backend, captured).await;
     let mut rows = output.get().rows().to_vec();
     rows.sort_by_key(|row| format!("{row:?}"));
     let mut expected = crate::tests::entity_properties::acceptance::expected();
@@ -142,20 +197,10 @@ async fn original_source_handoff_shared_backend_reaches_retained_consumer_transp
             )
         })
         .unwrap_or_else(|_| panic!("unique candidate transport conversion"));
-    assert!(authority::disclose(&policy_home, policy).await);
+    assert!(authority::disclose(policy_home, policy).await);
     transport.get().verify(&f.query, limits, cap).unwrap();
     assert_eq!(backend.status().resource_bytes, RESERVED);
-    authority::retire_and_recover(&f, &policy_home, policy, &publication).await;
-    drain(&backend, transport, &f.query, limits, cap).await;
-    let reopened = Backend::open(
-        BackendConfig::default(),
-        storage,
-        tokio::runtime::Handle::current(),
-    )
-    .await
-    .unwrap();
-    authority::verify_reopened_history(&f, &reopened, policy).await;
-    reopened.shutdown().await.unwrap();
+    transport
 }
 
 async fn drain(

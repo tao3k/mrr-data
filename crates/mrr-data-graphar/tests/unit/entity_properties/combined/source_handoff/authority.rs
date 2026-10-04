@@ -1,9 +1,11 @@
 //! Simulated enrolled policy guards the selected snapshot and disclosure.
-use super::*;
+use crate::tests::entity_properties::combined::{fixture::Fixture, remote::Remote};
 use mrr_data_backend::{
-    AuthorityExpectation, AuthorityProposal, AuthorityState, AuthorityStatus, ProfilePort,
+    AuthorityExpectation, AuthorityProposal, AuthorityState, AuthorityStatus, Backend, ProfilePort,
 };
-use mrr_data_content::{ConditionalContentCommitPort, ConditionalContentWrite};
+use mrr_data_content::{
+    ConditionalContentCommitPort, ConditionalContentWrite, publish_combined_graph,
+};
 const SCOPE: &str = "dataset";
 fn operation(root: cid::Cid) -> ConditionalContentWrite<'static> {
     ConditionalContentWrite {
@@ -59,7 +61,13 @@ pub(super) async fn publish(
         .await
         .unwrap();
     assert_eq!(
-        guarded.recover(write).await.unwrap().unwrap().committed.cid,
+        guarded
+            .recover(write)
+            .await
+            .unwrap()
+            .unwrap()
+            .committed
+            .root,
         write.replacement
     );
     (base, policy, receipt)
@@ -100,14 +108,24 @@ pub(super) async fn retire_and_recover(
     assert!(!disclose(base, policy).await);
     let fresh = ConditionalContentWrite {
         operation_id: "after-retirement",
+        expected: Some(
+            guarded
+                .recover(operation(*f.query.snapshot_root()))
+                .await
+                .unwrap()
+                .unwrap()
+                .committed,
+        ),
         ..operation(*f.query.snapshot_root())
     };
-    assert!(
+    assert!(matches!(
         guarded
             .commit(fresh, Some(receipt), |_| Ok::<_, ()>(()))
-            .await
-            .is_err()
-    );
+            .await,
+        Err(mrr_data_content::ConditionalCommitPortError::BeforeCommit(
+            mrr_data_backend::BackendError::AuthorityRetired
+        ))
+    ));
     assert!(guarded.recover(fresh).await.unwrap().is_none());
 }
 
@@ -125,7 +143,13 @@ pub(super) async fn verify_reopened_history(
         .unwrap();
     let write = operation(*f.query.snapshot_root());
     assert_eq!(
-        guarded.recover(write).await.unwrap().unwrap().committed.cid,
+        guarded
+            .recover(write)
+            .await
+            .unwrap()
+            .unwrap()
+            .committed
+            .root,
         write.replacement
     );
     assert!(matches!(

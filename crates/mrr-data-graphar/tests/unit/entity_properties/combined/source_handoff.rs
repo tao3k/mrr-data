@@ -117,7 +117,7 @@ fn source_fixture() -> properties::Fixture {
     // The caller's catalogs use the type identities emitted by MRR's frontend.
     // MRR Data does not infer labels or implement another identity convention.
     for (table, node) in f.entities.iter_mut().zip(
-        std::iter::once(path.start()).chain(path.segments().iter().map(|segment| segment.node())),
+        std::iter::once(path.start()).chain(path.segments().iter().map(mrr::PathSegment::node)),
     ) {
         let [id] = node.types() else {
             panic!("one declared node type")
