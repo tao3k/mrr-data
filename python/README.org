@@ -2,9 +2,15 @@
 
 * Project
 
-This installable Python project owns repository checks, upstream conformance
-fixtures and native qualification. =pyproject.toml= declares the package, CLI,
-development tools. =uv.lock= fixes their resolution.
+This installable Python project owns glue for repository checks, upstream
+conformance fixtures and native qualification. =pyproject.toml= declares the
+package, CLI and development tools. =uv.lock= fixes their resolution.
+
+Rust owns semantic, immutable-source, result admission and resource behavior
+assertions. Put new tests there whenever the Rust API can exercise the behavior.
+Python invokes those tests, supervises processes and collects their receipts;
+its own tests target entry points, subprocess cleanup, package resources and
+protocol failures at the glue boundary.
 
 All commands below run from the MRR Data checkout root:
 
@@ -24,14 +30,15 @@ An installed wheel outside the checkout requires =MRR_DATA_ROOT=.
 
 * Native and upstream suites
 
-- [[file:src/mrr_data_testing/duckgql/README.org][DuckGQL]]: =duckgql-build= and =duckgql-qualify=.
+- [[file:src/mrr_data_testing/duckgql/README.org][DuckGQL]]: =duckgql-build=, =duckgql-qualify= and Rust =query-resources= receipt collection.
 - [[file:src/mrr_data_testing/s3/README.org][S3 conformance]]: =s3-conformance=.
 - [[file:src/mrr_data_testing/kache/README.org][Kache upstream qualification]]: =kache-probe=.
 
 SQL, patches and provenance receipts live beside their owning suite and are
 packaged with it. Tests live in =tests=, outside the production package.
 Native suites require explicit provisioned SDKs and artifacts; ordinary Python
-unit tests do not download or compile them.
+unit tests do not download or build external SDKs. Small local compiler fixtures
+check compilation-unit framing and compiler-wrapper process behavior.
 
 * Progress and deadlines
 
@@ -41,6 +48,20 @@ wall limit. Build policy allows 30 seconds without output and has a 20-minute
 wall limit per phase. Control commands have a two-minute wall limit. Output
 does not extend a wall deadline. Timeout kills the process group and produces
 a refusal; it does not emit a successful receipt or artificial progress.
+
+For workspace Rust code generation, the installed =mrr-data-rustc-progress=
+entry point can serve as Cargo's =RUSTC_WORKSPACE_WRAPPER=. It forwards all
+compiler arguments and adds actual LLVM optimization and machine-code pass
+events during code generation.
+It preserves optimization flags, compiler output and the compiler's exit status.
+Registry and Git dependency compilers are outside the workspace wrapper's scope.
+The build supervisor still enforces its existing inactivity and wall limits.
+
+#+begin_src sh
+RUSTC_WORKSPACE_WRAPPER="$PWD/python/.venv/bin/mrr-data-rustc-progress" \
+  uv run --locked --project python mrr-data-test run-process --phase build -- \
+  cargo test -p mrr-data-turso-query --features backend-worker --locked --no-run
+#+end_src
 
 The DuckGQL builder and its CI native test/comparison phases use this
 supervisor. Compilation runs separately from timed test execution. The migrated S3 and Kache suites

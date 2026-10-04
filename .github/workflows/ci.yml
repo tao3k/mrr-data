@@ -312,12 +312,19 @@ jobs:
               output.write("MRR_DUCKGQL_ALLOW_UNSIGNED=1\n")
       - name: Qualify typed DuckGQL, retained output and native interrupt
         run: |
-          cargo test -p mrr-data-duckgql-query --features backend-worker,query-parity --locked --no-run
+          cargo test -p mrr-data-duckgql-query --features backend-worker,query-parity --locked --no-run --message-format=json | tee "$RUNNER_TEMP/duckgql-tests.jsonl"
           uv run --locked --project python mrr-data-test run-process --phase test -- cargo test -p mrr-data-duckgql-query --features backend-worker,query-parity --locked -- --nocapture
           cargo check -p mrr-data --no-default-features --features backend-duckgql-query --profile test --locked
           cargo clippy -p mrr-data-duckgql-query --all-targets --features backend-worker,query-parity --profile test --locked -- -D warnings
       - name: Record bounded whole-request query comparison
         run: uv run --locked --project python mrr-data-test run-process --phase test -- cargo test -p mrr-data-duckgql-query --features backend-worker,query-parity --locked same_source_scale_receipts -- --ignored --nocapture
+      - name: Record isolated engine resource matrix
+        run: uv run --locked --project python mrr-data-test query-resources --cargo-artifacts "$RUNNER_TEMP/duckgql-tests.jsonl" --output "$RUNNER_TEMP/query-resources.jsonl"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: query-resources-${{ matrix.os }}
+          path: ${{ runner.temp }}/query-resources.jsonl
+          if-no-files-found: error
 
   property-physical:
     name: Property snapshot and physical query (${{ matrix.os }})
@@ -332,6 +339,54 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install Python project manager and native dependencies
+        shell: bash
+        run: |
+          python3 -m pip install 'uv==0.11.3'
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            wget -c "https://apache.jfrog.io/artifactory/arrow/$(lsb_release --id --short | tr 'A-Z' 'a-z')/apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb" -P /tmp/
+            sudo apt-get install -y "/tmp/apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb"
+            sudo apt-get update -y
+            sudo apt-get install -y build-essential jq libsqlite3-dev libssl-dev pkg-config zlib1g-dev libarrow-dev libarrow-dataset-dev libarrow-acero-dev libarrow-compute-dev libparquet-dev
+          else
+            brew install apache-arrow gcc jq openssl pkg-config sqlite zlib
+            arrow_prefix="$(brew --prefix apache-arrow)"
+            echo "PKG_CONFIG_PATH=$arrow_prefix/lib/pkgconfig:$(brew --prefix openssl)/lib/pkgconfig" >> "$GITHUB_ENV"
+            echo "CMAKE_PREFIX_PATH=$arrow_prefix:$(brew --prefix)" >> "$GITHUB_ENV"
+            echo "DYLD_FALLBACK_LIBRARY_PATH=$arrow_prefix/lib" >> "$GITHUB_ENV"
+            echo "CXXFLAGS=-I$arrow_prefix/include -Wno-error=deprecated-declarations -Wno-error=macro-redefined" >> "$GITHUB_ENV"
+          fi
+      - name: Locate the exact Cargo-pinned MRR source frontend owner
+        shell: bash
+        run: |
+          cargo metadata --locked --format-version 1 --features mrr-data-datafusion/source-handoff,mrr-data-graphar/source-handoff > "$RUNNER_TEMP/mrr-source-metadata.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          metadata = json.loads((Path(os.environ["RUNNER_TEMP"]) / "mrr-source-metadata.json").read_text())
+          owners = [package for package in metadata["packages"] if package["name"] == "mrr-property-source"]
+          assert len(owners) == 1 and owners[0]["source"].startswith("git+https://github.com/tao3k/meta-relational-reasoning.git?")
+          root = Path(owners[0]["manifest_path"]).parents[2]
+          with open(os.environ["GITHUB_ENV"], "a") as output:
+              output.write(f"MRR_FRONTEND_OWNER={root}\n")
+          PY
+      - name: Install the source owner's immutable native Gerbil release
+        shell: bash
+        run: |
+          "$MRR_FRONTEND_OWNER/tools/ci/install-gerbil-release.sh" "$RUNNER_TEMP/mrr-gerbil"
+          echo "GERBIL_GSC=$RUNNER_TEMP/mrr-gerbil/bin/gsc" >> "$GITHUB_ENV"
+          echo "GERBIL_GXPKG=$RUNNER_TEMP/mrr-gerbil/bin/gxpkg" >> "$GITHUB_ENV"
+          echo "GERBIL_BUILD_VERBOSE=1" >> "$GITHUB_ENV"
+      - name: Build the MRR-owned source frontend package
+        shell: bash
+        run: |
+          cd "$MRR_FRONTEND_OWNER"
+          python3 tools/ci/prepare-gerbil-dependencies.py
+          gerbil deps --install
+          gerbil build
       - name: Test generic property snapshot and physical query
         run: |
           cargo test -p mrr-data-content --features property-snapshot --locked
@@ -340,3 +395,11 @@ jobs:
         run: |
           cargo clippy -p mrr-data-content --features property-snapshot --all-targets --locked -- -D warnings
           cargo clippy -p mrr-data-datafusion --all-targets --locked -- -D warnings
+      - name: Qualify original Healthcare source through native GraphAr and cold/warm snapshots
+        env:
+          MRR_NATIVE_PROGRESS: '1'
+        run: |
+          cargo test -p mrr-data-datafusion -p mrr-data-graphar --features mrr-data-datafusion/source-handoff,mrr-data-graphar/source-handoff,mrr-data-graphar/backend --locked --no-run
+          uv run --locked --project python mrr-data-test run-process --phase test -- cargo test -p mrr-data-datafusion -p mrr-data-graphar --features mrr-data-datafusion/source-handoff,mrr-data-graphar/source-handoff,mrr-data-graphar/backend --locked source_handoff -- --nocapture --test-threads=1
+          cargo check -p mrr-data --no-default-features --features backend-graphar-combined,datafusion --profile test --locked
+          cargo clippy -p mrr-data-datafusion -p mrr-data-graphar --all-targets --features mrr-data-datafusion/source-handoff,mrr-data-graphar/source-handoff,mrr-data-graphar/backend --profile test --locked -- -D warnings

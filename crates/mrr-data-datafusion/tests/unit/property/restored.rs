@@ -21,6 +21,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+#[cfg(feature = "source-handoff")]
+mod source_handoff;
+
 #[derive(Default)]
 struct Remote(Mutex<BTreeMap<String, Vec<u8>>>);
 impl RemoteContentStore for Remote {

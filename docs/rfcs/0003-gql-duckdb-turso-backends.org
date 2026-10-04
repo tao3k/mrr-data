@@ -262,9 +262,10 @@ GraphAr provides durable vertex/property groups and chunked edge adjacency. An
 =ordered_by_source= layout with offsets can support selective outgoing-edge
 reads; the destination layout can support incoming-edge reads. These positions
 are physical. Both execution paths must preserve the admitted =EntityId=,
-=FactId= and =RelationId= and required context fields. The current writer and
-reader qualify a fixed binary-Entity projection; arbitrary GraphAr layouts and
-MRR property paths require separately versioned lossless profiles.
+=FactId= and =RelationId= and required context fields. The query adapters in this RFC qualify a fixed binary-Entity projection.
+GraphAr also has a separate combined entity-property/relation capture path for
+DataFusion. Arbitrary layouts and broader query shapes require additional
+lossless profiles with versions managed in their Schema.
 
 PR #12 already has =GraphDatasetInventory= for the declared file closure and
 =GraphDatasetBinding= for the snapshot root, generation, relation and catalog
@@ -278,15 +279,15 @@ counts as authority.
 
 The captured object currently holds =Arc<[Fact]>= and deletes its private
 GraphAr files before return. It does not expose a retained Arrow stream,
-adjacency cursor or SQL table. The first qualified implementation should derive
-bounded typed vertex/edge relation images from one captured fact set, retaining
-canonical identities and an exact binding key. DuckGQL sees the registered
-DuckDB tables as a graph projection; Turso loads its relation image into
-bounded provider-owned tables with transactional rollback/cleanup. These are
-two engine representations of one authenticated source. The current DuckDB
-Arrow carrier qualifies only Int64/Utf8/Binary input and copies into native
-chunks; complete Fact mapping, plugin graph registration and Turso loading are
-all new gates.
+adjacency cursor or SQL table. The implemented bounded adapters derive typed vertex/edge relation images
+from one captured fact set, retaining canonical identities and the exact
+binding key. DuckGQL registers the derived DuckDB tables as a graph projection;
+Turso loads its relation image into bounded provider-owned tables with
+transactional rollback and cleanup. Native parity tests compare both engine
+representations of the same authenticated source and pass their candidates
+through MRR admission. The separate DuckDB Arrow carrier qualifies only
+Int64/Utf8/Binary input and copies into native chunks; it does not establish
+streaming graph access or broader property-query support.
 
 A later selective path may retain verified GraphAr chunks under a lease and
 scan topology/property groups into bounded Arrow batches. It must prove that

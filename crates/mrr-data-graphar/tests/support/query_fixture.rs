@@ -238,26 +238,37 @@ pub(crate) fn captured_facts(
     )
     .unwrap();
     let inventory = receipt.inventory().clone();
-    let query = bound_query_shape_with_rows(
-        &inventory,
-        "generation",
-        "target",
-        None,
-        engine,
-        facts.len(),
+    capture_published(&source, inventory, facts.len(), engine)
+}
+pub(crate) fn capture_published(
+    source: &std::path::Path,
+    inventory: core::GraphDatasetInventory,
+    rows: usize,
+    engine: &core::DataEngineProfile,
+) -> (
+    core::BoundDataQuery,
+    graphar::BinaryEntityProjection,
+    graphar::CapturedGraphArSnapshot,
+    core::GraphDatasetInventory,
+) {
+    let projection = graphar::BinaryEntityProjection::admit_catalog(
+        &mrr::RelationCatalog::admit(vec![relation()]).unwrap(),
+        relation().id(),
     )
     .unwrap();
+    let query = bound_query_shape_with_rows(&inventory, "generation", "target", None, engine, rows)
+        .unwrap();
     let limits = core::GraphInventoryLimits::default();
     let binding =
         core::GraphDatasetBinding::admit(&query, relation().id(), &inventory, limits).unwrap();
     let captured = graphar::capture_graphar_snapshot(
-        &source,
+        source,
         &query,
         binding,
         &inventory,
         &projection,
         limits,
-        graphar::GraphArReadLimits::new(facts.len().checked_mul(2).unwrap(), facts.len()),
+        graphar::GraphArReadLimits::new(rows.checked_mul(2).unwrap(), rows),
     )
     .unwrap();
     (query, projection, captured, inventory)

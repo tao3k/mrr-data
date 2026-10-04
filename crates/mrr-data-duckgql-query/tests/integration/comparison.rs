@@ -6,7 +6,7 @@ use mrr_data_duckgql_query::{
 };
 use std::{num::NonZeroUsize, time::Instant};
 
-fn admit(
+pub(super) fn admit(
     query: &mrr_data_core::BoundDataQuery,
     output: mrr_data_core::PhysicalQueryOutput,
     rows: usize,
@@ -23,7 +23,7 @@ fn admit(
     )
     .unwrap();
 }
-fn comparison_facts(rows: usize) -> (Vec<mrr::Fact>, Vec<Vec<mrr::QueryResultValue>>) {
+pub(super) fn comparison_facts(rows: usize) -> (Vec<mrr::Fact>, Vec<Vec<mrr::QueryResultValue>>) {
     let mut facts: Vec<_> = (0..rows)
         .map(|index| {
             query_fixture::fact_with_endpoints(
@@ -50,7 +50,7 @@ fn comparison_facts(rows: usize) -> (Vec<mrr::Fact>, Vec<Vec<mrr::QueryResultVal
         .collect();
     (facts, expected)
 }
-async fn comparison_database(directory: &std::path::Path) -> turso::Database {
+pub(super) async fn comparison_database(directory: &std::path::Path) -> turso::Database {
     turso::Builder::new_local(directory.join("comparison.db").to_str().unwrap())
         .build()
         .await
