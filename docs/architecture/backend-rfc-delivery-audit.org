@@ -1,0 +1,145 @@
+#+TITLE: Shared Backend and GraphAr RFC delivery audit
+#+DATE: 2026-10-04
+#+OPTIONS: toc:2
+
+* Audit baseline and evidence boundary
+
+This audit reads PR #12 at =d36337b703c0a1f5bd0fa1eaaa62d11178e6507f=.
+Its latest addition pins the DuckGQL interface research gate; runtime changes
+remain those at =16c111c8=. At audit time the exact-head CI had Arrow IPC fuzz
+passing and the other nine jobs still queued/running. This is not all-green
+remote acceptance. The prior local resource/native-query/cleanup receipts are
+functional evidence; they do not establish deployed authorization, process
+crash durability or native RSS/performance. All nine Turso packages in Cargo.lock
+remain =0.8.1=; Cargo build parallelism remains the default.
+
+* Architectural decisions retained
+
+- MRR owns canonical identities, catalog, graph-query semantics and result admission.
+- GraphAr is the provider-independent physical graph foundation for Production
+  graph workloads, including topology, adjacency/offsets and property groups.
+- Arrow provides typed interchange; the shared Backend owns one Host runtime
+  lifecycle, admission, leases, publication/recovery and drain.
+- Native Turso/DuckDB are optional transaction/execution providers. Engine
+  tables, indexes and extension CSR state are derived images of verified sources.
+- DuckGQL is a separately gated extension, not native DuckDB graph capability.
+  Its availability and benchmarks do not gate GraphAr persistence/selective access.
+- Production owns the common contract; no Example, profile-specific runtime or
+  reverse dependency changes that ownership.
+
+See [[file:0001-mrr-data-plane.org][the canonical data plane]], [[file:shared-backend.org][shared Backend]],
+[[file:../rfcs/0002-graphar-arrow-backend.org][RFC 0002]] and [[file:../rfcs/0003-gql-duckdb-turso-backends.org][RFC 0003]].
+
+* Implemented and bounded capability
+
+| Area | Implemented evidence | Remaining boundary |
+|------+----------------------+--------------------|
+| Shared execution | Shared worker admission, reserved recovery, retained handles, typed driver refusals, cooperative controls | Explicit stop while queued; long native-call interrupt/hard deadline; comprehensive mixed-workload evidence |
+| Turso query | Captured binary-Entity outgoing single hop, distinct endpoint bindings, parameterized SQL, FactId row order, rollback, retained output, MRR admission | General properties/paths, production source reuse, running native load/fetch stop receipts |
+| DuckDB Arrow | Checked/appender input, materialized and fallible streaming output, late error, native interrupt, leased output | Graph-query extension bridge, native RSS/spill; releasable VTab registration |
+| GraphAr | Native bounded projection, complete inventory binding, verified capture, publication/cold restore and finite MRR admission composition | Snapshot-pinned selective adjacency/property access and broader lossless physical profiles |
+| Authority/durability | Logical authority/version checks and finite close/reopen recovery | Live Host policy/key retirement/disclosure; publication-phase process crash and deployed-store acceptance |
+
+* Findings that change the execution plan
+
+** P1: queued explicit stop still waits for worker admission
+
+=prepare_resource_controlled= checks control inside its preparation closure.
+=Dispatcher::prepare= waits for resource/shared permits or waiter closure only.
+Consequently, dropping the waiter removes queued work, but explicit =cancel()=
+or an expired deadline with a live waiter is not observed until worker admission.
+Under held workers this can retain a resource reservation indefinitely.
+
+The next control slice must race both permit waits against a sticky cancellation
+notification and a Host-clock deadline. It must not submit native work after
+an observed stop and must release admission before returning the typed refusal.
+Running work still owns cleanup and its lease; no timer may imply native work
+has stopped. Test with deliberately held workers, a live cancelled waiter and
+an expired queued request; neither may open a connection or await gate release.
+
+** P1: ownership budgets are contractual, not a physical memory ceiling
+
+=ResourceHandle::get= borrows a value but cannot prohibit callers from cloning
+=PhysicalQueryOutput=. MRR projection currently consumes an owned output, and
+source captures use shared decoded facts. Keep the lease through conversion and
+admission, and explicitly reserve conversion/candidate scratch or transfer
+accounting to another owner before exporting clones. Do not describe logical
+reserved bytes as native RSS or as enforcement over arbitrary Rust clones.
+
+Qualify a bounded handoff through the real caller before broadening results;
+include a retained clone and conversion overlap, not only handle-drop tests.
+A borrowed/consuming lease-aware conversion API should be selected from actual
+MRR caller requirements rather than introducing a second result model.
+
+** P1: GraphAr strategic role requires a selective execution source
+
+Current =CapturedGraphArSnapshot= retains =Arc<[Fact]>= after complete decoding.
+This proves immutable bounded capture, not source-pinned adjacency cursors or
+selective property scans. Rebuilding an SQL table from all captured facts on
+an invocation does not demonstrate scalable graph access.
+
+Deliver a checked outgoing-neighborhood scan for the existing binary-Entity
+projection before inventing another query planner. Retain verified chunks and
+source binding under the shared Backend lease. Specify source versus destination
+layout support, offset bounds, endpoint/FactId mapping and property-row alignment.
+
+Selective reading must preserve integrity: the current inventory/root design
+may still require reading every declared file to verify the closure. Record
+integrity-verification bytes separately from execution-read bytes. Claim reduced
+end-to-end I/O only with a qualified authenticated chunk/cache design, never by
+skipping closure validation. Source mutation, stale bindings, malformed offsets
+and property/topology misalignment must yield no admitted candidate.
+
+** P2: distinguish current emitter from proposed generalized SQL plan
+
+RFC 0003 describes a future =PreparedSql= and multi-shape typed plan. Current
+code exposes =TursoSingleHopSql= for a deliberately narrow fixed mapping. It
+has no delivered general SQL plan, property filter, arbitrary parameter mapping
+or multiple-engine renderer. Mark the generalized section as proposed and tie
+each expansion to an MRR semantic slice and independent expected rows.
+
+** Independent research gate: DuckGQL
+
+Upstream typed-plan entrypoint, extension ABI/binary compatibility and canonical
+identity/result ordering require separate prototypes. No qualified bridge is
+implemented. Keep that work independent of GraphAr and Turso delivery. Do not
+replay source GQL into a second semantic binder to manufacture completion.
+
+* Delivery order and acceptance
+
+| Priority | Slice / owner | Required acceptance | Dependency |
+|----------+---------------+---------------------+------------|
+| P0 | Exact-head qualification / CI | Current head Linux/macOS, MSRV, GraphAr/native query and strict lint gates pass; receipts identify head/pins | Every release claim |
+| P1-A | Shared Backend queued stop | Explicit cancel/deadline while both permit lanes are blocked returns typed refusal; no driver execution, budget returns; recovery progresses | Existing shared scheduler |
+| P1-B | Turso cooperative execution / cleanup | Deterministic stop during conversion/load/fetch; rollback and teardown finish before drain; cleanup failure overrides output; no candidate | P1-A; pinned safe SDK |
+| P1-C | GraphAr selective source | Same immutable binding and independently expected rows; checked adjacency/offset/property alignment, mutation refusal, retained source lifetime | Current inventory/projection; P1-A |
+| P1-D | Host authority and durability | Real policy/key enrollment/retirement plus protected disclosure; publication-phase ACK loss and process-crash original-operation recovery | Shared publication contract; separate Host adapter |
+| P2-A | Original property-path case | Extend declared GraphAr property mapping and admitted MRR slice; original Healthcare query, null/missing/multiplicity/order and expected result; real caller handoff | GraphAr source contract and MRR frontend/catalog |
+| P2-B | Source reuse and measured optimization | Snapshot/profile/catalog keyed cache invalidation, owned leases, bounded reuse; matched cold/warm copy/RSS/spill/read-byte measurements | Correctness slices above |
+| Research | DuckGQL bridge | Versioned typed external entrypoint + compatible binaries + exact MRR admission/result ordering | Independent upstream/API gate |
+
+P1-D security/durability can proceed independently of selective-read development;
+it cannot be omitted from production qualification because a query fixture passes.
+Use focused tests for each seam. Existing native CI already runs the whole Turso
+crate, including cleanup unit tests. No repeated full native rebuild or additional
+provider should be introduced without a concrete unresolved acceptance risk.
+
+* Performance experiment contract
+
+The first experiment compares full capture and selective execution reads of
+one published binary-Entity graph. Use independent expected rows, varied degree
+skew, isolated cold/warm verification/cache states and identical MRR result
+ordering/admission. Measure setup/verification, data bytes, decode/copy, query,
+first/total result, retained reservations, actual native RSS and spill separately.
+Do not infer peak memory from row limits or infer throughput from build/test time.
+DuckGQL comparison starts only when its bridge is qualified; GraphAr delivery
+continues without it. Performance results decide optional execution optimizations,
+not the physical graph foundation's architectural position.
+
+* Definition of closure
+
+A slice is closed only when its implementation, refusal/lifecycle fixtures,
+exact-head platform checks and RFC status agree. Production readiness additionally
+requires live authority, actual Host invocation, durability and deployed-store
+receipts for the supported deployment. General graph-query conformance and hard
+native deadlines remain unclaimed until individually qualified.

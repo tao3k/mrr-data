@@ -158,6 +158,11 @@ admission.
 
 * SQL path for Turso and later engines
 
+The generalized mapping/plan/=PreparedSql= contract below is proposed.
+Implemented today is =TursoSingleHopSql= with fixed checked identifiers and
+the bounded binary-Entity single-hop slice. General properties, filters,
+parameter mappings and additional dialect renderers are not delivered.
+
 An optional Rust =mrr-data-turso-query= adapter accepts
 only an exact =BoundDataQuery=, a checked physical table/column mapping, typed
 runtime parameters and explicit limits. Its bounded graph-to-relational plan
@@ -410,9 +415,11 @@ RFC 0002 gates.
    planning, query, result conversion and MRR admission separately. Vary graph
    size, degree skew, selectivity, property width and warm/cold reuse; record
    native RSS, retained Arrow bytes, Turso table/index bytes and first-result
-   latency. Evaluate snapshot-pinned selective GraphAr scanning against the
-   DuckGQL baseline with exact fact/row parity and copy measurements. Maintain
-   an independent DuckDB execution path only if the decision gate above passes.
+   latency. Qualify snapshot-pinned GraphAr selective access against the full
+   captured-source path with exact fact/row parity and verification/copy costs.
+   Add DuckGQL comparisons only after its typed bridge is qualified. Additional
+   engine-specific planning follows the optimization gate above; GraphAr's
+   physical graph contract and selective source delivery are independent.
 
 The RFC does not claim general ISO GQL conformance. The Turso SQL path is
 independently deliverable while the DuckGQL typed-plan bridge is gated on an
@@ -429,3 +436,9 @@ extension interface. Neither path replaces MRR's semantic admission.
 - [[https://graphar.apache.org/docs/specification/format/][Apache GraphAr format specification]]
 - [[https://github.com/rahul-iyer/duckdb-gql][DuckGQL overview and graph projections]]
 - [[https://github.com/rahul-iyer/duckdb-gql/blob/main/src/gql_lowerer.cpp][DuckGQL lowering source]]
+
+* Consolidated delivery audit
+
+[[file:../architecture/backend-rfc-delivery-audit.org][The 2026-10-04 delivery audit]] records exact-head evidence, the queued explicit
+stop gap, retained-output handoff, GraphAr selective integrity and delivery order.
+Its acceptance gates govern subsequent implementation slices.
