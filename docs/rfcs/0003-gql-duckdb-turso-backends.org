@@ -125,6 +125,15 @@ DuckGQL would invoke a second parser and binder; it would not preserve MRR as
 the sole query-admission authority. The required bridge is therefore an
 *implementation gate*, not a capability of PR #12 or the released extension.
 
+At upstream commit =2e2a5f28db204a8efdcf9e763053986fb0cd2461=,
+=GqlParserExtension= registers =GqlParse= and =GqlPlan= with DuckDB's parser
+extension callback manager; =GqlPlan= binds the parsed statement before
+calling =GqlLower=. The exported extension entrypoint only loads the extension.
+These C++ internals are a useful upstream change seam, not a versioned external
+typed-plan API. The documented build targets DuckDB =v1.5.5=; PR #12 pins a
+different Rust DuckDB SDK version, so loading and ABI compatibility remain
+unverified independently of the MRR query semantics.
+
 The bridge should translate only a declared MRR typed-query slice into a
 versioned DuckGQL external-plan interface that bypasses DuckGQL parsing and
 conflicting semantic binding while retaining its graph optimizer and native
