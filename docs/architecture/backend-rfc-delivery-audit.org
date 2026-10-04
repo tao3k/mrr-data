@@ -136,6 +136,31 @@ Python qualification passes =33 tests= with native Rust discovery available;
 strict Ruff and formatting pass. These changes need their own exact-head platform
 run. M0/M1 platform acceptance and M3 measured optimization remain open.
 
+** Current compiler and native engine qualification
+
+The =c54acd27= integration uses the published MRR dispatch owner =8f389fd0=.
+Its unified native Source/DataFusion/GraphAr/Turso/DuckGQL test build passed
+under the unchanged 30-second no-output and 1200-second wall limits. The compiler
+wrapper emits actual LLVM inline and per-function stack remarks, adds them only
+once when both Cargo wrappers point to the same executable, and preserves caller
+optimization/debug flags and the real exit status. Python glue tests pass =25=.
+
+Turso passes =3= unit and =6= integration tests. DuckGQL passes =1= unit and
+=5= integration tests, with =3= explicit ignored native comparison workers.
+The separate 2/128/1024-row comparison passes in =11.68s=; all nine isolated
+resource cases pass in =19.67s=. The resource receipt identifies the clean
+=c54acd27= source and exact compiled binary, before the later integration of the
+shared Backend original-source caller. It does not qualify that added caller.
+
+The DataFusion original-source pair passes in =5.25s= with actual owner-operation
+logs. GraphAr original-source initialization fails the unchanged five-second
+no-output deadline in two separate invocations. The native stack sample is
+inside Gambit allocation/GC during setup. This is a failing progress gate, not
+successful source acceptance; host contention and a GC implementation defect
+have not been distinguished. No heap policy, timeout, synthetic heartbeat or
+substitute source has been used to turn it into a pass. Source-feature runtime,
+facade and exact-current-head platform CI qualification remain open.
+
 ** Prior integration local qualification: native frontend gate remains open
 
 The merged source-feature composition builds locally with the exact pinned
@@ -910,7 +935,7 @@ digests. Python glue tests cover discovery, malformed/missing protocol output,
 capture limits and descendant cleanup. Semantic and resource assertions remain
 in Rust. CI publishes the checked matrix for both native platforms.
 
-The current [[file:../../python/src/mrr_data_testing/duckgql/receipts/macos-resources.jsonl][macOS ARM64 phase receipt]] passes all nine cases in 16.28 seconds.
+The current [[file:../../python/src/mrr_data_testing/duckgql/receipts/macos-resources.jsonl][macOS ARM64 phase receipt]] passes all nine cases in 19.67 seconds.
 The [[file:../../python/src/mrr_data_testing/duckgql/receipts/macos-build.json][source build receipt]] records the unsigned SDK artifact digest
 =0bbeaac46695077931b2c526d29a62673083373afe45db007e2ede15d5f268a3=,
 13 generated parser units and their digests, with upstream Release optimization.
@@ -919,7 +944,7 @@ scale comparison passed at all three sizes. Both test and matrix execution used
 five-second no-output and 120-second wall limits. The build used the unchanged
 30-second no-output and 1200-second wall limits.
 
-The resource receipt identifies the clean local source head =79619743= and its
+The resource receipt identifies the clean local source head =c54acd27978800a079c873954ba7965b89d118a8= and its
 compiled binary. It does not establish remote CI acceptance. Concurrent host compilation affects timing;
 these samples do not establish a performance improvement. OS peak RSS includes
 source capture, Rust and the active native engine. It is a process high-water
@@ -930,5 +955,6 @@ prepare; DataFusion observes the first nonempty Arrow batch from execution
 start. Native buffering can precede those observations. These boundaries do
 not qualify operator-only first-result latency, spill peaks or cache effects.
 Original Healthcare source qualification remains a separate native frontend
-gate. The current root, fuzz and source frontend share MRR pin =542e81bf=; its
-fresh native dependency build is being qualified separately.
+gate. The current root, fuzz and source frontend share MRR pin =8f389fd0=.
+The unified native dependency build passed with the published owner; original
+source runtime acceptance remains open as recorded above.

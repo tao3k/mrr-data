@@ -63,12 +63,15 @@ wall limit per phase. Control commands have a two-minute wall limit. Output
 does not extend a wall deadline. Timeout kills the process group and produces
 a refusal; it does not emit a successful receipt or artificial progress.
 
-For workspace Rust code generation, the installed =mrr-data-rustc-progress=
-entry point can serve as Cargo's =RUSTC_WORKSPACE_WRAPPER=. It forwards all
-compiler arguments and adds actual LLVM optimization and machine-code pass
-events during code generation.
-It preserves optimization flags, compiler output and the compiler's exit status.
-Registry and Git dependency compilers are outside the workspace wrapper's scope.
+For Rust code generation, the installed =mrr-data-rustc-progress=
+entry point can serve as Cargo's =RUSTC_WORKSPACE_WRAPPER=. When external
+dependencies also require progress, set =RUSTC_WRAPPER= to the same entry point.
+The nested wrapper adds diagnostics only at the direct compiler call. It forwards
+all compiler arguments and adds actual LLVM inline remarks and per-function
+stack-byte records during code generation. Debug-info, optimization and
+code-generation settings remain those of the caller; the compiler warning about
+absent source locations is preserved, as are compiler output and exit status.
+Registry and Git dependency compilers are included when =RUSTC_WRAPPER= is set.
 The build supervisor still enforces its existing inactivity and wall limits.
 
 #+begin_src sh
