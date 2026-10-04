@@ -1,7 +1,7 @@
-//! Fail-closed admission for the MRR V1 binary-Entity `GraphAr` projection.
+//! Fail-closed topology and entity-property projections for admitted MRR catalogs.
 //!
 //! This crate owns no `GraphAr` wire format. It produces semantic edge records
-//! that the adapter hands to the project-maintained Apache `GraphAr` fork.
+//! and declared vertex tables through the project-maintained Apache `GraphAr` fork.
 #![forbid(unsafe_code)]
 
 #[cfg(feature = "backend")]
@@ -15,6 +15,14 @@ pub use backend::{
 };
 #[cfg(feature = "backend")]
 pub use backend::{GraphArSnapshotRequest, prepare_graphar_snapshot};
+#[cfg(feature = "native-graphar")]
+mod entity_properties;
+#[cfg(feature = "native-graphar")]
+pub use entity_properties::{
+    CapturedGraphArEntityProperties, GraphArEntityPropertyBlock, GraphArEntityPropertyError,
+    GraphArEntityPropertyLimits, GraphArEntityPropertyProjection, GraphArEntityPropertyReceipt,
+    GraphArEntityPropertyTable, capture_graphar_entity_properties, write_graphar_entity_properties,
+};
 mod projection;
 #[cfg(feature = "file-inventory")]
 mod query_shape;
@@ -63,3 +71,6 @@ pub use writer::{
 #[cfg(test)]
 #[path = "../tests/unit/mod.rs"]
 mod tests;
+
+#[cfg(feature = "backend")]
+pub use entity_properties::{GraphArEntityPropertiesRequest, prepare_graphar_entity_properties};

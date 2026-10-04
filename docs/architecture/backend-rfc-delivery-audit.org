@@ -369,3 +369,42 @@ GraphAr clippy passes. All nine Turso dependency versions remain =0.8.1= and
 Cargo job parallelism remains default. P2-A property mapping, original MRR
 query-owner handoff, remote chunk caching and engine spill qualification remain
 open; this physical range workload does not close them.
+
+** P2-A: native catalog-declared entity property mapping
+
+MRR Data now has a native string entity-property writer/capture API and optional
+shared Backend composition. It retains empty types and isolated entities,
+canonical global entity identities, exact declared nullable property shapes,
+and owned Arrow tables. Inventory capture uses the existing private CID-verified
+copy mechanism; caller YAML never chooses native paths. Local receipts and
+retained reuse bind full catalog, generation and semantic snapshot digest,
+including refusal of changed revisions within the same generation.
+
+The physical acceptance restores entity properties and both path relations
+through native GraphAr, removes their source directories, feeds the owned Arrow
+tables through the existing Healthcare-shaped two-hop executor, independently
+compares expected rows, and runs MRR result admission. Additional fixtures cover null/empty/Unicode,
+empty types, corrupted inventory content, unsupported scalar schemas, aggregate
+budgets, canceled preparation, consuming allocation-preserving table transfer,
+and shared Backend final-clone drain. These fixtures use admitted IR and do not
+claim original GQL compilation or Lambda invocation. The property artifact now
+has a canonical DAG-CBOR descriptor/CID with no serialized local paths. Decoder
+admission verifies bytes, version, unknown-field refusal, limits and the caller
+admitted catalog. A separately launched process reopens the native property
+files from the descriptor and independently compares every canonical row under
+a five-second gate; its fixture CID simulates publication authority. Global
+SnapshotManifest/profile root registration and MRR-owned original-source handoff
+remain integration slices.
+
+** P0: Linux DuckGQL SDK link repair
+
+Exact-head CI =4be86466c9e6bc633cb3c9cf7a2f3c1b5ab9ea9d= failed the Linux
+Typed DuckGQL native extension link in job =111365256021=. The linker reported
+both non-PIC ANTLR static objects (=R_X86_64_PC32=) and duplicate
+=duckdb::LogicalType::VARCHAR= definitions. The parallel commit =3eb1f9a943ee7b3545c5518f02b64280d7b258e5= now enables
+position-independent code for ANTLR and aligns the linked DuckDB archive with
+DuckGQL's C++17 constexpr rules. The [[https://gcc.gnu.org/pipermail/gcc-bugs/2021-August/753080.html][GCC mixed-standard link issue]] supports
+that root-cause diagnosis; new-head native CI still must qualify the fix. This
+slice preserves that parallel repair and removes the newly introduced
+=CARGO_BUILD_JOBS=2= setting from the DuckGQL CI job, restoring Cargo defaults.
+Immutable source pins and upstream static extension mode remain in place.

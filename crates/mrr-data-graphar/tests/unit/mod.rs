@@ -21,3 +21,6 @@ mod binary_entity;
 
 #[cfg(feature = "native-graphar")]
 pub(crate) use binary_entity::{fact as binary_fact, schema as binary_schema};
+
+#[cfg(feature = "native-graphar")]
+mod entity_properties;

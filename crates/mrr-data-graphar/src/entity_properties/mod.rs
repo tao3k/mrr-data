@@ -1,0 +1,21 @@
+//! Catalog-declared string vertex properties; MRR retains semantic authority.
+mod projection;
+mod read;
+mod write;
+
+pub use projection::{GraphArEntityPropertyProjection, GraphArEntityPropertyTable};
+pub use read::{CapturedGraphArEntityProperties, capture_graphar_entity_properties};
+pub use write::write_graphar_entity_properties;
+
+mod api;
+pub use api::{
+    GraphArEntityPropertyError, GraphArEntityPropertyLimits, GraphArEntityPropertyReceipt,
+};
+
+#[cfg(feature = "backend")]
+mod backend;
+#[cfg(feature = "backend")]
+pub use backend::{GraphArEntityPropertiesRequest, prepare_graphar_entity_properties};
+
+mod descriptor;
+pub use descriptor::GraphArEntityPropertyBlock;

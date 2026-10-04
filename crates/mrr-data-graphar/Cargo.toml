@@ -1,6 +1,6 @@
 [package]
 name = "mrr-data-graphar"
-description = "Fail-closed MRR binary-Entity projection contracts for Apache GraphAr"
+description = "Fail-closed MRR topology and entity-property projections for Apache GraphAr"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,13 +12,17 @@ default = []
 file-inventory = ["dep:mrr-data-core"]
 backend = ["native-graphar", "dep:mrr-data-backend"]
 selective-graphar = ["native-graphar", "dep:parquet", "dep:bytes", "dep:arrow-select"]
-native-graphar = ["file-inventory", "dep:arrow-array", "dep:graphar-rs", "dep:tempfile"]
+native-graphar = ["file-inventory", "dep:arrow-array", "dep:arrow-schema", "dep:graphar-rs", "dep:tempfile", "dep:cid", "dep:serde", "dep:serde_ipld_dagcbor"]
 
 [dependencies]
+cid = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+serde_ipld_dagcbor = { workspace = true, optional = true }
 arrow-select = { workspace = true, optional = true }
 parquet = { workspace = true, optional = true }
 bytes = { workspace = true, optional = true }
 arrow-array = { workspace = true, optional = true }
+arrow-schema = { workspace = true, optional = true }
 graphar-rs = { git = "https://github.com/GTrunSec/incubator-graphar", rev = "4d4b29715d9825bd3e9b78589cfb863880b9d1d8", optional = true }
 meta-relational-reasoning.workspace = true
 mrr-data-profile.workspace = true
@@ -33,6 +37,7 @@ harness = false
 required-features = ["selective-graphar"]
 
 [dev-dependencies]
+ipld-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 blake3.workspace = true

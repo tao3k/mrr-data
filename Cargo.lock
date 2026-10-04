@@ -3808,10 +3808,13 @@ name = "mrr-data-graphar"
 version = "0.1.0"
 dependencies = [
  "arrow-array",
+ "arrow-schema",
  "arrow-select",
  "blake3",
  "bytes",
+ "cid",
  "graphar-rs",
+ "ipld-core",
  "meta-relational-reasoning",
  "mrr-data-arrow",
  "mrr-data-asp-rust-build-support",
@@ -3823,6 +3826,7 @@ dependencies = [
  "nix",
  "parquet",
  "serde",
+ "serde_ipld_dagcbor 0.7.0",
  "serde_json",
  "tempfile",
  "tokio",

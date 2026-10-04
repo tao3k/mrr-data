@@ -544,3 +544,54 @@ mapping and an MRR-owned original-source plan/admission receipt. Binary-Entity
 outgoing access and synthetic physical measurements do not close that gate.
 A simulated Host/caller is the current acceptance boundary; deployed services
 or credentials are not prerequisites for this framework stage.
+
+** Declared native entity property tables (P2-A physical slice)
+
+=GraphArEntityPropertyProjection::admit= now maps the exact MRR EntityCatalog
+into standard GraphAr vertex types and Parquet property groups. A physical label
+=mrr_entity_<canonical type digest>= is derived from the supplied identity;
+logical labels are never guessed from source text. Each type has canonical
+=entity_id= plus its declared String properties/nullability. Unsupported scalars
+and reserved identity-property names refuse admission. Types with zero rows and
+isolated entities are explicit tables; they are not inferred from relation ends.
+This follows the [[https://graphar.apache.org/docs/specification/format/][GraphAr vertex/property format]] and leaves topology at the existing
+native binary-Entity/ordered-adjacency owner.
+
+=write_graphar_entity_properties= checks complete table coverage, exact Arrow
+shape, unique canonical IDs across types, aggregate row/value/type/property
+limits, and source nullability before native construction. It stages the full
+native table set, checks physical inventory limits and renames once. Its local
+receipt binds inventory, full entity catalog, semantic snapshot digest,
+generation, row count and chunk layout. The receipt does not infer publication
+or disclosure authority; an external caller must authenticate it in its root
+protocol. =descriptor= encodes versioned canonical DAG-CBOR control metadata
+and its CID, without local paths. =decode_descriptor_checked= authenticates
+exact bytes, known version/fields, inventory/row/layout limits and the supplied
+admitted MRR catalog; it never constructs a catalog identity from untrusted bytes.
+This is a property artifact descriptor, separate from the existing binary-Entity
+projection descriptor. Global SnapshotManifest/profile root registration remains
+a distinct integration gate.
+
+=capture_graphar_entity_properties= checks that receipt scope against the
+MRR-bound query before I/O, copies only CID-verified files, and reconstructs
+native metadata from the declared catalog in a private directory. Authenticated
+source YAML is retained as content, never interpreted as native path instructions.
+Native handles/files are gone before returning immutable Arrow tables. Reuse
+rejects semantic snapshot, generation and entity catalog changes. Native vertex
+string import currently copies into Arrow StringArray buffers; this is not a
+zero-copy vertex C Stream or a selective property-pushdown claim. Row/inventory
+bounds precede native reads; decoded value bounds do not enforce native RSS.
+
+=prepare_graphar_entity_properties= uses the same shared Backend scheduler,
+reservations, cooperative stops and drain lifecycle. =into_tables= plus
+=ResourceHandle::try_transform= transfers the existing table vector under its
+lease. Native calls remain nonpreemptible; reservations are ownership contracts.
+Physical two-hop acceptance consumes these restored tables in the existing
+property executor and admits its candidate through MRR. Direct-IR acceptance
+is distinct from original-source compilation; the parser-owned Healthcare
+caller and global publication-root registration remain separate delivery slices.
+Fresh-process acceptance persists descriptor bytes and its trusted fixture CID,
+drops writer objects, then reopens native files in a separate executable process
+and compares complete canonical rows, including null/empty/Unicode values. The
+worker has a strict five-second wall gate; its trusted CID simulates caller root
+authority, rather than establishing production disclosure authorization.

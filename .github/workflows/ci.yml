@@ -271,8 +271,6 @@ jobs:
     name: Typed DuckGQL (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 75
-    env:
-      CARGO_BUILD_JOBS: "2"
     strategy:
       fail-fast: false
       matrix:
