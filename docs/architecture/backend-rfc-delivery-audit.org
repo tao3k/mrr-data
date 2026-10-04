@@ -30,7 +30,7 @@ The graph facade and semantic-only consumers need not enable that native fronten
 
 | Composition | Owner and supported scope | Acceptance gate |
 |-------------+---------------------------+-----------------|
-| Root, fuzz and =mrr-property-source= | One MRR revision =a7450879af27d08ec1cafd1b43e9375d5ac6af52=; source digest, catalog binding and final result admission remain MRR-owned | Locked pin guard; native =source-handoff= Linux/macOS CI |
+| Root, fuzz and =mrr-property-source= | One MRR revision =8f389fd0aede8d8000197c959da69b6ba3e9bb86=; source digest, catalog binding, dispatch and final result admission remain MRR-owned | Locked pin guard; native =source-handoff= Linux/macOS CI |
 | GraphAr =native-graphar,source-handoff,backend= with DataFusion =source-handoff= | Combined Healthcare property/relation closure; original GQL, four rows including duplicate/null, cold and same-cache warm restoration on one Backend | Canonical source-handoff Rust caller and separate drift/refusal tests |
 | Shared Backend | Provider-independent admission, transaction authority/history and retained resource drain; simulated metadata in canonical caller | Positive, retirement, lost-ACK and final-clone assertions; native process-exit receipts remain separate |
 | GraphAr =selective-graphar= | Authenticated selective outgoing-range materialization under the declared schema | Paired full-source equivalence; end-to-end performance remains M3 |
@@ -49,7 +49,22 @@ does not establish process-exit or power-loss durability and does not replace
 the native provider recovery matrix. Resource bytes are declared reservations,
 not a native RSS cap. Local and platform qualification remain explicit gates.
 
-** Consolidated local qualification: native frontend gate remains open
+** Qualification boundary after concurrent dispatch integration
+
+Before publication, the remote advanced to =f9be539f= with the MRR-owned
+=PropertyQueryBackend= dispatch port and =export_execution= preserving its
+original admitted candidate. The integration retains that change and advances
+the optional source owner to the same =8f389fd0= revision as root and fuzz.
+The canonical native caller now implements that physical port and calls the
+source-bound MRR =execute_with= entrypoint before exporting the returned
+admitted execution. Semantic-only consumers keep MRR default features disabled;
+the optional source frontend explicitly owns native compilation.
+
+The following local receipts describe the prior =cb4f78cd= integration with
+MRR =a7450879=, not the newer dispatch composition. New-head compilation,
+dispatch/owner checks and platform source acceptance must qualify it again.
+
+** Prior integration local qualification: native frontend gate remains open
 
 The merged source-feature composition builds locally with the exact pinned
 MRR/POO/parser dependency SDK. A transient Apple linker =Bus error: 10= was

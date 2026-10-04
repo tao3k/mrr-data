@@ -1,7 +1,9 @@
 //! Catalog-backed bounded property path queries.
+mod backend;
 mod execution;
 mod restored;
 mod validation;
+pub use backend::RestoredPropertyBackend;
 pub use execution::{
     BinaryRelationTable, EntityPropertyTable, PropertyQueryLimits, execute_property_path_query,
 };

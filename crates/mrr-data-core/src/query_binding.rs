@@ -434,6 +434,29 @@ impl DataQueryResultHandoff {
         })
     }
 
+    /// Preserve MRR's original admitted dispatch candidate and backend binding.
+    /// The physical executor remains trusted; this is not an execution proof.
+    /// # Errors
+    /// Rejects query/candidate drift or an exceeded original Scheme wire budget.
+    pub fn export_execution(
+        execution: &meta_relational_reasoning::AdmittedPropertyExecution<BoundDataQuery>,
+        limits: meta_relational_reasoning::QueryResultLimits,
+        max_bytes: std::num::NonZeroUsize,
+    ) -> Result<Self, DataQueryHandoffError> {
+        let binding = execution.physical_evidence();
+        let result = meta_relational_reasoning::export_query_result_transport(
+            binding.query(),
+            execution.candidate(),
+            limits,
+            max_bytes,
+        )
+        .map_err(DataQueryHandoffError::Transport)?;
+        Ok(Self {
+            binding: binding.clone(),
+            result,
+        })
+    }
+
     #[must_use]
     pub fn binding(&self) -> &BoundDataQuery {
         &self.binding

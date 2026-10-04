@@ -15,12 +15,15 @@ use crate::{
 use meta_relational_reasoning as mrr;
 use mrr_data_backend::{Backend, BackendConfig, ResourceControl, ResourceHandle, ResourceStop};
 use mrr_data_content::MemoryContentStore;
-use mrr_data_core::{DataQueryResultHandoff, PhysicalQueryOutput};
+use mrr_data_core::DataQueryResultHandoff;
 use std::{num::NonZeroUsize, sync::Arc};
 #[path = "authority.rs"]
 mod authority;
+#[path = "executor.rs"]
+mod executor;
 #[path = "metadata.rs"]
 mod metadata;
+type Execution = mrr::AdmittedPropertyExecution<mrr_data_core::BoundDataQuery>;
 const RESERVED: usize = 8 << 20;
 
 async fn restore(
@@ -71,7 +74,7 @@ async fn execute(
     f: &Fixture,
     backend: &Backend,
     captured: ResourceHandle<CapturedCombinedGraphAr>,
-) -> ResourceHandle<PhysicalQueryOutput> {
+) -> ResourceHandle<Execution> {
     let tables = captured
         .get()
         .tables(&f.query)
@@ -87,21 +90,22 @@ async fn execute(
         .bind(&f.relations, &f.entities, &f.original.semantic)
         .unwrap();
     assert_eq!(bound.compilation().source_digest, SOURCE_DIGEST);
-    let query = bound.query().clone();
+    let physical = executor::CapturedBackend {
+        binding: f.query.clone(),
+        tables,
+        relations,
+        limits: properties::limits(),
+    };
     backend
         .prepare_resource_async_controlled(
             RESERVED,
             ResourceControl::default(),
             move |control| async move {
                 control.check()?;
-                let output = mrr_data_datafusion::execute_property_path_query(
-                    &query,
-                    &tables,
-                    &relations,
-                    properties::limits(),
-                )
-                .await
-                .unwrap();
+                let output = bound
+                    .execute_with(&physical, result_limits())
+                    .await
+                    .unwrap();
                 control.check()?;
                 drop(captured);
                 Ok::<_, ResourceStop>(output)
@@ -175,7 +179,7 @@ async fn query_transport(
     let captured = capture(f, backend, restored).await;
     assert_eq!(backend.status().resource_bytes, RESERVED);
     let output = execute(f, backend, captured).await;
-    let mut rows = output.get().rows().to_vec();
+    let mut rows = output.get().candidate().rows().to_vec();
     rows.sort_by_key(|row| format!("{row:?}"));
     let mut expected = crate::tests::entity_properties::acceptance::expected();
     expected.push(expected[0].clone());
@@ -187,14 +191,8 @@ async fn query_transport(
     );
     let cap = NonZeroUsize::new(1 << 20).unwrap();
     let transport = output
-        .try_transform(|output| {
-            DataQueryResultHandoff::export(
-                &f.query,
-                &mrr_data_datafusion::datafusion_engine_profile().unwrap(),
-                output,
-                limits,
-                cap,
-            )
+        .try_transform(|execution| {
+            DataQueryResultHandoff::export_execution(&execution, limits, cap)
         })
         .unwrap_or_else(|_| panic!("unique candidate transport conversion"));
     assert!(authority::disclose(policy_home, policy).await);

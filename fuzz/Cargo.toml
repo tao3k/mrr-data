@@ -9,7 +9,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "=0.4.13"
-meta-relational-reasoning = { git = "https://github.com/tao3k/meta-relational-reasoning.git", rev = "a7450879af27d08ec1cafd1b43e9375d5ac6af52" }
+meta-relational-reasoning = { git = "https://github.com/tao3k/meta-relational-reasoning.git", rev = "8f389fd0aede8d8000197c959da69b6ba3e9bb86", default-features = false }
 mrr-data-arrow = { path = "../crates/mrr-data-arrow" }
 
 [[bin]]
