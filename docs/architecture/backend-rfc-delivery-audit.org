@@ -419,3 +419,23 @@ and lock now use the exact root workspace MRR pin. The Python qualification
 framework checks the fuzz manifest and lock before feature compilation, with
 negative fixtures for either source of drift. This fixes the typed source
 identity mismatch; the new-head nightly ASan campaign remains its CI gate.
+
+** Property delivery qualification receipt
+
+At clean code head =452dfacc= (including parallel =bdc81a1c=), native GraphAr
+with =selective-graphar,backend= passes strict all-target Clippy and 49 functional
+tests in =1.05s=. Three tests are explicitly ignored in the normal list: the
+two separate performance experiments and the process worker. The parent
+acceptance actually launches that worker: its complete eight-row comparison
+passes in =0.02s=, and a completion artifact prevents an empty test-filter run
+from satisfying the parent. The outer Python supervisor applies the existing
+five-second inactivity / 120-second wall policy; the child has a stricter
+five-second wall limit and is reaped on timeout. No benchmark or Cargo job
+parallelism environment overrides were introduced.
+
+The isolated IPC fuzz target passes stable compilation and strict Clippy after
+its MRR pin repair; this is not a local nightly ASan campaign receipt. Python
+qualification has 16 passing tests, Ruff passes, and the documentation checker
+validates 21 Org documents and eight Org READMEs. All nine Turso packages remain
+=0.8.1=. Remote native/fuzz checks must be read at the subsequently published
+exact head; prior green jobs are not receipts for this property delivery.
