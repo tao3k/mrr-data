@@ -28,12 +28,16 @@ class CompilerOutput:
             self.pending = lines.pop()
         output = bytearray()
         for line in lines:
-            event = line.startswith(
-                (b"Running pass:", b"Running analysis:", b"Invalidating analysis:")
-            ) or bool(
-                re.match(
-                    rb"\[\d{4}-[^]]+\] 0x[0-9a-f]+\s+(Executing Pass|Freeing Pass|Made Modification) '",
-                    line,
+            event = (
+                line.startswith(
+                    (b"Running pass:", b"Running analysis:", b"Invalidating analysis:")
+                )
+                or bool(re.match(rb"\s+Running pass \d+ ", line))
+                or bool(
+                    re.match(
+                        rb"\[\d{4}-[^]]+\] 0x[0-9a-f]+\s+(Executing Pass|Freeing Pass|Made Modification) '",
+                        line,
+                    )
                 )
             )
             if event:

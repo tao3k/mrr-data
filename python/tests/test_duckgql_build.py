@@ -38,7 +38,8 @@ def test_compiler_output_grouping_preserves_split_diagnostics_and_real_failure(c
         output(b"ning pass: unsupported setting\n")
         == b"clang: error: Running pass: unsupported setting\n"
     )
-    assert b"compiler pass events: 1" in output(b"")
+    assert output(b" Running pass 1 InstCombinePass on function\n") == b""
+    assert b"compiler pass events: 2" in output(b"")
     with pytest.raises(subprocess.CalledProcessError) as failure:
         run(
             [

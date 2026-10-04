@@ -7,9 +7,7 @@ use super::{
 use crate::{capture_combined_graphar, tests::entity_properties::fixture as properties};
 use meta_relational_reasoning as mrr;
 use mrr_data_content::{MemoryContentStore, publish_combined_graph, restore_combined_graph};
-use mrr_property_source::{
-    CompiledPropertySourceQuery, PropertyQueryExecutor, compile_property_source_query,
-};
+use mrr_property_source::{CompiledPropertySourceQuery, compile_property_source_query};
 use std::num::NonZeroUsize;
 const SOURCE: &str = include_str!(
     "../../../../../mrr-data-datafusion/tests/fixtures/healthcare-case-profile-relations.gql"
@@ -22,12 +20,11 @@ struct Executor {
     entities: Vec<mrr_data_datafusion::EntityPropertyTable>,
     relations: Vec<mrr_data_datafusion::BinaryRelationTable>,
 }
-impl PropertyQueryExecutor for Executor {
-    type Error = mrr_data_datafusion::DataFusionQueryError;
+impl Executor {
     async fn execute<'a>(
         &'a self,
         query: &'a mrr::CatalogBoundQuery,
-    ) -> Result<mrr::CandidateQueryResult, Self::Error> {
+    ) -> Result<mrr::CandidateQueryResult, mrr_data_datafusion::DataFusionQueryError> {
         let result = mrr_data_datafusion::execute_property_path_query(
             query,
             &self.entities,
@@ -82,21 +79,21 @@ async fn original_source_handoff_native_combined_cold_and_warm_reaches_mrr_admis
                 .collect(),
             relations: relation_tables(&f, &captured),
         };
-        let executed = compile()
-            .execute_with(
-                &f.relations,
-                &f.entities,
-                &f.original.semantic,
-                &executor,
+        let bound = compile()
+            .bind(&f.relations, &f.entities, &f.original.semantic)
+            .unwrap();
+        let candidate = executor.execute(bound.query()).await.unwrap();
+        let _admitted = bound
+            .admit(
+                &candidate,
                 mrr::QueryResultLimits::new(
                     NonZeroUsize::new(100).unwrap(),
                     NonZeroUsize::new(300).unwrap(),
                 ),
             )
-            .await
             .unwrap();
-        assert_eq!(executed.compilation.source_digest, SOURCE_DIGEST);
-        let mut rows = executed.candidate.rows().to_vec();
+        assert_eq!(bound.compilation().source_digest, SOURCE_DIGEST);
+        let mut rows = candidate.rows().to_vec();
         rows.sort_by_key(|r| format!("{r:?}"));
         let mut expected = crate::tests::entity_properties::acceptance::expected();
         expected.push(expected[0].clone());

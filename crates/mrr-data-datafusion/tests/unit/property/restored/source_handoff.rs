@@ -4,8 +4,7 @@ use super::{
     RestoredSnapshot, execute_restored_property_path_query, fixture, limits, mrr, restored,
 };
 use mrr_property_source::{
-    CompiledPropertySourceQuery, PropertyQueryExecutor, PropertySourceExecutionError,
-    PropertySourceQueryError, compile_property_source_query,
+    CompiledPropertySourceQuery, PropertySourceQueryError, compile_property_source_query,
 };
 
 const SOURCE: &str = include_str!("../../../fixtures/healthcare-case-profile-relations.gql");
@@ -26,23 +25,18 @@ async fn original_source_handoff_refuses_semantic_drift_and_final_admission_budg
         relations: &relations,
         entities: &entities,
     };
-    let error = compile()
-        .execute_with(
-            &relations,
-            &entities,
-            &f.semantic,
-            &executor,
+    let bound = compile().bind(&relations, &entities, &f.semantic).unwrap();
+    let candidate = executor.execute(bound.query()).await.unwrap();
+    let error = bound
+        .admit(
+            &candidate,
             mrr::QueryResultLimits::new(
                 NonZeroUsize::new(1).unwrap(),
                 NonZeroUsize::new(3).unwrap(),
             ),
         )
-        .await
         .unwrap_err();
-    assert!(matches!(
-        error,
-        PropertySourceExecutionError::Semantic(PropertySourceQueryError::Admission(_))
-    ));
+    assert!(matches!(error, PropertySourceQueryError::Admission(_)));
 
     let generation = mrr::GenerationId::from_canonical_bytes("caller-updated-generation").unwrap();
     let semantic = mrr::SemanticSnapshot::admit(
@@ -56,31 +50,15 @@ async fn original_source_handoff_refuses_semantic_drift_and_final_admission_budg
         ],
     )
     .unwrap();
-    let error = compile()
-        .execute_with(
-            &relations,
-            &entities,
-            &semantic,
-            &executor,
-            mrr::QueryResultLimits::new(
-                NonZeroUsize::new(100).unwrap(),
-                NonZeroUsize::new(300).unwrap(),
-            ),
-        )
-        .await
-        .unwrap_err();
-    assert!(matches!(
-        error,
-        PropertySourceExecutionError::Physical(DataFusionQueryError::CatalogMismatch)
-    ));
+    let bound = compile().bind(&relations, &entities, &semantic).unwrap();
+    let error = executor.execute(bound.query()).await.unwrap_err();
+    assert!(matches!(error, DataFusionQueryError::CatalogMismatch));
 }
-impl PropertyQueryExecutor for Executor<'_> {
-    type Error = DataFusionQueryError;
-
+impl Executor<'_> {
     async fn execute<'a>(
         &'a self,
         query: &'a mrr::CatalogBoundQuery,
-    ) -> Result<mrr::CandidateQueryResult, Self::Error> {
+    ) -> Result<mrr::CandidateQueryResult, DataFusionQueryError> {
         let output = execute_restored_property_path_query(RestoredPropertyQuery {
             query,
             restored: self.restored,
@@ -183,20 +161,18 @@ async fn original_healthcare_source_reaches_mrr_admission_over_cold_and_warm_res
             relations: &relations,
             entities: &entities,
         };
-        let executed = compile()
-            .execute_with(
-                &relations,
-                &entities,
-                &f.semantic,
-                &executor,
+        let bound = compile().bind(&relations, &entities, &f.semantic).unwrap();
+        let candidate = executor.execute(bound.query()).await.unwrap();
+        let _admitted = bound
+            .admit(
+                &candidate,
                 mrr::QueryResultLimits::new(
                     NonZeroUsize::new(100).unwrap(),
                     NonZeroUsize::new(300).unwrap(),
                 ),
             )
-            .await
             .unwrap();
-        assert_eq!(executed.compilation.source_digest, SOURCE_DIGEST);
+        assert_eq!(bound.compilation().source_digest, SOURCE_DIGEST);
         let scalar = |text: &str| mrr::QueryResultValue::Scalar {
             schema: mrr::ValueSchema::String,
             value: mrr::Value::String(text.into()),
@@ -211,11 +187,11 @@ async fn original_healthcare_source_reaches_mrr_admission_over_cold_and_warm_res
             vec![scalar("healthcare"), scalar("two"), scalar("shared")],
         ];
         expected.push(vec![scalar("healthcare"), scalar("one"), scalar("shared")]);
-        let mut actual = executed.candidate.rows().to_vec();
+        let mut actual = candidate.rows().to_vec();
         expected.sort_by_key(|row| format!("{row:?}"));
         actual.sort_by_key(|row| format!("{row:?}"));
         assert_eq!(actual, expected);
-        let rows = executed.candidate.rows().to_vec();
+        let rows = candidate.rows().to_vec();
         if let Some(expected) = previous {
             assert_eq!(rows, expected);
         }

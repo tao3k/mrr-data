@@ -24,8 +24,8 @@ def test_workspace_wrapper_preserves_compiler_output_and_failure(tmp_path):
         check=True,
         timeout=10,
     )
-    assert b"IR Dump Before InstCombinePass" in result.stderr
-    assert b"Machine code for function" in result.stderr
+    assert b"Running pass" in result.stderr
+    assert b"Executing Pass" in result.stderr
     assert subprocess.check_output([plain], timeout=5) == subprocess.check_output(
         [wrapped], timeout=5
     )

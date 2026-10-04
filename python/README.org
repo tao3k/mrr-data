@@ -51,8 +51,8 @@ a refusal; it does not emit a successful receipt or artificial progress.
 
 For workspace Rust code generation, the installed =mrr-data-rustc-progress=
 entry point can serve as Cargo's =RUSTC_WORKSPACE_WRAPPER=. It forwards all
-compiler arguments and adds actual LLVM optimization and instruction-selection
-dumps during code generation.
+compiler arguments and adds actual LLVM optimization and machine-code pass
+events during code generation.
 It preserves optimization flags, compiler output and the compiler's exit status.
 Registry and Git dependency compilers are outside the workspace wrapper's scope.
 The build supervisor still enforces its existing inactivity and wall limits.
