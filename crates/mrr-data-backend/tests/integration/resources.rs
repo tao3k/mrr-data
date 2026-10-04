@@ -254,3 +254,117 @@ async fn caller_abort_signals_running_control_but_cleanup_keeps_admission() {
     assert_eq!(backend.status().resource_bytes, 0);
     backend.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn explicit_queued_stops_return_before_held_worker_releases() {
+    use mrr_data_backend::{ResourceControl, ResourcePreparationError, ResourceStop};
+    for resource_workers in [1, 2] {
+        let (backend, _) = open(BackendConfig {
+            max_resource_workers: resource_workers,
+            max_shared_workers: 1,
+            ..BackendConfig::default()
+        })
+        .await;
+        let gate = Arc::new((Mutex::new(false), Condvar::new()));
+        let worker_gate = gate.clone();
+        let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+        let held_backend = backend.clone();
+        let held = tokio::spawn(async move {
+            held_backend
+                .prepare_resource(8, move || {
+                    entered_tx.send(()).unwrap();
+                    let (lock, changed) = &*worker_gate;
+                    let mut released = lock.lock().unwrap();
+                    while !*released {
+                        released = changed.wait(released).unwrap();
+                    }
+                    Ok(())
+                })
+                .await
+        });
+        tokio::time::timeout(Duration::from_secs(3), entered_rx)
+            .await
+            .unwrap()
+            .unwrap();
+        for expired in [false, true] {
+            let control = ResourceControl::new(
+                expired.then(|| std::time::Instant::now() + Duration::from_millis(50)),
+            );
+            let waiting_backend = backend.clone();
+            let queued_control = control.clone();
+            let queued = tokio::spawn(async move {
+                waiting_backend
+                    .prepare_resource_controlled::<(), ResourceStop>(8, queued_control, |_| {
+                        panic!("queued stop reached driver")
+                    })
+                    .await
+            });
+            until(|| backend.status().active_resources == 2).await;
+            if !expired {
+                control.cancel();
+            }
+            let result = tokio::time::timeout(Duration::from_secs(3), queued).await;
+            // Release the held operation even when the assertion fails.
+            if result.is_err() {
+                let (lock, changed) = &*gate;
+                *lock.lock().unwrap() = true;
+                changed.notify_all();
+            }
+            let result = result.unwrap().unwrap();
+            let expected = if expired {
+                ResourceStop::Deadline
+            } else {
+                ResourceStop::Cancelled
+            };
+            assert!(
+                matches!(result, Err(ResourcePreparationError::Preparation(stop)) if stop == expected)
+            );
+            assert_eq!(backend.status().active_resources, 1);
+            assert_eq!(backend.status().resource_bytes, 8);
+        }
+        let (lock, changed) = &*gate;
+        *lock.lock().unwrap() = true;
+        changed.notify_all();
+        drop(held.await.unwrap().unwrap());
+        backend.shutdown().await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn consuming_conversion_transfers_lease_and_refuses_shared_input() {
+    use mrr_data_backend::ResourceTransformError;
+    let (backend, _) = open(BackendConfig {
+        max_resources: 1,
+        max_resource_bytes: 16,
+        ..BackendConfig::default()
+    })
+    .await;
+    let input = backend
+        .prepare_resource(16, || Ok(vec![1u8, 2]))
+        .await
+        .unwrap();
+    let clone = input.clone();
+    let Err(ResourceTransformError::Shared(input)) =
+        input.try_transform::<usize, ()>(|_| panic!("shared input was consumed"))
+    else {
+        panic!("shared conversion was not refused");
+    };
+    drop(clone);
+    let Ok(converted) = input.try_transform::<_, ()>(|bytes| Ok(bytes.len())) else {
+        panic!("unique conversion failed");
+    };
+    assert_eq!(*converted.get(), 2);
+    assert_eq!(backend.status().resource_bytes, 16);
+    assert_eq!(backend.status().active_resources, 1);
+    assert!(matches!(
+        backend.prepare_resource(1, || Ok(())).await,
+        Err(BackendError::Saturated)
+    ));
+    assert!(matches!(
+        converted.try_transform::<(), _>(|_| Err("conversion refused")),
+        Err(ResourceTransformError::Conversion("conversion refused"))
+    ));
+    assert_eq!(backend.status().active_resources, 0);
+    assert_eq!(backend.status().resource_bytes, 0);
+    backend.shutdown().await.unwrap();
+}

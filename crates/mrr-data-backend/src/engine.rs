@@ -99,7 +99,7 @@ impl Backend {
             .map_err(ResourcePreparationError::Backend)?;
         self.inner
             .dispatcher
-            .prepare(lease, prepare)
+            .prepare(lease, None, prepare)
             .await
             .map_err(|_| ResourcePreparationError::Backend(BackendError::WorkerLost))?
             .map_err(ResourcePreparationError::Preparation)
@@ -107,7 +107,8 @@ impl Backend {
     /// Prepare retained output with cooperative stop checkpoints.
     /// Dropping the waiter signals cancellation. Running driver work owns its
     /// lease through cleanup. The driver must check control between native calls;
-    /// no deadline timer or forced native interruption is created here.
+    /// queued deadlines use the Host runtime timer; running native calls are
+    /// not forcibly interrupted.
     /// # Errors
     /// Returns typed stops/refusals or shared Backend admission/worker failures.
     pub async fn prepare_resource_controlled<T, E>(
@@ -120,15 +121,26 @@ impl Backend {
         T: Send + Sync + 'static,
         E: From<crate::ResourceStop> + Send + 'static,
     {
+        use crate::ResourcePreparationError;
         let mut cancellation = crate::control::CancelOnDrop::new(control.clone());
+        let lease = self
+            .inner
+            .scheduler
+            .admit_resource(reserved_bytes)
+            .map_err(ResourcePreparationError::Backend)?;
+        let worker_control = control.clone();
         let result = self
-            .prepare_resource_fallible(reserved_bytes, move || {
-                control.check().map_err(E::from)?;
-                let value = prepare(&control)?;
-                control.check().map_err(E::from)?;
+            .inner
+            .dispatcher
+            .prepare(lease, Some((control, E::from)), move || {
+                worker_control.check().map_err(E::from)?;
+                let value = prepare(&worker_control)?;
+                worker_control.check().map_err(E::from)?;
                 Ok(value)
             })
-            .await;
+            .await
+            .map_err(|_| ResourcePreparationError::Backend(BackendError::WorkerLost))?
+            .map_err(ResourcePreparationError::Preparation);
         cancellation.disarm();
         result
     }

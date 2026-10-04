@@ -42,20 +42,15 @@ See [[file:0001-mrr-data-plane.org][the canonical data plane]], [[file:shared-ba
 
 * Findings that change the execution plan
 
-** P1: queued explicit stop still waits for worker admission
+** Delivered slice: queued explicit stop
 
-=prepare_resource_controlled= checks control inside its preparation closure.
-=Dispatcher::prepare= waits for resource/shared permits or waiter closure only.
-Consequently, dropping the waiter removes queued work, but explicit =cancel()=
-or an expired deadline with a live waiter is not observed until worker admission.
-Under held workers this can retain a resource reservation indefinitely.
-
-The next control slice must race both permit waits against a sticky cancellation
-notification and a Host-clock deadline. It must not submit native work after
-an observed stop and must release admission before returning the typed refusal.
-Running work still owns cleanup and its lease; no timer may imply native work
-has stopped. Test with deliberately held workers, a live cancelled waiter and
-an expired queued request; neither may open a connection or await gate release.
+The queued stop slice is now implemented. =ResourceControl= has a sticky
+notification and the dispatcher races both resource/shared permit waits against
+explicit cancellation and the Host-clock deadline. It drops owned request input
+and its reservation before returning a typed stop. The held-worker fixture
+covers both lanes without releasing the held worker, including a future deadline
+and a live explicit-cancel waiter. Running native calls still retain admission
+through cleanup; queue timers do not assert native interruption.
 
 ** P1: ownership budgets are contractual, not a physical memory ceiling
 
@@ -66,7 +61,15 @@ admission, and explicitly reserve conversion/candidate scratch or transfer
 accounting to another owner before exporting clones. Do not describe logical
 reserved bytes as native RSS or as enforcement over arbitrary Rust clones.
 
-Qualify a bounded handoff through the real caller before broadening results;
+=ResourceHandle::try_transform= now consumes unique ownership and carries its
+existing lease into the converted representation. Shared handles are refused
+without running conversion; conversion failure releases admission. The native
+Turso fixture consumes physical output into an MRR candidate, admits it and
+keeps the candidate lease through drain, without cloning the physical result.
+Host conversion scratch is still explicitly budgeted. This provides a library
+handoff receipt, not a deployed Host invocation.
+
+Qualify that handoff through the real caller before broadening results;
 include a retained clone and conversion overlap, not only handle-drop tests.
 A borrowed/consuming lease-aware conversion API should be selected from actual
 MRR caller requirements rather than introducing a second result model.
@@ -143,3 +146,22 @@ exact-head platform checks and RFC status agree. Production readiness additional
 requires live authority, actual Host invocation, durability and deployed-store
 receipts for the supported deployment. General graph-query conformance and hard
 native deadlines remain unclaimed until individually qualified.
+
+* Current execution checkpoint
+
+Implemented this slice: queued explicit cancellation/deadline and consumption
+of physical output into a leased MRR candidate. Focused resource/native tests,
+workspace policy and strict native adapter lint are the local gates. Remote
+exact-head acceptance must be recorded separately after publication.
+
+GraphAr selective native access still requires extending the pinned safe reader:
+current writer uses =UnorderedBySource=, and the reader's safe edge API provides
+whole-source batch export rather than a vertex/chunk range cursor. A full scan
+with a Rust-side filter is not selective I/O. Ordered adjacency publication and
+range/offset-aware safe reader qualification must precede the claimed P1-C gate.
+
+Requested Host inputs: actual policy/key retirement and protected-disclosure
+entrypoint; actual Lambda/Marlin producer/caller repository and runtime entry.
+Until supplied, library fixtures cannot close live authority or application
+invocation. Process-crash fault injection, selective graph access, original
+property-path expansion and the matched performance matrix remain outstanding.

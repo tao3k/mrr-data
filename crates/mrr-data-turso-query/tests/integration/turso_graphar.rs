@@ -391,16 +391,21 @@ async fn qualify_retained_output(
         backend.prepare_resource(1, || Ok(())).await,
         Err(BackendError::Saturated)
     ));
-    let candidate =
-        core::project_data_query_output(&query, query.engine(), retained.get().clone()).unwrap();
+    // Consume physical output into the MRR candidate under the same lease,
+    // rather than creating an unaccounted output clone.
+    drop(last);
+    let Ok(retained) = retained
+        .try_transform(|output| core::project_data_query_output(&query, query.engine(), output))
+    else {
+        panic!("retained candidate conversion failed");
+    };
     mrr::admit_query_result_candidate(
         query.query(),
-        &candidate,
+        retained.get(),
         mrr::QueryResultLimits::new(NonZeroUsize::new(2).unwrap(), NonZeroUsize::new(4).unwrap()),
     )
     .unwrap();
-    // This fixture's MRR conversion is completed while the output lease is held.
-    drop(candidate);
+    let last = retained.clone();
     let closing = backend.clone();
     let shutdown = tokio::spawn(async move { closing.shutdown().await });
     tokio::time::timeout(std::time::Duration::from_secs(3), async {
@@ -413,7 +418,7 @@ async fn qualify_retained_output(
     drop(retained);
     assert_eq!(backend.status().active_resources, 1);
     assert!(!shutdown.is_finished());
-    assert_eq!(last.get().rows().len(), 2);
+    assert_eq!(backend.status().resource_bytes, 2048);
     drop(last);
     tokio::time::timeout(std::time::Duration::from_secs(3), shutdown)
         .await

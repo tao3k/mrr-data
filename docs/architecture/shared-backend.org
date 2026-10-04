@@ -457,8 +457,23 @@ The optional Turso query adapter exposes
 participate in drain. Its reservation is a Host estimate including conversion
 scratch space, not native RSS. Keep the output handle through MRR projection
 and admission. An exported owned clone requires separate Host accounting.
-The existing owned-result entrypoint budgets execution only. The retained path now uses cooperative control: waiter cancellation signals a
+The existing owned-result entrypoint budgets execution only. The retained
+path now uses cooperative control: waiter cancellation signals a
 stop, and row/load/fetch checkpoints observe it. Cleanup still owns the lease.
 An explicit =ResourceControl= accepts a monotonic deadline through
 =execute_turso_graphar_controlled_on_backend=. Native interrupt and hard
 in-flight-call deadlines remain separate RFC 0003 gates.
+
+* Queued stop and consuming result handoff
+
+Controlled requests race both resource and shared-worker waits against explicit
+stop notifications and monotonic deadlines on the Host runtime. Queued refusal
+releases owned request input and admission before returning. Running driver
+calls retain admission through cleanup; this is not a hard native interrupt.
+
+=ResourceHandle::try_transform= requires unique ownership and transfers the
+reservation into a new representation, with no new runtime or scheduler.
+Shared handles return the original handle without invoking conversion; failed
+conversion releases the reservation. The Turso integration consumes physical
+output into a leased MRR candidate and holds that lease through admission/drain.
+Host estimates include conversion scratch and transformed output bytes.

@@ -307,6 +307,8 @@ The resource reservation includes captured input, temporary conversion buffers,
 Host-estimated native state and bounded output. Existing row/cell/string-byte
 limits are application bounds; they do not measure native allocator RSS.
 
+Both queued permit waits now observe sticky explicit stops and Host-clock
+deadlines and release their request input/reservation before typed refusal.
 The admitted request has queued, running and cleanup phases. Cancellation before
 execution releases the reservation without opening a connection. The controlled path signals a sticky stop when its waiter is dropped, or
 accepts an explicit Host cancellation/monotonic deadline. The adapter checks
@@ -335,14 +337,18 @@ The current =run_resource= path releases its lease before returning the owned
 physical output. It therefore budgets execution but does not account for output
 retained by the caller. The implemented retained-result entrypoint instead
 returns a Backend resource handle while the caller borrows physical output for
-MRR projection/admission. Worker permits are released after
+MRR projection/admission. =ResourceHandle::try_transform= consumes uniquely
+owned physical output into a candidate while transferring the same lease;
+shared handles are refused and conversion failure releases admission. The native
+fixture qualifies this handoff without a physical-output clone. Host conversion
+scratch remains explicitly budgeted. Worker permits are released after
 cleanup, but the byte/count reservation remains until the final output handle
 is dropped. Retained results therefore participate in Backend drain. The
 adapter must not export an unaccounted owned clone of large output buffers.
 Result admission does not itself release those physical buffers. The current
 MRR projection API consumes an owned =PhysicalQueryOutput=. A caller therefore
-keeps the handle through synchronous projection/admission and budgets conversion
-scratch/candidate memory explicitly; a clone handed to another task requires
+transfers the physical-output lease to the candidate through consuming
+conversion and budgets conversion scratch/candidate memory explicitly; a clone handed to another task requires
 separate Host accounting. The handle contract does not prevent arbitrary
 Rust callers from cloning values or enforce a native RSS ceiling.
 

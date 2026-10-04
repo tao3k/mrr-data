@@ -26,6 +26,30 @@ impl<T> ResourceHandle<T> {
     pub fn get(&self) -> &T {
         &self.0.value
     }
+    /// Consume a uniquely held resource and transfer its reservation to a new
+    /// representation. No resource bytes are exported without their lease.
+    /// The Host reservation must include conversion scratch and the new value.
+    /// # Errors
+    /// Refuses a shared handle without invoking conversion; conversion errors
+    /// release the input and reservation before returning.
+    pub fn try_transform<U, E>(
+        self,
+        convert: impl FnOnce(T) -> Result<U, E>,
+    ) -> Result<ResourceHandle<U>, ResourceTransformError<T, E>> {
+        let retained = Arc::try_unwrap(self.0)
+            .map_err(|shared| ResourceTransformError::Shared(Self(shared)))?;
+        let Retained {
+            value,
+            _lease: lease,
+        } = retained;
+        match convert(value) {
+            Ok(value) => Ok(ResourceHandle::new(value, lease)),
+            Err(error) => {
+                drop(lease);
+                Err(ResourceTransformError::Conversion(error))
+            }
+        }
+    }
 }
 
 /// Distinguish shared Backend admission/worker failure from a typed driver refusal.
@@ -50,4 +74,10 @@ impl<E: std::error::Error + 'static> std::error::Error for ResourcePreparationEr
             Self::Preparation(error) => Some(error),
         }
     }
+}
+
+/// A failed retained-resource conversion, preserving shared input ownership.
+pub enum ResourceTransformError<T, E> {
+    Shared(ResourceHandle<T>),
+    Conversion(E),
 }

@@ -26,6 +26,7 @@ pub struct ResourceControl(Arc<State>);
 struct State {
     reason: AtomicU8,
     deadline: Option<Instant>,
+    changed: tokio::sync::Notify,
 }
 impl ResourceControl {
     #[must_use]
@@ -33,6 +34,7 @@ impl ResourceControl {
         Self(Arc::new(State {
             reason: AtomicU8::new(0),
             deadline,
+            changed: tokio::sync::Notify::new(),
         }))
     }
     /// Request cancellation. The first observed stop reason wins.
@@ -50,6 +52,7 @@ impl ResourceControl {
             .0
             .reason
             .compare_exchange(0, reason, Ordering::AcqRel, Ordering::Acquire);
+        self.0.changed.notify_waiters();
     }
     /// Check for cancellation/deadline without creating a runtime or timer.
     /// # Errors
@@ -69,6 +72,24 @@ impl ResourceControl {
             0 => Ok(()),
             1 => Err(ResourceStop::Cancelled),
             _ => Err(ResourceStop::Deadline),
+        }
+    }
+    pub(crate) async fn stopped(&self) -> ResourceStop {
+        loop {
+            let notified = self.0.changed.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            if let Err(stop) = self.check() {
+                return stop;
+            }
+            if let Some(deadline) = self.0.deadline {
+                tokio::select! {
+                    () = &mut notified => {},
+                    () = tokio::time::sleep_until(tokio::time::Instant::from_std(deadline)) => {},
+                }
+            } else {
+                notified.await;
+            }
         }
     }
 }

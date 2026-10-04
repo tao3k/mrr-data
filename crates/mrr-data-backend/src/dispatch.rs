@@ -9,6 +9,8 @@ use tokio::{
     sync::{Semaphore, oneshot},
 };
 
+type StopMapper<E> = (crate::ResourceControl, fn(crate::ResourceStop) -> E);
+
 pub(crate) struct Dispatcher {
     writes: Arc<Semaphore>,
     recoveries: Arc<Semaphore>,
@@ -29,6 +31,7 @@ impl Dispatcher {
     pub(crate) fn prepare<T: Send + Sync + 'static, E: Send + 'static>(
         &self,
         lease: ResourceLease,
+        stop: Option<StopMapper<E>>,
         run: impl FnOnce() -> Result<T, E> + Send + 'static,
     ) -> oneshot::Receiver<Result<ResourceHandle<T>, E>> {
         let (mut tx, rx) = oneshot::channel();
@@ -36,14 +39,34 @@ impl Dispatcher {
         let shared = self.shared.clone();
         let runtime = self.runtime.clone();
         self.runtime.spawn(async move {
+            let stopped = async {
+                match &stop {
+                    Some((control, _)) => control.stopped().await,
+                    None => std::future::pending().await,
+                }
+            };
+            tokio::pin!(stopped);
             let permit = tokio::select! {
                 biased;
                 () = tx.closed() => return,
+                reason = &mut stopped => {
+                    drop(run);
+                    drop(lease);
+                    let _ = tx.send(Err((stop.as_ref().expect("stop control exists").1)(reason)));
+                    return;
+                },
                 permit = slots.acquire_owned() => permit.expect("resource slots never closed"),
             };
             let shared_permit = tokio::select! {
                 biased;
                 () = tx.closed() => return,
+                reason = &mut stopped => {
+                    drop(run);
+                    drop(lease);
+                    drop(permit);
+                    let _ = tx.send(Err((stop.as_ref().expect("stop control exists").1)(reason)));
+                    return;
+                },
                 permit = shared.acquire_owned() => permit.expect("shared slots never closed"),
             };
             let mut lease = lease.submitted();
