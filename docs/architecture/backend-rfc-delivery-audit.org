@@ -1398,3 +1398,33 @@ SDK build now uses four workers on its four-CPU public runner; macOS keeps two.
 The deadline and compiler optimization settings are unchanged. A fresh CI pass
 is required to establish whether this composition fits that budget; no
 controlled A/B performance improvement is asserted.
+** 2026-10-04 follow-up: unified GSC PR and remaining cold gates
+
+GSC PR #19 merged into PR #18's development branch at
+=f47b6a6ee3d323558acc0171440c13db1d552ac3=. #18 is the sole open GSC PR;
+main was not released. Data's pinned =09fcfbf= implementation is included in
+that merge. The source-grounded ABI/AoT/FFI audit and staged qualification plan
+now live in GSC design RFC =10.02.90=, linked by engineering standard =40.014=.
+
+The true published-pin build at Data =d75d1aa= (no local patch) failed idle30
+in the cold module-object phase. Large object completions were recorded,
+including the GQL grammar at 106,088ms, followed by the idle failure. This does
+not establish which remaining child was silent. The linker observer currently
+covers only the program-linker compilation and cannot qualify all module
+objects. The successful local-patch archive build remains separate evidence.
+
+Both initial and progress-enabled local-patch runtime attempts failed idle5.
+The second attempt recorded runtime initialization started. An owned native
+thread sample showed base64, inflate and SHA256 work. The parser's embedded
+language artifact loader has the matching decode/decompress/digest/read path;
+its existing trace flag is =GERBIL_PARSER_LR_TRACE=1=. Stage costs and complete
+restoration admission are not yet qualified. Trace boundaries alone cannot
+qualify a long silent operation between boundaries.
+
+The separate original-source receipt above records subsequent successful
+GraphAr 8/8 and DataFusion 2/2 runs on the =023a6db= composition. It does not
+erase the failed cold attempts or qualify the latest published-pin composition.
+P0 remains open for published-pin cold module compilation, cold artifact
+restoration and full Cargo Clippy progress. P1 requires rooted-GC, callback/error containment,
+thread ownership and lifecycle receipts. P2 performance work follows these
+correctness gates and separates startup, first query and steady-state calls.
