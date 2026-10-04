@@ -73,12 +73,36 @@ impl Backend {
         reserved_bytes: usize,
         prepare: impl FnOnce() -> Result<T, BackendError> + Send + 'static,
     ) -> Result<crate::ResourceHandle<T>, BackendError> {
-        let lease = self.inner.scheduler.admit_resource(reserved_bytes)?;
+        self.prepare_resource_fallible(reserved_bytes, prepare)
+            .await
+            .map_err(|error| match error {
+                crate::ResourcePreparationError::Backend(error)
+                | crate::ResourcePreparationError::Preparation(error) => error,
+            })
+    }
+    /// Prepare retained output while preserving the driver's typed error.
+    /// Queued cancellation skips preparation; running work retains admission
+    /// through cleanup. Success retains its reservation until the final handle
+    /// is dropped. Failure releases admission before returning its error.
+    /// # Errors
+    /// Distinguishes Backend admission/worker failures from driver refusals.
+    pub async fn prepare_resource_fallible<T: Send + Sync + 'static, E: Send + 'static>(
+        &self,
+        reserved_bytes: usize,
+        prepare: impl FnOnce() -> Result<T, E> + Send + 'static,
+    ) -> Result<crate::ResourceHandle<T>, crate::ResourcePreparationError<E>> {
+        use crate::ResourcePreparationError;
+        let lease = self
+            .inner
+            .scheduler
+            .admit_resource(reserved_bytes)
+            .map_err(ResourcePreparationError::Backend)?;
         self.inner
             .dispatcher
             .prepare(lease, prepare)
             .await
-            .map_err(|_| BackendError::WorkerLost)?
+            .map_err(|_| ResourcePreparationError::Backend(BackendError::WorkerLost))?
+            .map_err(ResourcePreparationError::Preparation)
     }
     /// Run one physical operation on the bounded resource worker lane and
     /// return its owned result. The reservation covers the worker, not the

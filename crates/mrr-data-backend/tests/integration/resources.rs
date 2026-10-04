@@ -107,6 +107,15 @@ async fn failure_and_panicking_workers_return_all_reservations() {
             .await,
         Err(BackendError::Corrupt)
     ));
+    let refusal = backend
+        .prepare_resource_fallible::<(), _>(8, || Err("driver-refusal"))
+        .await;
+    assert!(matches!(
+        refusal,
+        Err(mrr_data_backend::ResourcePreparationError::Preparation(
+            "driver-refusal"
+        ))
+    ));
     assert_eq!(backend.status().active_resources, 0);
     assert!(matches!(
         backend

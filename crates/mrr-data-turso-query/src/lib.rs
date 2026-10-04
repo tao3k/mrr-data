@@ -13,4 +13,6 @@ mod turso_graphar;
 #[cfg(feature = "turso-graphar")]
 pub use turso_graphar::{SqlQueryLimits, execute_turso_graphar_single_hop};
 #[cfg(feature = "backend-worker")]
-pub use turso_graphar::{TursoBackendQuery, execute_turso_graphar_on_backend};
+pub use turso_graphar::{
+    TursoBackendQuery, execute_turso_graphar_on_backend, execute_turso_graphar_retained_on_backend,
+};

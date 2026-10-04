@@ -424,3 +424,21 @@ live Host authorization, full semantic type mapping, native query streaming or
 RSS/throughput. Those remain the ordered RFC gates. Documentation-only updates
 following this source commit preserve these bounded source receipts; their new
 workflow runs must be reported separately.
+
+* Retained typed query output
+
+=Backend::prepare_resource_fallible= uses the same resource scheduler and
+blocking worker lane as =prepare_resource=. It preserves a typed driver
+refusal separately from admission/lifecycle/worker failure. On success a
+=ResourceHandle<T>= owns the reservation until its final clone is dropped;
+on preparation failure admission is released before returning the error.
+No provider or MRR query type enters the shared engine API.
+
+The optional Turso query adapter exposes
+=execute_turso_graphar_retained_on_backend= for physical output that must
+participate in drain. Its reservation is a Host estimate including conversion
+scratch space, not native RSS. Keep the output handle through MRR projection
+and admission. An exported owned clone requires separate Host accounting.
+The existing owned-result entrypoint budgets execution only. Both paths still
+finish running work after caller cancellation; native interrupt/deadline are
+separate RFC 0003 gates.

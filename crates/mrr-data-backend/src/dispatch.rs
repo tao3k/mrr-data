@@ -1,6 +1,6 @@
 //! Wait asynchronously before occupying the Host's bounded blocking executor.
 use crate::{
-    BackendConfig, BackendError, ResourceHandle,
+    BackendConfig, ResourceHandle,
     scheduler::{Lease, ResourceLease},
 };
 use std::sync::Arc;
@@ -26,11 +26,11 @@ impl Dispatcher {
             runtime,
         }
     }
-    pub(crate) fn prepare<T: Send + Sync + 'static>(
+    pub(crate) fn prepare<T: Send + Sync + 'static, E: Send + 'static>(
         &self,
         lease: ResourceLease,
-        run: impl FnOnce() -> Result<T, BackendError> + Send + 'static,
-    ) -> oneshot::Receiver<Result<ResourceHandle<T>, BackendError>> {
+        run: impl FnOnce() -> Result<T, E> + Send + 'static,
+    ) -> oneshot::Receiver<Result<ResourceHandle<T>, E>> {
         let (mut tx, rx) = oneshot::channel();
         let slots = self.resources.clone();
         let shared = self.shared.clone();

@@ -27,3 +27,27 @@ impl<T> ResourceHandle<T> {
         &self.0.value
     }
 }
+
+/// Distinguish shared Backend admission/worker failure from a typed driver refusal.
+#[derive(Debug)]
+pub enum ResourcePreparationError<E> {
+    Backend(crate::BackendError),
+    Preparation(E),
+}
+
+impl<E: std::fmt::Display> std::fmt::Display for ResourcePreparationError<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Backend(error) => write!(f, "resource backend: {error}"),
+            Self::Preparation(error) => write!(f, "resource preparation: {error}"),
+        }
+    }
+}
+impl<E: std::error::Error + 'static> std::error::Error for ResourcePreparationError<E> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Backend(error) => Some(error),
+            Self::Preparation(error) => Some(error),
+        }
+    }
+}

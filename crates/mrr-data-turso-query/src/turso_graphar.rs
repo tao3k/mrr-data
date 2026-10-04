@@ -145,26 +145,50 @@ pub async fn execute_turso_graphar_on_backend(
     runtime: tokio::runtime::Handle,
     request: TursoBackendQuery,
 ) -> Result<PhysicalQueryOutput, SqlQueryError> {
-    let TursoBackendQuery {
-        database,
-        query,
-        source,
-        projection,
-        limits,
-        reserved_bytes,
-    } = request;
     backend
-        .run_resource(reserved_bytes, move || {
-            runtime.block_on(execute_turso_graphar_single_hop(
-                &database,
-                &query,
-                &source,
-                &projection,
-                limits,
-            ))
+        .run_resource(request.reserved_bytes, move || {
+            run_backend_request(&runtime, &request)
         })
         .await
         .map_err(SqlQueryError::Backend)?
+}
+
+/// Execute with retained output accounting on the shared Backend.
+/// The Host reservation includes input/native state, output and conversion
+/// scratch space. Keep the returned handle through MRR projection/admission;
+/// output clones must not escape that reservation without separate Host accounting.
+/// Native cancellation/deadline are not implemented by this entrypoint.
+/// # Errors
+/// Refuses admission, unsupported query/source, driver failure or lost worker.
+#[cfg(feature = "backend-worker")]
+pub async fn execute_turso_graphar_retained_on_backend(
+    backend: &mrr_data_backend::Backend,
+    runtime: tokio::runtime::Handle,
+    request: TursoBackendQuery,
+) -> Result<mrr_data_backend::ResourceHandle<PhysicalQueryOutput>, SqlQueryError> {
+    use mrr_data_backend::ResourcePreparationError;
+    backend
+        .prepare_resource_fallible(request.reserved_bytes, move || {
+            run_backend_request(&runtime, &request)
+        })
+        .await
+        .map_err(|error| match error {
+            ResourcePreparationError::Backend(error) => SqlQueryError::Backend(error),
+            ResourcePreparationError::Preparation(error) => error,
+        })
+}
+#[cfg(feature = "backend-worker")]
+fn run_backend_request(
+    runtime: &tokio::runtime::Handle,
+    request: &TursoBackendQuery,
+) -> Result<PhysicalQueryOutput, SqlQueryError> {
+    runtime.block_on(execute_turso_graphar_single_hop(
+        &request.database,
+        &request.query,
+        &request.source,
+        &request.projection,
+        request.limits,
+    ))
 }
 async fn execute_in_transaction(
     connection: &turso::Connection,

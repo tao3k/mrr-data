@@ -11,7 +11,9 @@ use mrr_data_turso_query::{
     turso_graphar_engine_profile,
 };
 #[cfg(feature = "backend-worker")]
-use mrr_data_turso_query::{TursoBackendQuery, execute_turso_graphar_on_backend};
+use mrr_data_turso_query::{
+    TursoBackendQuery, execute_turso_graphar_on_backend, execute_turso_graphar_retained_on_backend,
+};
 
 fn relation() -> mrr::RelationSchema {
     mrr::RelationSchema::new(
@@ -297,12 +299,12 @@ async fn turso_single_hop_uses_backend_resource_worker() {
     ));
     let output = execute_turso_graphar_on_backend(
         &backend,
-        runtime,
+        runtime.clone(),
         TursoBackendQuery {
-            database,
+            database: database.clone(),
             query: query.clone(),
-            source,
-            projection,
+            source: source.clone(),
+            projection: projection.clone(),
             limits: limits(),
             reserved_bytes: 2048,
         },
@@ -319,5 +321,104 @@ async fn turso_single_hop_uses_backend_resource_worker() {
         mrr::QueryResultLimits::new(NonZeroUsize::new(2).unwrap(), NonZeroUsize::new(4).unwrap()),
     )
     .unwrap();
-    backend.shutdown().await.unwrap();
+    qualify_retained_output(
+        &backend,
+        runtime,
+        TursoBackendQuery {
+            database,
+            query,
+            source,
+            projection,
+            limits: limits(),
+            reserved_bytes: 2048,
+        },
+    )
+    .await;
+}
+
+#[cfg(feature = "backend-worker")]
+async fn qualify_retained_output(
+    backend: &mrr_data_backend::Backend,
+    runtime: tokio::runtime::Handle,
+    request: TursoBackendQuery,
+) {
+    use mrr_data_backend::BackendError;
+    let TursoBackendQuery {
+        database,
+        query,
+        source,
+        projection,
+        ..
+    } = request;
+    let refused = execute_turso_graphar_retained_on_backend(
+        backend,
+        runtime.clone(),
+        TursoBackendQuery {
+            database: database.clone(),
+            query: query.clone(),
+            source: source.clone(),
+            projection: projection.clone(),
+            limits: SqlQueryLimits {
+                max_input_rows: 1,
+                ..limits()
+            },
+            reserved_bytes: 2048,
+        },
+    )
+    .await;
+    assert!(matches!(refused, Err(SqlQueryError::Limit("input rows"))));
+    assert_eq!(backend.status().active_resources, 0);
+    assert_eq!(backend.status().resource_bytes, 0);
+    let retained = execute_turso_graphar_retained_on_backend(
+        backend,
+        runtime,
+        TursoBackendQuery {
+            database,
+            query: query.clone(),
+            source,
+            projection,
+            limits: limits(),
+            reserved_bytes: 2048,
+        },
+    )
+    .await
+    .unwrap();
+    let last = retained.clone();
+    assert_eq!(backend.status().active_resources, 1);
+    assert_eq!(backend.status().resource_bytes, 2048);
+    assert_eq!(backend.status().blocking_resources, 0);
+    assert!(matches!(
+        backend.prepare_resource(1, || Ok(())).await,
+        Err(BackendError::Saturated)
+    ));
+    let candidate =
+        core::project_data_query_output(&query, query.engine(), retained.get().clone()).unwrap();
+    mrr::admit_query_result_candidate(
+        query.query(),
+        &candidate,
+        mrr::QueryResultLimits::new(NonZeroUsize::new(2).unwrap(), NonZeroUsize::new(4).unwrap()),
+    )
+    .unwrap();
+    // This fixture's MRR conversion is completed while the output lease is held.
+    drop(candidate);
+    let closing = backend.clone();
+    let shutdown = tokio::spawn(async move { closing.shutdown().await });
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        while backend.status().lifecycle != mrr_data_backend::Lifecycle::Draining {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    drop(retained);
+    assert_eq!(backend.status().active_resources, 1);
+    assert!(!shutdown.is_finished());
+    assert_eq!(last.get().rows().len(), 2);
+    drop(last);
+    tokio::time::timeout(std::time::Duration::from_secs(3), shutdown)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(backend.status().resource_bytes, 0);
 }

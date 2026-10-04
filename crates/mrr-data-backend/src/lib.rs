@@ -15,7 +15,7 @@ pub use query::{
     ArrowQuerySummary,
 };
 mod resource;
-pub use resource::ResourceHandle;
+pub use resource::{ResourceHandle, ResourcePreparationError};
 mod scheduler;
 mod transaction;
 pub use authority::{

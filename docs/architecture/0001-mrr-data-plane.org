@@ -321,7 +321,9 @@ and a temporary transaction. It returns physical output for the same MRR
 admission bridge. Its =execute_turso_graphar_on_backend= entrypoint uses
 =Backend::run_resource= and the Host runtime on shared bounded workers. Queued
 cancellation skips execution; running work retains its lease through completion.
-Native interruption/deadline and retained-output accounting remain gates in
+The retained entrypoint returns a Backend resource handle and retains its
+reservation through the final clone; driver refusals release admission.
+Native interruption/deadline remain gates in
 [[file:../rfcs/0003-gql-duckdb-turso-backends.org][RFC 0003]]; the standalone executor does not enforce Backend admission.
 Shared scheduling does not complete all query lifecycle gates. General query
 execution remains a later engine-specific feature.

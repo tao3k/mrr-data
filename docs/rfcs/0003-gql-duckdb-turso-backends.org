@@ -21,8 +21,12 @@ snapshot-drift refusal and MRR admission. The follow-on
 =Backend::run_resource= on its shared bounded blocking worker and the
 Host-supplied runtime. Queued cancellation skips work; running cancellation
 retains the lease until execution and rollback finish. Native interrupt,
-deadline, retained-output accounting, additional shapes, other SQL dialects
-and the DuckGQL typed bridge remain open.
+deadline, additional shapes, other SQL dialects and the DuckGQL typed bridge
+remain open. The retained-output entrypoint
+=execute_turso_graphar_retained_on_backend= uses shared
+=prepare_resource_fallible= admission and returns a =ResourceHandle= rather
+than releasing its reservation when execution ends. Typed driver refusals
+release the lease and remain distinct from Backend admission/worker errors.
 This status records implemented interfaces, not a claim that all acceptance
 gates or current-head CI have passed.
 The dedicated Turso connection has a 250 ms busy timeout; this only bounds
@@ -226,14 +230,16 @@ than maintaining another graph planner.
 | Identity/publication | Inventory, binding, child/root ACK and cold restore | Bind every graph/table cache to exact root, generation, catalogs and projection version |
 | Semantic capture | Verified binary-Entity facts and Backend lease | Lossless fact-to-vertex/edge mapping and lifetime rules |
 | DuckDB | Checked Arrow input, releasable appender input and materialized/native streaming Arrow output | DuckGQL binary compatibility, graph registration, external typed-plan bridge and result conversion |
-| Turso | Protected metadata transactions and bounded single-hop query on shared Backend workers | Native interrupt/deadline, retained output accounting, source reuse and additional typed query shapes |
+| Turso | Protected metadata transactions and bounded single-hop query on shared Backend workers | Native interrupt/deadline, source reuse and additional typed query shapes |
 | Selective access | Native GraphAr read and Arrow C Stream import during preparation | Snapshot-pinned adjacency/property scan with measured pushdown and resources |
 
 * Shared execution lifecycle contract
 
 Shared worker admission is implemented by =execute_turso_graphar_on_backend=
-and =Backend::run_resource=. The remaining contract below is an implementation
-gate, especially native interrupt/deadline and output retention. The standalone
+and =Backend::run_resource=. Retained output uses
+=execute_turso_graphar_retained_on_backend= and
+=Backend::prepare_resource_fallible=. Native interrupt/deadline and driver
+cleanup fault injection remain implementation gates. The standalone
 =execute_turso_graphar_single_hop= entrypoint does not enforce Backend admission.
 
 ** One scheduler and one Host runtime
@@ -287,14 +293,33 @@ behavior need executable receipts under the pinned SDK.
 
 The current =run_resource= path releases its lease before returning the owned
 physical output. It therefore budgets execution but does not account for output
-retained by the caller. The next retained-result path must instead return a
-Backend resource handle while the caller borrows physical output for MRR projection/admission. Worker permits are released after
+retained by the caller. The implemented retained-result entrypoint instead
+returns a Backend resource handle while the caller borrows physical output for
+MRR projection/admission. Worker permits are released after
 cleanup, but the byte/count reservation remains until the final output handle
 is dropped. Retained results therefore participate in Backend drain. The
 adapter must not export an unaccounted owned clone of large output buffers.
-Result admission does not itself release those physical buffers.
+Result admission does not itself release those physical buffers. The current
+MRR projection API consumes an owned =PhysicalQueryOutput=. A caller therefore
+keeps the handle through synchronous projection/admission and budgets conversion
+scratch/candidate memory explicitly; a clone handed to another task requires
+separate Host accounting. The handle contract does not prevent arbitrary
+Rust callers from cloning values or enforce a native RSS ceiling.
 
-** Required integration receipts
+** Implemented retained-result receipts
+
+The portable resource suite exercises the same generic dispatcher used by the
+Turso retained path: final-clone drain, failure and worker panic release, queued
+and running caller cancellation. A typed driver refusal is preserved rather
+than converted to a generic Backend error.
+
+The native Turso fixture extends the captured-fact query/MRR admission case:
+worker accounting finishes while retained byte/count admission remains active;
+a second resource is refused at saturation; shutdown waits for the final clone.
+The fixture qualifies a bounded two-edge result, not native interruption,
+process-crash cleanup, general query shapes or measured RSS.
+
+** Remaining and extended integration receipts
 
 - With one shared worker, a held write prevents a Turso query from opening its
   connection; reserved recovery still progresses on the Host runtime.
