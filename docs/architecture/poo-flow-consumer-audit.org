@@ -63,3 +63,44 @@ Python framework 16/16, Ruff lint/format and Org-link checks pass. This removal
 does not claim new S3 execution, remote recovery or a cross-process native
 physical envelope. The existing read-only Scheme v2 handoff remains the
 consumer path.
+
+* MRR-owned dispatch into the Data backend — implementation slice
+
+MRR's contract facade owns =PropertyQueryBackend= and
+=CatalogBoundQuery::execute_with=. MRR Data's =RestoredPropertyBackend=
+implements this port with the original admitted query, verified immutable
+snapshot, original relation/entity catalogs and physical execution limits.
+It composes existing =bind_data_query=, restored DataFusion execution and
+=project_data_query_output=. MRR then admits the returned candidate against
+its original query and result limits. Backend success cannot bypass this
+final admission. Physical evidence retains the selected root and engine.
+
+Data's dependency disables the facade's default inference feature. No parser,
+Scheme SDK or native solver is a dependency of the ordinary Backend build.
+Production MRR selects native Scheme inference separately. Data owns Backend
+and Protocol implementation; MRR owns dispatch and semantic admission.
+The restored backend currently uses already verified restored content. This
+slice does not add remote dispatch, retries, cancellation, provider admission,
+Temporal current-cut selection, atomic publication or recovery semantics.
+
+The new executable controls cover actual restored DataFusion dispatch,
+corrupt IPC rejection, query/physical generation mismatch, and MRR result
+admission rejection after physical success. They use the original typed MRR
+query fixture; source compilation remains in MRR. Tests do not reconstruct
+queries from receipts or reinterpret backend failures as empty results.
+
+The root and fuzz manifests and lockfiles select MRR
+=8f389fd0aede8d8000197c959da69b6ba3e9bb86=. The resolved normal/build Backend
+graph contains no Gerbil SDK, MRR frontend or Rust ASCENT package. No local
+patches substitute the published source. =DataQueryResultHandoff::export_execution=
+exports the original admitted candidate and backend-selected binding, without
+executing the query again. The receiver retains its own root/query checks.
+
+Final local checks: Core 38/38 (0.08s), DataFusion 24/24 (0.15s), with the
+unchanged five-second genuine-output and 45-second batch watchdog. All-target
+Core/DataFusion Clippy passed with =-D warnings=. The first lint run rejected
+a missing technical-name backtick and a numeric literal separator; both were
+fixed without suppressions. Remote CI, external Protocol execution, deployed
+executor trust, complete Temporal current-cut correspondence, IFC publication
+and recovery remain separate gates. No new model call or performance
+improvement is claimed by this implementation slice.
