@@ -63,7 +63,7 @@ impl DuckDbArrowInput {
         self.batch
     }
     /// Copy this admitted slice through a Host-owned native appender.
-    /// This avoids the SDK VTab helper's process-lifetime source registry.
+    /// This avoids the SDK `VTab` helper's process-lifetime source registry.
     /// The Host owns transaction/flush and engine-memory budgets and keeps its
     /// appender/connection on the Backend worker until native work completes.
     /// # Errors
