@@ -1494,8 +1494,8 @@ remain retained; trace does not establish a startup performance improvement.
 
 ** Published diagnostic propagation and current CI boundary
 
-Data root/fuzz now pin MRR =659aab5ce28d12a165332bed84dec4e280155fb1=,
-which pins GSC =3f1ba7aaf5957c774c4269dd9deb2a92b2ed637d=. Registry versions
+Data root/fuzz now pin MRR =d137b6d536136982ad0c6d2f0d1bc30c19159899=,
+which pins GSC =5f4ca683e3635b89fa791233147e272699b72321=. Registry versions
 are preserved. The CI original-query step enables =GERBIL_PARSER_LR_TRACE=1=.
 
 The candidate full-chain local-patch build failed idle30 during PackageSpec
@@ -1687,3 +1687,25 @@ the earlier successful fresh-prefix sample of dynamic-module exit cleanup.
 No current-pin original-query executable was admitted from that failed build.
 The concurrent source-resource matrix and progress changes through =0912e5bc=
 were preserved; they are not counted as fresh semantic execution here.
+
+** PackageSpec compiler phase qualification
+
+The final composition pins MRR =d137b6d536136982ad0c6d2f0d1bc30c19159899= and GSC
+=5f4ca683e3635b89fa791233147e272699b72321=. MRR emits actual build-script entered/returned
+events under positive =GERBIL_BUILD_VERBOSE= while retaining the first-party
+command parser and pending-job wait. The delegated spec and reused-prefix
+build exited zero; invalid compile options exited nonzero without a returned
+event. Successful process exit remains mandatory.
+
+An owned fresh-prefix attempt still refused idle30 after 148.75s before return.
+Quiet snapshots at 15.45s and 28.17s retained GCC compiling =native~1.c=; its
+actual sample traversed DSE/DCE/CCP/dominator passes, while GXI waited in
+=select=. No object was admitted. This establishes a package C-compilation
+quiet phase in that run, separately from earlier dyld cleanup. A preceding
+169.87s refusal had no valid sample because local sandbox denied =ps=.
+
+MRR =659aab5= Ubuntu Scheme package build/tests passed, but the Rust native
+GQL object failed. The available job log did not expose a complete typed
+compiler cause; it is not classified as a proven timeout. Subsequent source
+integration/lint steps were skipped. New-head CI and the full Data native
+build remain gates; these pins do not establish P0-P2 closure.
