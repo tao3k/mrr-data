@@ -3,7 +3,9 @@
 This is the initial pre-implementation audit. The original GQL worker and
 Arrow/CID property snapshot producer have since been delivered and accepted on
 Ubuntu and macOS; [[file:healthcare-query-audit.org][the current Healthcare query audit]] records that evidence.
-The real Lambda/Marlin typed native handoff remains open.
+The MRR-owned original-query handoff remains open. A local simulated caller is
+sufficient for current framework acceptance; deployed Lambda/Marlin and credentials
+are later product-integration gates.
 
 The acceptance target is the unchanged, declared POO Flow query:
 

@@ -522,3 +522,25 @@ full-source I/O. Ordered layout does not establish arbitrary property profiles,
 incoming traversal, path semantics, globally checked facts outside a slice, RSS
 bounds or end-to-end reduced I/O. The [[file:../architecture/backend-rfc-delivery-audit.org][delivery audit]] records the matched
 uniform/skewed experiment, exact parity/refusal fixtures and remaining gates.
+
+** Physical process measurement and consuming ownership
+
+=GraphArSelection::into_facts= transfers its existing Vec; the shared Backend
+fixture consumes it through =ResourceHandle::try_transform=, checks allocation
+identity and preserves the original reservation through final-clone drain.
+This supplies a physical handoff, not final MRR query admission or RSS enforcement.
+
+The Rust =graphar_range_workload= benchmark measures full/reference outgoing
+reads and selected ranges in separate fresh exec processes on one native fixture.
+It records OS RSS high-water, preparation, first query, retained-source reuse,
+reader bytes, Arrow rows, CPU and page-fault/context-switch diagnostics. The
+parent checks native parity and the children check independent ordered Fact
+digests; watchdogs fail silent/stalled children and reclaim them. Complete CID
+verification remains mandatory. OS caches are uncontrolled and engine spill is
+not measured. See [[file:../../crates/mrr-data-graphar/benches/README.org][the experiment contract]].
+
+P2 property-path execution still requires declared lossless entity-property
+mapping and an MRR-owned original-source plan/admission receipt. Binary-Entity
+outgoing access and synthetic physical measurements do not close that gate.
+A simulated Host/caller is the current acceptance boundary; deployed services
+or credentials are not prerequisites for this framework stage.

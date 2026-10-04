@@ -220,6 +220,10 @@ jobs:
         run: >-
           cargo test -p mrr-data-graphar --features selective-graphar,backend --locked
           selective_matched_workload_experiment -- --ignored --nocapture
+      - name: Measure GraphAr process RSS and retained-source reuse
+        run: >-
+          cargo bench -p mrr-data-graphar --bench graphar_range_workload
+          --features selective-graphar,backend --profile test --locked -- --measure
       - name: Check facade GraphAr native feature
         run: |
           cargo check -p mrr-data --no-default-features --features graphar-native --locked

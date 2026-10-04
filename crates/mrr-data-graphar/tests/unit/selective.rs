@@ -1,5 +1,6 @@
 //! Independent native full-source and selective offset-range parity.
-use super::snapshot::{fact, query, query_for_count, schema};
+use super::binary_entity::{fact, query_for_count, schema};
+use super::snapshot::query;
 use crate::{
     BinaryEntityProjection, GraphArAdjacency, GraphArReadLimits, GraphArSelectiveError,
     capture_graphar_selective_snapshot, prepare_graphar_source_with_adjacency,
@@ -389,16 +390,7 @@ async fn selective_backend_keeps_source_output_budgets_and_final_clone_drain() {
     .unwrap();
     let source = crate::prepare_graphar_selective_snapshot(
         &backend,
-        crate::GraphArSelectiveSnapshotRequest {
-            source: fixture.source.clone(),
-            query: fixture.bound.clone(),
-            binding: fixture.binding.clone(),
-            inventory: fixture.receipt.inventory().clone(),
-            projection: fixture.projection.clone(),
-            inventory_limits: GraphInventoryLimits::default(),
-            max_vertices: 10,
-            layout: fixture.layout,
-        },
+        snapshot_request(&fixture),
         SOURCE,
         ResourceControl::new(None),
     )
@@ -463,13 +455,48 @@ async fn selective_backend_keeps_source_output_budgets_and_final_clone_drain() {
             .await
             .is_err()
     );
-    drop(output_clone);
+    let expected = expected_neighborhood(&fixture.expected, outgoing_request(&fixture).source);
+    let facts = transfer_selection(output_clone, &expected, &backend, OUTPUT);
+    drop(facts);
     tokio::time::timeout(std::time::Duration::from_secs(3), shutdown)
         .await
         .unwrap()
         .unwrap()
         .unwrap();
     assert_eq!(backend.status().resource_bytes, 0);
+}
+
+#[cfg(feature = "backend")]
+fn snapshot_request(fixture: &OrderedFixture) -> crate::GraphArSelectiveSnapshotRequest {
+    crate::GraphArSelectiveSnapshotRequest {
+        source: fixture.source.clone(),
+        query: fixture.bound.clone(),
+        binding: fixture.binding.clone(),
+        inventory: fixture.receipt.inventory().clone(),
+        projection: fixture.projection.clone(),
+        inventory_limits: GraphInventoryLimits::default(),
+        max_vertices: fixture.expected.len() * 2,
+        layout: fixture.layout,
+    }
+}
+
+#[cfg(feature = "backend")]
+fn transfer_selection(
+    output: mrr_data_backend::ResourceHandle<crate::GraphArSelection>,
+    expected: &[Fact],
+    backend: &mrr_data_backend::Backend,
+    reserved: usize,
+) -> mrr_data_backend::ResourceHandle<Vec<Fact>> {
+    let allocation = output.get().facts().as_ptr();
+    let facts = output
+        .try_transform(|selection| Ok::<_, mrr_data_backend::BackendError>(selection.into_facts()))
+        .unwrap_or_else(|_| panic!("unique selection must transfer its existing lease"));
+    assert_eq!(facts.get(), expected);
+    assert_eq!(facts.get().as_ptr(), allocation);
+    let clone = facts.clone();
+    drop(facts);
+    assert_eq!(backend.status().resource_bytes, reserved);
+    clone
 }
 
 fn workload(skewed: bool) -> Vec<Fact> {

@@ -353,6 +353,15 @@ fn scenario_semantically_reads_ten_thousand_graphar_edges() {
     let prepared_scenario = graphar_prepared_admission_scenario();
     let limits = GraphArReadLimits::new(EDGE_COUNT, EDGE_COUNT);
     let prepared = prepare_graphar_source(&output, limits).expect("prepare GraphAr semantic facts");
+    let (first_admitted, first_projection_validation) = prepared
+        .admit_observed(&projection)
+        .expect("first prepared projection validation");
+    assert_eq!(first_admitted.facts(), expected_facts);
+    eprintln!(
+        "mrr-data-graphar-prepared-first-validation-us={}",
+        first_projection_validation.as_micros()
+    );
+    drop(first_admitted);
     let parity_iteration = Cell::new(0_usize);
     let parity_measurement = measure_asp_rust_scenario(&parity_scenario, || {
         let iteration = parity_iteration.get();

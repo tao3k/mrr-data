@@ -309,3 +309,63 @@ prepared admission P95 was =63.974334ms= against the unchanged =50ms= cap
 and no OS isolation is inferred from stopping this task's build. Exact-head CI
 and separate performance investigation remain required before a performance
 closure claim. The new facade feature check and strict Kache clippy also pass.
+
+** P2-B: bounded prepared projection reuse and process resource measurement
+
+Prepared sources now hold at most one successful physical-projection certificate
+shared by their clones. Its key is the complete admitted relation schema and
+optional catalog digest; a different key revalidates every immutable fact and
+cannot overwrite/grow the cache. Failed admission never certifies. This removes
+repeated row validation for the same prepared source/projection, while fresh
+Host effects/disclosure and final MRR query-result admission remain mandatory
+at their own owners. A new source has a new certificate, and snapshot/generation
+scope checks are unchanged. Cold/first validation is distinct from measured
+warm reuse; no old measurement is relabeled as a cached result.
+
+=GraphArSelection::into_facts= additionally transfers its existing Vec under
+=ResourceHandle::try_transform=. The fixture verifies allocation identity,
+reservation retention and final-clone drain. Public immutable access still does
+not enforce RSS over arbitrary caller clones.
+
+The opt-in Rust =graphar_range_workload= benchmark adds eight process-separated
+cases over uniform/skewed 65,536-edge native fixtures. It records normalized OS
+RSS high-water at baseline/preparation/first query/reuse, CPU, page faults,
+block operations and involuntary context switches. Native full parity runs in
+the parent; each child compares an independent full Fact-context/value digest
+for its outgoing result. Two warmups and 21 measured reuses share one verified
+source; no child retains the producer's fact vectors. The supervisor enforces
+paired digests/counts and lower reader bytes/Arrow materialization, and kills
+silent/stalled children. It does not impose a latency/RSS reduction threshold.
+The [[file:../../crates/mrr-data-graphar/benches/README.org][benchmark contract]] distinguishes fresh processes from uncontrolled OS caches,
+cumulative high-water from current allocations, and diagnostics from engine
+spill. Linux/macOS CI runs the experiment; local measurements follow below.
+
+*** Local acceptance: 2026-10-04, macOS
+
+Measured on the uncommitted implementation based on =b0a69ba884d77ea2b7a373c9ece5bd72f2bec6ed=;
+=dirty=true= is recorded by the benchmark. These are local observations, not
+a clean-commit remote CI receipt. All eight fresh workers and all four comparisons
+passed independent count/context/value digests. Times include physical scan and
+outgoing filtering, and exclude oracle digest calculation. RSS below is the
+whole-process cumulative high-water after reuse, not a per-query allocation delta.
+
+| Distribution / source | Result edges | Full / selected reader bytes | Full / selected materialized rows | Full / selected RSS bytes | Full / selected reuse P95 ms |
+|-
+| Uniform / 0 | 512 | 5954816 / 47680 | 131072 / 1026 | 162185216 / 31670272 | 102.698 / 0.288 |
+| Uniform / 1 | 512 | 5954816 / 47680 | 131072 / 1026 | 162021376 / 31735808 | 67.496 / 0.869 |
+| Skewed / 0 | 32768 | 6143597 / 3118517 | 131072 / 65538 | 162136064 / 100532224 | 79.972 / 65.942 |
+| Skewed / 1 | 258 | 6143597 / 96034 | 131072 / 518 | 151781376 / 30556160 | 101.077 / 1.963 |
+
+The unchanged native 10k Scenario now passes: first uncached projection
+validation =261us=; warm prepared total P95 =141584ns= (50ms cap), bridge
+total P95 =104753833ns= and semantic-read P95 =48576167ns= (500ms caps).
+The paired 5% native saving gate and Arrow C Stream import gate also pass.
+This supersedes the earlier local prepared-admission failure for this cache
+implementation only; it does not retroactively change the earlier measurement.
+
+Functional acceptance: 38 GraphAr tests passed, two explicit experiments ignored;
+the ignored 10k Scenario was then run separately and passed. Strict all-target
+GraphAr clippy passes. All nine Turso dependency versions remain =0.8.1= and
+Cargo job parallelism remains default. P2-A property mapping, original MRR
+query-owner handoff, remote chunk caching and engine spill qualification remain
+open; this physical range workload does not close them.

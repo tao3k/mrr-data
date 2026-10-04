@@ -119,6 +119,12 @@ pub struct GraphArSelection {
     metrics: GraphArSelectionMetrics,
 }
 impl GraphArSelection {
+    /// Transfer physical facts without cloning their values. Backend callers
+    /// use `ResourceHandle::try_transform` to preserve the retained lease.
+    #[must_use]
+    pub fn into_facts(self) -> Vec<Fact> {
+        self.facts
+    }
     #[must_use]
     pub fn facts(&self) -> &[Fact] {
         &self.facts

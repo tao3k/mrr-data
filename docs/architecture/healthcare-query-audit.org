@@ -56,9 +56,11 @@ evidence. The source-level worker entry point was later removed from MRR Data
 to keep Query ownership in MRR; current CI exercises the generic physical
 producer and executor independently.
 
-The actual Lambda/Marlin process has not yet exported its projected POO rows
-through a typed native boundary or called the property producer/worker. A
-deployed S3/Kache provider serving the same root and a release-qualified host
-invocation also remain separate gates. The caller owns a wall-clock deadline
-and cancellation across restoration and query execution; neither is supplied
-by this library test.
+For the current P0–P2 framework stage, a local simulated Lambda/Marlin caller
+using the original source and MRR-owned compile/bind/admission boundary is
+sufficient. Real credentials or deployed processes are not prerequisites. The
+original-query handoff must remain in the MRR Query owner; generic physical
+fixtures or the synthetic GraphAr benchmark do not substitute for it. An actual
+Lambda/Marlin process and deployed S3/Kache serving the same root are later
+product-integration gates. The simulated caller still owns deadline/cancellation
+across restoration, physical execution and final admission.

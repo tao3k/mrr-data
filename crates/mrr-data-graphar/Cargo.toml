@@ -26,7 +26,17 @@ mrr-data-core = { workspace = true, optional = true, features = ["content-identi
 tempfile = { workspace = true, optional = true }
 mrr-data-backend = { workspace = true, optional = true }
 
+[[bench]]
+name = "graphar_range_workload"
+path = "benches/graphar_range_workload/mod.rs"
+harness = false
+required-features = ["selective-graphar"]
+
 [dev-dependencies]
+serde.workspace = true
+serde_json.workspace = true
+blake3.workspace = true
+
 mrr-data-content.workspace = true
 tempfile.workspace = true
 mrr-data-asp-rust-build-support.workspace = true
@@ -34,6 +44,9 @@ mrr-data-arrow.workspace = true
 mrr-data-core = { workspace = true, features = ["content-identity"] }
 mrr-data-datafusion.workspace = true
 tokio.workspace = true
+
+[target.'cfg(unix)'.dev-dependencies]
+nix.workspace = true
 
 [lints]
 workspace = true

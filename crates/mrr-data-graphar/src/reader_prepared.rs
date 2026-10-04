@@ -4,7 +4,7 @@ use std::{
     collections::{HashMap, hash_map::Entry},
     hash::Hash,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, OnceLock},
     time::{Duration, Instant},
 };
 
@@ -34,6 +34,7 @@ pub struct PreparedGraphArSource {
     edge_count: usize,
     facts: Arc<[Fact]>,
     predicates: Arc<[Arc<str>]>,
+    admitted_projection: Arc<OnceLock<BinaryEntityProjection>>,
     timings: GraphArPrepareTimings,
 }
 
@@ -156,6 +157,22 @@ impl GraphArPrepareTimings {
 }
 
 impl PreparedGraphArSource {
+    // A bounded one-entry certificate applies only to immutable physical facts
+    // and the exact admitted schema/catalog. It is not query/result admission
+    // or fresh Host authorization. A different projection is fully validated.
+    fn admit_projection(
+        &self,
+        projection: &BinaryEntityProjection,
+    ) -> Result<Duration, GraphArReadError> {
+        let started = Instant::now();
+        if self.admitted_projection.get() == Some(projection) {
+            return Ok(started.elapsed());
+        }
+        admit_prepared_facts(&self.facts, &self.predicates, projection)?;
+        let _ = self.admitted_projection.set(projection.clone());
+        Ok(started.elapsed())
+    }
+
     #[must_use]
     pub fn root(&self) -> &Path {
         &self.root
@@ -190,7 +207,7 @@ impl PreparedGraphArSource {
         &self,
         projection: &BinaryEntityProjection,
     ) -> Result<GraphArQuerySource, GraphArReadError> {
-        admit_prepared_facts(&self.facts, &self.predicates, projection)?;
+        self.admit_projection(projection)?;
         Ok(GraphArQuerySource::new(
             self.root.clone(),
             projection,
@@ -212,7 +229,10 @@ impl PreparedGraphArSource {
             .map(|(dataset, _fact_admission)| dataset)
     }
 
-    /// Admits prepared facts and reports only projection-owned admission time.
+    /// Admits prepared facts and reports projection-owned validation/lookup time.
+    /// The first successful exact schema/catalog is certified for immutable
+    /// reuse. Changed projections revalidate every fact; Host authority and
+    /// final query admission remain separate.
     ///
     /// # Errors
     ///
@@ -221,7 +241,7 @@ impl PreparedGraphArSource {
         &self,
         projection: &BinaryEntityProjection,
     ) -> Result<(GraphArDataset, Duration), GraphArReadError> {
-        let fact_admission = admit_prepared_facts(&self.facts, &self.predicates, projection)?;
+        let fact_admission = self.admit_projection(projection)?;
         Ok((
             GraphArDataset {
                 root: self.root.clone(),
@@ -300,6 +320,7 @@ fn prepare_with_adjacency(
         edge_count: edges.count,
         facts: Arc::from(facts.values),
         predicates: Arc::from(facts.predicates),
+        admitted_projection: Arc::new(OnceLock::new()),
         timings: GraphArPrepareTimings {
             graph_info: graph_info_elapsed,
             native_vertex_read: vertices.native_read,
@@ -537,3 +558,7 @@ pub(crate) fn admit_selected_batches(
     admit_prepared_facts(&facts.values, &facts.predicates, projection)?;
     Ok(facts.values)
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/prepared_admission.rs"]
+mod admission_tests;
