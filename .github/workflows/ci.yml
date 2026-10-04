@@ -379,7 +379,7 @@ jobs:
       - name: Install the source owner's immutable native Gerbil release
         shell: bash
         run: |
-          "$MRR_FRONTEND_OWNER/tools/ci/install-gerbil-release.sh" "$RUNNER_TEMP/mrr-gerbil"
+          "$MRR_FRONTEND_OWNER/.github/scripts/install-gerbil-release.sh" "$RUNNER_TEMP/mrr-gerbil"
           echo "GERBIL_GSC=$RUNNER_TEMP/mrr-gerbil/bin/gsc" >> "$GITHUB_ENV"
           echo "GERBIL_GXPKG=$RUNNER_TEMP/mrr-gerbil/bin/gxpkg" >> "$GITHUB_ENV"
           echo "GERBIL_BUILD_VERBOSE=1" >> "$GITHUB_ENV"
@@ -387,7 +387,7 @@ jobs:
         shell: bash
         run: |
           cd "$MRR_FRONTEND_OWNER"
-          python3 tools/ci/prepare-gerbil-dependencies.py
+          uv run --project proofs/MRRProof mrr-prepare-gerbil-dependencies
           gerbil deps --install
           gerbil build
       - name: Test generic property snapshot and physical query

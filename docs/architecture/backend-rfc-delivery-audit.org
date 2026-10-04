@@ -1275,7 +1275,8 @@ platform CI remains a release gate after integration and local qualification.
 MRR PR #9 =023a6dbdaa7d9d88ad129e22cb3abcd12231bc3b= completed both Ubuntu
 native CI jobs successfully, including native build, Rust/Gerbil tests, source
 integration and lint. macOS remained in progress at observation time. This
-qualifies MRR's published head, not all downstream Data profiles.
+qualifies that historical MRR head, not the later dependency update or all
+downstream Data profiles.
 
 The exact GQL grammar SCM that hit the idle gate compiled successfully on macOS
 with Gambit =-:1n,2n,d5qQ -verbose= under the unchanged 30-second idle and
@@ -1286,10 +1287,28 @@ Line buffering alone exposed definition trace but still hit the idle gate;
 real collector events cover work inside that long definition compilation.
 No heap policy or Cargo job limit was changed.
 
-A prepared =gerbil-scheme-native-build= fix additionally forwards child output
-while it runs. This is local upstream work based on PR #19 =6ccabe00=; its full
-crate and downstream closure qualification and upstream publication remain
-separate gates. The standalone compiler success alone does not close them.
+The authorized upstream fix is published on PR #19 as
+=5a3bf1d798b9f2fef223942b0ff1f46c32183691=. It forwards live GSC output and
+includes diagnostic runtime options in verbose native cache fingerprints.
+Four actual process regressions passed, including the six-second child under
+five-second idle supervision; the library cache regression also passed.
+MRR PR #9 =d2894c88c10fdbf310c53793f6fe460e5003ec38= pins that fix; Data's
+workspace and fuzz manifests/locks now pin this MRR revision. Source-owner CI
+uses the owner's migrated release script and Python project entry point.
+Locked workspace metadata validates the composition without unrelated registry
+upgrades. Latest-head upstream CI remains a separate qualification gate.
+
+A local-patch complete Data build crossed the former GQL compiler idle failure:
+package build completed in 84,522ms, all 205 module C generations in 101,273ms,
+and 59 native object jobs in 199,727ms using default Cargo/native parallelism.
+The GQL grammar generated C in 54,599ms and compiled its object in 140,986ms.
+These are phase durations, not controlled performance comparisons. The full
+build then failed the unchanged 30-second idle gate while GCC compiled the
+8,582,602-byte =program_link.c=. Adding GCC =-Q -fopt-info-all= exposed header
+function names but still failed the same gate; these unproven options are not
+part of the published fix. Complete archive construction and original-query
+runtime qualification therefore remain open. This local-patch experiment does
+not qualify the newly published dependency composition end to end.
 
 Data =ceccf19a= Ubuntu Rust failed ASP rule =RUST-MOD-R010= for two new parent
 scope glob imports. Both original-source test modules now name imports
