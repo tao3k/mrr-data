@@ -61,7 +61,14 @@ mod transfer;
 pub use transfer::{BudgetedRemote, RemoteTransferLimits, TransferSession, TransferStats};
 
 #[cfg(feature = "graph-snapshot")]
+mod combined_graph;
+#[cfg(feature = "graph-snapshot")]
 mod graph_snapshot;
+#[cfg(feature = "graph-snapshot")]
+pub use combined_graph::{
+    CombinedGraphInputs, PreparedCombinedGraph, prepare_combined_graph, publish_combined_graph,
+    restore_combined_graph,
+};
 #[cfg(feature = "graph-snapshot")]
 pub use graph_snapshot::{
     GraphPublication, GraphPublishInputs, GraphTransferError, GraphTransferLimits,

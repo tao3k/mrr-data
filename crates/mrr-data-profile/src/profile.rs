@@ -35,3 +35,6 @@ pub const SHA2_256_CODE: u64 = 0x12;
 pub const GRAPHAR_ENTITY_PROPERTIES_NAMESPACE: &str = "mrr.graphar.entity-properties.v1";
 /// Initial property artifact projection profile.
 pub const GRAPHAR_ENTITY_PROPERTIES_VERSION: u64 = 1;
+
+/// Acyclic combined native dataset control profile.
+pub const GRAPHAR_DATASET_NAMESPACE: &str = "mrr.graphar.dataset.v1";

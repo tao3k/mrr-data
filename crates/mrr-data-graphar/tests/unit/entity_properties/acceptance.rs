@@ -37,7 +37,7 @@ pub(super) fn inputs(
             .collect(),
     )
 }
-fn expected() -> Vec<Vec<mrr::QueryResultValue>> {
+pub(super) fn expected() -> Vec<Vec<mrr::QueryResultValue>> {
     let scalar = |s: &str| mrr::QueryResultValue::Scalar {
         schema: mrr::ValueSchema::String,
         value: mrr::Value::String(s.into()),

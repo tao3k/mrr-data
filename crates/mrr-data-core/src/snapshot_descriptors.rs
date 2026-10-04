@@ -113,6 +113,7 @@ impl CoverageDescriptor {
 pub enum GraphProjectionKind {
     BinaryEntity,
     EntityProperties,
+    Dataset,
 }
 
 /// Optional `GraphAr` projection attached to the same semantic snapshot.
@@ -158,6 +159,17 @@ impl GraphProjectionDescriptor {
             graphar_version,
             manifest_cid,
         })
+    }
+    /// Register an acyclic combined native dataset descriptor.
+    /// # Errors
+    /// Refuses invalid native format versions and non-DAG-CBOR descriptor CIDs.
+    pub fn dataset(
+        graphar_version: impl Into<String>,
+        manifest_cid: Cid,
+    ) -> Result<Self, DataError> {
+        let mut value = Self::entity_properties(graphar_version, manifest_cid)?;
+        value.kind = GraphProjectionKind::Dataset;
+        Ok(value)
     }
     #[must_use]
     pub const fn kind(&self) -> GraphProjectionKind {

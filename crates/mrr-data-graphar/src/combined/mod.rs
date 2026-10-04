@@ -1,0 +1,11 @@
+//! Complete native capture of the authenticated combined content closure.
+mod api;
+mod capture;
+pub use api::{
+    CapturedCombinedGraphAr, CapturedGraphArRelation, CombinedGraphArLimits, CombinedGraphArParts,
+};
+pub use capture::capture_combined_graphar;
+#[cfg(feature = "backend")]
+mod backend;
+#[cfg(feature = "backend")]
+pub use backend::{CombinedGraphArRequest, prepare_combined_graphar};

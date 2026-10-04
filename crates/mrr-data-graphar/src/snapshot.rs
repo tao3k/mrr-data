@@ -96,6 +96,30 @@ pub fn capture_graphar_snapshot(
     {
         return Err(GraphArCaptureError::SemanticScope);
     }
+    let dataset = capture_inventory(
+        source,
+        inventory,
+        projection,
+        binding.generation(),
+        inventory_limits,
+        read_limits,
+    )?;
+    Ok(CapturedGraphArSnapshot(Captured {
+        binding,
+        vertex_count: dataset.vertex_count(),
+        facts: dataset.shared_facts(),
+    }))
+}
+/// Native topology preparation shared by root-bound capture owners.
+pub(crate) fn capture_inventory(
+    source: &Path,
+    inventory: &GraphDatasetInventory,
+    projection: &BinaryEntityProjection,
+    generation: meta_relational_reasoning::GenerationId,
+    inventory_limits: GraphInventoryLimits,
+    read_limits: GraphArReadLimits,
+) -> Result<crate::GraphArDataset, GraphArCaptureError> {
+    inventory.canonical_bytes(inventory_limits)?;
     let directory = tempfile::tempdir()?;
     check_entry(source, true)?;
     for descriptor in inventory.files() {
@@ -128,7 +152,7 @@ pub fn capture_graphar_snapshot(
     if dataset
         .facts()
         .iter()
-        .any(|f| f.context().generation() != binding.generation())
+        .any(|f| f.context().generation() != generation)
     {
         return Err(GraphArCaptureError::SemanticScope);
     }
@@ -136,12 +160,9 @@ pub fn capture_graphar_snapshot(
     // preparation worker before exposing a resource handle to async callers.
     drop(info);
     directory.close()?;
-    Ok(CapturedGraphArSnapshot(Captured {
-        binding,
-        vertex_count: dataset.vertex_count(),
-        facts: dataset.shared_facts(),
-    }))
+    Ok(dataset)
 }
+
 pub(crate) fn copy_verified_file(
     source: &Path,
     destination: &Path,

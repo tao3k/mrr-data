@@ -62,7 +62,7 @@ pub fn capture_graphar_entity_properties(
 ) -> Result<CapturedGraphArEntityProperties, Error> {
     capture_checked(source, query, projection, receipt, limits, || Ok(()))
 }
-pub(super) fn capture_checked(
+pub(crate) fn capture_checked(
     source: &Path,
     query: &CatalogBoundQuery,
     projection: &GraphArEntityPropertyProjection,

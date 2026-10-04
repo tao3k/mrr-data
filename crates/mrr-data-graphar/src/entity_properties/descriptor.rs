@@ -5,24 +5,9 @@ use super::{
 };
 use crate::GraphArChunkLayout;
 use cid::Cid;
-use meta_relational_reasoning::GenerationId;
-use mrr_data_core::{GraphDatasetInventory, dag_cbor_cid};
-use serde::{Deserialize, Serialize};
+use mrr_data_core::{GraphEntityPropertyDescriptor, GraphEntityPropertyScope, dag_cbor_cid};
 use std::path::PathBuf;
 
-const NAMESPACE: &str = mrr_data_core::GRAPHAR_ENTITY_PROPERTIES_NAMESPACE;
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct Wire {
-    namespace: String,
-    version: u8,
-    inventory: GraphDatasetInventory,
-    catalog: [u8; 32],
-    generation: GenerationId,
-    snapshot: [u8; 32],
-    rows: u64,
-    vertex_chunk: u64,
-}
 /// Immutable portable source descriptor and its exact DAG-CBOR content identity.
 /// The local source path is never serialized. The caller authenticates this CID
 /// in its root/publication protocol before accepting external data.
@@ -56,22 +41,23 @@ impl GraphArEntityPropertyReceipt {
         if self.rows > limits.max_rows {
             return Err(Error::Budget("entity rows"));
         }
-        let wire = Wire {
-            namespace: NAMESPACE.into(),
-            version: 1,
-            inventory: self.inventory.clone(),
-            catalog: *self.catalog.as_bytes(),
-            generation: self.generation,
-            snapshot: self.snapshot,
-            rows: u64::try_from(self.rows).map_err(|_| Error::Budget("row count overflow"))?,
-            vertex_chunk: u64::try_from(self.layout.vertex_chunk_size())
-                .map_err(|_| Error::Budget("vertex chunk size"))?,
-        };
-        let bytes = serde_ipld_dagcbor::to_vec(&wire)
-            .map_err(|_| Error::Shape("property descriptor encoding"))?;
-        if bytes.len() > limits.inventory.max_manifest_bytes {
-            return Err(Error::Budget("property descriptor bytes"));
-        }
+        let wire = GraphEntityPropertyDescriptor::admit(
+            self.inventory.clone(),
+            GraphEntityPropertyScope {
+                catalog: *self.catalog.as_bytes(),
+                generation: self.generation,
+                snapshot: self.snapshot,
+                rows: u64::try_from(self.rows).map_err(|_| Error::Budget("row count overflow"))?,
+                vertex_chunk: u64::try_from(self.layout.vertex_chunk_size())
+                    .map_err(|_| Error::Budget("vertex chunk size"))?,
+            },
+            limits.inventory,
+            limits.max_rows,
+        )
+        .map_err(property_error)?;
+        let bytes = wire
+            .canonical_bytes(limits.inventory, limits.max_rows)
+            .map_err(property_error)?;
         Ok(GraphArEntityPropertyBlock {
             cid: dag_cbor_cid(&bytes),
             bytes,
@@ -96,39 +82,40 @@ impl GraphArEntityPropertyReceipt {
         if dag_cbor_cid(bytes) != *root {
             return Err(Error::Integrity);
         }
-        let wire: Wire = serde_ipld_dagcbor::from_slice(bytes)
-            .map_err(|_| Error::Shape("property descriptor encoding"))?;
-        if wire.namespace != NAMESPACE || wire.version != 1 {
-            return Err(Error::Shape("property descriptor version"));
+        let wire = GraphEntityPropertyDescriptor::decode_checked(
+            bytes,
+            root,
+            limits.inventory,
+            limits.max_rows,
+        )
+        .map_err(property_error)?;
+        let scope = wire.scope();
+        if scope.catalog != *projection.catalog_digest().as_bytes() {
+            return Err(Error::Scope);
         }
-        wire.inventory
-            .canonical_bytes(limits.inventory)
-            .map_err(crate::GraphArInventoryError::from)?;
-        let rows = usize::try_from(wire.rows).map_err(|_| Error::Budget("entity rows"))?;
-        if rows > limits.max_rows {
-            return Err(Error::Budget("entity rows"));
-        }
+        let rows = usize::try_from(scope.rows).map_err(|_| Error::Budget("entity rows"))?;
         let vertex =
-            usize::try_from(wire.vertex_chunk).map_err(|_| Error::Budget("vertex chunk size"))?;
+            usize::try_from(scope.vertex_chunk).map_err(|_| Error::Budget("vertex chunk size"))?;
         let layout =
             GraphArChunkLayout::new(vertex, GraphArChunkLayout::default().edge_chunk_size())
                 .map_err(|_| Error::Shape("vertex layout"))?;
-        if wire.catalog != *projection.catalog_digest().as_bytes() {
-            return Err(Error::Scope);
-        }
-        let canonical = serde_ipld_dagcbor::to_vec(&wire)
-            .map_err(|_| Error::Shape("property descriptor encoding"))?;
-        if canonical != bytes {
-            return Err(Error::Integrity);
-        }
         Ok(Self {
             root: source,
-            inventory: wire.inventory,
+            inventory: wire.inventory().clone(),
             catalog: projection.catalog_digest(),
-            generation: wire.generation,
-            snapshot: wire.snapshot,
+            generation: scope.generation,
+            snapshot: scope.snapshot,
             rows,
             layout,
         })
+    }
+}
+
+fn property_error(error: mrr_data_core::GraphInventoryError) -> Error {
+    match error {
+        mrr_data_core::GraphInventoryError::Limit => Error::Budget("property descriptor"),
+        mrr_data_core::GraphInventoryError::Integrity
+        | mrr_data_core::GraphInventoryError::NonCanonical => Error::Integrity,
+        error => Error::Inventory(crate::GraphArInventoryError::from(error)),
     }
 }

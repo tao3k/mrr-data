@@ -1,6 +1,6 @@
 //! Catalog-declared string vertex properties; MRR retains semantic authority.
 mod projection;
-mod read;
+pub(crate) mod read;
 mod write;
 
 pub use projection::{GraphArEntityPropertyProjection, GraphArEntityPropertyTable};

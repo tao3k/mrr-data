@@ -60,6 +60,15 @@ pub struct GraphArReadLimits {
 
 impl GraphArReadLimits {
     #[must_use]
+    pub const fn max_vertices(self) -> usize {
+        self.max_vertices
+    }
+    #[must_use]
+    pub const fn max_edges(self) -> usize {
+        self.max_edges
+    }
+
+    #[must_use]
     pub const fn new(max_vertices: usize, max_edges: usize) -> Self {
         Self {
             max_vertices,

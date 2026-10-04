@@ -459,8 +459,8 @@ consuming allocation identity, last-clone release and shutdown. The separate
 process worker now decodes/authenticates the complete SnapshotManifest and uses
 this root-bound capture API before its complete independent row comparison.
 
-This closes local property profile registration, not a combined native graph
-publication closure or original query compilation. SnapshotManifest's single
+This receipt closes local property profile registration. The combined native
+closure is qualified in P2-B below; original query compilation remains separate. SnapshotManifest's single
 graph projection selects this property artifact; relation IPC children remain
 separately declared. Native relation/property grouping requires an acyclic
 combined dataset descriptor. Existing generic graph-transfer refusal and binary
@@ -484,3 +484,29 @@ existing bounded supervisor and process worker timeout. No optional performance
 experiments were repeated; this receipt does not claim new query/RSS gains or
 remote CI closure. All nine Turso packages remain =0.8.1= and Cargo jobs remain
 default.
+
+** P2-B: complete native relation/property content closure
+
+Core now owns the shared canonical property descriptor and the acyclic combined
+=mrr.graphar.dataset.v1= descriptor. Combined admission requires every admitted
+relation, rejects duplicate/missing members, checks all semantic/catalog scope,
+and applies aggregate inventory budgets across logical artifacts. Transfer
+preparation verifies ordinary snapshot children alongside native files; child
+and descriptor ACKs precede the simulated authority gate and snapshot root ACK.
+Cold restoration checks the complete closure before native capture.
+
+Native capture reuses the existing private verified topology reader and property
+reader, reconstructs metadata from catalogs, accumulates topology row limits,
+and preserves MRR fact contexts. One shared Backend owns reservation/control
+and native worker preparation. Consuming handoff preserves the table vector;
+shutdown waits for the final cloned handle. Payload limits are not hard native
+RSS ceilings, and controls cannot interrupt a native call mid-phase.
+
+Acceptance uses real native GraphAr files with source directories deleted before
+publication, a simulated remote service, a cold cache, two-hop direct-IR execution,
+three independent expected rows and verified MRR result transport. It injects
+failure at every ACK, denies the root gate, recovers lost-root-ACK retry, refuses
+corrupt/missing native children, missing/duplicate catalog members, unknown
+metadata version, global transfer/inventory budgets and physical-root reuse.
+No live Host credentials are required. Original GQL frontend invocation, deployed
+provider durability and new performance gains are not established by this slice.

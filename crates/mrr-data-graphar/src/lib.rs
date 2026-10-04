@@ -79,3 +79,13 @@ pub use entity_properties::{
     GraphArEntityPropertiesRequest, RegisteredGraphArEntityPropertiesRequest,
     prepare_graphar_entity_properties, prepare_registered_graphar_entity_properties,
 };
+
+#[cfg(feature = "combined-graph")]
+mod combined;
+#[cfg(feature = "combined-graph")]
+pub use combined::{
+    CapturedCombinedGraphAr, CapturedGraphArRelation, CombinedGraphArLimits, CombinedGraphArParts,
+    capture_combined_graphar,
+};
+#[cfg(all(feature = "combined-graph", feature = "backend"))]
+pub use combined::{CombinedGraphArRequest, prepare_combined_graphar};

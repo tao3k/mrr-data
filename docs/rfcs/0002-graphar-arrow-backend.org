@@ -620,13 +620,47 @@ A fresh process now authenticates SnapshotManifest bytes using a trusted fixture
 root, binds the MRR query and restores the native property artifact through this
 registered API. No live Host or credentials are required for this framework gate.
 
-SnapshotManifest currently selects one graph projection. This property slice
-can coexist with the root's declared Arrow relation batches; it does not register
-multiple native relation artifacts alongside properties. A future combined
-native dataset profile must reference property and per-relation inventories
-without referencing a binding that points back to the same snapshot root: that
-would create a CID cycle. Caller-derived graph bindings may authenticate the
-already selected root after its closure is fixed. Generic snapshot transfer still
-refuses graph projections, and the existing graph publication API remains for
-binary topology; neither silently accepts this new property artifact profile.
-The combined closure and original MRR source caller remain explicit gates.
+SnapshotManifest selects one graph projection. Its =mrr.graphar.dataset.v1=
+profile now selects an acyclic =GraphDatasetDescriptor=: one typed property
+inventory and exactly one inventory for every relation in the admitted catalog.
+The descriptor embeds semantic snapshot, catalog and generation scope, but no
+physical snapshot root. The complete descriptor CID is registered only after
+native child identities are fixed; the snapshot then references that descriptor.
+This construction avoids a CID cycle. Legacy topology/property profile bytes
+remain unchanged. The typed property descriptor is shared by Core, transfer and
+native capture so there is one canonical control-plane decoder.
+
+=prepare_combined_graph= verifies the entire Arrow/coverage/lineage/native
+closure before publication. =publish_combined_graph= requires each child ACK,
+then the dataset descriptor ACK, the simulation/Host gate, and finally the
+snapshot root ACK. Failed/lost ACKs return no complete receipt; same-CID retry
+may recover previously uploaded orphans. Protected discovery CAS is still a
+separate operation. Generic snapshot transfer still refuses graph profiles, and
+legacy binary graph transfer does not silently accept the combined profile.
+
+=restore_combined_graph= admits the caller-selected root, exact descriptor,
+full relation membership, semantic scope and every child's CID/declared length
+under block/count/aggregate budgets before returning a prepared closure.
+=capture_combined_graphar= reconstructs private native metadata from admitted
+catalogs, checks native framing and scope, and returns immutable Arrow property
+tables plus fully re-admitted contextual MRR relation facts. Source YAML never
+chooses native paths. Shared Backend preparation reserves the complete payload,
+checks cooperative controls between files/phases, and retains the same lease
+through consuming handoff and final-clone shutdown. Native calls are not
+preemptible; decoded metadata, provider copies and decompression need Host
+headroom and are not a hard RSS ceiling. Topology row limits accumulate across
+all relation artifacts, including repeated physical vertices.
+
+The native acceptance deletes original source directories before publication,
+publishes to a simulated content service, restores into a cold cache, captures
+both native relations and properties, executes a direct-IR two-hop DataFusion
+query, compares all three independent expected rows, and verifies the original
+MRR result transport intended for Scheme consumers. Equal descriptors and
+semantic scopes under another physical root refuse capture/result reuse.
+This qualifies the declared string-property slice and simulated publication
+framework; original GQL parser/compiler invocation remains a separate gate.
+
+The optional facade feature =backend-graphar-combined= selects this composition;
+providers do not create their own Backend runtime. Turso/DuckDB remain optional
+physical providers; neither becomes the graph capability owner. GraphAr retains
+the graph storage/projection role across all Production profiles and cases.
