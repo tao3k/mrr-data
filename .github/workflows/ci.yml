@@ -362,7 +362,7 @@ jobs:
       - name: Locate the exact Cargo-pinned MRR source frontend owner
         shell: bash
         run: |
-          cargo metadata --locked --format-version 1 --features mrr-data-datafusion/graphar-source-handoff > "$RUNNER_TEMP/mrr-source-metadata.json"
+          cargo metadata --locked --format-version 1 --features mrr-data-datafusion/source-handoff,mrr-data-graphar/source-handoff > "$RUNNER_TEMP/mrr-source-metadata.json"
           python3 - <<'PY'
           import json, os
           from pathlib import Path
@@ -384,6 +384,7 @@ jobs:
         shell: bash
         run: |
           cd "$MRR_FRONTEND_OWNER"
+          python3 tools/ci/prepare-gerbil-dependencies.py
           gerbil deps --install
           gerbil build
       - name: Test generic property snapshot and physical query
@@ -396,7 +397,7 @@ jobs:
           cargo clippy -p mrr-data-datafusion --all-targets --locked -- -D warnings
       - name: Qualify original Healthcare source through native GraphAr and cold/warm snapshots
         run: |
-          cargo test -p mrr-data-datafusion --features graphar-source-handoff --locked --no-run
-          uv run --locked --project python mrr-data-test run-process --phase test -- cargo test -p mrr-data-datafusion --features graphar-source-handoff --locked source_handoff -- --nocapture --test-threads=1
+          cargo test -p mrr-data-datafusion -p mrr-data-graphar --features mrr-data-datafusion/source-handoff,mrr-data-graphar/source-handoff --locked --no-run
+          uv run --locked --project python mrr-data-test run-process --phase test -- cargo test -p mrr-data-datafusion -p mrr-data-graphar --features mrr-data-datafusion/source-handoff,mrr-data-graphar/source-handoff --locked source_handoff -- --nocapture --test-threads=1
           cargo check -p mrr-data --no-default-features --features backend-graphar-combined,datafusion --profile test --locked
-          cargo clippy -p mrr-data-datafusion -p mrr-data-graphar --all-targets --features mrr-data-datafusion/graphar-source-handoff --profile test --locked -- -D warnings
+          cargo clippy -p mrr-data-datafusion -p mrr-data-graphar --all-targets --features mrr-data-datafusion/source-handoff,mrr-data-graphar/source-handoff --profile test --locked -- -D warnings

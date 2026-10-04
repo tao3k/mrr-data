@@ -48,7 +48,9 @@ pub fn transfer_limits() -> GraphTransferLimits {
 }
 impl Fixture {
     pub fn new() -> Self {
-        let original = properties::fixture();
+        Self::with_original(properties::fixture())
+    }
+    pub(super) fn with_original(original: properties::Fixture) -> Self {
         let (projection, tables) = inputs(&original);
         let relations = mrr::RelationCatalog::admit(
             original

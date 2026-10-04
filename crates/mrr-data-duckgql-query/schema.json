@@ -34,6 +34,10 @@
     "antlr_source_sha256": {
       "type": "string",
       "const": "0ed13668906e86dbc0dcddf30fdee68c10203dea4e83852b4edb810821bee3c4"
+    },
+    "generated_parser_parts": {
+      "type": "integer",
+      "const": 12
     }
   },
   "required": [

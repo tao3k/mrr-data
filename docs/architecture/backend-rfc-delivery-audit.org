@@ -556,16 +556,24 @@ digests. Python glue tests cover discovery, malformed/missing protocol output,
 capture limits and descendant cleanup. Semantic and resource assertions remain
 in Rust. CI publishes the checked matrix for both native platforms.
 
-A local macOS ARM64 run passed all nine cases in 13.64 seconds using the earlier
-Schema-pinned unsigned SDK artifact with digest
-=c73ac0bf2b61738ec07cd1bf5c9b054825deec30d195ef512167ea06d5ffda68=.
-This was an uncommitted working-tree measurement, not exact-head CI acceptance.
-OS peak RSS includes source capture, Rust and the active native engine. The
-measurement is a process high-water mark, not an enforced operator memory cap.
-That earlier run predates phase decomposition. The current adapters record
-disjoint preparation, load, execution, fetch/decode and cleanup durations;
-DuckGQL/Turso observe the first safe SDK cursor row from prepare, and DataFusion
-observes the first nonempty Arrow batch from execution start. These boundaries
-can follow native buffering and do not qualify operator-only first-result or
-spill peaks. Latest phase receipts and original Healthcare source qualification
-are recorded separately below when accepted.
+The current [[file:../../python/src/mrr_data_testing/duckgql/receipts/macos-resources.jsonl][macOS ARM64 phase receipt]] passes all nine cases in 18.13 seconds.
+The [[file:../../python/src/mrr_data_testing/duckgql/receipts/macos-build.json][source build receipt]] records the unsigned SDK artifact digest
+=0bbeaac46695077931b2c526d29a62673083373afe45db007e2ede15d5f268a3=,
+13 generated parser units and their digests, with upstream Release optimization.
+Native adapter regression passed five tests; the separately invoked same-source
+scale comparison passed at all three sizes. Both test and matrix execution used
+five-second no-output and 120-second wall limits. The build used the unchanged
+30-second no-output and 1200-second wall limits.
+
+These receipts identify an uncommitted working tree and compiled binary, not
+exact-head remote CI acceptance. Concurrent host compilation affects timing;
+these samples do not establish a performance improvement. OS peak RSS includes
+source capture, Rust and the active native engine. It is a process high-water
+mark, not an enforced operator memory cap.
+The adapters record disjoint preparation, load, execution, fetch/decode and
+cleanup durations. DuckGQL/Turso observe the first safe SDK cursor row from
+prepare; DataFusion observes the first nonempty Arrow batch from execution
+start. Native buffering can precede those observations. These boundaries do
+not qualify operator-only first-result latency, spill peaks or cache effects.
+Original Healthcare source qualification remains a separate native frontend
+gate; the pinned upstream Gerbil dependency closure still requires repair.

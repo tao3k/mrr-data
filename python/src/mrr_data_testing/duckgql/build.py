@@ -59,6 +59,55 @@ class CompilerOutput:
         return output
 
 
+def parser_units(source, directory, count):
+    """Partition pinned ANTLR rule blocks without changing their definitions."""
+    original = source.read_bytes()
+    markers = list(re.finditer(rb"(?m)^//----------------- ", original))
+    footer = original.rfind(b"\nvoid GQLParser::initialize()")
+    namespace = original.find(b"\nnamespace {")
+    if len(markers) < count or not 0 < namespace < markers[0].start() < footer:
+        raise ValueError("unexpected pinned ANTLR parser framing")
+    start = markers[0].start()
+    prefix, body, suffix = original[:start], original[start:footer], original[footer:]
+    for private in (
+        b"gqlParserStaticData",
+        b"gqlParserOnceFlag",
+        b"gqlParserInitialize",
+        b"GQLParserStaticData",
+    ):
+        if private in body:
+            raise ValueError("rule block references translation-unit private state")
+    offsets = [marker.start() for marker in markers] + [footer]
+    blocks = [original[left:right] for left, right in zip(offsets, offsets[1:])]
+    if prefix + b"".join(blocks) + suffix != original:
+        raise ValueError("ANTLR rule partition changed source bytes")
+    directory.mkdir(parents=True, exist_ok=True)
+    primary = directory / "parser-initializer.cpp"
+    primary.write_bytes(prefix + suffix)
+    files = [primary]
+    prelude = original[:namespace]
+    target_bytes = (len(body) + count - 1) // count
+    groups = [[]]
+    size = 0
+    for index, block in enumerate(blocks):
+        if size >= target_bytes and len(groups) < count:
+            groups.append([])
+            size = 0
+        groups[-1].append((offsets[index], block))
+        size += len(block)
+    filename = json.dumps(source.as_posix()).encode()
+    for index, group in enumerate(groups):
+        path = directory / f"parser-rules-{index}.cpp"
+        contents = bytearray(prelude)
+        for offset, block in group:
+            line = original[:offset].count(b"\n") + 1
+            contents.extend(b"\n#line " + str(line).encode() + b" " + filename + b"\n")
+            contents.extend(block)
+        path.write_bytes(contents)
+        files.append(path)
+    return files
+
+
 def run(argv, *, build=False):
     print("build:", " ".join(map(str, argv)), flush=True)
     run_process(
@@ -165,6 +214,10 @@ def main():
         ],
         build=True,
     )
+    parser = duckgql / "src/parser/generated/GQLParser.cpp"
+    units = parser_units(
+        parser, directory / "generated-parser", const("generated_parser_parts")
+    )
     config = directory / "extension-config.cmake"
     # All values are fixed Schema fields or resolved build paths, never query input.
     config.write_text(
@@ -175,6 +228,11 @@ def main():
         # Third-party sources assume independent translation units. In
         # particular zstd has conflicting file-local macros/types in a batch.
         "cmake_language(DEFER CALL set_target_properties duckdb_zstd duckdb_re2 duckdb_mbedtls duckdb_pg_query duckdb_utf8proc duckdb_fsst duckdb_hyperloglog duckdb_fmt duckdb_miniz duckdb_skiplistlib duckdb_fastpforlib duckdb_yyjson PROPERTIES UNITY_BUILD OFF)\n"
+        # Original definitions are compiled as bounded rule-block units.
+        f'cmake_language(DEFER CALL set_source_files_properties "{parser.as_posix()}" TARGET_DIRECTORY duckgql_loadable_extension PROPERTIES HEADER_FILE_ONLY TRUE)\n'
+        "cmake_language(DEFER CALL target_sources duckgql_loadable_extension PRIVATE "
+        + " ".join(f'"{path.as_posix()}"' for path in units)
+        + ")\n"
         # Expose actual compiler optimization decisions during large units.
         # These diagnostics report work performed by the compiler, rather
         # than manufacturing progress from an elapsed-time heartbeat.
@@ -231,6 +289,9 @@ def main():
         "signed": False,
         "build_configuration": {
             "cxx_standard": 17,
+            "generated_parser_units": len(units),
+            "generated_parser_source_sha256": digest(parser),
+            "generated_parser_unit_sha256": [digest(path) for path in units],
             "core_unity_batch_size": 4,
             "third_party_unity": False,
             "native_progress_diagnostics": "compiler-pass-execution",

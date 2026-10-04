@@ -230,7 +230,7 @@ fn combined_catalog_canonical_bytes_and_global_budgets_refuse() {
     );
 }
 
-fn relation_tables(
+pub(super) fn relation_tables(
     f: &Fixture,
     captured: &crate::CapturedCombinedGraphAr,
 ) -> Vec<mrr_data_datafusion::BinaryRelationTable> {

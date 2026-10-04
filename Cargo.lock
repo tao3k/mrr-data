@@ -3923,9 +3923,7 @@ dependencies = [
  "mrr-data-asp-rust-build-support",
  "mrr-data-content",
  "mrr-data-core",
- "mrr-data-graphar",
  "mrr-property-source",
- "tempfile",
  "tokio",
 ]
 
@@ -3971,6 +3969,7 @@ dependencies = [
  "mrr-data-core",
  "mrr-data-datafusion",
  "mrr-data-profile",
+ "mrr-property-source",
  "nix",
  "parquet",
  "serde",
@@ -4051,7 +4050,7 @@ dependencies = [
 [[package]]
 name = "mrr-frontends"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=e9f87c3744b0d38709c479edc1b2143ef5ec9bbd#e9f87c3744b0d38709c479edc1b2143ef5ec9bbd"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=9ee5ace469e7a9319c74b8be0308e9062a47e587#9ee5ace469e7a9319c74b8be0308e9062a47e587"
 dependencies = [
  "icu_properties",
  "mrr-gerbil",
@@ -4062,7 +4061,7 @@ dependencies = [
 [[package]]
 name = "mrr-gerbil"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=e9f87c3744b0d38709c479edc1b2143ef5ec9bbd#e9f87c3744b0d38709c479edc1b2143ef5ec9bbd"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=9ee5ace469e7a9319c74b8be0308e9062a47e587#9ee5ace469e7a9319c74b8be0308e9062a47e587"
 dependencies = [
  "blake3",
  "gerbil-scheme-sys",
@@ -4080,7 +4079,7 @@ dependencies = [
 [[package]]
 name = "mrr-gerbil-native-build"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=e9f87c3744b0d38709c479edc1b2143ef5ec9bbd#e9f87c3744b0d38709c479edc1b2143ef5ec9bbd"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=9ee5ace469e7a9319c74b8be0308e9062a47e587#9ee5ace469e7a9319c74b8be0308e9062a47e587"
 dependencies = [
  "gerbil-scheme-native-build",
 ]
@@ -4126,7 +4125,7 @@ dependencies = [
 [[package]]
 name = "mrr-property-source"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=e9f87c3744b0d38709c479edc1b2143ef5ec9bbd#e9f87c3744b0d38709c479edc1b2143ef5ec9bbd"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=9ee5ace469e7a9319c74b8be0308e9062a47e587#9ee5ace469e7a9319c74b8be0308e9062a47e587"
 dependencies = [
  "meta-relational-reasoning",
  "mrr-frontends",

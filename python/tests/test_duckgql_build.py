@@ -1,5 +1,6 @@
 import sys
 import subprocess
+import shutil
 
 import pytest
 
@@ -59,3 +60,58 @@ def test_output_grouping_keeps_capture_bytes_unmodified():
         capture_limit=1000,
     )
     assert result.stdout == payload.encode()
+
+
+def test_rule_partition_preserves_native_linkage_and_results(tmp_path):
+    compiler = shutil.which("c++")
+    if compiler is None:
+        pytest.skip("native C++ compiler unavailable")
+    (tmp_path / "GQLParser.h").write_text(
+        "#pragma once\nclass GQLParser { public: virtual ~GQLParser(); "
+        "virtual int first() const; virtual int second() const; "
+        "int value() const; static void initialize(); };\n"
+    )
+    source = tmp_path / "GQLParser.cpp"
+    source.write_text(
+        '#include "GQLParser.h"\n'
+        "\nnamespace { int private_state() { return 21; } }\n"
+        "int GQLParser::value() const { return private_state(); }\n"
+        "GQLParser::~GQLParser() = default;\n"
+        "//----------------- FirstContext -----------------\n"
+        "int GQLParser::first() const { return value(); }\n"
+        "//----------------- SecondContext -----------------\n"
+        "int GQLParser::second() const { return value() * 2; }\n"
+        "\nvoid GQLParser::initialize() {}\n"
+    )
+    main = tmp_path / "main.cpp"
+    main.write_text(
+        '#include "GQLParser.h"\n#include <iostream>\n'
+        "int main() { GQLParser::initialize(); GQLParser p; "
+        "std::cout << p.first() << ' ' << p.second(); }\n"
+    )
+    parts = build.parser_units(source, tmp_path / "parts", 2)
+    for name, units in (("original", [source]), ("partitioned", parts)):
+        binary = tmp_path / name
+        subprocess.run(
+            [
+                compiler,
+                "-std=c++17",
+                "-O2",
+                "-I",
+                str(tmp_path),
+                *map(str, units),
+                str(main),
+                "-o",
+                str(binary),
+            ],
+            check=True,
+            capture_output=True,
+            timeout=20,
+        )
+        assert subprocess.check_output([binary], timeout=5) == b"21 42"
+    source.write_text(
+        source.read_text().replace("return value();", "return gqlParserStaticData;")
+    )
+    with pytest.raises(ValueError, match="private state"):
+        build.parser_units(source, tmp_path / "refused", 2)
+    assert not (tmp_path / "refused").exists()
