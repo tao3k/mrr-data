@@ -9,10 +9,13 @@ original slices and do not independently define current completion. The initial
 audit used PR #12 at =aacc25511367391262f4639e5485701406089b21=. The consolidated
 source/dispatch composition was first published at
 =f949c4f5bdbceb93e590ec7408912c2dd66e55cc=. The published integration is now
-based on =e9811693=, retaining the Source resource/progress changes from
-=892030bb= and pinning MRR =d137b6d536136982ad0c6d2f0d1bc30c19159899=.
-Qualification is recorded
-below. Platform results must refer to their exact head; earlier-head green checks
+based on =e44d642c=, retaining bounded Scheme metadata and the Source
+resource/progress changes, with MRR
+=d137b6d536136982ad0c6d2f0d1bc30c19159899= and GSC
+=5f4ca683e3635b89fa791233147e272699b72321= frozen. Source integration
+=e850fa30= was rebuilt and qualified locally; subsequent commits change
+documentation and retained evidence only. Platform results must refer to their
+exact head; earlier-head green checks
 do not establish all-platform closure.
 
 ** Overall assessment
@@ -55,7 +58,7 @@ not a native RSS cap. Local and platform qualification remain explicit gates.
 
 ** Current integration and continuous qualification
 
-The published =e9811693= composition retains complete-Dataset selective capture,
+The integrated =e850fa30= composition retains complete-Dataset selective capture,
 cross-profile original-source reuse and supervised native Cargo builds with
 separate successful executable artifact records. Root, fuzz and optional Source
 agree on MRR =d137b6d5=, including shared SDK command isolation and PackageSpec
@@ -63,19 +66,30 @@ phase diagnostics. Dependency and
 workspace compilers both emit real progress. Original-source execution enables
 the parser's existing artifact decode/verification/admission trace.
 
-The preceding =68545984= dependency binary was freshly rebuilt with the new
-resource harness. Nine nonignored GraphAr Source cases passed in =14.03s= and
-the matched eight-case resource matrix passed in =58.46s=. Rust verifies one
-immutable snapshot per shape, original-query results and final zero reservations.
-Selective reads reduced bytes and decoded rows; warm/selective request medians
-regressed against warm/full in both shapes. This diagnostic establishes the
-measurement path, not latest-pin acceptance or release-scale performance.
-Own-crate strict Clippy passed with the preceding build's exact dependencies.
-The frozen =d137b6d5= owner now has a complete local Cargo Source build and
-passing DataFusion/GraphAr Source filters (2 and 9 nonignored tests). The
-resource parent isolates native fixture production in a child process so it
-can retain ownership of every child's exit status. Its new eight-case matrix,
-full current-pin Cargo Clippy and exact-head Linux/macOS acceptance remain gates.
+The current frozen-owner Cargo Source build passed; DataFusion/GraphAr Source
+filters passed (2 and 9 nonignored tests). The resource parent isolates native
+fixture production so it retains ownership of every child's exit status.
+After the Scheme metadata integration, the standalone eight-case matrix passed
+in =29.66s=, full all-target strict Source Clippy in =48.36s= and the facade in
+=29.38s=. Rust verifies one immutable snapshot per shape, independent
+original-query results and final zero reservations. Retained receipts below
+separate the earlier negative wall/CPU results from this latest local run.
+
+| M3 measurement scope | Current evidence and classification |
+|----------------------+-------------------------------------|
+| Original-source equivalence, snapshot identity and cleanup | Local pass for all eight uniform/skewed modes |
+| Relation read bytes, decoded rows, selected edges and remote payload bytes | Measured physical counters; selective reads reduce relation work |
+| Request/phase wall, process CPU and isolated process RSS high-water mark | Measured diagnostic scope; OS cache and host scheduling uncontrolled |
+| Warm/full versus warm/selective performance | Mixed results across runs; retained negative gates prevent a production speedup claim |
+| Already prepared source reuse | Measured separately; excludes fresh preparation and cannot qualify general runtime speedup |
+| Copied bytes, engine spill and streamed first-result timing | Explicitly deferred/unsupported; null values are not measured zeroes |
+| Release-scale and exact-head native platform qualification | Open; tiny fixtures and earlier-head successes do not close these gates |
+
+Exact-head Linux/macOS/MSRV acceptance remains required. The superseded
+=0912e5bc= Source jobs failed on both native platforms with =compiler artifact
+monitor panicked= before semantic execution. Upstream diagnosis and qualification
+continue with Data pins frozen; a local cached build does not close that
+fresh-platform failure.
 
 Local Python qualification passes =46 tests=; strict Ruff, formatting and
 21-document/7-README checks pass. Collection checkout identity, binary digest
