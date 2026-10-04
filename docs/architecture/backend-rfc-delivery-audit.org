@@ -149,7 +149,7 @@ The later successful checks are recorded separately. The earlier Turso =5= and
 DuckDB =6= dispatch receipts cover unchanged lifecycle code and binaries; they
 do not requalify the modified source fixtures or the new platform head.
 
-** Retained original-source reuse: native acceptance remains open
+** Retained original-source reuse: local acceptance, platform gate remains open
 
 The canonical simulated Healthcare caller now retains one immutable native
 GraphAr capture across successive MRR-owned original-query executions. Every
@@ -174,7 +174,8 @@ passes =33 tests= locally; strict Ruff and formatting pass. Two local native
 executable builds fail the unchanged =30s= inactivity policy before successful
 =build-finished= records: the first has no compiler-event wrapper, and the second
 uses the existing real LLVM-event wrapper. Neither starts a test; neither is
-reported as a runtime pass. Native acceptance of the expanded caller remains open.
+reported as a runtime pass. The later diagnostic qualification below establishes
+local acceptance separately; platform acceptance remains open.
 
 Frozen [[https://github.com/tao3k/mrr-data/actions/runs/37202100315][CI run 37202100315]] at =56b7057a= has one completed Python failure and
 one Arrow-fuzz success as of =2026-10-04 12:34 UTC=; the other jobs are pending.
@@ -187,6 +188,56 @@ the prerequisite repair needs a new exact-head platform result. All test and
 build limits, compiler optimization and Cargo default concurrency are unchanged.
 Keep the frozen run available while this batch is qualified locally; do not
 replace its pending results with an earlier green head.
+
+** Native-build silence diagnosis and supervised Cargo record separation
+
+The previous timeouts lacked a child-process snapshot, so their exact final
+instruction cannot be reconstructed. A bounded diagnostic rebuild at =f395402c=
+keeps the same source owner, native SDK, optimization, Cargo default concurrency
+and =30s idle / 1200s wall= policy, and adds Cargo =-vv= visibility. At =24.2s=,
+after =8.76s= without output, its owned process tree shows Cargo waiting on the
+=mrr-gerbil= build script and =gxi= running =gerbil-rs-stage-program= at =18.4%=
+CPU. A later sample shows Rust's native code-generation thread executing LLVM
+instruction selection, not merely an inactive main thread waiting for codegen.
+This locates actual work in phases outside the two selected LLVM remark classes;
+it does not prove that every historical timeout was caused by the same phase.
+
+There are two verified visibility gaps in the pinned native builder:
+- =mrr-gerbil-native-build= defaults its observation verbosity to zero; its
+  Gerbil subprocess helper uses =Command::output()=, retaining successful child
+  stdout/stderr until completion and then discarding them.
+- Cargo hides build-script output during normal compilation. [[https://doc.rust-lang.org/cargo/reference/build-scripts.html#outputs-of-the-build-script][Cargo's documented
+  =-vv= mode]] makes that output visible. A Rust LLVM wrapper alone cannot expose
+  Gerbil package/program preparation or every code-generation phase.
+
+The diagnostic also reports =Dirty mrr-gerbil= because an =OUT_DIR= generated
+=finite.scm= changed after the previous interrupted build's timestamp. The next
+successful warm build reports =Fresh mrr-gerbil=, so this evidence does not
+establish a perpetual rebuild loop. Do not skip source invalidation based on this
+observation. The cold diagnostic succeeds in =3m17s=; its warm follow-up succeeds
+in =17.44s=. These are unmatched diagnostic observations, not an A/B speedup.
+
+The framework now captures =compiler-artifact= and =build-finished= records
+separately while forwarding very-verbose native output to the existing progress
+supervisor. Split records are buffered until complete; errors remain visible;
+failed, interrupted or incomplete builds remove the artifact record. Known LLVM
+note diagnostics are grouped by actual received records, with no timer-generated
+output. Cargo can replay cached compiler diagnostics, so diagnostic counts do not
+certify fresh CPU work. The watchdog still reads actual raw bytes before grouping.
+The source CI uses =-vv=, the existing workspace compiler wrapper, the declared
+native observation verbosity, and this supervised build capture. Its test phase
+still launches exact compiled executables without a second Cargo invocation.
+
+The expanded shared-Backend original-source caller passes independently in
+=3.37s=. The subsequent direct original-source qualification passes DataFusion
+=2 tests in 2.01s= and GraphAr =2 tests in 3.04s=, including the expanded reuse,
+budget refusal, retirement and retained-consumer drain scenario. Each process
+keeps the =5s idle / 120s wall= policy and emits real MRR initialization/operation
+transitions. These receipts qualify the unchanged Rust source at =f395402c=;
+they do not replace current-head Linux/macOS CI or establish deployed behavior.
+Python framework qualification passes =40 tests=. The final separated-record
+warm build succeeds in =19.82s= with native inputs =Fresh=; no controlled
+performance claim follows from that elapsed observation.
 
 ** Concurrent compiler and native engine qualification at c54acd27 (historical)
 

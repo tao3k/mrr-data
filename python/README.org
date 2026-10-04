@@ -36,11 +36,22 @@ Rust continues to own all semantic assertions.
 
 #+begin_src sh
 cargo_artifacts=$(mktemp)
-cargo test -p mrr-data-core --locked --lib --no-run --message-format=json > "$cargo_artifacts"
+uv run --locked --project python mrr-data-test run-process --phase build \
+  --cargo-artifacts "$cargo_artifacts" -- \
+  cargo test -vv -p mrr-data-core --locked --lib --no-run --message-format=json
 uv run --locked --project python mrr-data-test run-process --phase test \
   --cargo-artifacts "$cargo_artifacts" --test-target mrr_data_core -- --nocapture
 rm "$cargo_artifacts"
 #+end_src
+
+Cargo =-vv= exposes build-script output that normal compilation hides. The
+build capture keeps executable identities and the successful finish record
+separate from very-verbose native diagnostics. It forwards real output to the
+existing supervisor and groups known LLVM note diagnostics without hiding errors.
+Interrupted, failed or incomplete builds remove the artifact file. Cargo may
+replay cached diagnostics: diagnostic counts are not fresh CPU-work measurements.
+Native compiler owners must also expose actual phase transitions; a Rust LLVM
+wrapper does not cover silent Gerbil imports, program staging or native linking.
 
 * Native and upstream suites
 
