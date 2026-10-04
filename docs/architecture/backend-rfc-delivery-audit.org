@@ -64,6 +64,18 @@ The following local receipts describe the prior =cb4f78cd= integration with
 MRR =a7450879=, not the newer dispatch composition. New-head compilation,
 dispatch/owner checks and platform source acceptance must qualify it again.
 
+The =8ca7dc37= dispatch integration is locally compiled without the optional
+source frontend: Core =38 passed= and DataFusion =24 passed= under the unchanged
+test progress/deadline policy. The new dispatch tests preserve the original
+candidate and Scheme v2 handoff, retain corrupt-backend failure, and reject
+generation drift and insufficient final admission budgets. Python =24 passed=,
+the root/source/fuzz pin guard agrees on =8f389fd0=, all nine Turso packages stay
+=0.8.1=, and the documentation check passes. Strict all-target, test-profile
+Clippy passes for the five selected crates with =source-handoff=, shared Backend
+and selective GraphAr enabled, including the canonical dispatch caller's types.
+Native-source execution and current-head Linux/macOS CI remain separate
+qualification gates.
+
 ** Prior integration local qualification: native frontend gate remains open
 
 The merged source-feature composition builds locally with the exact pinned
