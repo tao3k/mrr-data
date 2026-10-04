@@ -234,9 +234,13 @@ pub(super) fn relation_tables(
     f: &Fixture,
     captured: &crate::CapturedCombinedGraphAr,
 ) -> Vec<mrr_data_datafusion::BinaryRelationTable> {
-    captured
-        .relations(&f.query)
-        .unwrap()
+    fact_tables(f, captured.relations(&f.query).unwrap())
+}
+pub(super) fn fact_tables(
+    f: &Fixture,
+    relations: &[crate::CapturedGraphArRelation],
+) -> Vec<mrr_data_datafusion::BinaryRelationTable> {
+    relations
         .iter()
         .map(|relation| {
             let id = &relation.relation;
@@ -274,7 +278,7 @@ pub(super) fn relation_tables(
         .collect::<Vec<_>>()
 }
 
-fn alternate_root(f: &Fixture) -> mrr_data_core::BoundDataQuery {
+pub(super) fn alternate_root(f: &Fixture) -> mrr_data_core::BoundDataQuery {
     use mrr_data_core::{
         CoverageDescriptor, CoverageKind, SnapshotBlock, SnapshotManifest, SnapshotManifestRequest,
         bind_data_query, raw_cid,

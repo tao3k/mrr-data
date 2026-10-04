@@ -24,7 +24,19 @@ pub(super) async fn publish(
     AuthorityState,
     mrr_data_content::PublishReceipt,
 ) {
-    let base = backend.profile("healthcare", "simulation").unwrap();
+    publish_for(f, backend, remote, "healthcare").await
+}
+pub(super) async fn publish_for(
+    f: &Fixture,
+    backend: &Backend,
+    remote: &Remote,
+    profile: &str,
+) -> (
+    ProfilePort,
+    AuthorityState,
+    mrr_data_content::PublishReceipt,
+) {
+    let base = backend.profile(profile, "simulation").unwrap();
     let policy = base
         .advance_authority(
             SCOPE,
@@ -134,7 +146,15 @@ pub(super) async fn verify_reopened_history(
     backend: &Backend,
     policy: AuthorityState,
 ) {
-    let base = backend.profile("healthcare", "simulation").unwrap();
+    verify_reopened_history_for(f, backend, policy, "healthcare").await;
+}
+pub(super) async fn verify_reopened_history_for(
+    f: &Fixture,
+    backend: &Backend,
+    policy: AuthorityState,
+    profile: &str,
+) {
+    let base = backend.profile(profile, "simulation").unwrap();
     let guarded = base
         .with_authorities(&[AuthorityExpectation {
             authority_id: "policy".into(),

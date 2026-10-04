@@ -7,6 +7,62 @@ from pathlib import Path
 from mrr_data_testing.process import BUILD_LIMITS, CONTROL_LIMITS, TEST_LIMITS, run
 
 
+class CargoArtifactCapture:
+    """Keep Cargo records separate from live, very-verbose build diagnostics."""
+
+    def __init__(self, output):
+        self.output = output
+        self.pending = b""
+        self.finished = []
+        self.events = 0
+
+    def __call__(self, block):
+        lines = (self.pending + block).splitlines(keepends=True)
+        self.pending = b""
+        if block and lines and not lines[-1].endswith(b"\n"):
+            self.pending = lines.pop()
+        forwarded = bytearray()
+        for line in lines:
+            if not line.startswith(b"{"):
+                forwarded.extend(line)
+                continue
+            record = json.loads(line)
+            if not isinstance(record, dict) or "reason" not in record:
+                forwarded.extend(line)
+                continue
+            if record["reason"] in ("compiler-artifact", "build-finished"):
+                self.output.write(line if line.endswith(b"\n") else line + b"\n")
+            if record["reason"] == "build-finished":
+                self.finished.append(record.get("success") is True)
+            message = record.get("message", {})
+            if (
+                record["reason"] == "compiler-message"
+                and message.get("level") == "note"
+                and any(
+                    event in message.get("message", "")
+                    for event in (" inline (", " prologepilog (")
+                )
+            ):
+                self.events += 1
+                if self.events >= 256:
+                    forwarded.extend(self.summary())
+            else:
+                forwarded.extend(line)
+        if not block and self.events:
+            forwarded.extend(self.summary())
+        self.output.flush()
+        return bytes(forwarded)
+
+    def summary(self):
+        output = f"rust compiler diagnostic events: {self.events}\n".encode()
+        self.events = 0
+        return output
+
+    def complete(self):
+        if self.finished != [True]:
+            raise ValueError("one successful Cargo build required")
+
+
 def compiled_test_binaries(artifacts, targets):
     """Select exact named test executables from a successful Cargo build record."""
     selected = {name: set() for name in targets}
@@ -47,6 +103,18 @@ def main():
     args = parser.parse_args()
     command = args.arguments[1:] if args.arguments[:1] == ["--"] else args.arguments
     if args.cargo_artifacts:
+        if args.phase == "build":
+            if args.test_target or not command:
+                parser.error("Cargo artifact capture requires a build command")
+            try:
+                with args.cargo_artifacts.open("wb") as output:
+                    capture = CargoArtifactCapture(output)
+                    run(command, limits=BUILD_LIMITS, output_filter=capture)
+                    capture.complete()
+            except BaseException:
+                args.cargo_artifacts.unlink(missing_ok=True)
+                raise
+            return
         if args.phase != "test" or not args.test_target:
             parser.error(
                 "Cargo artifacts require the test phase and named test targets"

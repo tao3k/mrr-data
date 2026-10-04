@@ -5,7 +5,7 @@ use crate::{
     restore_combined_graph_content,
     tests::entity_properties::{
         combined::{
-            acceptance::relation_tables,
+            acceptance::{alternate_root, relation_tables},
             fixture::{Fixture, capture_limits, transfer_limits},
             remote::Remote,
         },
@@ -86,16 +86,24 @@ async fn execute(
         })
         .collect::<Vec<_>>();
     let relations = relation_tables(f, captured.get());
-    let bound = compile()
-        .bind(&f.relations, &f.entities, &f.original.semantic)
-        .unwrap();
-    assert_eq!(bound.compilation().source_digest, SOURCE_DIGEST);
     let physical = executor::CapturedBackend {
         binding: f.query.clone(),
         tables,
         relations,
         limits: properties::limits(),
     };
+    dispatch(f, backend, captured, physical).await
+}
+async fn dispatch<T: Send + Sync + 'static>(
+    f: &Fixture,
+    backend: &Backend,
+    captured: ResourceHandle<T>,
+    physical: executor::CapturedBackend,
+) -> ResourceHandle<Execution> {
+    let bound = compile()
+        .bind(&f.relations, &f.entities, &f.original.semantic)
+        .unwrap();
+    assert_eq!(bound.compilation().source_digest, SOURCE_DIGEST);
     backend
         .prepare_resource_async_controlled(
             RESERVED,
@@ -144,10 +152,52 @@ async fn original_source_handoff_shared_backend_reaches_retained_consumer_transp
     drop(first);
     assert_eq!(backend.status().resource_bytes, 0);
     remote.blocks.lock().unwrap().clear();
-    let transport = query_transport(&f, &backend, remote, cache, &policy_home, policy).await;
+    let warm = query_transport(
+        &f,
+        &backend,
+        remote.clone(),
+        cache.clone(),
+        &policy_home,
+        policy,
+    )
+    .await;
+    drop(warm);
+    assert_eq!(backend.status().resource_bytes, 0);
+    let restored = restore(&f, &backend, remote, cache).await;
+    let captured = capture(&f, &backend, restored).await;
+    let other = alternate_root(&f);
+    assert!(captured.get().tables(&other).is_err());
+    assert!(captured.get().relations(&other).is_err());
+    for _ in 0..2 {
+        let transport = captured_transport(&f, &backend, captured.clone()).await;
+        assert!(authority::disclose(&policy_home, policy).await);
+        assert_eq!(backend.status().resource_bytes, 2 * RESERVED);
+        let insufficient = mrr::QueryResultLimits::new(
+            NonZeroUsize::new(1).unwrap(),
+            NonZeroUsize::new(1).unwrap(),
+        );
+        assert!(
+            transport
+                .get()
+                .verify(&f.query, insufficient, NonZeroUsize::new(1 << 20).unwrap())
+                .is_err()
+        );
+        drop(transport);
+        assert_eq!(backend.status().resource_bytes, RESERVED);
+    }
+    let transport = captured_transport(&f, &backend, captured.clone()).await;
+    assert!(authority::disclose(&policy_home, policy).await);
     let limits = result_limits();
     let cap = NonZeroUsize::new(1 << 20).unwrap();
     authority::retire_and_recover(&f, &policy_home, policy, &publication).await;
+    // Immutable physical source remains usable, but a previous disclosure does
+    // not authorize another consumer after policy retirement.
+    let after_retirement = captured_transport(&f, &backend, captured.clone()).await;
+    assert!(!authority::disclose(&policy_home, policy).await);
+    assert_eq!(backend.status().resource_bytes, 3 * RESERVED);
+    drop(after_retirement);
+    drop(captured);
+    assert_eq!(backend.status().resource_bytes, RESERVED);
     drain(&backend, transport, &f.query, limits, cap).await;
     let reopened = Backend::open(
         BackendConfig::default(),
@@ -178,7 +228,24 @@ async fn query_transport(
     assert_eq!(backend.status().resource_bytes, RESERVED);
     let captured = capture(f, backend, restored).await;
     assert_eq!(backend.status().resource_bytes, RESERVED);
+    let transport = captured_transport(f, backend, captured).await;
+    assert!(authority::disclose(policy_home, policy).await);
+    assert_eq!(backend.status().resource_bytes, RESERVED);
+    transport
+}
+
+async fn captured_transport(
+    f: &Fixture,
+    backend: &Backend,
+    captured: ResourceHandle<CapturedCombinedGraphAr>,
+) -> ResourceHandle<DataQueryResultHandoff> {
     let output = execute(f, backend, captured).await;
+    execution_transport(f, output)
+}
+fn execution_transport(
+    f: &Fixture,
+    output: ResourceHandle<Execution>,
+) -> ResourceHandle<DataQueryResultHandoff> {
     let mut rows = output.get().candidate().rows().to_vec();
     rows.sort_by_key(|row| format!("{row:?}"));
     let mut expected = crate::tests::entity_properties::acceptance::expected();
@@ -190,14 +257,15 @@ async fn query_transport(
         NonZeroUsize::new(300).unwrap(),
     );
     let cap = NonZeroUsize::new(1 << 20).unwrap();
+    let insufficient =
+        mrr::QueryResultLimits::new(NonZeroUsize::new(1).unwrap(), NonZeroUsize::new(1).unwrap());
+    assert!(DataQueryResultHandoff::export_execution(output.get(), insufficient, cap).is_err());
     let transport = output
         .try_transform(|execution| {
             DataQueryResultHandoff::export_execution(&execution, limits, cap)
         })
         .unwrap_or_else(|_| panic!("unique candidate transport conversion"));
-    assert!(authority::disclose(policy_home, policy).await);
     transport.get().verify(&f.query, limits, cap).unwrap();
-    assert_eq!(backend.status().resource_bytes, RESERVED);
     transport
 }
 
@@ -229,3 +297,10 @@ async fn drain(
         .unwrap();
     assert_eq!(backend.status().resource_bytes, 0);
 }
+
+#[path = "cross_profile.rs"]
+mod cross_profile;
+
+#[cfg(feature = "selective-graphar")]
+#[path = "selective.rs"]
+mod selective;

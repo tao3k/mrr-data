@@ -41,3 +41,33 @@ pub async fn prepare_combined_graphar(
         })
         .await
 }
+
+/// Prepare the same combined closure as a globally validated ordered source.
+/// # Errors
+/// Refuses reservation/control, complete scope and native/selective capture errors.
+#[cfg(feature = "selective-graphar")]
+pub async fn prepare_combined_graphar_selective(
+    backend: &Backend,
+    request: CombinedGraphArRequest,
+    layout: crate::GraphArChunkLayout,
+    reserved_bytes: usize,
+    control: ResourceControl,
+) -> Result<ResourceHandle<super::CapturedCombinedGraphArSelective>, ResourcePreparationError<Error>>
+{
+    if reserved_bytes < request.closure.total_bytes() {
+        return Err(ResourcePreparationError::Backend(BackendError::Limit));
+    }
+    backend
+        .prepare_resource_controlled(reserved_bytes, control, move |control| {
+            super::selective::capture_checked(
+                &request.closure,
+                &request.query,
+                &request.relations,
+                &request.properties,
+                request.limits,
+                layout,
+                || control.check().map_err(Error::Stop),
+            )
+        })
+        .await
+}

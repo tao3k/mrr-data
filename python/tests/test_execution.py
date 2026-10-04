@@ -1,11 +1,13 @@
 import json
+import io
 from pathlib import Path
+import subprocess
 import sys
 
 import pytest
 
 from mrr_data_testing import execution
-from mrr_data_testing.process import TEST_LIMITS
+from mrr_data_testing.process import BUILD_LIMITS, TEST_LIMITS
 
 
 def record(name, executable, *, test=True, kind=None):
@@ -20,6 +22,110 @@ def record(name, executable, *, test=True, kind=None):
 def write_artifacts(path, records):
     path.write_text("\n".join(json.dumps(record) for record in records))
     return path
+
+
+def test_verbose_cargo_capture_keeps_live_bytes_and_only_machine_records():
+    output = io.BytesIO()
+    capture = execution.CargoArtifactCapture(output)
+    payload = (
+        b"[owner] cargo:rerun-if-changed=source.ss\n"
+        b"[owner] native phase complete\n"
+        b'{"reason":"compiler-message","message":{"level":"warning","message":"kept live"}}\n'
+        b'{"reason":"compiler-artifact","target":{"name":"owner"}}\n'
+        b'{"reason":"build-finished","success":true}\n'
+    )
+    assert capture(payload[:70]) + capture(payload[70:]) == payload
+    assert capture(b"") == b""
+    capture.complete()
+    records = [json.loads(line) for line in output.getvalue().splitlines()]
+    assert [record["reason"] for record in records] == [
+        "compiler-artifact",
+        "build-finished",
+    ]
+
+
+def test_cargo_capture_groups_real_rust_remarks_without_hiding_errors():
+    capture = execution.CargoArtifactCapture(io.BytesIO())
+    event = (
+        json.dumps(
+            {
+                "reason": "compiler-message",
+                "message": {
+                    "level": "note",
+                    "message": "<unknown file>:0:0 inline (success): compiler work",
+                },
+            }
+        ).encode()
+        + b"\n"
+    )
+    error = (
+        json.dumps(
+            {
+                "reason": "compiler-message",
+                "message": {
+                    "level": "error",
+                    "message": "unsupported inline (option)",
+                },
+            }
+        ).encode()
+        + b"\n"
+    )
+    assert (
+        capture(event * 256 + error)
+        == b"rust compiler diagnostic events: 256\n" + error
+    )
+    assert capture(event) == b""
+    assert capture(b"") == b"rust compiler diagnostic events: 1\n"
+    assert capture(b"") == b""
+
+
+@pytest.mark.parametrize("finished", [[], [False], [1], [True, True]])
+def test_build_capture_refuses_incomplete_or_failed_cargo(finished):
+    capture = execution.CargoArtifactCapture(io.BytesIO())
+    for value in finished:
+        capture(
+            json.dumps({"reason": "build-finished", "success": value}).encode() + b"\n"
+        )
+    with pytest.raises(ValueError, match="one successful Cargo build"):
+        capture.complete()
+
+
+def test_build_capture_removes_prior_success_on_real_process_failure(
+    tmp_path, monkeypatch
+):
+    artifacts = tmp_path / "cargo.jsonl"
+    artifacts.write_text('{"reason":"build-finished","success":true}\n')
+    calls = []
+    actual_run = execution.run
+
+    def observe(command, **kwargs):
+        calls.append((command, kwargs["limits"]))
+        return actual_run(command, **kwargs)
+
+    command = [
+        sys.executable,
+        "-c",
+        'print(\'{"reason":"build-finished","success":true}\'); raise SystemExit(7)',
+    ]
+    monkeypatch.setattr(execution, "run", observe)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run-process",
+            "--phase",
+            "build",
+            "--cargo-artifacts",
+            str(artifacts),
+            "--",
+            *command,
+        ],
+    )
+    with pytest.raises(subprocess.CalledProcessError) as failure:
+        execution.main()
+    assert failure.value.returncode == 7
+    assert calls == [(command, BUILD_LIMITS)]
+    assert not artifacts.exists()
 
 
 def test_selects_only_named_cargo_test_executables(tmp_path):

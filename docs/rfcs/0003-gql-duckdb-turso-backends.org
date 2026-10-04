@@ -56,8 +56,10 @@ independent of that extension and of database-query benchmark results.
 
 [[file:../architecture/0001-mrr-data-plane.org][The canonical data-plane ownership table]] fixes MRR semantics/admission,
 GraphAr graph representation, Arrow interchange and shared Backend lifecycle.
-Native GraphAr packaging remains opt-in; current binary-Entity qualification
-does not establish arbitrary property layouts or selective graph scanning.
+Native GraphAr packaging remains opt-in. The current delivery ledger covers
+binary-Entity topology, declared entity-property tables, combined original-source
+capture and narrow ordered-outgoing selective access. Broad layouts and measured
+end-to-end selective-query performance remain explicit qualification gates.
 
 * Decision and ownership
 

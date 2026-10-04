@@ -7,10 +7,11 @@
 This section is the current delivery plan. Later dated receipts describe their
 original slices and do not independently define current completion. The initial
 audit used PR #12 at =aacc25511367391262f4639e5485701406089b21=. The consolidated
-source/dispatch composition is published at
-=707f435320008df6799be8e8be1cfede5aad71cb= with MRR owner
-=d5beb4030bf875fa851cddc27789030c551154c3=. Its qualification is recorded
-below. Platform results must refer to that exact head; earlier-head green checks
+source/dispatch composition was first published at
+=f949c4f5bdbceb93e590ec7408912c2dd66e55cc=. The published integration is now
+=ceccf19a92e4233d1639a4e0d1ee1b23b0aae370= with MRR owner
+=023a6dbdaa7d9d88ad129e22cb3abcd12231bc3b=. Qualification is recorded
+below. Platform results must refer to their exact head; earlier-head green checks
 do not establish all-platform closure.
 
 ** Overall assessment
@@ -32,8 +33,8 @@ The graph facade and semantic-only consumers need not enable that native fronten
 
 | Composition | Owner and supported scope | Acceptance gate |
 |-------------+---------------------------+-----------------|
-| Root, fuzz and =mrr-property-source= | One MRR revision =d5beb4030bf875fa851cddc27789030c551154c3=; source digest, catalog binding, dispatch and final result admission remain MRR-owned | Locked pin guard; native =source-handoff= Linux/macOS CI |
-| GraphAr =native-graphar,source-handoff,backend= with DataFusion =source-handoff= | Combined Healthcare property/relation closure; original GQL, four rows including duplicate/null, cold and same-cache warm restoration on one Backend | Canonical source-handoff Rust caller and separate drift/refusal tests |
+| Root, fuzz and =mrr-property-source= | One MRR revision =023a6dbdaa7d9d88ad129e22cb3abcd12231bc3b=; source digest, catalog binding, dispatch and final result admission remain MRR-owned | Locked pin guard; native =source-handoff= Linux/macOS CI |
+| GraphAr =native-graphar,source-handoff,backend,selective-graphar= with DataFusion =source-handoff= | Combined Healthcare property/relation closure; original GQL, four rows including duplicate/null, cold and same-cache warm restoration on one Backend; complete Dataset binding for selective neighborhoods | Canonical source-handoff Rust caller, cross-profile reuse and separate drift/refusal tests |
 | Shared Backend | Provider-independent admission, transaction authority/history and retained resource drain; simulated metadata in canonical caller | Positive, retirement, lost-ACK and final-clone assertions; native process-exit receipts remain separate |
 | GraphAr =selective-graphar= | Authenticated selective outgoing-range materialization under the declared schema | Paired full-source equivalence; end-to-end performance remains M3 |
 | Turso =0.8.1= (all nine lockfile packages) | Optional native transaction provider and outgoing single-hop execution image | Declared-shape, interrupt/resource and recovery suites |
@@ -51,10 +52,30 @@ does not establish process-exit or power-loss durability and does not replace
 the native provider recovery matrix. Resource bytes are declared reservations,
 not a native RSS cap. Local and platform qualification remain explicit gates.
 
-** Current owner and platform qualification at 707f4353
+** Current integration and continuous qualification
 
-The root, fuzz and optional source frontend now share the published MRR owner
-=d5beb403=. The previous =8f389fd0= binaries and receipts below remain historical.
+The =ceccf19a= composition retains complete-Dataset selective capture,
+cross-profile original-source reuse and supervised native Cargo builds with
+separate successful executable artifact records. Root, fuzz and optional Source
+agree on MRR =023a6dbd=. Current-pin original-source controls and uniform/skewed
+process measurements remain open as detailed in the final integration section.
+Local Python qualification after merging passes =42 tests=; strict Ruff,
+formatting, the real checkout owner-pin guard and documentation checks pass.
+Native acceptance must refer to the rebuilt integration and its selected
+=source-handoff,backend,selective-graphar= composition.
+
+The =707f4353= CI run was cancelled when this integration was published, after
+six successful jobs. Its distribution aggregator fails on cancelled prerequisites;
+this is not a distribution semantic failure. The remaining seven native/general
+jobs do not establish acceptance. The workflow now keeps a running validation
+batch intact and queues subsequent pushes instead of cancelling unfinished
+native work. Later receipts still require their own exact source head; this
+scheduling change does not transfer an earlier head's green result.
+
+** Historical owner and platform qualification at 707f4353
+
+At this head the root, fuzz and optional source frontend share MRR owner
+=d5beb403=. Both this pin and the previous =8f389fd0= receipts are historical.
 No earlier binary qualifies the changed owner, even when its MRR Data source is
 otherwise unchanged.
 
@@ -62,8 +83,8 @@ Exact-head [[https://github.com/tao3k/mrr-data/actions/runs/37204680399][CI run 
 Arrow fuzz, MSRV and Linux native Source. The Source job passes DataFusion
 =2 tests= and GraphAr =2 tests=, including the canonical shared Backend caller,
 with real module-initialization diagnostics under unchanged five-second
-inactivity and 120-second wall limits. Maintained GraphAr, typed DuckGQL and
-general Rust remain in progress; macOS Source remains queued. Python now
+inactivity and 120-second wall limits. Maintained GraphAr, typed DuckGQL, general
+Rust and macOS Source were cancelled when the branch advanced. Python
 explicitly installs Rust =1.95.0= and verifies the native compiler before the
 process tests. Its prior plain-Rust cold compilation timeout is resolved in this
 run without changing the fixture's ten-second limit. Local checks at this head
@@ -187,6 +208,96 @@ The later successful checks are recorded separately. The earlier Turso =5= and
 DuckDB =6= dispatch receipts cover unchanged lifecycle code and binaries; they
 do not requalify the modified source fixtures or the new platform head.
 
+** Retained original-source reuse: local acceptance, platform gate remains open
+
+The canonical simulated Healthcare caller now retains one immutable native
+GraphAr capture across successive MRR-owned original-query executions. Every
+execution binds the original compilation again, checks the same expected rows
+(including duplicates/null), refuses insufficient result-admission limits and
+exports a newly admitted transport. The retained capture rejects a substituted
+physical snapshot even when its projection descriptor is unchanged. Each result
+adds its own shared Backend reservation; dropping it leaves the source reservation
+alive. No global cache or stored authorization decision is introduced.
+
+After simulated policy retirement, the same physical source can still produce
+an internal admitted result, but a fresh disclosure check refuses access. Source
+and refused consumer release their reservations before the previously accepted
+consumer's final-clone drain. These assertions cover immutable physical source
+reuse and fresh admission/disclosure; separate catalog/generation/schema refusal
+tests remain necessary. This is not cross-profile query equivalence or M3
+performance qualification.
+
+The modified caller passes strict all-target, test-profile Clippy for the five
+selected crates with =source-handoff,backend,selective-graphar= enabled. Python
+passes =33 tests= locally; strict Ruff and formatting pass. Two local native
+executable builds fail the unchanged =30s= inactivity policy before successful
+=build-finished= records: the first has no compiler-event wrapper, and the second
+uses the existing real LLVM-event wrapper. Neither starts a test; neither is
+reported as a runtime pass. The later diagnostic qualification below establishes
+local acceptance separately; platform acceptance remains open.
+
+Frozen [[https://github.com/tao3k/mrr-data/actions/runs/37202100315][CI run 37202100315]] at =56b7057a= has one completed Python failure and
+one Arrow-fuzz success as of =2026-10-04 12:34 UTC=; the other jobs are pending.
+The Python failure is the plain Rust compiler fixture exceeding its existing
+=10s= deadline (=32 passed, 1 failed=). This job did not explicitly prepare a
+Rust toolchain. It now declares the same stable-toolchain action as the other
+Rust qualification jobs, before executing tests. The log does not establish
+whether rustup startup, compilation or runner contention caused the timeout;
+the prerequisite repair needs a new exact-head platform result. All test and
+build limits, compiler optimization and Cargo default concurrency are unchanged.
+Keep the frozen run available while this batch is qualified locally; do not
+replace its pending results with an earlier green head.
+
+** Native-build silence diagnosis and supervised Cargo record separation
+
+The previous timeouts lacked a child-process snapshot, so their exact final
+instruction cannot be reconstructed. A bounded diagnostic rebuild at =f395402c=
+keeps the same source owner, native SDK, optimization, Cargo default concurrency
+and =30s idle / 1200s wall= policy, and adds Cargo =-vv= visibility. At =24.2s=,
+after =8.76s= without output, its owned process tree shows Cargo waiting on the
+=mrr-gerbil= build script and =gxi= running =gerbil-rs-stage-program= at =18.4%=
+CPU. A later sample shows Rust's native code-generation thread executing LLVM
+instruction selection, not merely an inactive main thread waiting for codegen.
+This locates actual work in phases outside the two selected LLVM remark classes;
+it does not prove that every historical timeout was caused by the same phase.
+
+There are two verified visibility gaps in the pinned native builder:
+- =mrr-gerbil-native-build= defaults its observation verbosity to zero; its
+  Gerbil subprocess helper uses =Command::output()=, retaining successful child
+  stdout/stderr until completion and then discarding them.
+- Cargo hides build-script output during normal compilation. [[https://doc.rust-lang.org/cargo/reference/build-scripts.html#outputs-of-the-build-script][Cargo's documented
+  =-vv= mode]] makes that output visible. A Rust LLVM wrapper alone cannot expose
+  Gerbil package/program preparation or every code-generation phase.
+
+The diagnostic also reports =Dirty mrr-gerbil= because an =OUT_DIR= generated
+=finite.scm= changed after the previous interrupted build's timestamp. The next
+successful warm build reports =Fresh mrr-gerbil=, so this evidence does not
+establish a perpetual rebuild loop. Do not skip source invalidation based on this
+observation. The cold diagnostic succeeds in =3m17s=; its warm follow-up succeeds
+in =17.44s=. These are unmatched diagnostic observations, not an A/B speedup.
+
+The framework now captures =compiler-artifact= and =build-finished= records
+separately while forwarding very-verbose native output to the existing progress
+supervisor. Split records are buffered until complete; errors remain visible;
+failed, interrupted or incomplete builds remove the artifact record. Known LLVM
+note diagnostics are grouped by actual received records, with no timer-generated
+output. Cargo can replay cached compiler diagnostics, so diagnostic counts do not
+certify fresh CPU work. The watchdog still reads actual raw bytes before grouping.
+The source CI uses =-vv=, the existing workspace compiler wrapper, the declared
+native observation verbosity, and this supervised build capture. Its test phase
+still launches exact compiled executables without a second Cargo invocation.
+
+The expanded shared-Backend original-source caller passes independently in
+=3.37s=. The subsequent direct original-source qualification passes DataFusion
+=2 tests in 2.01s= and GraphAr =2 tests in 3.04s=, including the expanded reuse,
+budget refusal, retirement and retained-consumer drain scenario. Each process
+keeps the =5s idle / 120s wall= policy and emits real MRR initialization/operation
+transitions. These receipts qualify the unchanged Rust source at =f395402c=;
+they do not replace current-head Linux/macOS CI or establish deployed behavior.
+Python framework qualification passes =40 tests=. The final separated-record
+warm build succeeds in =19.82s= with native inputs =Fresh=; no controlled
+performance claim follows from that elapsed observation.
+
 ** Concurrent compiler and native engine qualification at c54acd27 (historical)
 
 The =c54acd27= integration uses the published MRR dispatch owner =8f389fd0=.
@@ -263,6 +374,82 @@ Do not infer complete P0-P2 delivery from cumulative unit-test counts.
 | Platform evidence | Current local Backend 8 tests; GraphAr 68 tests, 3 explicit ignores; strict lint and isolated facade check | Exact-head Linux/macOS/MSRV/native CI and receipt reconciliation at every exit gate |
 
 ** Milestones, dependency order and exit criteria
+
+*** Strategic review: GraphAr and the complete next delivery
+
+Review baseline: clean local =c6e26f11=, with local original-source acceptance
+=DataFusion 2 / GraphAr 2= and Python =40=. Published =56b7057a= remains a
+separate frozen CI baseline. At this review its Linux original-source and
+maintained GraphAr jobs, MSRV, Arrow fuzz and both S3 jobs pass; Python fails,
+and macOS original-source/GraphAr, general Rust and both DuckGQL jobs remain
+pending. Local fixes and older platform passes do not close current-head gates.
+
+GraphAr is the common durable physical representation for Production graph
+workloads. Its strategic value follows from a graph-aware adjacency/offset layout,
+independently projected property groups, immutable chunk reuse and interoperable
+storage across execution engines. [[https://graphar.apache.org/docs/overview/concepts/][The official format concepts]] describe the
+source/destination adjacency layouts and chunk/property separation;
+[[https://arxiv.org/html/2312.09577v4][the GraphAr paper]] motivates neighbor access and label filtering as distinct
+physical operations. These support the architecture choice, not a performance
+claim about the current MRR implementation or a guarantee that every published
+feature exists in the pinned Rust/C++ SDK.
+
+| Architectural responsibility | Owner | Strategic delivery boundary |
+|------------------------------+-------+-----------------------------|
+| Original source, catalog/generation, semantic identities, final candidate admission | MRR | Engine output always returns through the original admitted query |
+| Graph metadata, vertex/edge properties, adjacency/offset layout | GraphAr adapter | One immutable representation contract; typed descriptors vary by profile |
+| Reservations, queues, cancellation, retained buffers, drain and close | Shared Production Backend | One runtime/admission model for all profiles and physical capabilities |
+| Immutable content, transfer/cache, root binding and publication closure | MRR Data content/snapshot layer | GraphAr metadata and native chunks bind to exact CIDs; the file format is not the authorization authority |
+| Atomic heads, authority versions and recovery history | Optional metadata transaction provider | Storage-independent transaction protocol; SQL stays inside optional implementations |
+| Columnar interchange | Arrow | Explicit schema, buffer lifetime/release and actual copy accounting |
+| Physical scan/join/filter and narrow extension dispatch | DataFusion/DuckDB/DuckGQL/Turso query adapters | Supported operators differ; execution images can be rebuilt from the admitted snapshot |
+
+GraphAr format selection does not supply MVCC, atomic publication, authority
+retirement or crash recovery. Those existing contracts must remain visible.
+The persistence contract serves every graph-using Production profile without
+forcing native GraphAr or a database onto consumers that only need semantic
+types or opaque metadata. No provider owns a second independent Backend.
+
+The main performance risk is paying full-snapshot verification and full fact
+materialization before every selective query. The current selective implementation
+has positioned Parquet reads, offsets and row selection; the canonical combined
+caller still captures its full physical closure. The next optimization must join
+those paths and measure authentication, cold acquisition, materialization and
+query independently. Global required coverage cannot be dropped to make a slice
+benchmark look faster. Reuse verified immutable source ownership first; selective
+cold acquisition requires an explicit integrity/coverage contract before release.
+
+GraphAr durable chunk size, Parquet row group size, Arrow batch byte limit and
+native engine vector capacity are separate parameters. Chunk/property layouts
+need measured workload selection, not a universal row count. Current native VTab
+copy/registry boundaries also prevent an end-to-end zero-copy claim. [[https://arrow.apache.org/docs/format/CDataInterface.html][Arrow's C Data
+ownership contract]] and [[https://duckdb.org/docs/current/clients/rust/result_handling][DuckDB's Rust result-handling contract]] require precise
+release and streaming behavior; iterating batches does not itself bound engine
+RSS or remove a blocking operator's internal materialization.
+
+| Priority / existing milestone | Complete delivery unit | Exit evidence |
+|-------------------------------+------------------------+---------------|
+| P0 / M0 | Reconcile RFC status and capabilities; finish frozen CI, integrate the locally qualified build/source batch and publish one coherent head | Same-head Linux/macOS/MSRV and required feature results; pins and receipt identities agree |
+| P1 / M1 | One original-query publication, cold/warm restore, capture, physical query, final admission and simulated disclosure/recovery caller | Expected rows/nulls/duplicates and source/scope/corruption/refusal cases pass; process-reopen evidence remains distinct from same-process reopen |
+| P1 / M2 | Retained immutable source plus independently admitted consumers; complete mixed-profile lifecycle and drift matrix | Every snapshot/profile/catalog/generation/schema change refuses stale reuse; cleanup precedes drain; native providers preserve reserved recovery |
+| P2 / M3 first | Integrate selective GraphAr access into the same admitted original-query caller | Full-reference and selective outputs agree; bounded bytes/rows/leases and coverage rules hold on uniform/skewed inputs |
+| P2 / M3 final | Matched cold/full, warm/full and warm/selective/reuse measurements, then supported-scope release | CPU and wall, verification/execution/transfer bytes, copies, peak RSS, first/total result and engine spill receipts; same-head release CI |
+
+The cross-profile acceptance must reuse real supported graph schemas with
+distinct profile bindings; differing metadata keys alone prove metadata isolation,
+not an entire second Production graph case. Incoming traversal, broad GQL,
+arbitrary property/n-ary profiles, specialized label encodings and further engines
+are deferred until a concrete Production query establishes need and its acceptance
+contract. Paper algorithms are research candidates, not implicitly implemented
+features. Prioritize graph correctness/lifetime and then measured scan/reuse gains
+ahead of expanding provider count.
+
+Keep one ledger and publish complete milestone batches. Native owner progress
+streaming, Python toolchain setup, exact-source platform acceptance and the Linux
+DuckGQL cold-build deadline are the present engineering gates. Simulated Host
+authorization remains sufficient; live deployment credentials, a universal SQL
+compiler, an independent graph runtime per provider or relaxed timeouts are not
+added to this plan.
 
 *** M0: one delivery baseline and one current status
 
@@ -1006,6 +1193,79 @@ prepare; DataFusion observes the first nonempty Arrow batch from execution
 start. Native buffering can precede those observations. These boundaries do
 not qualify operator-only first-result latency, spill peaks or cache effects.
 Original Healthcare source qualification remains a separate native frontend
-gate. This receipt and the current root, fuzz and source frontend use MRR pin
-=d5beb403=. Linux original-source qualification passes at =707f4353=;
-macOS Source and completed platform acceptance remain open as recorded above.
+gate. This receipt uses MRR pin =d5beb403=; the current root, fuzz and optional
+source frontend use =023a6dbd=. Linux original-source qualification passes at
+=707f4353= for its prior pin. Current-pin native acceptance remains open.
+
+* Consolidated M1-M3 integration: complete Dataset selective source
+
+The integration preserves remote =707f4353= and advances root/fuzz together
+to published MRR PR #9 commit =023a6dbdaa7d9d88ad129e22cb3abcd12231bc3b=.
+This is the native child-output forwarding fix on top of =d5beb403=.
+The Python prerequisite is
+Rust 1.95.0 with an explicit compiler version check. Original-source CI now
+selects =source-handoff,backend,selective-graphar= together for GraphAr;
+plain selective tests alone do not qualify the original MRR query.
+
+** Implemented correctness and ownership
+
+- Two simulated profiles execute the same original Healthcare source and catalogs
+  with distinct generation/revision/snapshot identities on one Backend. Both
+  directions reject foreign captures and consumer handoffs; retiring Healthcare
+  leaves Research disclosure active. Actual retained source/result consumers
+  exhaust the common byte budget; over-budget work is rejected before its driver
+  while authority retirement/recovery still progresses. Complete cache restoration, retained
+  consumers, shutdown drain and reopened metadata are checked in that caller.
+  Reopening is still in-process metadata reuse, not a process-crash claim.
+  Original-source queue cancellation, deadline and abandonment composition
+  remains an M2 gate; generic Backend lifecycle tests alone do not close it.
+- =CapturedCombinedGraphArSelective= authenticates the complete Dataset and each
+  declared member. It retains immutable Arrow properties and ordered relation
+  descriptors/indexes, and checks complete scope before range reads. It does not
+  relax =GraphDatasetBinding= or manufacture a single-relation query binding.
+- Cold preparation verifies all relation inventory files and performs full
+  contextual fact scans before discarding full facts. Aggregate vertex/edge
+  budgets still apply. Only subsequent reads are selective; full initial I/O,
+  native scratch and temporary copies remain charged to preparation.
+- The original MRR dispatch/final admission/typed transport checks independently
+  expected null and duplicate rows for full-reference and outgoing two-hop reads.
+  The caller declares its selected sources; this is not a generalized GQL planner.
+
+** Evidence and remaining qualification
+
+On the pre-integration =8f389fd0= dependency baseline, the GraphAr original-source
+suite passed 4/4 in 3.95s and the five-crate strict all-target test-profile Clippy
+composition passed in 9.66s. The unchanged-config initial link attempt failed
+with an Apple linker Bus error; a separately recorded retry succeeded. Neither
+that failed attempt nor pre-integration binaries qualify the new dependency pin.
+The published =023a6db= composition is rebuilt and requalified separately.
+Verbose mode now forwards actual child events before process exit. Three tests
+of the extracted actual process function passed, including a six-second child
+under the five-second idle test supervisor. This is function-level evidence;
+it does not qualify the complete native dependency build.
+
+The locally patched complete build emitted real Scheme compile events, then
+failed the unchanged 30-second idle build gate during package compilation.
+The native archive buffering defect is fixed; later native silence remains
+open. The published-pin rebuild completed package-build in 94,693ms and
+program-stage in 20,524ms, then failed the same idle gate during module C
+generation for =gerbil-parser/languages/gql/iso-39075-2024/grammar=.
+An owned-process sample before refusal identified the actual =gsc= child.
+The upstream native-build helper still buffers module subprocess output with
+=Command.output()=. A standalone invocation of the exact generated grammar
+source with Gambit =-verbose= also failed the unchanged 30-second idle gate.
+Consequently live forwarding alone is not evidence of sufficient compiler
+progress, and verbosity alone is not a demonstrated repair.
+CI uses =GERBIL_BUILD_VERBOSE=9= so actual module start/completion events
+are observable. No synthetic heartbeat or relaxed timeout is used.
+
+Small-fixture reads expose an actual tradeoff: the five-edge downstream reference
+read 15,122 bytes; two selected neighborhoods read 5,070 + 10,140 bytes. Footer and
+boundary overhead can outweigh reduced edge materialization. This closes a
+correctness slice, not the M3 speedup gate. Uniform/skewed original-query process
+CPU/wall/RSS and cold/warm/reuse comparisons remain explicit measurement work.
+
+Frozen =56b7057a= Linux DuckGQL CI passed. Other canceled platform checks are
+unqualified. The distribution aggregator failed because its required test job
+was canceled, rather than proving a distribution semantic failure. Current-head
+platform CI remains a release gate after integration and local qualification.

@@ -83,6 +83,8 @@ pub enum GraphArEntityPropertyError {
     Integrity,
     Inventory(GraphArInventoryError),
     Capture(GraphArCaptureError),
+    #[cfg(feature = "selective-graphar")]
+    Selective(crate::GraphArSelectiveError),
     Native(graphar_rs::Error),
     Arrow(arrow_schema::ArrowError),
     Io(std::io::Error),
@@ -132,5 +134,22 @@ impl From<mrr_data_backend::ResourceStop> for GraphArEntityPropertyError {
 impl From<mrr_data_content::GraphTransferError> for GraphArEntityPropertyError {
     fn from(error: mrr_data_content::GraphTransferError) -> Self {
         Self::Transfer(error)
+    }
+}
+
+#[cfg(feature = "selective-graphar")]
+impl From<crate::GraphArSelectiveError> for GraphArEntityPropertyError {
+    fn from(error: crate::GraphArSelectiveError) -> Self {
+        #[cfg(feature = "backend")]
+        match error {
+            crate::GraphArSelectiveError::Cancelled => {
+                return Self::Stop(mrr_data_backend::ResourceStop::Cancelled);
+            }
+            crate::GraphArSelectiveError::Deadline => {
+                return Self::Stop(mrr_data_backend::ResourceStop::Deadline);
+            }
+            _ => {}
+        }
+        Self::Selective(error)
     }
 }

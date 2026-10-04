@@ -98,3 +98,16 @@ pub use combined::{
 
 #[cfg(all(feature = "combined-graph", feature = "backend"))]
 pub use combined::{CombinedGraphArRestoreRequest, restore_combined_graph_content};
+
+#[cfg(all(feature = "combined-graph", feature = "selective-graphar"))]
+pub use combined::{
+    CapturedCombinedGraphArSelective, CombinedGraphArSelectiveMetrics,
+    capture_combined_graphar_selective,
+};
+
+#[cfg(all(
+    feature = "combined-graph",
+    feature = "backend",
+    feature = "selective-graphar"
+))]
+pub use combined::prepare_combined_graphar_selective;

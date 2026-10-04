@@ -122,11 +122,17 @@ async fn original_source_handoff_native_combined_cold_and_warm_reaches_mrr_admis
     }
 }
 fn source_fixture() -> properties::Fixture {
+    source_fixture_with_semantic(None)
+}
+fn source_fixture_with_semantic(semantic: Option<mrr::SemanticSnapshot>) -> properties::Fixture {
     let compiled = compile();
     let [path] = compiled.query().graph().paths() else {
         panic!("one original path")
     };
     let mut f = properties::fixture();
+    if let Some(semantic) = semantic {
+        f.semantic = semantic;
+    }
     // The caller's catalogs use the type identities emitted by MRR's frontend.
     // MRR Data does not infer labels or implement another identity convention.
     for (table, node) in f
