@@ -11,7 +11,9 @@ def main():
         arguments.extend(
             [
                 "-C",
-                "llvm-args=-print-before=instcombine,finalize-isel",
+                "llvm-args=-print-pass-numbers",
+                "-C",
+                "llvm-args=-debug-pass=Executions",
             ]
         )
     os.execvp(compiler, [compiler, *arguments])
