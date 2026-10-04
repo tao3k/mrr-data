@@ -29,6 +29,7 @@ backend-graph-publish = ["backend", "mrr-data-backend/graph-publish"]
 backend-turso = ["backend", "mrr-data-backend/turso"]
 backend-turso-query = ["backend-turso", "backend-graphar", "dep:mrr-data-turso-query", "mrr-data-turso-query/backend-worker"]
 backend-duckdb = ["backend", "arrow", "mrr-data-backend/duckdb"]
+backend-duckgql-query = ["backend", "backend-graphar", "dep:mrr-data-duckgql-query", "mrr-data-duckgql-query/backend-worker"]
 content = ["content-identity", "dep:mrr-data-content"]
 transfer = ["snapshot", "mrr-data-content/transfer", "dep:mrr-data-cache", "mrr-data-cache/blocking"]
 snapshot = ["content", "mrr-data-content/snapshot"]
@@ -53,6 +54,7 @@ mrr-data-security = { workspace = true, optional = true }
 mrr-data-datafusion = { workspace = true, optional = true }
 mrr-data-graphar = { workspace = true, optional = true }
 mrr-data-turso-query = { workspace = true, optional = true }
+mrr-data-duckgql-query = { workspace = true, optional = true }
 mrr-data-pseudonymization = { path = "../mrr-data-pseudonymization", version = "0.1.0", optional = true }
 mrr-data-profile.workspace = true
 

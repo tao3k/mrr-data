@@ -8,7 +8,9 @@ Partially implemented on [[https://github.com/tao3k/mrr-data/pull/12][MRR Data P
 metadata providers. The provider-neutral =backend-arrow-query= protocol and
 DuckDB Host-prepared statement adapter support materialized and fallible native
 streaming output. Native streaming does not imply bounded engine RSS. The
-DuckDB adapter does not load DuckGQL.
+Host-prepared DuckDB adapter does not load DuckGQL. The separate optional
+=mrr-data-duckgql-query= port loads a Host-prepared artifact and invokes the
+registered typed program for the admitted binary-Entity single-hop slice.
 
 The optional =mrr-data-turso-query= crate and =backend-turso-query= facade
 feature compile one already bound, outgoing binary-Entity query with distinct
@@ -122,8 +124,9 @@ graph and lowers its own logical plan to DuckDB structures and table functions.
 Its current source does not document an entry point for MRR's
 =CatalogBoundQuery= or =BoundDataQuery=. Sending the original source text to
 DuckGQL would invoke a second parser and binder; it would not preserve MRR as
-the sole query-admission authority. The required bridge is therefore an
-*implementation gate*, not a capability of PR #12 or the released extension.
+the sole query-admission authority. The bounded =mrr-data-duckgql-query= bridge now translates the checked
+binary-Entity single-hop slice directly into the registered typed table
+function. General typed-query shapes remain an implementation gate.
 
 At upstream commit =2e2a5f28db204a8efdcf9e763053986fb0cd2461=,
 =GqlParserExtension= registers =GqlParse= and =GqlPlan= with DuckDB's parser
@@ -131,17 +134,17 @@ extension callback manager; =GqlPlan= binds the parsed statement before
 calling =GqlLower=. The exported extension entrypoint only loads the extension.
 These C++ internals are a useful upstream change seam, not a versioned external
 typed-plan API. The documented build targets DuckDB =v1.5.5=; PR #12 pins a
-different Rust DuckDB SDK version, so loading and ABI compatibility remain
-unverified independently of the MRR query semantics.
+different Rust DuckDB SDK version. The separate source build below qualifies
+the repository SDK rather than changing its pin.
 
 The 2026-10-04 native audit qualified the registered
 =gql_match_relational= table-function boundary on a signed Community Extensions
 binary: DuckDB =1.5.5=, DuckGQL =0.2.0=, macOS ARM64. Its 27 typed arguments
 carry a logical program whose version is a Schema field. This interface bypasses
 GQL parsing for the read. The checked-in
-[[file:../../tools/duckgql-interface/qualify.py][qualification runner]],
-[[file:../../tools/duckgql-interface/schema.json][Schema]] and
-[[file:../../tools/duckgql-interface/receipts/macos-native.jsonl][artifact-hashed receipt]] qualify three ordered rows, duplicate edges,
+[[file:../../python/src/mrr_data_testing/duckgql/qualify.py][qualification runner]],
+[[file:../../crates/mrr-data-duckgql-query/schema.json][Schema]] and
+[[file:../../python/src/mrr_data_testing/duckgql/receipts/macos-native.jsonl][artifact-hashed receipt]] qualify three ordered rows, duplicate edges,
 canonical physical labels and refusal of an unknown program version. A fixed
 GQL text query is an independent registration control, not an MRR execution
 fallback. The Community registry source reference inspected for this package
@@ -156,14 +159,15 @@ parameters (version, labels, projection structs, output aliases and result
 ordering) through JSON-to-native List/Struct casts. It preserves the same three
 rows and refuses unsupported version, malformed JSON and wrong element types
 without partial output. Quoted/Unicode/injection-shaped aliases remain data.
-This is a CLI transport receipt; a Rust adapter still needs native Statement
-bindings and the checked MRR mapping. It does not qualify Rust execution, MRR result
-admission, shared lifecycle, native memory bounds or the repository's current
-SDK. Installing the plugin for DuckDB =1.5.6= on macOS ARM64 returned HTTP 404
+This CLI transport receipt is independent of the Rust adapter. The Rust
+implementation binds five scalars through =Statement=, reconstructs native
+List/Struct inputs with fixed casts and decodes canonical MRR identities; it
+does not generate CLI EXECUTE text. Installing the plugin for DuckDB =1.5.6= on macOS ARM64 returned HTTP 404
 from the Community repository during this audit. =PINNED= graph registration
 also refused an ordinary DuckDB source because that policy requires a DuckLake
-=SNAPSHOT_VERSION=. A future GraphAr-derived image must retain its authenticated
-immutable binding independently of the plugin's =LIVE= registration policy.
+=SNAPSHOT_VERSION=. The implemented private GraphAr-derived image therefore retains its
+authenticated immutable binding independently of the plugin's =LIVE=
+registration policy.
 
 The bridge should translate only a declared MRR typed-query slice into a
 versioned DuckGQL external-plan interface that bypasses DuckGQL parsing and
@@ -181,11 +185,30 @@ suggest a registration seam. MRR Data must register only tables derived from
 a Host-authenticated =BoundDataQuery= source, map canonical Entity/Fact IDs to
 source-key properties, and verify graph schema and snapshot policy. DuckGQL's
 dense element IDs, adjacency offsets and CSR state are snapshot-local physical
-identities, not MRR identities. The extension currently targets a different
-DuckDB version from PR #12's pinned Rust SDK, so a compatible binary, platform,
-loading policy and end-to-end query fixture are separate release gates. A
+identities, not MRR identities. The Schema-pinned source build targets the
+repository's DuckDB =1.5.6= and explicitly selects unsigned loading for its
+isolated artifact. Signed Community availability, other platforms and
+production loading policy remain separate release gates. A
 compatible =LOAD duckgql= alone does not prove the typed bridge or result
 admission.
+
+
+** Current SDK and artifact lifecycle
+
+[[file:../../python/README.org][The Python qualification project]] owns the pinned source builder and native
+probe suites. [[file:../../python/src/mrr_data_testing/duckgql/receipts/macos-sdk.jsonl][The SDK receipt]] qualifies all eight independent probe stages on
+macOS ARM64 with DuckDB =1.5.6= and an unsigned locally built DuckGQL artifact.
+Source revisions, ANTLR archive digest and program/SDK versions live in the
+Rust adapter's Schema. This is distinct from signed Community distribution.
+
+The Host captures and hashes the artifact once on an accounted setup worker;
+clones reuse one private immutable load path. DuckDB's pinned loader retains
+=dlopen= library mappings for the process lifetime and does not expose unload
+through connection close. Reusing the prepared artifact prevents creating a new
+mapped module image for every request. Query cursors, derived tables and private
+connections close before result publication. Resident code and artifact setup
+have a separate Host lifetime/budget; neither connection teardown nor shared
+request accounting is a measured process-RSS ceiling.
 
 * SQL path for Turso and later engines
 

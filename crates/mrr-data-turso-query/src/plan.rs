@@ -2,9 +2,7 @@
 
 #[cfg(feature = "turso-graphar")]
 use meta_relational_reasoning::QueryResultValue;
-use meta_relational_reasoning::{
-    Binding, Direction, EntityId, Expression, RelationId, ResultMode, SetQuantifier,
-};
+use meta_relational_reasoning::{Binding, EntityId, RelationId};
 #[cfg(feature = "turso-graphar")]
 use mrr_data_core::PhysicalQueryOutput;
 use mrr_data_core::{BoundDataQuery, DataEngineProfile};
@@ -94,79 +92,28 @@ impl TursoSingleHopSql {
         query: &BoundDataQuery,
         projection: &BinaryEntityProjection,
     ) -> Result<Self, SqlQueryError> {
-        if query.engine() != &turso_graphar_engine_profile()? {
-            return Err(SqlQueryError::EngineProfileMismatch);
-        }
-        if query.graph_projection_manifest().is_none()
-            || projection.catalog_digest() != Some(query.query().catalog_digest())
-        {
-            return Err(SqlQueryError::SourceMismatch);
-        }
-        let ir = query.query().query();
-        if !ir.filters().is_empty()
-            || !ir.aggregations().is_empty()
-            || !ir.grouping().is_empty()
-            || !ir.ordering().is_empty()
-            || ir.offset().is_some()
-            || ir.limit().is_some()
-            || ir.result().mode() != ResultMode::Return(SetQuantifier::All)
-        {
-            return Err(SqlQueryError::UnsupportedShape(
-                "only unordered RETURN ALL without filters or paging",
-            ));
-        }
-        let [path] = ir.graph().paths() else {
-            return Err(SqlQueryError::UnsupportedShape("exactly one path"));
-        };
-        let [segment] = path.segments() else {
-            return Err(SqlQueryError::UnsupportedShape("exactly one edge"));
-        };
-        let edge = segment.relation();
-        if edge.binding().is_some() {
-            return Err(SqlQueryError::UnsupportedShape(
-                "edge bindings are unsupported",
-            ));
-        }
-        if edge.direction() != Direction::Outgoing
-            || edge.min_hops() != 1
-            || edge.max_hops() != Some(1)
-            || edge.types() != [projection.relation_id()]
-        {
-            return Err(SqlQueryError::UnsupportedShape(
-                "one outgoing edge of the projected relation",
-            ));
-        }
-        let [source_type] = path.start().types() else {
-            return Err(SqlQueryError::UnsupportedShape("one source Entity type"));
-        };
-        let [target_type] = segment.node().types() else {
-            return Err(SqlQueryError::UnsupportedShape("one target Entity type"));
-        };
-        if path.start().binding() == segment.node().binding() {
-            return Err(SqlQueryError::UnsupportedShape(
-                "distinct endpoint bindings required",
-            ));
-        }
-        let columns = ir
-            .projections()
+        let hop = mrr_data_graphar::BinaryEntityHop::admit(
+            query,
+            projection,
+            &turso_graphar_engine_profile()?,
+        )
+        .map_err(|error| match error {
+            mrr_data_graphar::EntityHopError::EngineProfileMismatch => {
+                SqlQueryError::EngineProfileMismatch
+            }
+            mrr_data_graphar::EntityHopError::SourceMismatch => SqlQueryError::SourceMismatch,
+            mrr_data_graphar::EntityHopError::UnsupportedShape(reason) => {
+                SqlQueryError::UnsupportedShape(reason)
+            }
+        })?;
+        let columns: Vec<_> = hop
+            .columns()
             .iter()
-            .map(|p| match p.expression() {
-                Expression::Binding(binding) if binding == path.start().binding() => {
-                    Ok(EndpointColumn::Source(*source_type))
-                }
-                Expression::Binding(binding) if binding == segment.node().binding() => {
-                    Ok(EndpointColumn::Target(*target_type))
-                }
-                _ => Err(SqlQueryError::UnsupportedShape(
-                    "direct endpoint projections only",
-                )),
+            .map(|column| match column {
+                mrr_data_graphar::EntityEndpoint::Source(id) => EndpointColumn::Source(*id),
+                mrr_data_graphar::EntityEndpoint::Target(id) => EndpointColumn::Target(*id),
             })
-            .collect::<Result<Vec<_>, _>>()?;
-        if columns.is_empty() {
-            return Err(SqlQueryError::UnsupportedShape(
-                "at least one endpoint projection",
-            ));
-        }
+            .collect();
         // Every emitted identifier is a compiler constant. No GQL binding,
         // catalog name or runtime value enters the SQL text.
         let statement = format!(
@@ -179,7 +126,7 @@ impl TursoSingleHopSql {
         );
         Ok(Self {
             statement,
-            outputs: ir.projections().iter().map(|p| p.alias().clone()).collect(),
+            outputs: hop.outputs().to_vec(),
             columns,
             relation: projection.relation_id(),
             relation_binding: projection.relation_id().to_string(),

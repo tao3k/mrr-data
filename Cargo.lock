@@ -3640,6 +3640,7 @@ dependencies = [
  "mrr-data-content",
  "mrr-data-core",
  "mrr-data-datafusion",
+ "mrr-data-duckgql-query",
  "mrr-data-graphar",
  "mrr-data-profile",
  "mrr-data-pseudonymization",
@@ -3780,6 +3781,26 @@ dependencies = [
  "mrr-data-content",
  "mrr-data-core",
  "tokio",
+]
+
+[[package]]
+name = "mrr-data-duckgql-query"
+version = "0.1.0"
+dependencies = [
+ "duckdb",
+ "meta-relational-reasoning",
+ "mrr-data-arrow",
+ "mrr-data-backend",
+ "mrr-data-content",
+ "mrr-data-core",
+ "mrr-data-datafusion",
+ "mrr-data-graphar",
+ "mrr-data-turso-query",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "tokio",
+ "turso",
 ]
 
 [[package]]

@@ -74,7 +74,10 @@ impl ResourceControl {
             _ => Err(ResourceStop::Deadline),
         }
     }
-    pub(crate) async fn stopped(&self) -> ResourceStop {
+    /// Wait for the sticky explicit stop or Host-clock deadline on the current
+    /// runtime. Drivers may use this to signal native interrupt; the wait does
+    /// not release admission or establish that native cleanup has completed.
+    pub async fn stopped(&self) -> ResourceStop {
         loop {
             let notified = self.0.changed.notified();
             tokio::pin!(notified);

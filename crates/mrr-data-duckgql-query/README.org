@@ -1,0 +1,71 @@
+#+title: Typed DuckGQL physical query adapter
+
+* Contract
+
+MRR supplies an already catalog/snapshot-bound query. The adapter admits the
+same binary-Entity single-hop shape as Turso through =BinaryEntityHop=, then
+passes a fixed typed-program invocation to =gql_match_relational=. It has no GQL
+read frontend and no DuckDB graph-to-SQL compiler. Fixed CREATE GRAPH setup is
+administration of a private derived image. Unsupported shapes are refused.
+
+The [[file:schema.json][Schema]] owns program/SDK/extension versions and source pins.
+The default feature has no native engine. =duckgql-graphar= enables execution;
+=backend-worker= uses shared admission and retained output. =query-parity=
+enables native cross-engine tests. The facade is =backend-duckgql-query=.
+
+* Artifact and source ownership
+
+The Host supplies a path, SHA-256 digest and bounded artifact size. No query
+downloads/installs a plugin. =DuckGqlArtifact::capture= authenticates and copies bytes once on an accounted
+Host setup worker. Its clones share one private immutable load path. Queries
+check loaded engine/extension versions and close their private connection
+before returning output. DuckDB keeps the loaded library mapping for the
+process lifetime; reuse one prepared artifact owner rather than creating a new
+load path for every request. Connection cleanup does not unload extension code,
+and the Host accounts for its resident module separately. Unsigned loading is false unless explicitly
+selected by the Host. CI locally builds audited source and explicitly selects
+unsigned loading for that isolated artifact.
+
+Captured facts are reauthorized against the exact snapshot/catalog/generation
+and inventory scope. Each Fact becomes a distinct edge, including duplicate
+endpoint pairs. A private ordinal preserves canonical Fact ordering independently
+of identity text collation. Identity properties remain native bound values;
+result columns decode to canonical typed MRR node values. MRR still owns final
+result admission.
+
+* Lifecycle and bounds
+
+=execute_duckgql_graphar_controlled_on_backend= uses the common worker pool and
+returns a =ResourceHandle<PhysicalQueryOutput>=. Its Host reservation includes
+input/conversion buffers, native query state, output and conversion scratch.
+The shared module and its preparation have a separate Host lifetime/budget. Consume the handle through =try_transform= into an admitted candidate;
+retained clones participate in Backend drain. An owned clone of large buffers
+requires separate Host accounting.
+
+The Host runtime waits on =ResourceControl::stopped= and signals DuckDB's native
+interrupt. Worker admission remains held until native return and connection
+close. This does not guarantee a hard execution bound for plugin code that does
+not check DuckDB's interrupt flag. Row/cell/input-byte bounds and DuckDB
+=memory_limit= are not a measured RSS ceiling. Plain standalone execution leaves
+worker admission/cancellation to the Host.
+
+* Native qualification
+
+#+begin_src sh
+uv run --locked --project python mrr-data-test duckgql-build --work-dir /absolute/build-directory
+# Set MRR_DUCKGQL_EXTENSION and MRR_DUCKGQL_SHA256 from artifact.json.
+# Locally built unsigned artifacts additionally require MRR_DUCKGQL_ALLOW_UNSIGNED=1.
+cargo test -p mrr-data-duckgql-query --features backend-worker,query-parity -- --nocapture
+cargo test -p mrr-data-duckgql-query --features backend-worker,query-parity \
+  same_source_scale_receipts -- --ignored --nocapture
+#+end_src
+
+Native tests fail on a missing artifact. The comparison uses one captured source
+at 2, 128 and 1024 edges, independent expected rows and final admission for each
+engine. Timings cover whole invocations: DuckGQL includes private connection, image
+construction, registration, execution and teardown; shared artifact preparation
+is recorded separately and reused across all invocations;
+Turso includes image load/query/rollback; DataFusion includes Arrow conversion
+and execution. Fixture creation/capture is recorded separately. These are bounded
+engineering receipts, not standalone operator latency or representative production
+performance. Native RSS and general property/path shapes require separate evidence.

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DuckGQL typed program interface",
+  "type": "object",
+  "properties": {
+    "program_version": {
+      "type": "integer",
+      "const": 2
+    },
+    "argument_count": {
+      "type": "integer",
+      "const": 27
+    },
+    "rust_engine_version": {
+      "type": "string",
+      "const": "v1.5.6"
+    },
+    "extension_version": {
+      "type": "string",
+      "const": "0.2.0"
+    },
+    "extension_revision": {
+      "type": "string",
+      "const": "44e77c6835f9e6758bb3e3bccb1a642981dbf1e7"
+    },
+    "duckdb_source_revision": {
+      "type": "string",
+      "const": "069cc9f9b5be802405797faecc284961b07c70ef"
+    },
+    "antlr_version": {
+      "type": "string",
+      "const": "4.13.2"
+    },
+    "antlr_source_sha256": {
+      "type": "string",
+      "const": "0ed13668906e86dbc0dcddf30fdee68c10203dea4e83852b4edb810821bee3c4"
+    }
+  },
+  "required": [
+    "program_version",
+    "argument_count"
+  ],
+  "additionalProperties": false
+}

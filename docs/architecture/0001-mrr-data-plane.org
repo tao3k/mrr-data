@@ -893,7 +893,7 @@ cover access key/secret, CA trust, hostname verification, namespace roots,
 conditional creation, idempotent publication, corrupt-object non-overwrite,
 bounded reads and genuine Arrow snapshot cold restore through Kache.
 
-The reproducible =tools/s3-conformance/run.py= isolates the server build and
+The reproducible =python/src/mrr_data_testing/s3/run.py= isolates the server build and
 records its binary hash; see [[file:../../evidence/s3-conformance-receipt.json][the conformance receipt]].
 The test server uses Rust 1.96.0; MRR Data stays at Rust 1.95.0. No default
 feature or production dependency changed. A dedicated Ubuntu/macOS CI job runs

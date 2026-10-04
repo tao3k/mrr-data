@@ -1,0 +1,54 @@
+#+title: MRR Data Python qualification project
+
+* Project
+
+This installable Python project owns repository checks, upstream conformance
+fixtures and native qualification. =pyproject.toml= declares the package, CLI,
+optional POO Flow dependencies and development tools. =uv.lock= fixes their
+resolution. Runtime integrations remain under =integrations/poo_flow=.
+
+All commands below run from the MRR Data checkout root:
+
+#+begin_src sh
+uv sync --locked --project python
+uv run --locked --project python pytest python/tests -q
+uv run --locked --project python ruff check python
+uv run --locked --project python ruff format --check python
+uv run --locked --project python mrr-data-test run-process --phase test -- cargo test -p mrr-data-core -- --nocapture
+uv run --locked --project python mrr-data-test check-docs
+uv run --locked --project python mrr-data-test check-features
+uv run --locked --project python mrr-data-test check-spec-fixtures --spec-root /path/to/spec
+#+end_src
+
+The package resolves the checkout independently of the current directory.
+An installed wheel outside the checkout requires =MRR_DATA_ROOT=.
+
+* Native and upstream suites
+
+- [[file:src/mrr_data_testing/duckgql/README.org][DuckGQL]]: =duckgql-build= and =duckgql-qualify=.
+- [[file:src/mrr_data_testing/s3/README.org][S3 conformance]]: =s3-conformance=.
+- [[file:src/mrr_data_testing/kache/README.org][Kache upstream qualification]]: =kache-probe=.
+
+SQL, patches and provenance receipts live beside their owning suite and are
+packaged with it. Tests live in =tests=, outside the production package.
+Native suites require explicit provisioned SDKs and artifacts; ordinary Python
+unit tests do not download or compile them. Enable =--extra poo-flow= when
+running the S3 suite's POO Flow acceptance.
+
+* Progress and deadlines
+
+[[file:src/mrr_data_testing/process.py][The subprocess supervisor]] separates real-output inactivity from the wall
+deadline. Test policy refuses five seconds without output and has a 120-second
+wall limit. Build policy allows 30 seconds without output and has a 20-minute
+wall limit per phase. Control commands have a two-minute wall limit. Output
+does not extend a wall deadline. Timeout kills the process group and produces
+a refusal; it does not emit a successful receipt or artificial progress.
+
+The DuckGQL builder and its CI native test/comparison phases use this
+supervisor. Compilation runs separately from timed test execution. The migrated S3 and Kache suites
+retain their existing process contracts pending dedicated lifecycle migration;
+their retained bounds are visible in their modules.
+
+CI keeps native DuckGQL separate from GraphAr, with the existing 75-minute job
+ceiling. Python framework tests have their own five-minute job. Increasing a
+job ceiling requires measured phase evidence and a separate decision.

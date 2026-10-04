@@ -1,0 +1,8 @@
+{"stage": "artifact-identity", "duckdb_version": "v1.5.6", "extension_version": "0.2.0", "duckdb_sha256": "7d15b2aaf6be05212ada5f99fe79e0b83e63b7ed91e7e422c0b925278e9e0c39", "extension_sha256": "c73ac0bf2b61738ec07cd1bf5c9b054825deec30d195ef512167ea06d5ffda68", "fixture_sha256": "22c5e956305867f31b0081396c7b91dee6cf96edb5f08adbe5f2d82b3f21e53f", "carrier_sha256": "a378415430ca004dea1cababe8e8c1b24c26e3259f01dd3c9671b8234b3a7258", "schema_sha256": "1a2035ddfe47dbbc22b88010ea9497a3150639b185d63ddd279866aa95f772c0"}
+{"stage": "native-program-probe", "program_version": 2, "rows": 3, "elapsed_ms": 2023.232}
+{"stage": "version-refusal", "passed": true}
+{"stage": "labelled-program-parity", "passed": true, "typed_rows": 3, "control_rows": 3}
+{"stage": "prepared-scalar-transport", "passed": true, "rows": 3, "scalar_parameters": 5}
+{"stage": "prepared-carrier-refusal", "case": "version", "passed": true}
+{"stage": "prepared-carrier-refusal", "case": "malformed-json", "passed": true}
+{"stage": "prepared-carrier-refusal", "case": "wrong-type", "passed": true}

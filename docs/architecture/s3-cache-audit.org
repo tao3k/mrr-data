@@ -68,7 +68,7 @@ cargo test -p mrr-data-content --all-features --locked
 cargo test -p mrr-data-cache --all-features --locked
 cargo test --workspace --features mrr-data/car,mrr-data/filesystem,mrr-data/cache,mrr-data/s3 --locked
 cargo clippy --workspace --features mrr-data/car,mrr-data/filesystem,mrr-data/cache,mrr-data/s3 --all-targets --locked -- -D warnings
-python3 tools/check-features.py
+uv run --locked --project python mrr-data-test check-features
 #+end_src
 
 The S3 suite requires permission to bind an ephemeral localhost socket; it uses

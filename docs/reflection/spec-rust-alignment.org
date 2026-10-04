@@ -15,7 +15,7 @@ LeanPoo Allow would not authorize a later read or provider release.
 
 * Executable evidence and limit
 
-[[file:../../tools/check-spec-fixtures.py][The pin gate]] compares five Rust
+[[file:../../python/src/mrr_data_testing/checks/spec_fixtures.py][The pin gate]] compares five Rust
 fixtures with the exact Cargo-pinned SPEC Git tree. SPEC's
 [[https://github.com/tao3k/cedar-poo-spec/pull/5][Table Batch Wire V1]]
 adds checked ordered response cases replayed by its Rust bridge. MRR Data

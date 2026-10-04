@@ -38,6 +38,8 @@ pub use mrr_data_cache as cache;
 #[cfg(feature = "content")]
 pub use mrr_data_content as content;
 
+#[cfg(feature = "backend-duckgql-query")]
+pub use mrr_data_duckgql_query as duckgql_query;
 /// Property Graph projection contracts.
 #[cfg(feature = "graphar")]
 pub use mrr_data_graphar as graphar;

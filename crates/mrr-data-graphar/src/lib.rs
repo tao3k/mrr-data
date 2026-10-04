@@ -16,7 +16,11 @@ pub use backend::{
 #[cfg(feature = "backend")]
 pub use backend::{GraphArSnapshotRequest, prepare_graphar_snapshot};
 mod projection;
+#[cfg(feature = "file-inventory")]
+mod query_shape;
 mod query_source;
+#[cfg(feature = "file-inventory")]
+pub use query_shape::{BinaryEntityHop, EntityEndpoint, EntityHopError};
 #[cfg(feature = "native-graphar")]
 mod reader;
 #[cfg(feature = "selective-graphar")]

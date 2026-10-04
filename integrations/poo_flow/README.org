@@ -110,7 +110,7 @@ Install the test runtime dependencies in an isolated Python environment:
 
 #+begin_src sh
 python3 -m pip install 'anyio==4.14.1' 'cffi==2.0.0' 'pyturso==0.6.1'
-python3 tools/s3-conformance/run.py --poo-flow --receipt /tmp/poo-mrr-receipt.json
+uv run --locked --project python mrr-data-test s3-conformance --poo-flow --receipt /tmp/poo-mrr-receipt.json
 #+end_src
 
 The runner fetches clean POO Flow revision

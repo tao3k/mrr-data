@@ -231,8 +231,8 @@ cargo test -p mrr-data-backend --no-default-features --locked
 cargo test -p mrr-data-backend --features turso --locked -- --nocapture
 cargo test -p mrr-data-backend --features duckdb --locked -- --nocapture
 just test-backend
-python3 tools/check-features.py
-python3 tools/check-spec-fixtures.py --spec-root /path/to/pinned/cedar
+uv run --locked --project python mrr-data-test check-features
+uv run --locked --project python mrr-data-test check-spec-fixtures --spec-root /path/to/pinned/cedar
 #+end_src
 
 * Reproducible metadata performance and lifecycle measurement
