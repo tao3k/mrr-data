@@ -342,6 +342,15 @@ Consumers release old leases to permit further fetches, and retain a lease for
 any independently cloned Arrow arrays/batches. Public Arrow buffer clones can
 escape Rust-level accounting; the Host ownership contract is explicit.
 
+=emit_next= accepts a source returning =Result<Option<RecordBatch>>=: a delivered
+batch returns =true=; explicit source EOF returns =false=; late errors remain
+sticky. It reserves bytes before fetching, including the EOF probe. At exactly
+the batch/row limit, EOF is accepted; one bounded extra fetch is needed to
+distinguish EOF from excess output, which is refused before delivery. Consumers
+must release prior leases before waiting for another fetch if those leases fill
+the retained byte budget. Wrapping an iterator that hides errors in =None= cannot
+satisfy the fallible source contract. Empty sources release their reservation.
+
 Output refusal is sticky. Driver errors, early termination and worker panic never
 become successful EOF. =summary= exists only after the producer's successful
 terminal report; partial batches grant no complete candidate, authorization or

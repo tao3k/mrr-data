@@ -210,21 +210,47 @@ impl ArrowQueryEmitter {
         if let Some(error) = self.failure {
             return Err(error);
         }
-        let result = self.emit_inner(fetch);
+        // Known-size producers refuse before fetching an extra batch.
+        if self.summary.batches >= self.limits.max_batches {
+            self.failure = Some(ArrowQueryError::Limit);
+            return Err(ArrowQueryError::Limit);
+        }
+        self.emit_next(|| fetch().map(Some)).map(|_| ())
+    }
+    /// Fetch one batch from a fallible source, reserving output bytes first.
+    /// Returns `true` for a delivered batch and `false` only for explicit EOF.
+    /// The source must distinguish EOF from fetch/conversion errors; wrapping an
+    /// iterator that hides errors in `None` does not satisfy this contract.
+    /// At the batch limit, one bounded fetch is necessary to distinguish exact
+    /// completion from excess output. An excess batch is never delivered.
+    /// As with `emit`, this reservation does not bound native engine allocations.
+    /// # Errors
+    /// Fetch errors and output refusals are sticky, including errors after the
+    /// final allowed batch. Consumer cancellation wakes a pending reservation.
+    pub fn emit_next(
+        &mut self,
+        fetch: impl FnOnce() -> Result<Option<RecordBatch>, ArrowQueryError>,
+    ) -> Result<bool, ArrowQueryError> {
+        if let Some(error) = self.failure {
+            return Err(error);
+        }
+        let result = self.emit_next_inner(fetch);
         if let Err(error) = result {
             self.failure = Some(error);
         }
         result
     }
-    fn emit_inner(
+    fn emit_next_inner(
         &mut self,
-        fetch: impl FnOnce() -> Result<RecordBatch, ArrowQueryError>,
-    ) -> Result<(), ArrowQueryError> {
+        fetch: impl FnOnce() -> Result<Option<RecordBatch>, ArrowQueryError>,
+    ) -> Result<bool, ArrowQueryError> {
+        let mut bytes = self.budget.reserve(self.limits.max_batch_bytes)?;
+        let Some(batch) = fetch()? else {
+            return Ok(false);
+        };
         if self.summary.batches >= self.limits.max_batches {
             return Err(ArrowQueryError::Limit);
         }
-        let mut bytes = self.budget.reserve(self.limits.max_batch_bytes)?;
-        let batch = fetch()?;
         if batch.schema() != self.schema {
             return Err(ArrowQueryError::Schema);
         }
@@ -248,7 +274,7 @@ impl ArrowQueryEmitter {
             .map_err(|_| ArrowQueryError::Cancelled)?;
         self.summary.rows = rows;
         self.summary.batches += 1;
-        Ok(())
+        Ok(true)
     }
 }
 /// Consume physical batches, releasing old leases to permit more output.

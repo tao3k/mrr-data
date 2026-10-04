@@ -85,6 +85,108 @@ async fn until(mut condition: impl FnMut() -> bool) {
     .unwrap();
 }
 #[tokio::test]
+async fn fallible_fetch_distinguishes_exact_limit_eof_from_late_failure_and_excess() {
+    for terminal in [Ok(None), Err(ArrowQueryError::Driver), Ok(Some(batch()))] {
+        let backend = backend().await;
+        let expected = match &terminal {
+            Ok(None) => None,
+            Err(error) => Some(*error),
+            Ok(Some(_)) => Some(ArrowQueryError::Limit),
+        };
+        let mut query = backend
+            .query_arrow(
+                batch().schema(),
+                ArrowQueryLimits {
+                    max_batches: 1,
+                    max_rows: 4,
+                    ..limits()
+                },
+                1024,
+                move |out| {
+                    assert!(out.emit_next(|| Ok(Some(batch())))?);
+                    // Ignoring a late refusal cannot manufacture successful EOF.
+                    let _ = out.emit_next(|| terminal);
+                    if let Some(error) = expected {
+                        assert_eq!(
+                            out.emit_next(|| panic!("failed source fetched again")),
+                            Err(error)
+                        );
+                    }
+                    Ok(())
+                },
+            )
+            .unwrap();
+        let first = query.next_batch().await.unwrap().unwrap();
+        assert_eq!(first.batch().num_rows(), 4);
+        drop(first);
+        if let Some(error) = expected {
+            assert_eq!(query.next_batch().await.err(), Some(error));
+            assert!(query.summary().is_none());
+        } else {
+            assert!(query.next_batch().await.unwrap().is_none());
+            assert_eq!(query.summary().unwrap().batches, 1);
+            assert_eq!(query.summary().unwrap().rows, 4);
+        }
+        drop(query);
+        backend.shutdown().await.unwrap();
+    }
+}
+#[tokio::test]
+async fn empty_fallible_source_releases_reservation_and_reports_zero_batches() {
+    let backend = backend().await;
+    let mut query = backend
+        .query_arrow(batch().schema(), limits(), 1024, |out| {
+            assert!(!out.emit_next(|| Ok(None))?);
+            Ok(())
+        })
+        .unwrap();
+    assert!(query.next_batch().await.unwrap().is_none());
+    assert_eq!(query.summary().unwrap().batches, 0);
+    assert_eq!(backend.status().resource_bytes, 0);
+    drop(query);
+    backend.shutdown().await.unwrap();
+}
+#[tokio::test]
+async fn fallible_eof_fetch_waits_for_retained_bytes_and_cancel_skips_fetch() {
+    let backend = backend().await;
+    let bytes = batch().get_array_memory_size();
+    let fetched = Arc::new(AtomicUsize::new(0));
+    let marker = fetched.clone();
+    let mut query = backend
+        .query_arrow(
+            batch().schema(),
+            ArrowQueryLimits {
+                max_batch_bytes: bytes,
+                max_retained_bytes: bytes,
+                ..limits()
+            },
+            bytes,
+            move |out| {
+                assert!(out.emit_next(|| Ok(Some(batch())))?);
+                let result = out.emit_next(|| {
+                    marker.fetch_add(1, Ordering::SeqCst);
+                    Ok(None)
+                });
+                assert_eq!(result, Err(ArrowQueryError::Cancelled));
+                Ok(())
+            },
+        )
+        .unwrap();
+    let retained = query.next_batch().await.unwrap().unwrap();
+    assert_eq!(fetched.load(Ordering::SeqCst), 0);
+    query.cancel();
+    until(|| backend.status().blocking_resources == 0).await;
+    assert_eq!(fetched.load(Ordering::SeqCst), 0);
+    assert_eq!(
+        query.next_batch().await.err(),
+        Some(ArrowQueryError::Cancelled)
+    );
+    assert!(query.summary().is_none());
+    drop(retained);
+    drop(query);
+    backend.shutdown().await.unwrap();
+}
+#[tokio::test]
 async fn late_errors_and_worker_panic_never_certify_partial_output() {
     for panic_worker in [false, true] {
         let backend = backend().await;
