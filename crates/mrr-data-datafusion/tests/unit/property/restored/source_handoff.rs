@@ -131,6 +131,25 @@ fn source_fixture() -> Fixture {
         )
         .unwrap();
     }
+    // Two distinct physical edges project to the same row under RETURN ALL.
+    let table = &mut f.relations[1];
+    let arrays = table
+        .batch
+        .columns()
+        .iter()
+        .map(|column| {
+            let strings = column
+                .as_any()
+                .downcast_ref::<arrow_array::StringArray>()
+                .unwrap();
+            let values = strings
+                .iter()
+                .chain(strings.iter().take(1))
+                .collect::<Vec<_>>();
+            std::sync::Arc::new(arrow_array::StringArray::from(values)) as arrow_array::ArrayRef
+        })
+        .collect();
+    table.batch = arrow_array::RecordBatch::try_new(table.batch.schema(), arrays).unwrap();
     let relations = mrr::RelationCatalog::admit(
         f.relations
             .iter()
@@ -191,6 +210,7 @@ async fn original_healthcare_source_reaches_mrr_admission_over_cold_and_warm_res
             ],
             vec![scalar("healthcare"), scalar("two"), scalar("shared")],
         ];
+        expected.push(vec![scalar("healthcare"), scalar("one"), scalar("shared")]);
         let mut actual = executed.candidate.rows().to_vec();
         expected.sort_by_key(|row| format!("{row:?}"));
         actual.sort_by_key(|row| format!("{row:?}"));

@@ -69,8 +69,12 @@ and third-party libraries retain independent translation units. This bounds comp
 changing the progress supervisor's wall or idle limits.
 The extension emits native compiler pass-execution diagnostics during optimization
 of large units, including the 48k-line generated GQL parser. These logs report
-actual optimizer and machine-code passes. Release optimization settings are retained and the
-artifact receipt records the build configuration. The wall and no-output
+actual optimizer and machine-code passes. The generated parser is compiled in
+bounded translation units at complete ANTLR rule-block boundaries. The original
+rule definitions reconstruct the pinned source byte-for-byte; private initializer
+state stays in one unit. All units retain upstream Release optimization flags.
+The artifact records source and derived-unit digests. Translation-unit boundaries
+can affect text-parser optimization; no text-parser throughput gain is claimed. The wall and no-output
 limits still apply to compilation and linking.
 The logger groups 256 actual compiler pass/analysis events and retains the
 latest event in each group. Other output and diagnostics remain visible;
@@ -93,6 +97,12 @@ The Rust matrix runs DuckGQL, Turso and DataFusion in separate processes for
 each Schema-selected source size, using the same authenticated GraphAr source.
 Each case checks expected rows and admits every result through MRR. The Python
 tests check entry-point discovery, protocol collection and process cleanup.
+The current [[file:receipts/macos-resources.jsonl][macOS resource receipt]] records nine passing cases with phase samples
+and process RSS. Its [[file:receipts/macos-build.json][build receipt]] identifies the exact locally built SDK and
+all derived parser units. The resource receipt records a dirty working tree;
+remote CI and the original-source frontend qualification remain separate gates.
+Concurrent host compilation affects these samples; they establish no speedup.
+
 OS peak RSS covers the entire isolated process, including source capture and
 Rust; it is not a native operator memory limit. The Rust adapters additionally
 record disjoint preparation, load, execution, fetch/decode and cleanup phases.

@@ -1,0 +1,33 @@
+{
+  "schema_sha256": "946fa9b526dcdff2a323b4cc5f45760343c1b0067d159bc69f774da097a1bfab",
+  "duckdb_source_revision": "069cc9f9b5be802405797faecc284961b07c70ef",
+  "extension_revision": "44e77c6835f9e6758bb3e3bccb1a642981dbf1e7",
+  "antlr_source_sha256": "0ed13668906e86dbc0dcddf30fdee68c10203dea4e83852b4edb810821bee3c4",
+  "artifact": "/private/tmp/mrr-data-framework-build/extension-build/extension/duckgql/duckgql.duckdb_extension",
+  "sha256": "0bbeaac46695077931b2c526d29a62673083373afe45db007e2ede15d5f268a3",
+  "signed": false,
+  "build_configuration": {
+    "cxx_standard": 17,
+    "generated_parser_units": 13,
+    "generated_parser_source_sha256": "ff120bdc5f7be9eacde16956e026ae7a4054868aae0d49247b31c32738bf308e",
+    "generated_parser_unit_sha256": [
+      "d36d665206bd94709638485fe637402d15b8cc1769995511425b024c5e3f9b11",
+      "601865f00ee98af91b4f18d58d0b540e77600003ba25f6d4a915103d5ea58107",
+      "1d3c4c687040110c641b08f4d3ae4aaf12c17a3bdf90e735013e20b9bed3ea54",
+      "87b786a6f179e30c94da8df7d67e13ec6d5698e6e43fb9ca5b08d70bb8633ba5",
+      "5ccf3df4a83a737d850a0eb40587e0a0eaebbfc7c45e3347eea7c1b9e4bd6fe8",
+      "4091b0493e39b081ca9c8778b6cc8cc8a937e4654bef51ddeb81a17e4c8b8054",
+      "7f5a4c115906de5a9f29adb9b3025fd3693ef19523d3372f58e07821e3440f53",
+      "f8f2a0e8923ced301ee84c7266a5dc9cded96a8c6f51e6cd6c12d14b22814a4e",
+      "0858fee2eda9e1c650b2f8a3870be623b1d16988e6376365421416a9191a175b",
+      "da7ee241cbd861abb5436bd7ec269538a8714517de0cf86dd04b5589ab35dd11",
+      "c6a07e1c63007e5954f8b1d0f0356450ca995676a79a63b25fccae0aa0d14dbb",
+      "2e4491559ed312b0e20cd3370547473d4959f0cf63545a97d52e8c5ae4aa5ece",
+      "a84ff46655d7a2522f3a5628dc274a79a520cc28e515f424af289b042ecd9083"
+    ],
+    "core_unity_batch_size": 4,
+    "third_party_unity": false,
+    "native_progress_diagnostics": "compiler-pass-execution",
+    "jobs": 12
+  }
+}

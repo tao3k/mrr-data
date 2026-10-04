@@ -9,6 +9,7 @@ repository.workspace = true
 
 [features]
 default = []
+source-handoff = ["combined-graph", "dep:mrr-property-source"]
 combined-graph = ["native-graphar", "dep:mrr-data-content"]
 file-inventory = ["dep:mrr-data-core"]
 backend = ["native-graphar", "dep:mrr-data-backend"]
@@ -16,6 +17,7 @@ selective-graphar = ["native-graphar", "dep:parquet", "dep:bytes", "dep:arrow-se
 native-graphar = ["file-inventory", "dep:arrow-array", "dep:arrow-schema", "dep:graphar-rs", "dep:tempfile", "dep:cid", "dep:serde", "dep:serde_ipld_dagcbor"]
 
 [dependencies]
+mrr-property-source = { workspace = true, optional = true }
 mrr-data-content = { workspace = true, optional = true, features = ["graph-snapshot"] }
 cid = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
