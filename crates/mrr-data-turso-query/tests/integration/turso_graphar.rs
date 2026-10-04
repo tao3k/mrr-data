@@ -79,17 +79,7 @@ fn bound_query_shape(
     shape: Option<RefusedShape>,
 ) -> Result<core::BoundDataQuery, core::DataQueryBindingError> {
     let generation = mrr::GenerationId::from_canonical_bytes(generation).unwrap();
-    let snapshot = mrr::SemanticSnapshot::admit(
-        generation,
-        vec![
-            mrr::RevisionBinding::admit(
-                mrr::ExternalRevisionIdentity::new("git", "fixture", "revision").unwrap(),
-                generation,
-            )
-            .unwrap(),
-        ],
-    )
-    .unwrap();
+    let snapshot = admitted_snapshot(generation);
     let binding = |name: &str| mrr::Binding::new(name).unwrap();
     let op = |name: &str| mrr::QueryOperatorId::from_canonical_bytes(name).unwrap();
     let query_id = mrr::QueryId::from_canonical_bytes("query").unwrap();
@@ -130,26 +120,7 @@ fn bound_query_shape(
         } else {
             vec![]
         },
-        mrr::QueryResult::returning(if matches!(shape, Some(RefusedShape::Distinct)) {
-            mrr::SetQuantifier::Distinct
-        } else {
-            mrr::SetQuantifier::All
-        })
-        .with_projections(vec![
-            mrr::Projection::new(
-                op("return-source"),
-                mrr::Expression::Binding(binding("source")),
-                binding("from"),
-            ),
-            mrr::Projection::new(
-                op("return-target"),
-                mrr::Expression::Binding(binding(target_binding)),
-                binding("to"),
-            ),
-        ])
-        .with_limit(
-            matches!(shape, Some(RefusedShape::Paging)).then_some(mrr::PageValue::Literal(1)),
-        ),
+        query_result(target_binding, shape),
     )
     .unwrap();
     let entity_schema = mrr::EntitySchema::new(node_type, "Node", vec![]).unwrap();
@@ -193,6 +164,41 @@ fn bound_query_shape(
         &core::SnapshotBlock::encode(manifest).unwrap(),
         &turso_graphar_engine_profile().unwrap(),
     )
+}
+fn query_result(target_binding: &str, shape: Option<RefusedShape>) -> mrr::QueryResult {
+    let binding = |name: &str| mrr::Binding::new(name).unwrap();
+    let op = |name: &str| mrr::QueryOperatorId::from_canonical_bytes(name).unwrap();
+    mrr::QueryResult::returning(if matches!(shape, Some(RefusedShape::Distinct)) {
+        mrr::SetQuantifier::Distinct
+    } else {
+        mrr::SetQuantifier::All
+    })
+    .with_projections(vec![
+        mrr::Projection::new(
+            op("return-source"),
+            mrr::Expression::Binding(binding("source")),
+            binding("from"),
+        ),
+        mrr::Projection::new(
+            op("return-target"),
+            mrr::Expression::Binding(binding(target_binding)),
+            binding("to"),
+        ),
+    ])
+    .with_limit(matches!(shape, Some(RefusedShape::Paging)).then_some(mrr::PageValue::Literal(1)))
+}
+fn admitted_snapshot(generation: mrr::GenerationId) -> mrr::SemanticSnapshot {
+    mrr::SemanticSnapshot::admit(
+        generation,
+        vec![
+            mrr::RevisionBinding::admit(
+                mrr::ExternalRevisionIdentity::new("git", "fixture", "revision").unwrap(),
+                generation,
+            )
+            .unwrap(),
+        ],
+    )
+    .unwrap()
 }
 fn captured() -> (
     core::BoundDataQuery,

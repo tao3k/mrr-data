@@ -130,6 +130,12 @@ async fn held_metadata_write_queues_query_and_reserved_recovery_progresses() {
     .await
     .unwrap();
     assert_eq!(output.get().rows().len(), 2);
+    // Retained output holds its resource reservation, but has returned the
+    // shared worker permit so another admitted physical operation can run.
+    let alongside = backend.prepare_resource(8, || Ok(())).await.unwrap();
+    assert_eq!(backend.status().active_resources, 2);
+    assert_eq!(backend.status().blocking_resources, 0);
+    drop(alongside);
     drop(output);
     backend.shutdown().await.unwrap();
     assert_eq!(backend.status().resource_bytes, 0);

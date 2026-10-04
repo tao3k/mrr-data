@@ -1,0 +1,47 @@
+#+title: DuckGQL native typed-interface qualification
+
+* Purpose
+
+Probe the registered =gql_match_relational= typed program independently of GQL
+read parsing. This is an engineering fixture, not an MRR query adapter or a
+GraphAr performance comparison. The caller supplies an exact DuckDB CLI and a
+Host-installed signed/pinned extension. The runner never downloads or installs
+an extension.
+
+* Run
+
+#+begin_src sh
+python3 tools/duckgql-interface/qualify.py \
+  --duckdb /absolute/path/to/duckdb \
+  --extension-directory /absolute/path/to/extensions
+#+end_src
+
+The runner exits nonzero on missing artifacts, unexpected native rows, failed
+program-version refusal or labelled-query parity failure. Each subprocess has
+a 20-second timeout. JSON lines identify the exact binary/fixture/Schema hashes
+and separate native-program, version-refusal and labelled-parity receipts.
+Elapsed time includes process startup and fixture setup; it is not comparative
+query latency. The fixed text read is an audit control, not an execution fallback.
+
+* Contract and limits
+
+[[file:schema.json][The Schema]] owns the native program version and argument count.
+File names, graph names and runner stages carry no version suffix. The
+[[file:typed-match.sql][fixture]] registers fixed read-only tables, maps original source keys to
+ordinary string identity properties and calls the plugin's typed program.
+Catalog-normalized node/edge labels are explicit physical bindings. Returning
+the edge identity property permits deterministic Fact order while preserving
+duplicate endpoint pairs.
+
+[[file:receipts/macos-native.jsonl][The macOS receipt]] qualifies DuckDB 1.5.5 with signed DuckGQL 0.2.0.
+The Community registry reference inspected during this run was
+=44e77c6835f9e6758bb3e3bccb1a642981dbf1e7=. The repository uses Rust DuckDB
+1.10506.0; the Community artifact for its corresponding engine 1.5.6 was absent
+on macOS ARM64 at audit time. No SDK version change is made by this probe.
+
+An authenticated GraphAr source, canonical MRR identities, a checked
+=BoundDataQuery= mapping, Rust typed-parameter transport, result admission,
+Backend lifecycle and supported Linux/macOS artifacts are additional gates.
+Ordinary DuckDB tables require LIVE registration here; the extension's PINNED
+policy requires an attached DuckLake snapshot. The MRR source binding must
+therefore be enforced by the immutable derived image and its resource owner.

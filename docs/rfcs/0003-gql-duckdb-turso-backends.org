@@ -134,6 +134,31 @@ typed-plan API. The documented build targets DuckDB =v1.5.5=; PR #12 pins a
 different Rust DuckDB SDK version, so loading and ABI compatibility remain
 unverified independently of the MRR query semantics.
 
+The 2026-10-04 native audit qualified the registered
+=gql_match_relational= table-function boundary on a signed Community Extensions
+binary: DuckDB =1.5.5=, DuckGQL =0.2.0=, macOS ARM64. Its 27 typed arguments
+carry a logical program whose version is a Schema field. This interface bypasses
+GQL parsing for the read. The checked-in
+[[file:../../tools/duckgql-interface/qualify.py][qualification runner]],
+[[file:../../tools/duckgql-interface/schema.json][Schema]] and
+[[file:../../tools/duckgql-interface/receipts/macos-native.jsonl][artifact-hashed receipt]] qualify three ordered rows, duplicate edges,
+canonical physical labels and refusal of an unknown program version. A fixed
+GQL text query is an independent registration control, not an MRR execution
+fallback. The Community registry source reference inspected for this package
+was =44e77c6835f9e6758bb3e3bccb1a642981dbf1e7=.
+
+This corrects the assumption that a new C ABI is necessarily required. The
+registered typed boundary is a candidate for a pinned adapter; it is internal
+and not documented as a stable external MRR API. The probe uses fixture string
+identities and ordinary DuckDB source tables, not an authenticated GraphAr
+=BoundDataQuery=. It does not qualify Rust parameter transport, MRR result
+admission, shared lifecycle, native memory bounds or the repository's current
+SDK. Installing the plugin for DuckDB =1.5.6= on macOS ARM64 returned HTTP 404
+from the Community repository during this audit. =PINNED= graph registration
+also refused an ordinary DuckDB source because that policy requires a DuckLake
+=SNAPSHOT_VERSION=. A future GraphAr-derived image must retain its authenticated
+immutable binding independently of the plugin's =LIVE= registration policy.
+
 The bridge should translate only a declared MRR typed-query slice into a
 versioned DuckGQL external-plan interface that bypasses DuckGQL parsing and
 conflicting semantic binding while retaining its graph optimizer and native
@@ -372,16 +397,31 @@ while admission stays charged until cleanup completes. Interruption inside a
 long-running native call and deterministic cancellation during a large native
 load/fetch remain separate qualification gates.
 
-** Remaining and extended integration receipts
+The follow-on native transaction fixture checks stops after the first INSERT
+and after the first decoded result row. Cancellation and deadline refusals both
+roll back before return, remove the temporary image and allow a subsequent query
+on that connection. These deterministic checkpoints qualify partial-load and
+partial-fetch cleanup, not asynchronous interruption of an in-flight native call.
+The native error fixture covers duplicate primary-key failure, malformed Entity
+identity, output row/cell refusal and cleanup-failure precedence.
 
-- With one shared worker, a held write prevents a Turso query from opening its
-  connection; reserved recovery still progresses on the Host runtime.
-- Cancel a queued query and prove no table/connection was created. Cancel a
-  running load and result fetch, then prove cleanup completes before drain.
-- Retain successful output after worker completion: another worker may run,
-  while shutdown waits until the last output handle is dropped.
-- Exercise row/cell/byte refusals, native failure and cleanup failure. Each
-  releases its resources and yields no MRR-admitted candidate.
+The integrated held-write fixture exercises a real Turso metadata transaction
+with one common worker permit. A queued Turso graph request has zero blocking
+resource workers while reserved recovery completes. Aborting that waiter releases
+its owned database/source references and resource charge before the held write is
+released; a subsequent query succeeds. The source/result fixture uses different
+endpoint values to prove canonical Fact ordering, checks all input/output budgets,
+and still passes final MRR admission. Filters, DISTINCT, paging, incoming paths
+and edge bindings are explicitly refused; variable-length paths are refused at
+the engine-profile binding boundary.
+
+** Remaining integration receipts
+
+- Exercise asynchronous cancellation during large load/fetch with measured
+  stop latency and native state; deterministic checkpoint tests establish
+  cleanup ordering but do not establish responsiveness inside a native call.
+- Qualify native interrupt and hard execution deadlines through an explicit
+  supported driver interface; the pinned safe Turso API does not expose one.
 - Repeat on Linux/macOS with exact Turso =0.8.1=. Keep admission/result identity
   parity with the existing captured-fact fixture and record current-head CI.
 
