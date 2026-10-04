@@ -151,7 +151,13 @@ This corrects the assumption that a new C ABI is necessarily required. The
 registered typed boundary is a candidate for a pinned adapter; it is internal
 and not documented as a stable external MRR API. The probe uses fixture string
 identities and ordinary DuckDB source tables, not an authenticated GraphAr
-=BoundDataQuery=. It does not qualify Rust parameter transport, MRR result
+=BoundDataQuery=. A follow-on PREPARE/EXECUTE fixture carries five scalar
+parameters (version, labels, projection structs, output aliases and result
+ordering) through JSON-to-native List/Struct casts. It preserves the same three
+rows and refuses unsupported version, malformed JSON and wrong element types
+without partial output. Quoted/Unicode/injection-shaped aliases remain data.
+This is a CLI transport receipt; a Rust adapter still needs native Statement
+bindings and the checked MRR mapping. It does not qualify Rust execution, MRR result
 admission, shared lifecycle, native memory bounds or the repository's current
 SDK. Installing the plugin for DuckDB =1.5.6= on macOS ARM64 returned HTTP 404
 from the Community repository during this audit. =PINNED= graph registration

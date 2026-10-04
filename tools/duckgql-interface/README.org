@@ -17,11 +17,20 @@ python3 tools/duckgql-interface/qualify.py \
 #+end_src
 
 The runner exits nonzero on missing artifacts, unexpected native rows, failed
-program-version refusal or labelled-query parity failure. Each subprocess has
+program-version refusal, labelled-query parity or prepared-parameter refusal. Each subprocess has
 a 20-second timeout. JSON lines identify the exact binary/fixture/Schema hashes
 and separate native-program, version-refusal and labelled-parity receipts.
 Elapsed time includes process startup and fixture setup; it is not comparative
 query latency. The fixed text read is an audit control, not an execution fallback.
+
+[[file:parameter-transport.sql][The prepared-parameter fixture]] carries program version, catalog labels,
+projection expression structs, output aliases and result ordering through five
+scalar parameters. JSON casts recover native List/Struct arguments before the
+plugin binds its typed program. It produces the same three rows, preserves
+quoted/Unicode/injection-shaped aliases as data and refuses unknown program
+version, malformed JSON and wrong element types without output rows. This
+qualifies CLI PREPARE/EXECUTE on the audited artifact. A Rust adapter must bind
+scalar values through Statement; CLI EXECUTE text is not its implementation.
 
 * Contract and limits
 
@@ -40,7 +49,7 @@ The Community registry reference inspected during this run was
 on macOS ARM64 at audit time. No SDK version change is made by this probe.
 
 An authenticated GraphAr source, canonical MRR identities, a checked
-=BoundDataQuery= mapping, Rust typed-parameter transport, result admission,
+=BoundDataQuery= mapping, Rust scalar-parameter transport, result admission,
 Backend lifecycle and supported Linux/macOS artifacts are additional gates.
 Ordinary DuckDB tables require LIVE registration here; the extension's PINNED
 policy requires an attached DuckLake snapshot. The MRR source binding must

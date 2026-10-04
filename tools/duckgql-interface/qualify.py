@@ -25,6 +25,8 @@ def main():
     program_version = schema["properties"]["program_version"]["const"]
     template = Path(__file__).with_name("typed-match.sql").read_text()
     fixture = template.replace("__PROGRAM_VERSION__", str(program_version))
+    carrier_path = Path(__file__).with_name("parameter-transport.sql")
+    carrier = carrier_path.read_text()
 
     def run(source):
         return subprocess.run(
@@ -44,7 +46,7 @@ def main():
         with Path(path).open("rb") as stream:
             return hashlib.file_digest(stream, "sha256").hexdigest()
 
-    print(json.dumps({"stage": "artifact-identity", "duckdb_version": duckdb_version, "extension_version": extension_version, "duckdb_sha256": digest(args.duckdb), "extension_sha256": digest(extension_path), "fixture_sha256": digest(Path(__file__).with_name("typed-match.sql")), "schema_sha256": digest(Path(__file__).with_name("schema.json"))}), flush=True)
+    print(json.dumps({"stage": "artifact-identity", "duckdb_version": duckdb_version, "extension_version": extension_version, "duckdb_sha256": digest(args.duckdb), "extension_sha256": digest(extension_path), "fixture_sha256": digest(Path(__file__).with_name("typed-match.sql")), "carrier_sha256": digest(carrier_path), "schema_sha256": digest(Path(__file__).with_name("schema.json"))}), flush=True)
     started = time.monotonic()
     expected = [["zoe", "yan", "edge-a"], ["alice", "bob", "edge-b"], ["alice", "bob", "edge-c"]]
 
@@ -81,6 +83,42 @@ def main():
     print(json.dumps({"stage": "labelled-program-parity", "passed": passed, "typed_rows": len(labelled), "control_rows": len(control_rows)}), flush=True)
     if not passed:
         raise SystemExit("labelled typed-program gate failed; no MRR DuckGQL integration is qualified")
+
+    projections = []
+    for index, result_type, property_name in [(0, 8, "mrr_entity"), (2, 8, "mrr_entity"), (1, 9, "mrr_fact")]:
+        projections.append({
+            "node_types": [2, 1], "result_types": [7, result_type],
+            "binding_indices": [index, index], "operators": [0, 0],
+            "values": ["", ""], "properties": [property_name, ""],
+            "child_counts": [0, 0], "aggregate": [False, False],
+            "distinct": [False, False],
+        })
+
+    def carrier_query(version, projection_json):
+        # EXECUTE is a CLI qualification of prepared scalar parameters. A Rust
+        # adapter must use Statement bindings, not generate this EXECUTE text.
+        # These aliases also exercise quoted/Unicode/injection-shaped data.
+        payloads = [json.dumps(["node", "knows", "node"]), projection_json,
+                    json.dumps(["source'", "目标", "fact'); DROP TABLE audit_edges; --"]),
+                    json.dumps([2])]
+        quoted = ["'" + value.replace("'", "''") + "'" for value in payloads]
+        return setup + carrier + "\nEXECUTE typed_carrier(" + str(version) + ", " + ", ".join(quoted) + ");\n"
+
+    transported = read_rows(run(prefix + carrier_query(program_version, json.dumps(projections))))
+    if transported != expected:
+        raise SystemExit(f"prepared scalar transport rows differ: {transported!r}")
+    print(json.dumps({"stage": "prepared-scalar-transport", "passed": True, "rows": len(transported), "scalar_parameters": 5}), flush=True)
+    for name, version, payload, diagnostic in [
+        ("version", 255, json.dumps(projections), "Invalid GQL relational MATCH input"),
+        ("malformed-json", program_version, "{broken", "Conversion Error"),
+        ("wrong-type", program_version, '[{"node_types":["not-an-integer"]}]', "Conversion Error"),
+    ]:
+        refused = run(prefix + carrier_query(version, payload))
+        if refused.returncode == 0 or diagnostic not in refused.stderr:
+            raise SystemExit(f"prepared carrier {name} refusal failed: {refused.stderr}")
+        if list(csv.reader(io.StringIO(refused.stdout)))[2:]:
+            raise SystemExit(f"prepared carrier {name} published partial rows")
+        print(json.dumps({"stage": "prepared-carrier-refusal", "case": name, "passed": True}), flush=True)
 
 
 if __name__ == "__main__":
