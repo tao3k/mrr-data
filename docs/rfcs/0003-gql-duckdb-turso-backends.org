@@ -11,9 +11,10 @@ streaming output. Native streaming does not imply bounded engine RSS. The
 DuckDB adapter does not load DuckGQL.
 
 The optional =mrr-data-turso-query= crate and =backend-turso-query= facade
-feature compile one already bound, outgoing binary-Entity query to a
-parameterized Turso statement, load captured GraphAr facts into a temporary
-relation, and return bounded =PhysicalQueryOutput=. Final MRR admission belongs
+feature compile one already bound, outgoing binary-Entity query with distinct
+endpoint bindings and no edge binding to a parameterized Turso statement, load
+captured GraphAr facts into a temporary relation, and return bounded
+=PhysicalQueryOutput=. Final MRR admission belongs
 to the caller. The native fixture covers duplicate-edge preservation,
 snapshot-drift refusal and MRR admission. The follow-on
 =execute_turso_graphar_on_backend= entrypoint uses
@@ -24,6 +25,8 @@ deadline, retained-output accounting, additional shapes, other SQL dialects
 and the DuckGQL typed bridge remain open.
 This status records implemented interfaces, not a claim that all acceptance
 gates or current-head CI have passed.
+The dedicated Turso connection has a 250 ms busy timeout; this only bounds
+lock contention and is not a query execution deadline.
 
 * Decision and ownership
 

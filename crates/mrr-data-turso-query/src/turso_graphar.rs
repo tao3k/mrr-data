@@ -5,6 +5,7 @@ use mrr_data_core::{BoundDataQuery, PhysicalQueryOutput};
 use mrr_data_graphar::{BinaryEntityProjection, CapturedGraphArSnapshot};
 #[cfg(feature = "backend-worker")]
 use std::sync::Arc;
+use std::time::Duration;
 
 /// Preflight and result bounds. These do not constrain Turso native RSS.
 #[derive(Clone, Copy, Debug)]
@@ -104,6 +105,9 @@ pub async fn execute_turso_graphar_single_hop(
     let plan = TursoSingleHopSql::compile(query, projection)?;
     let rows = prepare_rows(query, source, projection, limits)?;
     let connection = database.connect().map_err(|_| SqlQueryError::Native)?;
+    connection
+        .busy_timeout(Duration::from_millis(250))
+        .map_err(|_| SqlQueryError::Native)?;
     connection
         .execute("BEGIN", ())
         .await

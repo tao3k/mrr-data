@@ -105,6 +105,11 @@ impl TursoSingleHopSql {
             return Err(SqlQueryError::UnsupportedShape("exactly one edge"));
         };
         let edge = segment.relation();
+        if edge.binding().is_some() {
+            return Err(SqlQueryError::UnsupportedShape(
+                "edge bindings are unsupported",
+            ));
+        }
         if edge.direction() != Direction::Outgoing
             || edge.min_hops() != 1
             || edge.max_hops() != Some(1)
@@ -120,6 +125,11 @@ impl TursoSingleHopSql {
         let [target_type] = segment.node().types() else {
             return Err(SqlQueryError::UnsupportedShape("one target Entity type"));
         };
+        if path.start().binding() == segment.node().binding() {
+            return Err(SqlQueryError::UnsupportedShape(
+                "distinct endpoint bindings required",
+            ));
+        }
         let columns = ir
             .projections()
             .iter()

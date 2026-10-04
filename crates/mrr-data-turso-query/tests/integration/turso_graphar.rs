@@ -47,6 +47,13 @@ fn fact(id: &str) -> mrr::Fact {
     )
 }
 fn bound_query(inventory: &core::GraphDatasetInventory, generation: &str) -> core::BoundDataQuery {
+    bound_query_with_target(inventory, generation, "target")
+}
+fn bound_query_with_target(
+    inventory: &core::GraphDatasetInventory,
+    generation: &str,
+    target_binding: &str,
+) -> core::BoundDataQuery {
     let generation = mrr::GenerationId::from_canonical_bytes(generation).unwrap();
     let snapshot = mrr::SemanticSnapshot::admit(
         generation,
@@ -78,7 +85,7 @@ fn bound_query(inventory: &core::GraphDatasetInventory, generation: &str) -> cor
                         Some(1),
                     )
                     .unwrap(),
-                    mrr::NodePattern::new(binding("target"), vec![node_type]),
+                    mrr::NodePattern::new(binding(target_binding), vec![node_type]),
                 )],
             )],
         )
@@ -92,7 +99,7 @@ fn bound_query(inventory: &core::GraphDatasetInventory, generation: &str) -> cor
             ),
             mrr::Projection::new(
                 op("return-target"),
-                mrr::Expression::Binding(binding("target")),
+                mrr::Expression::Binding(binding(target_binding)),
                 binding("to"),
             ),
         ]),
@@ -231,6 +238,13 @@ async fn turso_single_hop_preserves_duplicate_edges_and_mrr_admission() {
     assert!(matches!(
         execute_turso_graphar_single_hop(&database, &drifted, &source, &projection, limits()).await,
         Err(SqlQueryError::SourceMismatch)
+    ));
+    let repeated = bound_query_with_target(&inventory, "generation", "source");
+    assert!(matches!(
+        TursoSingleHopSql::compile(&repeated, &projection),
+        Err(SqlQueryError::UnsupportedShape(
+            "distinct endpoint bindings required"
+        ))
     ));
     let mut small = limits();
     small.max_input_rows = 1;
