@@ -2573,7 +2573,7 @@ dependencies = [
 [[package]]
 name = "gerbil-scheme-native-build"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/gerbil-scheme-rust.git?rev=b3eb5dce9bfb1e57c3ce618de46798e360213f6a#b3eb5dce9bfb1e57c3ce618de46798e360213f6a"
+source = "git+https://github.com/tao3k/gerbil-scheme-rust.git?rev=6ccabe001f4f28af3e79de491e67c2ac9669b7cf#6ccabe001f4f28af3e79de491e67c2ac9669b7cf"
 dependencies = [
  "cbindgen",
  "cc",
@@ -2586,7 +2586,7 @@ dependencies = [
 [[package]]
 name = "gerbil-scheme-rust-project-harness"
 version = "0.1.2"
-source = "git+https://github.com/tao3k/gerbil-scheme-rust.git?rev=b3eb5dce9bfb1e57c3ce618de46798e360213f6a#b3eb5dce9bfb1e57c3ce618de46798e360213f6a"
+source = "git+https://github.com/tao3k/gerbil-scheme-rust.git?rev=6ccabe001f4f28af3e79de491e67c2ac9669b7cf#6ccabe001f4f28af3e79de491e67c2ac9669b7cf"
 dependencies = [
  "cargo-lock",
  "cargo_toml",
@@ -2604,7 +2604,7 @@ dependencies = [
 [[package]]
 name = "gerbil-scheme-rust-project-harness-policy"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/gerbil-scheme-rust.git?rev=b3eb5dce9bfb1e57c3ce618de46798e360213f6a#b3eb5dce9bfb1e57c3ce618de46798e360213f6a"
+source = "git+https://github.com/tao3k/gerbil-scheme-rust.git?rev=6ccabe001f4f28af3e79de491e67c2ac9669b7cf#6ccabe001f4f28af3e79de491e67c2ac9669b7cf"
 dependencies = [
  "gerbil-scheme-rust-project-harness",
 ]
@@ -2612,7 +2612,7 @@ dependencies = [
 [[package]]
 name = "gerbil-scheme-sys"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/gerbil-scheme-rust.git?rev=b3eb5dce9bfb1e57c3ce618de46798e360213f6a#b3eb5dce9bfb1e57c3ce618de46798e360213f6a"
+source = "git+https://github.com/tao3k/gerbil-scheme-rust.git?rev=6ccabe001f4f28af3e79de491e67c2ac9669b7cf#6ccabe001f4f28af3e79de491e67c2ac9669b7cf"
 dependencies = [
  "gerbil-scheme-native-build",
  "gerbil-scheme-rust-project-harness-policy",
@@ -4050,7 +4050,7 @@ dependencies = [
 [[package]]
 name = "mrr-frontends"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=9ee5ace469e7a9319c74b8be0308e9062a47e587#9ee5ace469e7a9319c74b8be0308e9062a47e587"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=542e81bf049ddc73769fea9bc47967560d0e32f1#542e81bf049ddc73769fea9bc47967560d0e32f1"
 dependencies = [
  "icu_properties",
  "mrr-gerbil",
@@ -4061,7 +4061,7 @@ dependencies = [
 [[package]]
 name = "mrr-gerbil"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=9ee5ace469e7a9319c74b8be0308e9062a47e587#9ee5ace469e7a9319c74b8be0308e9062a47e587"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=542e81bf049ddc73769fea9bc47967560d0e32f1#542e81bf049ddc73769fea9bc47967560d0e32f1"
 dependencies = [
  "blake3",
  "gerbil-scheme-sys",
@@ -4079,7 +4079,7 @@ dependencies = [
 [[package]]
 name = "mrr-gerbil-native-build"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=9ee5ace469e7a9319c74b8be0308e9062a47e587#9ee5ace469e7a9319c74b8be0308e9062a47e587"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=542e81bf049ddc73769fea9bc47967560d0e32f1#542e81bf049ddc73769fea9bc47967560d0e32f1"
 dependencies = [
  "gerbil-scheme-native-build",
 ]
@@ -4125,7 +4125,7 @@ dependencies = [
 [[package]]
 name = "mrr-property-source"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=9ee5ace469e7a9319c74b8be0308e9062a47e587#9ee5ace469e7a9319c74b8be0308e9062a47e587"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=542e81bf049ddc73769fea9bc47967560d0e32f1#542e81bf049ddc73769fea9bc47967560d0e32f1"
 dependencies = [
  "meta-relational-reasoning",
  "mrr-frontends",
