@@ -1714,3 +1714,72 @@ GQL object failed. The available job log did not expose a complete typed
 compiler cause; it is not classified as a proven timeout. Subsequent source
 integration/lint steps were skipped. New-head CI and the full Data native
 build remain gates; these pins do not establish P0-P2 closure.
+
+** Frozen d137 Source execution and isolated resource collection
+
+The frozen MRR =d137b6d536136982ad0c6d2f0d1bc30c19159899= / GSC
+=5f4ca683e3635b89fa791233147e272699b72321= composition completed the local
+full Cargo Source build in =10m29s= under unchanged idle30/wall1200 limits.
+PackageSpec returned successfully after =61749ms=; native compilation admitted
+all =59= objects after =140524ms=. The preceding full-build wall refusal remains
+a failed attempt; this successful cached continuation qualifies the current
+compiled source, not a fresh-cache build-time claim.
+
+Under unchanged idle5/wall120 limits, the compiled DataFusion Source pair passed
+in =6.84s= and all nine GraphAr Source cases passed in =10.82s=. The resource
+matrix initially failed with =ECHILD= after three child cases: its parent had
+initialized Gambit and could not admit a successful child wait. The corrected
+parent initializes neither Gambit nor Tokio. Isolated fixture producers write
+one authenticated immutable closure per shape; all mode children verify and
+reuse that closure. Child output and successful process exit are both required.
+
+The complete corrected matrix passed in =46.51s=: two fixture producers and
+eight mode children, two warmups and three samples per mode. Rust checked four
+independently expected NULL/duplicate-bearing rows, equal source CIDs within
+each shape and zero final reservations. Python collected the successful Rust
+records. The clean collection checkout was
+=65dc8f8a0e18fc5a15c72360d9bba1b550f4081e=; its compiled Rust source is unchanged
+by the intervening documentation commit. The retained receipt is
+[[file:../../evidence/original-source/original-source-d137-macos.jsonl][the macOS original-source resource envelope]].
+Its executable SHA-256 is
+=089c9d10920272686f27fc4f958b8de7a62dff21aa813a87258886f83db9034f=;
+successful Cargo artifact collection SHA-256 is
+=db045f79562b915e13aa00aca55aea9aa4c79fc4912d0712f15b842f7ae6f300=.
+Collection HEAD remains explicitly distinct from compiled-source identity.
+
+| Shape | Mode | Median request ms | Median CPU ms | Relation bytes | Decoded rows | Selected edges |
+|-------+------+-------------------+---------------+----------------+--------------+----------------|
+| uniform | cold/full | 326.00 | 83.57 | 49997 | 32 | 16 |
+| uniform | warm/full | 149.70 | 83.22 | 49997 | 32 | 16 |
+| uniform | warm/selective | 237.29 | 75.68 | 20213 | 14 | 6 |
+| uniform | retained/selective | 3.37 | 3.10 | 20213 | 14 | 6 |
+| skewed | cold/full | 80.98 | 70.64 | 45154 | 32 | 16 |
+| skewed | warm/full | 253.49 | 65.21 | 45154 | 32 | 16 |
+| skewed | warm/selective | 180.49 | 70.24 | 20213 | 14 | 6 |
+| skewed | retained/selective | 7.10 | 4.34 | 20213 | 14 | 6 |
+
+Cold remote payload reads were =92033= / =82540= bytes; all warm modes read
+zero remote payload bytes. Selectivity reduced relation bytes and decoded rows,
+but uniform warm/selective wall time regressed =58.5%= and skewed selective CPU
+regressed =7.7%= against warm/full. Retained results include an already prepared
+source. These tiny simulated-remote fixtures do not establish a production
+speedup. Copied bytes, engine spill and streamed first-result timing remain
+explicitly unsupported/null; OS cache is uncontrolled and RSS is an isolated
+process high-water mark. M3 release-scale qualification remains open.
+
+The superseded =0912e5bc= Ubuntu Source job =111480865401= failed in the native
+object artifact monitor (=compiler artifact monitor panicked=), before Source
+execution. That typed failure is separate from output-inactivity refusal and
+from this local macOS success. Frozen-head Linux/macOS/MSRV CI remains required
+for M0/M1 acceptance.
+
+The frozen local facade check (=backend-graphar-combined,datafusion=, no default
+features, locked test profile) passed in =6m32s=. The old macOS maintained
+GraphAr job =111480865419= passed =67= runtime tests but failed its ASP gate
+on the two deep relative imports in the new resource collector. The current
+composition uses explicit crate owner paths and its local ASP gate passed;
+the historical job remains failed. These results do not replace current-head
+platform acceptance.
+
+The frozen DataFusion/GraphAr Source all-target strict Clippy gate passed in
+=2m53s= with =-D warnings= and unchanged idle30/wall1200 supervision.
