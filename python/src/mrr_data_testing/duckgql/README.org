@@ -99,8 +99,9 @@ Each case checks expected rows and admits every result through MRR. The Python
 tests check entry-point discovery, protocol collection and process cleanup.
 The current [[file:receipts/macos-resources.jsonl][macOS resource receipt]] records nine passing cases with phase samples
 and process RSS. Its [[file:receipts/macos-build.json][build receipt]] identifies the exact locally built SDK and
-all derived parser units. The resource receipt records a dirty working tree;
-remote CI and the original-source frontend qualification remain separate gates.
+all derived parser units. The resource receipt identifies the clean local source
+head and compiled binary; remote CI and the original-source frontend
+qualification remain separate gates.
 Concurrent host compilation affects these samples; they establish no speedup.
 
 OS peak RSS covers the entire isolated process, including source capture and
