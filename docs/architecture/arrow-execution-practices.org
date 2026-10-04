@@ -21,7 +21,7 @@ architectural guidance, not executable qualification.
 | Practice and primary source | Concrete decision | Evidence boundary |
 |-----------------------------+-------------------+-------------------|
 | [[https://arrow.apache.org/docs/format/CStreamInterface.html][C Stream ownership and blocking pull]] | Stream and returned arrays have separate owners; serialize pulls, retain source leases, release independently | SDK result ownership after connection close is tested; full public job/stream lifetime remains a release gate |
-| [[https://github.com/duckdb/duckdb-rs/blob/8aa176add468ce2f7ada2d9bfd46f4c13509f198/crates/duckdb/src/vtab/arrow.rs][Pinned Rust Arrow virtual-table conversion]] | Guard actual native vector capacity before registration; use bounded slices | Unsplit 4,097-row input aborts in the raw SDK; carrier refuses it and the complete sliced fixture passes |
+| [[https://github.com/duckdb/duckdb-rs/blob/8aa176add468ce2f7ada2d9bfd46f4c13509f198/crates/duckdb/src/vtab/arrow.rs][Pinned Rust Arrow virtual-table conversion]] | Guard actual native vector capacity before registration; use bounded slices | Initial 1.10502.0 unsplit input aborted; carrier retains its conservative bounded-slice contract |
 | [[https://docs.rs/arrow-array/58.4.0/arrow_array/struct.RecordBatch.html][Rust RecordBatch slicing and physical memory accounting]] | Validate the source once and lazily yield shared-buffer slices; no collected input-batch vector | Schema Arc and Int64 buffer pointer identity are tested; logical one-row slices still obey retained-allocation budget |
 | [[https://duckdb.org/2021/12/03/duck-arrow][DuckDB Arrow streaming and projection/filter pushdown]] | Keep future scan/query boundaries columnar; push only admitted predicates/projections to the physical scanner | Python/R dataset integration does not establish pushdown or zero-copy for the Rust VTab; both require engine-plan/scan counters |
 | [[https://arrow.apache.org/docs/cpp/ipc.html][Arrow IPC source-dependent zero-copy]] | Treat in-process C Stream and durable IPC as different boundaries; account for decompression, alignment and source lifetime | No end-to-end zero-copy claim for compressed IPC or remote transport; verified immutable mmap/BufferReader strategies need platform tests |
@@ -39,7 +39,7 @@ validation for every vector-sized input. Each native registration still has a
 bounded batch. Slice array wrappers and Vecs of column references can allocate;
 shared payload buffers do not imply allocation-free execution.
 
-The pointer test proves Rust-side slicing shares Int64 buffers. The pinned
+The pointer test proves Rust-side slicing shares Int64 buffers. The SDK
 ArrowVTab subsequently converts Arrow columns into DuckDB data chunks and copies
 primitive values. Appending is a conversion/write path as well. This design
 therefore makes no claim that native Rust VTab ingestion is the zero-copy
@@ -73,6 +73,15 @@ The API provides incremental result fetching; some operations still materialize
 internally. Joins/sorts/aggregations can retain native state. Engine-memory/spill
 configuration and observed RSS are separate gates; output-byte backpressure is
 not a bound on native engine memory.
+
+The current SDK VTab query-parameter helper stores every registered batch in a
+process-lifetime global registry. Native VTab conversion fixtures cannot qualify
+bounded source lifetime. =DuckDbArrowInput::append_to= instead consumes admitted
+slices through a Host-owned appender without using that registry; a fixture
+checks release of its input array wrapper and preserved native table values.
+Transaction/flush, native memory and publication still belong to the Host/profile.
+The stream-result driver also avoids VTab registration. A releasable safe VTab
+source registration remains open.
 
 * GraphAr transfer limits
 

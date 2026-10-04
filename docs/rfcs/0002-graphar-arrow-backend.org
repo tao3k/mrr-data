@@ -179,16 +179,25 @@ state, not reusable authority.
 | E: Shared Arrow query port | Backend dispatch plus optional engine adapter | Read/write pressure, cancellation, buffer lease lifetime, busy drain, overload counters and exact post-reopen results |
 | F: Performance qualification | Existing GraphAr phase timings and matched query fixtures | Equal facts/results, separate native I/O/C Stream/semantic admission/planning phases, varying chunks/guards, cache/RSS limits and both OS native receipts |
 
-The pinned SDK virtual-table callback copies a complete input batch into one
-native vector. A direct 4,097-row probe reproduced =data.len() <= capacity()=
+The initial 1.10502.0 SDK virtual-table callback copied a complete input batch into
+one native vector. A direct 4,097-row probe reproduced =data.len() <= capacity()=
 failure followed by a non-unwinding FFI panic and process abort. The public input
 carrier reads native capacity using the SDK safe API and rejects over-capacity
-batches before that callback. Qualification then queries the complete 4,097-row
+batches before registration. Qualification then queries the complete 4,097-row
 fixture in admitted vector-sized slices, preserving order and all values.
 Appender qualification keeps the original unsplit 4,097-row fixture, since that
 separate SDK path handles vector splitting. A caller using raw SDK APIs can still
 bypass the carrier; the future public port must require it, aggregate buffer
 leases and bounded scheduling.
+
+The current 1.10506.0 VTab internally slices inputs across native vectors.
+Our carrier keeps its conservative native-capacity slice contract. The new
+SDK's =arrow_recordbatch_to_query_params= retains every registered source in a
+process-lifetime global store so views can rebind later. Its raw VTab fixture
+therefore qualifies value conversion only, not bounded source lifetime or drain.
+Production input uses the qualified native appender/table path until a
+releasable safe registration is available; the streaming result driver does not
+use that global store. VTab lifetime release remains an explicit input-port gate.
 
 Slice A is implemented. Slice B now has a standalone core file inventory under
 =content-identity=: =mrr.graphar.file-inventory.v1= uses a DAG-CBOR root and RAW

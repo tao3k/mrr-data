@@ -1,4 +1,4 @@
-//! Bounded input for the pinned SDK's single-vector Arrow virtual table.
+//! Bounded Arrow input slices for native appending and conversion qualification.
 use crate::BackendError;
 use arrow_array::RecordBatch;
 use arrow_schema::DataType;
@@ -61,6 +61,17 @@ impl DuckDbArrowInput {
     #[must_use]
     pub fn into_batch(self) -> RecordBatch {
         self.batch
+    }
+    /// Copy this admitted slice through a Host-owned native appender.
+    /// This avoids the SDK VTab helper's process-lifetime source registry.
+    /// The Host owns transaction/flush and engine-memory budgets and keeps its
+    /// appender/connection on the Backend worker until native work completes.
+    /// # Errors
+    /// Refuses native conversion/appending errors without exposing SDK details.
+    pub fn append_to(self, appender: &mut duckdb::Appender<'_>) -> Result<(), BackendError> {
+        appender
+            .append_record_batch(self.batch)
+            .map_err(|_| BackendError::Unavailable)
     }
 }
 

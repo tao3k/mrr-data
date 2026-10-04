@@ -197,3 +197,27 @@ fn arrow_input_refuses_buffer_limit_configuration_and_unqualified_types() {
         ));
     }
 }
+
+#[test]
+fn admitted_input_appends_without_process_lifetime_source_registration() {
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch("CREATE TABLE bounded_input(id BIGINT, entity VARCHAR, payload BLOB)")
+        .unwrap();
+    let source = batch(17);
+    let source_array = Arc::downgrade(source.column(0));
+    let input = DuckDbArrowInput::admit(source, 17, 65_536).unwrap();
+    {
+        let mut appender = conn.appender("bounded_input").unwrap();
+        input.append_to(&mut appender).unwrap();
+        // Array wrappers are released by the synchronous input conversion path.
+        assert!(source_array.upgrade().is_none());
+        appender.flush().unwrap();
+    }
+    let actual: Vec<RecordBatch> = conn
+        .prepare("SELECT * FROM bounded_input ORDER BY id")
+        .unwrap()
+        .query_arrow([])
+        .unwrap()
+        .collect();
+    equal_rows(&actual, &batch(17));
+}

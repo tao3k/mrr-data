@@ -160,7 +160,9 @@ Enabling DuckDB includes the SDK's =appender-arrow= and =vtab-arrow= capabilitie
 the facade's =backend-duckdb= also enables the common =arrow= feature.
 [[file:../../crates/mrr-data-backend/src/providers/duckdb_arrow.rs][DuckDbArrowInput]] validates explicit row/buffer limits, native vector capacity,
 field identities and the qualified Int64/Utf8/Binary subset before virtual-table
-registration. It is an input carrier, with no semantic authority or job lease.
+registration. =append_to= consumes an admitted slice through the Host appender,
+avoiding the SDK VTab helper's process-lifetime source registry. It is an input
+carrier, with no semantic authority or job lease; transaction/flush remain Host-owned.
 [[file:../rfcs/0002-graphar-arrow-backend.org][RFC 0002]] specifies the proposed graph publication and Arrow query ports under
 this lifecycle, with current SDK conformance and remaining implementation gates.
 All provider instances for a canonical local path share one native database
