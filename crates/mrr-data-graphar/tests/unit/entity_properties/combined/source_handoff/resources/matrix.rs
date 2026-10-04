@@ -5,6 +5,7 @@ use std::{
     process::{Command, Stdio},
 };
 const CASE_TEST: &str = "tests::entity_properties::combined::source_handoff::backend::selective::resources::original_source_resource_case";
+const FIXTURE_TEST: &str = "tests::entity_properties::combined::source_handoff::backend::selective::resources::fixture::original_source_resource_fixture";
 
 fn verify(receipt: &Value, shape: &str, mode: &str, snapshot: Option<&str>) -> bool {
     let samples = receipt["samples"].as_array();
@@ -47,10 +48,10 @@ fn verify(receipt: &Value, shape: &str, mode: &str, snapshot: Option<&str>) -> b
                 })
         })
 }
-fn execute(shape: &str, mode: &str, fixture: &std::path::Path) -> Value {
+fn child_output(test: &str, shape: &str, mode: &str, fixture: &std::path::Path) -> Vec<String> {
     let mut child = Command::new(std::env::current_exe().unwrap())
         .args([
-            CASE_TEST,
+            test,
             "--exact",
             "--ignored",
             "--nocapture",
@@ -63,25 +64,33 @@ fn execute(shape: &str, mode: &str, fixture: &std::path::Path) -> Value {
         .stderr(Stdio::inherit())
         .spawn()
         .unwrap();
-    let mut receipts = Vec::new();
+    let mut output = Vec::new();
     for line in BufReader::new(child.stdout.take().unwrap()).lines() {
         let line = line.unwrap();
         println!("{line}");
-        if let Some(receipt) = line.strip_prefix("SOURCE-RESOURCE ") {
-            receipts.push(serde_json::from_str::<Value>(receipt).unwrap());
-        }
+        output.push(line);
     }
     assert!(
         child.wait().unwrap().success(),
-        "native original-source case refused"
+        "native original-source child refused"
     );
+    output
+}
+fn execute(shape: &str, mode: &str, fixture: &std::path::Path) -> Value {
+    let receipts = child_output(CASE_TEST, shape, mode, fixture)
+        .into_iter()
+        .filter_map(|line| {
+            line.strip_prefix("SOURCE-RESOURCE ")
+                .map(|receipt| serde_json::from_str::<Value>(receipt).unwrap())
+        })
+        .collect::<Vec<_>>();
     assert_eq!(receipts.len(), 1, "one checked native receipt required");
-    receipts.pop().unwrap()
+    receipts.into_iter().next().unwrap()
 }
 
-#[tokio::test]
+#[test]
 #[ignore = "native original-source process matrix; use the glue progress supervisor"]
-async fn original_source_resource_matrix() {
+fn original_source_resource_matrix() {
     let schema = super::schema();
     let contract = &schema["properties"];
     let mut receipts = Vec::new();
@@ -89,7 +98,10 @@ async fn original_source_resource_matrix() {
         let shape = shape.as_str().unwrap();
         let directory = tempfile::tempdir().unwrap();
         let fixture = directory.path().join("fixture.json");
-        super::fixture::write(shape, &fixture).await;
+        // Keep the parent free of native runtime initialization and its process
+        // signal ownership; it must retain every child's actual wait status.
+        child_output(FIXTURE_TEST, shape, "fixture", &fixture);
+        assert!(fixture.is_file(), "checked immutable fixture required");
         let mut snapshot = None;
         let mut full_rows = None;
         for mode in contract["modes"]["const"].as_array().unwrap() {

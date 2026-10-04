@@ -23,7 +23,15 @@ struct Payload {
     dataset: String,
     blocks: Vec<(String, Vec<u8>)>,
 }
-pub(super) async fn write(shape: &str, path: &Path) {
+#[tokio::test]
+#[ignore = "isolated immutable fixture producer; use the Rust matrix"]
+async fn original_source_resource_fixture() {
+    let shape = std::env::var("MRR_DATA_SOURCE_SHAPE").unwrap();
+    assert!(matches!(shape.as_str(), "uniform" | "skewed"));
+    let path = std::env::var("MRR_DATA_SOURCE_FIXTURE").unwrap();
+    write(&shape, Path::new(&path)).await;
+}
+async fn write(shape: &str, path: &Path) {
     println!("original-source shared fixture preparation started shape={shape}");
     let f = Fixture::with_original_options(
         shaped_fixture(shape == "skewed"),
