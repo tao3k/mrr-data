@@ -1269,3 +1269,31 @@ Frozen =56b7057a= Linux DuckGQL CI passed. Other canceled platform checks are
 unqualified. The distribution aggregator failed because its required test job
 was canceled, rather than proving a distribution semantic failure. Current-head
 platform CI remains a release gate after integration and local qualification.
+
+* GSC progress repair and exact-head Ubuntu evidence
+
+MRR PR #9 =023a6dbdaa7d9d88ad129e22cb3abcd12231bc3b= completed both Ubuntu
+native CI jobs successfully, including native build, Rust/Gerbil tests, source
+integration and lint. macOS remained in progress at observation time. This
+qualifies MRR's published head, not all downstream Data profiles.
+
+The exact GQL grammar SCM that hit the idle gate compiled successfully on macOS
+with Gambit =-:1n,2n,d5qQ -verbose= under the unchanged 30-second idle and
+1200-second wall build supervisor. It emitted 120 actual GC reports and wrote
+6,465,867 bytes of C. Log creation to final write was approximately 59.46 seconds;
+this is approximate wall time, not CPU time or a speedup comparison.
+Line buffering alone exposed definition trace but still hit the idle gate;
+real collector events cover work inside that long definition compilation.
+No heap policy or Cargo job limit was changed.
+
+A prepared =gerbil-scheme-native-build= fix additionally forwards child output
+while it runs. This is local upstream work based on PR #19 =6ccabe00=; its full
+crate and downstream closure qualification and upstream publication remain
+separate gates. The standalone compiler success alone does not close them.
+
+Data =ceccf19a= Ubuntu Rust failed ASP rule =RUST-MOD-R010= for two new parent
+scope glob imports. Both original-source test modules now name imports
+explicitly. The existing GraphAr policy binary scanning the changed current
+source passed both policy tests in 1.04 seconds; it is source-policy evidence,
+not freshly compiled original-query qualification. Concurrent Data =b4a2cf25=
+was preserved and its CI was pending behind the prior running batch.

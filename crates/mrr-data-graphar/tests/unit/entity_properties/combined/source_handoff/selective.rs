@@ -1,6 +1,20 @@
 //! One original MRR query admits full and selected reads from the same Dataset.
-use super::*;
+use super::{
+    RESERVED, authority, dispatch, execution_transport, executor, metadata, restore, source_fixture,
+};
+use crate::tests::entity_properties::{
+    combined::{
+        acceptance::alternate_root,
+        fixture::{Fixture, capture_limits},
+        remote::Remote,
+    },
+    fixture as properties,
+};
 use crate::{CapturedGraphArRelation, GraphArAdjacency, GraphArChunkLayout, GraphArWriteOptions};
+use meta_relational_reasoning as mrr;
+use mrr_data_backend::{Backend, BackendConfig, ResourceControl};
+use mrr_data_content::MemoryContentStore;
+use std::sync::Arc;
 
 #[tokio::test]
 async fn original_source_handoff_selective_dataset_matches_full_reference() {

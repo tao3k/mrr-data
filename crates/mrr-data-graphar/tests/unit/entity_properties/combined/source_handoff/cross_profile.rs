@@ -1,5 +1,16 @@
 //! Distinct original-source generations share admission, never source authority.
-use super::*;
+use super::{
+    RESERVED, authority, capture, captured_transport, drain, metadata, restore, result_limits,
+    source_fixture,
+};
+use crate::tests::entity_properties::{
+    combined::{fixture::Fixture, remote::Remote},
+    fixture as properties,
+};
+use meta_relational_reasoning as mrr;
+use mrr_data_backend::{Backend, BackendConfig};
+use mrr_data_content::MemoryContentStore;
+use std::{num::NonZeroUsize, sync::Arc};
 
 #[tokio::test]
 async fn original_source_handoff_cross_profile_reuse_refuses_foreign_generation() {
