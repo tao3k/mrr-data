@@ -22,6 +22,8 @@ use std::{
 };
 use tokio::task::JoinSet;
 
+mod mixed_lifecycle;
+
 #[cfg(feature = "turso")]
 type Native = mrr_data_backend::providers::TursoProvider;
 #[cfg(all(not(feature = "turso"), feature = "duckdb"))]

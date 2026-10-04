@@ -24,7 +24,9 @@ fn artifact() -> DuckGqlArtifact {
         .expect("set MRR_DUCKGQL_SHA256 to its authenticated digest");
     let bytes: Vec<_> = digest
         .as_bytes()
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|part| u8::from_str_radix(std::str::from_utf8(part).unwrap(), 16).unwrap())
         .collect();
     DuckGqlArtifact::capture(

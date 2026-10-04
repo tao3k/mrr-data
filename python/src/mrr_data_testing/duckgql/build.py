@@ -39,6 +39,12 @@ class CompilerOutput:
                         line,
                     )
                 )
+                or bool(
+                    re.match(
+                        rb".+:\d+(?::\d+)?: (?:optimized: |missed: |note: Considering inline candidate )",
+                        line,
+                    )
+                )
             )
             if event:
                 self.events += 1

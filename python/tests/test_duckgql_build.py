@@ -63,6 +63,35 @@ def test_output_grouping_keeps_capture_bytes_unmodified():
     assert result.stdout == payload.encode()
 
 
+def test_gcc_grouping_keeps_warnings_notes_errors_and_exit_failure(capfd):
+    progress = (
+        b"/source/parser.cpp:12:9: optimized: Inlining a into b\n"
+        b"/source/parser.cpp:13: missed: will not early inline c\n"
+        b"/include/header.h:7:2: note: Considering inline candidate d\n"
+    )
+    diagnostics = (
+        b"/source/parser.cpp:14:9: warning: invalid optimization option\n"
+        b"/include/header.h:4:2: note: declared here\n"
+        b"/source/parser.cpp:15:9: error: unsupported declaration\n"
+    )
+    output = build.CompilerOutput()
+    assert output(progress[:25]) == b""
+    assert output(progress[25:] + diagnostics) == diagnostics
+    assert b"compiler pass events: 3" in output(b"")
+    assert output(b"") == b""
+    with pytest.raises(subprocess.CalledProcessError) as failure:
+        run(
+            [
+                sys.executable,
+                "-c",
+                f"print({diagnostics.decode()!r}, end=''); raise SystemExit(9)",
+            ],
+            output_filter=build.CompilerOutput(),
+        )
+    assert failure.value.returncode == 9
+    assert "error: unsupported declaration" in capfd.readouterr().out
+
+
 def test_rule_partition_preserves_native_linkage_and_results(tmp_path):
     compiler = shutil.which("c++")
     if compiler is None:

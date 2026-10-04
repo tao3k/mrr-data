@@ -19,7 +19,7 @@ uv sync --locked --project python
 uv run --locked --project python pytest python/tests -q
 uv run --locked --project python ruff check python
 uv run --locked --project python ruff format --check python
-uv run --locked --project python mrr-data-test run-process --phase test -- cargo test -p mrr-data-core -- --nocapture
+uv run --locked --project python mrr-data-test run-process --phase test -- /path/to/test-binary --nocapture
 uv run --locked --project python mrr-data-test check-docs
 uv run --locked --project python mrr-data-test check-features
 uv run --locked --project python mrr-data-test check-spec-fixtures --spec-root /path/to/spec
@@ -27,6 +27,20 @@ uv run --locked --project python mrr-data-test check-spec-fixtures --spec-root /
 
 The package resolves the checkout independently of the current directory.
 An installed wheel outside the checkout requires =MRR_DATA_ROOT=.
+
+For Cargo tests, compile first and record the build's exact executable identities.
+The test phase executes those binaries directly, keeping Cargo's dependency and
+fingerprint checks outside the test inactivity window. Failed/incomplete builds,
+missing targets and ambiguous artifacts are refused before launching any test.
+Rust continues to own all semantic assertions.
+
+#+begin_src sh
+cargo_artifacts=$(mktemp)
+cargo test -p mrr-data-core --locked --lib --no-run --message-format=json > "$cargo_artifacts"
+uv run --locked --project python mrr-data-test run-process --phase test \
+  --cargo-artifacts "$cargo_artifacts" --test-target mrr_data_core -- --nocapture
+rm "$cargo_artifacts"
+#+end_src
 
 * Native and upstream suites
 
