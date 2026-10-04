@@ -1783,3 +1783,30 @@ platform acceptance.
 
 The frozen DataFusion/GraphAr Source all-target strict Clippy gate passed in
 =2m53s= with =-D warnings= and unchanged idle30/wall1200 supervision.
+
+** Scheme v2 integration requalification
+
+Remote =e44d642c= added bounded Scheme v2 backend metadata without changing
+the frozen MRR/GSC pins. After preserving that parallel work, local
+=e850fa30063ef39db8c1ba2a478f386796dd0f34= rebuilt both Source test programs in
+=3m09s=. DataFusion's two cases passed in =2.94s= and GraphAr's nine in =4.15s=;
+strict all-target Source Clippy passed in =48.36s= and the facade in =29.38s=.
+The matrix also passed in =38.65s= while incremental lint overlapped; this run
+is retained locally as correctness evidence only. A subsequent standalone
+matrix passed in =29.66s= with all eight modes and unchanged supervision.
+
+[[file:../../evidence/original-source/original-source-d137-scheme-v2-macos.jsonl][The standalone merged-source envelope]]
+records that clean collection head, executable SHA-256
+=1256f8e893be4caa6bd405216f7c6393bfd1054fd61d36d466279e5f1d49d9e4= and Cargo
+artifact SHA-256 =130ee0cd44cb897e31f0872c31b1b896997006de7ae5a1284f730ba26273c55c=.
+Uniform warm/full versus warm/selective medians were =200.66ms= / =166.51ms=;
+skewed were =246.31ms= / =127.38ms=. The prior run's wall/CPU regressions remain
+retained. Sign changes across these tiny-fixture runs and uncontrolled OS cache
+preclude a production speedup claim; release-scale and platform gates stay open.
+
+The merge also introduced two Scheme receipts under =docs/qualifications=,
+which failed the existing Org-only documentation gate. Moving the unchanged
+original receipt and the merged receipt into =evidence/qualifications=, updating
+their references, restores the =21= Org document / =7= README check. The merged
+receipt's original-receipt path changes; its historical source hashes remain
+historical inputs. This path repair changes no backend runtime source.
