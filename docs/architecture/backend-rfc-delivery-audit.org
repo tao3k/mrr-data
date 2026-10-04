@@ -1486,7 +1486,7 @@ remain retained; trace does not establish a startup performance improvement.
 
 ** Published diagnostic propagation and current CI boundary
 
-Data root/fuzz now pin MRR =7d23fd23cad5e0516b4f9ec4df18bf294d7a8276=,
+Data root/fuzz now pin MRR =ff3aa3eb57e9fffd94616fd70b6ecdd605959ef4=,
 which pins GSC =b20d209bc63fd6bfec00f5b69e5738971986daf1=. Registry versions
 are preserved. The CI original-query step enables =GERBIL_PARSER_LR_TRACE=1=.
 
@@ -1514,3 +1514,23 @@ proof job failed before project tests while downloading Elan (HTTP 403), while
 its companion job passed. Those receipts do not qualify MRR =7d23fd2= or the
 new Data head. Current-head CI and full Data original-query qualification
 remain required, as do paired target-specific performance measurements.
+
+** P0 supervision: exited parents and owned descendants
+
+MRR =ff3aa3eb57e9fffd94616fd70b6ecdd605959ef4= now reaps direct children
+independently of output pipe readiness and kills the owned process group even
+when its parent has already exited. The real fork regression deliberately
+prints all successful receipts and exits zero while a SIGTERM-ignoring child
+retains stdout. The previous supervisor leaked that child; the repair still
+refuses at idle5 with status 124 and cleans the descendant. Six process
+regressions passed in 5.542s. Timeout diagnostics include parent status and pipe
+state, providing evidence for the earlier macOS failure without admitting it.
+
+GSC =b20d209= remains unchanged with exact-head Ubuntu/macOS CI success. The
+previously failing tiny dynamic Scheme module compiled independently, and a
+retry of the existing PackageSpec prefix exited zero with actual GC work. An
+owned GXI sample showed hash/expander/collector work. Those reused-prefix
+receipts do not close the failed fresh-prefix or full current-pin source build.
+P0 full cold build and original-query execution remain the next acceptance
+boundary; P1 ABI/lifecycle and P2 paired release-query/memory evidence retain
+separate gates. No production release or performance gain is claimed here.
