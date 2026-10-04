@@ -8,7 +8,8 @@ use mrr_property_source::{
 };
 
 const SOURCE: &str = include_str!("../../../fixtures/healthcare-case-profile-relations.gql");
-const SOURCE_DIGEST: &str = "7a3a88a9ebd24cd738d426c0def633247d1a0fc13e9e37cca13bb23e90ba0c63";
+const SOURCE_DIGEST: &str =
+    "sha256:7a3a88a9ebd24cd738d426c0def633247d1a0fc13e9e37cca13bb23e90ba0c63";
 
 struct Executor<'a> {
     restored: &'a RestoredSnapshot,

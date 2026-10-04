@@ -396,6 +396,8 @@ jobs:
           cargo clippy -p mrr-data-content --features property-snapshot --all-targets --locked -- -D warnings
           cargo clippy -p mrr-data-datafusion --all-targets --locked -- -D warnings
       - name: Qualify original Healthcare source through native GraphAr and cold/warm snapshots
+        env:
+          MRR_NATIVE_PROGRESS: '1'
         run: |
           cargo test -p mrr-data-datafusion -p mrr-data-graphar --features mrr-data-datafusion/source-handoff,mrr-data-graphar/source-handoff --locked --no-run
           uv run --locked --project python mrr-data-test run-process --phase test -- cargo test -p mrr-data-datafusion -p mrr-data-graphar --features mrr-data-datafusion/source-handoff,mrr-data-graphar/source-handoff --locked source_handoff -- --nocapture --test-threads=1

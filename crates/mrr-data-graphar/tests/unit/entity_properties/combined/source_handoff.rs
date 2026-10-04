@@ -12,7 +12,8 @@ use std::num::NonZeroUsize;
 const SOURCE: &str = include_str!(
     "../../../../../mrr-data-datafusion/tests/fixtures/healthcare-case-profile-relations.gql"
 );
-const SOURCE_DIGEST: &str = "7a3a88a9ebd24cd738d426c0def633247d1a0fc13e9e37cca13bb23e90ba0c63";
+const SOURCE_DIGEST: &str =
+    "sha256:7a3a88a9ebd24cd738d426c0def633247d1a0fc13e9e37cca13bb23e90ba0c63";
 fn compile() -> CompiledPropertySourceQuery {
     compile_property_source_query("case-profile-relations.gql", SOURCE, SOURCE_DIGEST).unwrap()
 }
