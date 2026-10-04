@@ -441,7 +441,7 @@ revocation integration.
 | 1 | Backend query/output and dispatch | Explicit successful terminal; late failure/panic stays failure; leases/backpressure/cancellation; recovery during stalled resource work |
 | 2 | Optional DuckDB driver | Both materialized and native streaming drivers; schema/null/binary preservation, late native fetch errors, exact-limit EOF, native interrupt and retained buffer teardown |
 | 3 | Facade Production composition | Real native publication/CAS/reopen/cold-read/query/MRR admission on both providers and OS, bound to exact source/pins |
-| 4 | Host/domain authority integration | Actual policy/key snapshot enrollment and retirement synchronized with fresh effects and final protected disclosure |
+| 4 | Host/domain authority integration | Simulated Host policy/key snapshot enrollment, rotation and retirement synchronized with fresh effects and final protected disclosure |
 | 5 | Fault injection at every publication phase | Original-operation recovery after child/root ACK loss and process crash; no partial head; separate power-loss and deployed-store receipts |
 | 6 | Matched performance matrix | Same facts and admitted results; queue/validation/native fetch/export/admission timings; first batch, retained buffers, RSS/spill, cold/warm and both OS |
 

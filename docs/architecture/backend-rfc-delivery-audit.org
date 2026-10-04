@@ -34,11 +34,11 @@ See [[file:0001-mrr-data-plane.org][the canonical data plane]], [[file:shared-ba
 
 | Area | Implemented evidence | Remaining boundary |
 |------+----------------------+--------------------|
-| Shared execution | Shared worker admission, reserved recovery, retained handles, typed driver refusals, cooperative controls | Explicit stop while queued; long native-call interrupt/hard deadline; comprehensive mixed-workload evidence |
+| Shared execution | Shared worker admission, reserved recovery, retained handles, typed driver refusals, cooperative controls and queued explicit stop | Long native-call interrupt/hard deadline; comprehensive mixed-workload evidence |
 | Turso query | Captured binary-Entity outgoing single hop, distinct endpoint bindings, parameterized SQL, FactId row order, rollback, retained output, MRR admission | General properties/paths, production source reuse, running native load/fetch stop receipts |
 | DuckDB Arrow | Checked/appender input, materialized and fallible streaming output, late error, native interrupt, leased output | Graph-query extension bridge, native RSS/spill; releasable VTab registration |
 | GraphAr | Native bounded projection, complete inventory binding, verified capture, publication/cold restore and finite MRR admission composition | Snapshot-pinned selective adjacency/property access and broader lossless physical profiles |
-| Authority/durability | Logical authority/version checks and finite close/reopen recovery | Live Host policy/key retirement/disclosure; publication-phase process crash and deployed-store acceptance |
+| Authority/durability | Authority/version checks, simulated Host policy/key rotation/retirement/disclosure and finite close/reopen recovery | Publication-phase process crash fixtures |
 
 * Findings that change the execution plan
 
@@ -69,7 +69,7 @@ keeps the candidate lease through drain, without cloning the physical result.
 Host conversion scratch is still explicitly budgeted. This provides a library
 handoff receipt, not a deployed Host invocation.
 
-Qualify that handoff through the real caller before broadening results;
+Qualify that handoff through a simulated Host caller before broadening results;
 include a retained clone and conversion overlap, not only handle-drop tests.
 A borrowed/consuming lease-aware conversion API should be selected from actual
 MRR caller requirements rather than introducing a second result model.
@@ -116,8 +116,8 @@ replay source GQL into a second semantic binder to manufacture completion.
 | P1-A | Shared Backend queued stop | Explicit cancel/deadline while both permit lanes are blocked returns typed refusal; no driver execution, budget returns; recovery progresses | Existing shared scheduler |
 | P1-B | Turso cooperative execution / cleanup | Deterministic stop during conversion/load/fetch; rollback and teardown finish before drain; cleanup failure overrides output; no candidate | P1-A; pinned safe SDK |
 | P1-C | GraphAr selective source | Same immutable binding and independently expected rows; checked adjacency/offset/property alignment, mutation refusal, retained source lifetime | Current inventory/projection; P1-A |
-| P1-D | Host authority and durability | Real policy/key enrollment/retirement plus protected disclosure; publication-phase ACK loss and process-crash original-operation recovery | Shared publication contract; separate Host adapter |
-| P2-A | Original property-path case | Extend declared GraphAr property mapping and admitted MRR slice; original Healthcare query, null/missing/multiplicity/order and expected result; real caller handoff | GraphAr source contract and MRR frontend/catalog |
+| P1-D | Host authority and durability | Simulated policy/key enrollment/retirement plus protected disclosure; publication-phase ACK loss and process-crash original-operation recovery | Shared publication contract; separate Host adapter |
+| P2-A | Original property-path case | Extend declared GraphAr property mapping and admitted MRR slice; original Healthcare query, null/missing/multiplicity/order and expected result; simulated caller handoff | GraphAr source contract and MRR frontend/catalog |
 | P2-B | Source reuse and measured optimization | Snapshot/profile/catalog keyed cache invalidation, owned leases, bounded reuse; matched cold/warm copy/RSS/spill/read-byte measurements | Correctness slices above |
 | Research | DuckGQL bridge | Versioned typed external entrypoint + compatible binaries + exact MRR admission/result ordering | Independent upstream/API gate |
 
@@ -142,10 +142,13 @@ not the physical graph foundation's architectural position.
 * Definition of closure
 
 A slice is closed only when its implementation, refusal/lifecycle fixtures,
-exact-head platform checks and RFC status agree. Production readiness additionally
-requires live authority, actual Host invocation, durability and deployed-store
-receipts for the supported deployment. General graph-query conformance and hard
-native deadlines remain unclaimed until individually qualified.
+exact-head platform checks and RFC status agree. Current P0–P2 closure concerns
+the framework: simulated Host authorization and original-query callers, native
+local providers, and local process/fault injection are sufficient evidence.
+Deployment credentials, live Lambda/Marlin processes and deployed object stores
+are not prerequisites. Future product deployment requires its own integration
+acceptance. General graph-query conformance and hard native deadlines remain
+unclaimed until individually qualified.
 
 * Current execution checkpoint
 
@@ -160,8 +163,31 @@ whole-source batch export rather than a vertex/chunk range cursor. A full scan
 with a Rust-side filter is not selective I/O. Ordered adjacency publication and
 range/offset-aware safe reader qualification must precede the claimed P1-C gate.
 
-Requested Host inputs: actual policy/key retirement and protected-disclosure
-entrypoint; actual Lambda/Marlin producer/caller repository and runtime entry.
-Until supplied, library fixtures cannot close live authority or application
-invocation. Process-crash fault injection, selective graph access, original
+Host inputs are simulated in this stage. Use the existing Backend authority
+CAS for policy/key enrollment, rotation and retirement; serialize final protected
+disclosure with those changes in the simulated Host. Historical recovery remains
+a receipt lookup, never fresh disclosure permission. Original Lambda/Marlin
+query bytes and expected rows can run through local simulated callers.
+Publication-phase process-crash injection, selective graph access, original
 property-path expansion and the matched performance matrix remain outstanding.
+
+** Simulated Host authority contract
+
+=backend_consumer::authorities::simulated_host_disclosure_rotation_retirement_and_replay_are_separate=
+uses the existing native Backend with a local simulated Host. It enrolls separate
+policy and key commitments, binds both to a fresh content effect, refuses omitted
+or stale guards, rotates the key, and orders final disclosure before concurrent
+policy retirement. Canceled pending disclosure emits nothing. Historical replay
+and exact receipt recovery remain available after retirement, while disclosure
+is refused both before and after native reopen.
+
+All mutations and final disclosure pass through one simulated Host boundary.
+This qualifies that single-Host contract; it does not claim that a local mutex
+coordinates independent processes or that Backend CAS alone authorizes payload
+release. A future distributed Host supplies its own equivalent final-disclosure
+coordination. No live credential or deployed service is needed for this fixture.
+
+Local simulated-Host acceptance: the same consumer passes with native Turso
+=0.8.1= and DuckDB; strict Backend consumer clippy (=--profile test=,
+=-D warnings=), formatting and diff checks pass. Remote acceptance of the new
+commit remains a separate exact-head CI gate.

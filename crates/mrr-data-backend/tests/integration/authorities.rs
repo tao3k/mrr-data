@@ -436,3 +436,212 @@ async fn lost_logical_head_cannot_be_reenrolled_as_fresh_authority() {
     ));
     reopened.shutdown().await.unwrap();
 }
+
+/// A single simulated Host owns all authority mutation and final disclosure.
+/// The gate represents the Host's execution boundary, not a Backend permission
+/// oracle. Multi-process Hosts must supply their own equivalent coordination.
+struct SimulatedHost {
+    port: ProfilePort,
+    boundary: tokio::sync::Mutex<Vec<Vec<u8>>>,
+}
+impl SimulatedHost {
+    async fn advance(&self, proposal: Update) -> AuthorityState {
+        let _boundary = self.boundary.lock().await;
+        self.port
+            .advance_authority("shared-home", proposal)
+            .await
+            .unwrap()
+    }
+
+    async fn disclose(
+        &self,
+        guards: &[Guard],
+        payload: &[u8],
+        held: Option<(
+            tokio::sync::oneshot::Sender<()>,
+            tokio::sync::oneshot::Receiver<()>,
+        )>,
+    ) -> bool {
+        let mut emitted = self.boundary.lock().await;
+        // Policy and key are both mandatory. Neither historical receipts nor
+        // caller-supplied snapshots establish current disclosure permission.
+        if guards.len() != 2
+            || !["policy", "key"]
+                .iter()
+                .all(|id| guards.iter().filter(|g| g.authority_id == *id).count() == 1)
+        {
+            return false;
+        }
+        for guard in guards {
+            if guard.state.status != Status::Active
+                || self
+                    .port
+                    .authority("shared-home", &guard.authority_id)
+                    .await
+                    .unwrap()
+                    != Some(guard.state)
+            {
+                return false;
+            }
+        }
+        if let Some((entered, release)) = held {
+            let _ = entered.send(());
+            // Caller cancellation/drop never emits the protected payload.
+            if release.await.is_err() {
+                return false;
+            }
+        }
+        emitted.push(payload.into());
+        true
+    }
+}
+
+async fn simulate_disclosure_retirement_race(
+    host: std::sync::Arc<SimulatedHost>,
+    guards: &[Guard],
+) -> AuthorityState {
+    // A canceled pending disclosure releases the boundary without emitting.
+    let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = tokio::sync::oneshot::channel();
+    let canceled = tokio::spawn({
+        let host = host.clone();
+        let guards = guards.to_vec();
+        async move {
+            host.disclose(&guards, b"canceled", Some((entered_tx, release_rx)))
+                .await
+        }
+    });
+    tokio::time::timeout(std::time::Duration::from_secs(3), entered_rx)
+        .await
+        .unwrap()
+        .unwrap();
+    canceled.abort();
+    assert!(canceled.await.unwrap_err().is_cancelled());
+    drop(release_tx);
+    assert_eq!(host.boundary.lock().await.len(), 2);
+
+    // An in-flight final disclosure finishes before retirement can enter the
+    // same Host boundary. Once retirement completes, no later disclosure emits.
+    let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = tokio::sync::oneshot::channel();
+    let disclosure = tokio::spawn({
+        let host = host.clone();
+        let guards = guards.to_vec();
+        async move {
+            host.disclose(
+                &guards,
+                b"before-retirement",
+                Some((entered_tx, release_rx)),
+            )
+            .await
+        }
+    });
+    tokio::time::timeout(std::time::Duration::from_secs(3), entered_rx)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(host.boundary.try_lock().is_err());
+    let retirement = tokio::spawn({
+        let host = host.clone();
+        let expected = guards[0].state;
+        async move {
+            host.advance(Update {
+                authority_id: "policy".into(),
+                expected: Some(expected),
+                replacement: expected.commitment,
+                status: Status::Retired,
+            })
+            .await
+        }
+    });
+    release_tx.send(()).unwrap();
+    assert!(disclosure.await.unwrap());
+    retirement.await.unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn simulated_host_disclosure_rotation_retirement_and_replay_are_separate() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("simulated-host.db");
+    let backend = open(&path).await;
+    let host = std::sync::Arc::new(SimulatedHost {
+        port: backend.profile("profile.v1", "tenant").unwrap(),
+        boundary: tokio::sync::Mutex::new(Vec::new()),
+    });
+    let mut guards = Vec::new();
+    for id in ["policy", "key"] {
+        guards.push(Guard {
+            authority_id: id.into(),
+            state: host
+                .advance(Update {
+                    authority_id: id.into(),
+                    expected: None,
+                    replacement: root(id.as_bytes()),
+                    status: Status::Active,
+                })
+                .await,
+        });
+    }
+    let original = host.port.with_authorities(&guards).unwrap();
+    let w = write("authorized-effect", None, b"protected");
+    committed(
+        &original
+            .commit(w, Some(&ack(w)), |_| Ok::<_, ()>(()))
+            .await
+            .unwrap(),
+    );
+    assert!(!host.disclose(&guards[..1], b"omitted-key", None).await);
+    assert!(host.disclose(&guards, b"initial", None).await);
+    let old = guards.clone();
+    guards[1].state = host
+        .advance(Update {
+            authority_id: "key".into(),
+            expected: Some(guards[1].state),
+            replacement: root(b"key-rotated"),
+            status: Status::Active,
+        })
+        .await;
+    assert!(!host.disclose(&old, b"stale-key", None).await);
+    assert!(host.disclose(&guards, b"rotated", None).await);
+
+    let retired = simulate_disclosure_retirement_race(host.clone(), &guards).await;
+    assert!(!host.disclose(&guards, b"after-retirement", None).await);
+    guards[0].state = retired;
+    assert!(!host.disclose(&guards, b"retired-snapshot", None).await);
+    // Exact historical receipts survive retirement without re-authorizing data.
+    assert!(original.recover(w).await.unwrap().is_some());
+    assert!(matches!(
+        original
+            .commit(w, None, |_| -> Result<(), ()> {
+                panic!("historical replay must not validate a fresh effect")
+            })
+            .await
+            .unwrap(),
+        Outcome::Replayed(_)
+    ));
+    assert!(!host.disclose(&old, b"replayed-payload", None).await);
+    assert_eq!(
+        *host.boundary.lock().await,
+        [
+            b"initial".to_vec(),
+            b"rotated".to_vec(),
+            b"before-retirement".to_vec()
+        ]
+    );
+    backend.shutdown().await.unwrap();
+    let reopened = open(&path).await;
+    let resumed = SimulatedHost {
+        port: reopened.profile("profile.v1", "tenant").unwrap(),
+        boundary: tokio::sync::Mutex::new(Vec::new()),
+    };
+    assert!(!resumed.disclose(&old, b"restart-bypass", None).await);
+    assert_eq!(
+        resumed
+            .port
+            .authority("shared-home", "policy")
+            .await
+            .unwrap(),
+        Some(retired)
+    );
+    reopened.shutdown().await.unwrap();
+}

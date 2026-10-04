@@ -415,8 +415,9 @@ RFC 0002 gates.
 5. Add the one/two-edge property-path slice, including the original Healthcare
    query, only after each path supports admitted property equality, nullable
    outputs, exact catalog mapping and =RETURN ALL= multiplicity. DuckGQL-only
-   CSR algorithms are a separate DuckDB capability. Real Lambda/Marlin calls
-   and deployed behavior remain separate acceptance gates.
+   CSR algorithms are a separate DuckDB capability. Local simulated Lambda/Marlin
+   callers suffice for this framework gate; real deployment acceptance is future
+   product work and does not block the RFC implementation.
 6. Compare capture, fact-to-row conversion, plugin registration or Turso load,
    planning, query, result conversion and MRR admission separately. Vary graph
    size, degree skew, selectivity, property width and warm/cold reuse; record
