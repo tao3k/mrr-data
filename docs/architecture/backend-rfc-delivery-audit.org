@@ -1464,3 +1464,53 @@ qualify the four later GraphAr cases or the =68545984= dependency. The remote
 =18cf4df0= run =37211540167= was still pending native checks at this receipt;
 Python, Arrow IPC fuzz and Ubuntu S3/TLS had passed. Exact published-head
 platform acceptance and M3 original-query measurements remain open.
+** 2026-10-04 cold source trace and compiler localization
+
+The published-pin cold build's 59 object start/completion events identify
+=clan/poo/trie= as the sole unfinished module (58 completed). Owned GCC 16.2.0
+sampling showed RTL PRE load-motion expression-table hashing/comparison.
+Verbose optimization remarks alone reproduced idle30 refusal. A diagnostic
+compile retaining =-O2= and SDK ABI flags, with only =-fno-gcse-lm= added,
+completed under unchanged build supervision. The GSC #18 candidate now applies
+this narrow policy to SDK-declared GCC generated modules independently of
+verbosity and observes actual module intermediates. Full latest-pin archive,
+semantic and performance acceptance remain separate gates.
+
+Enabling the parser's existing =GERBIL_PARSER_LR_TRACE=1= produced actual
+artifact decode/verified/admitted output during initialization. The independently
+supervised admitted local-patch source executables passed DataFusion 2/2 in
+7.55s and GraphAr 4/4 in 9.93s, with idle5 unchanged. This is the earlier
+=023a6db= MRR composition and helper-local patch, not latest-pin qualification.
+The CI original-query step now enables this flag. Earlier startup failures
+remain retained; trace does not establish a startup performance improvement.
+
+** Published diagnostic propagation and current CI boundary
+
+Data root/fuzz now pin MRR =7d23fd23cad5e0516b4f9ec4df18bf294d7a8276=,
+which pins GSC =b20d209bc63fd6bfec00f5b69e5738971986daf1=. Registry versions
+are preserved. The CI original-query step enables =GERBIL_PARSER_LR_TRACE=1=.
+
+The candidate full-chain local-patch build failed idle30 during PackageSpec
+preparation before the archive object stage. A direct experiment confirmed
+Gerbil's per-module GSC options follow =-target C=, causing appended runtime
+=-:= and =-verbose= options to be warned as improperly placed and ignored.
+The MRR build helper now preserves the existing SDK mappings and appends real
+collector diagnostics through =GAMBOPT= for GXI and child GSC. The small actual
+GSC module experiment passed with real GC output. A warm package run succeeded;
+the fresh run retained idle30 failure and =unable to execute tool 'ld'= errors.
+The full latest-pin cold Data composition therefore remains unqualified.
+
+Current MRR production helper source passed direct strict Clippy-driver
+checking against qualified cached dependencies. Full local Cargo helper test
+and check attempts still failed idle30 in Rust dependencies. Five Python
+process-supervision regressions passed, including the Darwin exited-child
+signal race and retention of live permission refusal. Cleanup repair preserves
+the timeout refusal; a final =OK= line alone is not process success.
+
+Exact GSC =b20d209= Ubuntu and macOS CI both completed successfully. Earlier
+MRR =f256c13= had two successful Ubuntu native jobs; one macOS native job failed
+idle5 after final harness output and then hit the repaired cleanup race. One
+proof job failed before project tests while downloading Elan (HTTP 403), while
+its companion job passed. Those receipts do not qualify MRR =7d23fd2= or the
+new Data head. Current-head CI and full Data original-query qualification
+remain required, as do paired target-specific performance measurements.

@@ -407,6 +407,7 @@ jobs:
       - name: Qualify original Healthcare source through native GraphAr and cold/warm snapshots
         env:
           MRR_NATIVE_PROGRESS: '1'
+          GERBIL_PARSER_LR_TRACE: '1'
           GERBIL_BUILD_VERBOSE: '9'
           RUSTC_WORKSPACE_WRAPPER: '${{ github.workspace }}/python/src/mrr_data_testing/rustc_progress.py'
         run: |
