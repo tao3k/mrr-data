@@ -530,4 +530,10 @@ commit, and prove that stale evidence cannot advance the logical head. Separate
 Context and Backend passes do not establish that combined property.
 
 Native qualification inputs, bounded runtime results and retained failures are
-recorded in [[file:../qualifications/backend-scheme-v2.ss][the Scheme v2 qualification receipt]].
+recorded in [[file:../qualifications/backend-scheme-v2.ss][the original Scheme v2 qualification receipt]]
+for commit =9db8c41eed07513808e4ce1278a01b4b33e52334= with MRR
+=685459849876f84addc0a8bad40de4c00caede7d=. The dependency merge uses MRR
+=d137b6d536136982ad0c6d2f0d1bc30c19159899=; its independently rebuilt
+artifacts and results are recorded in
+[[file:../qualifications/backend-scheme-v2-merged-head.ss][the merged dependency qualification receipt]].
+The original receipt remains historical evidence for its own source graph.
