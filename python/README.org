@@ -4,8 +4,7 @@
 
 This installable Python project owns repository checks, upstream conformance
 fixtures and native qualification. =pyproject.toml= declares the package, CLI,
-optional POO Flow dependencies and development tools. =uv.lock= fixes their
-resolution. Runtime integrations remain under =integrations/poo_flow=.
+development tools. =uv.lock= fixes their resolution.
 
 All commands below run from the MRR Data checkout root:
 
@@ -32,8 +31,7 @@ An installed wheel outside the checkout requires =MRR_DATA_ROOT=.
 SQL, patches and provenance receipts live beside their owning suite and are
 packaged with it. Tests live in =tests=, outside the production package.
 Native suites require explicit provisioned SDKs and artifacts; ordinary Python
-unit tests do not download or compile them. Enable =--extra poo-flow= when
-running the S3 suite's POO Flow acceptance.
+unit tests do not download or compile them.
 
 * Progress and deadlines
 

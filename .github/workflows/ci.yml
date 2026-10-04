@@ -134,20 +134,16 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
-      - name: Install POO Flow runtime dependencies
+      - name: Install conformance test dependencies
         run: |
           python3 -m pip install 'uv==0.11.3'
-          uv sync --locked --project python --extra poo-flow
-      - name: Test and lint the optional POO Flow resource
-        run: |
-          cargo test -p mrr-data-poo-flow --features runtime --locked
-          cargo clippy -p mrr-data-poo-flow --features runtime --all-targets --locked -- -D warnings
+          uv sync --locked --project python
       - name: Check conformance receipt freshness contracts
         run: uv run --locked --project python pytest python/tests/test_s3_receipts.py -q
       - name: Run local S3 authentication, TLS and snapshot conformance
         env:
           RUSTUP_TOOLCHAIN: 1.95.0
-        run: uv run --locked --project python --extra poo-flow mrr-data-test s3-conformance --poo-flow --receipt "$RUNNER_TEMP/s3-conformance-receipt.json"
+        run: uv run --locked --project python mrr-data-test s3-conformance --receipt "$RUNNER_TEMP/s3-conformance-receipt.json"
       - name: Summarize tested source and service
         env:
           RECEIPT_PATH: ${{ runner.temp }}/s3-conformance-receipt.json

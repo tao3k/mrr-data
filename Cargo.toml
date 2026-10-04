@@ -2,7 +2,6 @@
 members = [
   "build-support/mrr-data-asp-rust-project-policy",
   "crates/mrr-data",
-  "crates/mrr-data-poo-flow",
   "crates/mrr-data-arrow",
   "crates/mrr-data-content",
   "crates/mrr-data-backend",

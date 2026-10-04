@@ -263,18 +263,15 @@ member crate.
 
 ** POO Flow consumer
 
-The optional [[file:../../integrations/poo_flow/README.org][POO Flow resource]] publishes
-static runtime-plan edges and restores them through S3/Kache before executing
-an MRR-admitted endpoint query. It plugs into the existing Python Runtime tool
-boundary; it does not execute the Healthcare GQL queries or restore a full plan.
-Build it explicitly with ~cargo build -p mrr-data-poo-flow --features runtime~.
-
+The Legacy static-edge worker and Python resource have been removed.
 The generic ~mrr-data-content/property-snapshot~ feature materializes typed
 Arrow/CID property snapshots. ~mrr-data-datafusion~ restores and executes a
-bounded physical query supplied by MRR. Source compilation, semantic binding,
-execution sequencing, and candidate admission belong to MRR's Query API;
-the POO Flow caller must connect that API to these physical capabilities.
-The existing Python tool integration remains the static-edge profile.
+bounded physical query supplied by MRR. Source compilation and semantic
+admission belong to MRR; ~execute_restored_property_query_handoff~ exports
+complete original Scheme v2 result bytes and the exact physical binding.
+POO Flow consumes that typed handoff through its native Temporal bridge.
+This is a read-only library path; durable remote publication and recovery are
+separate gates and have no replacement worker in this slice.
 
 * GraphAr and Arrow Backend design
 

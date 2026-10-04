@@ -13,7 +13,6 @@ import socket
 import socketserver
 import ssl
 import subprocess
-import sys
 import tempfile
 import threading
 import time
@@ -21,7 +20,6 @@ import time
 REVISION = "8ac644246b5a11664eaed6cbb3a36b3874047586"
 REPOSITORY = "https://github.com/s3s-project/s3s.git"
 ROOT = repository_root()
-POO_REVISION = "7f60e82b609ed2227ce3e71d17c5a1a351902e54"
 KEY, SECRET = "local-conformance-key", "local-conformance-secret"
 
 
@@ -201,38 +199,7 @@ class Relay(socketserver.BaseRequestHandler):
             return
 
 
-def poo_runtime(cache):
-    source = cache / ("poo-flow-" + POO_REVISION)
-    if not source.exists():
-        source.mkdir(parents=True)
-        run(["git", "init", source], capture_output=True)
-        run(
-            [
-                "git",
-                "-C",
-                source,
-                "fetch",
-                "--depth=1",
-                "https://github.com/tao3k/poo-flow.git",
-                POO_REVISION,
-            ]
-        )
-        run(
-            ["git", "-C", source, "checkout", "--detach", "FETCH_HEAD"],
-            capture_output=True,
-        )
-    actual = subprocess.check_output(
-        ["git", "-C", source, "rev-parse", "HEAD"], text=True
-    ).strip()
-    dirty = subprocess.check_output(
-        ["git", "-C", source, "status", "--porcelain", "--untracked-files=no"]
-    )
-    if actual != POO_REVISION or dirty:
-        raise RuntimeError("POO Flow runtime must match the clean pinned source")
-    return source / "packages/python-runtime/src"
-
-
-def example_smoke(root, endpoint, ca, poo_source=None):
+def example_smoke(root, endpoint, ca):
     environment = {k: v for k, v in os.environ.items() if not k.startswith("AWS_")}
     empty_config = root / "empty-aws-config"
     empty_config.write_text("")
@@ -247,54 +214,6 @@ def example_smoke(root, endpoint, ca, poo_source=None):
         AWS_CONFIG_FILE=str(empty_config),
         AWS_SHARED_CREDENTIALS_FILE=str(empty_config),
     )
-    consumer_receipt = None
-    if poo_source is not None:
-        environment["PYTHONPATH"] = str(poo_source)
-        run(
-            [
-                sys.executable,
-                "-m",
-                "unittest",
-                "discover",
-                "-s",
-                "integrations/poo_flow",
-                "-p",
-                "test_*.py",
-            ],
-            cwd=ROOT,
-            env=environment,
-        )
-        run(
-            [
-                "cargo",
-                "build",
-                "-p",
-                "mrr-data-poo-flow",
-                "--features",
-                "runtime",
-                "--locked",
-            ],
-            cwd=ROOT,
-        )
-        environment["S3_ROOT"] = "poo-flow/static-edges"
-        output = root / "poo-flow-receipt.json"
-        run(
-            [
-                sys.executable,
-                ROOT / "integrations/poo_flow/acceptance.py",
-                "--worker",
-                ROOT / "target/debug/mrr-data-poo-flow",
-                "--receipt",
-                output,
-            ],
-            cwd=ROOT,
-            env=environment,
-        )
-        consumer_receipt = json.loads(output.read_text())
-        consumer_receipt["runtime_revision"] = POO_REVISION
-        consumer_receipt["worker_sha256"] = hashlib.sha256(
-            (ROOT / "target/debug/mrr-data-poo-flow").read_bytes()
-        ).hexdigest()
     payload = root / "example-input"
     payload.write_bytes(b"local TLS example roundtrip")
     for example in ["s3_cache", "s3_snapshot"]:
@@ -337,7 +256,6 @@ def example_smoke(root, endpoint, ca, poo_source=None):
     )
     if oversized.returncode == 0 or "file exceeds 64 MiB" not in oversized.stderr:
         raise RuntimeError("single-file example did not reject oversized input")
-    return consumer_receipt
 
 
 def main():
@@ -348,18 +266,12 @@ def main():
         default=Path(tempfile.gettempdir()) / "mrr-s3-conformance",
     )
     parser.add_argument("--receipt", type=Path)
-    parser.add_argument(
-        "--poo-flow",
-        action="store_true",
-        help="also qualify the installed POO Flow runtime consumer",
-    )
     args = parser.parse_args()
     # Never leave an earlier success receipt at the requested output on failure.
     if args.receipt:
         args.receipt.unlink(missing_ok=True)
     source_digest = workspace_digest()
     binary = build(args.cache_dir.resolve())
-    poo_source = poo_runtime(args.cache_dir.resolve()) if args.poo_flow else None
     with tempfile.TemporaryDirectory(prefix="mrr-s3-tls-") as directory:
         root = Path(directory)
         ca, key, cert = certificates(root)
@@ -487,7 +399,7 @@ def main():
                         raise RuntimeError(
                             "protected S3 conformance test did not execute exactly once"
                         )
-                    consumer_receipt = example_smoke(root, endpoint, ca, poo_source)
+                    example_smoke(root, endpoint, ca)
                 finally:
                     proxy.shutdown()
                     thread.join(timeout=5)
@@ -524,8 +436,6 @@ def main():
         ],
         "result": "passed",
     }
-    if consumer_receipt is not None:
-        receipt["poo_flow"] = consumer_receipt
     if args.receipt:
         args.receipt.write_text(json.dumps(receipt, indent=2) + "\n")
     print(json.dumps(receipt))

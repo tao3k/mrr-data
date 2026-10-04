@@ -9,9 +9,6 @@ description = "MRR Data conformance, native qualification and repository checks"
 requires-python = ">=3.13"
 dependencies = []
 
-[project.optional-dependencies]
-poo-flow = ["anyio==4.14.1", "cffi==2.0.0", "pyturso==0.6.1"]
-
 [project.scripts]
 mrr-data-test = "mrr_data_testing.cli:main"
 

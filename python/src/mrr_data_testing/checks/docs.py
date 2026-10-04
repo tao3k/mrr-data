@@ -13,7 +13,6 @@ MAINTAINED_READMES = (
     ROOT / "python/README.org",
     ROOT / "python/src/mrr_data_testing/duckgql/README.org",
     ROOT / "crates/mrr-data-duckgql-query/README.org",
-    ROOT / "integrations/poo_flow/README.org",
     ROOT / "python/src/mrr_data_testing/kache/README.org",
     ROOT / "python/src/mrr_data_testing/s3/README.org",
 )

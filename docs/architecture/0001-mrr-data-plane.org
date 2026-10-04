@@ -1012,44 +1012,13 @@ This historical entry-point audit did not establish consumer integration. The
 subsequent static-edge resource acceptance below closes that profile only; Healthcare
 execution and hosted-provider qualification remain outside that result.
 
-*** POO Flow static-edge resource — accepted
+*** POO Flow native typed handoff
 
-The first concrete consumer uses the existing Python =RuntimeGraphPlan= and
-=RuntimeGraphToolNode= boundary. Its fixed =poo-flow.static-edges.v1= profile
-publishes only explicit static dependencies and queries their MRR Entity
-endpoints. It is a separate useful operation, not a substitute for the declared
-Healthcare queries. Conditional routes, arbitrary GQL, full plan restoration
-and effect authorization remain outside this profile.
-
-=mrr-data-poo-flow= is a workspace crate with no default dependencies; its
-=runtime= feature enables the external process worker. The Python binding in
-=integrations/poo_flow/= fixes query scope at tool registration. Rust restores
-the exact root, validates fact context and snapshot identity, executes the
-existing DataFusion slice and calls MRR result admission. The source/revision
-owner supplies immutable input; credentials stay in runtime configuration.
-
-Acceptance imports the clean pinned POO Flow public runtime source, invokes its
-real tool node, and compares admitted results across producer-local, empty-cache,
-warm-cache and reopened-process execution. Warm/reopened caches require zero
-remote operations. Scope substitution, stale generation, duplicate edges,
-transport failure, process timeout and actual S3 corruption must fail closed.
-The existing Ubuntu/macOS S3 jobs also test/lint this feature and retain consumer
-measurements and source binding in their receipts. See
-=integrations/poo_flow/README.org= for exact limits and deployment instructions.
-
-A source-identity regression discovered during this integration was corrected
-in DataFusion: an encoded Arrow Entity ID must be parsed as that typed ID,
-not fed back into =from_canonical_bytes= to derive a second identity. Direct
-source-ID and malformed/wrong-domain regression tests complement cross-engine
-parity, which alone could miss a shared decoding defect.
-
-Remote closure is recorded at =c18f7d373e07d927e3c2f66d2d85b4706c714a54=:
-[[https://github.com/tao3k/mrr-data/actions/runs/35463412334][CI run 35463412334]]
-passed all nine checks, including both platform consumer jobs, with zero warning
-diagnostics in the reviewed logs. Both platform receipts match the tested source.
-See =poo-flow-consumer-audit.org= for the fingerprint and observed counters.
-[[https://github.com/tao3k/mrr-data/pull/1][PR #1]] remains open; acceptance is not
-merge or release publication. This source revision is the baseline for M5.1.
+The Legacy static-edge worker, Python adapter and their acceptance entrypoints
+have been removed. Consumers use MRR-owned source compilation and admission,
+MRR Data physical restoration/execution, and the original Scheme v2 result
+handoff. This removal does not qualify remote publication or durable recovery.
+See =poo-flow-consumer-audit.org= for the bounded native library evidence.
 
 *** Healthcare case-profile property-path query
 
@@ -1062,9 +1031,8 @@ WHERE s.identity = 'healthcare'
 RETURN s.identity, c.id, p.identity
 #+end_src
 
-The current static-edge snapshot contains neither the required entity properties
-nor a complete Healthcare catalog. Merely extending the hop count cannot satisfy
-this query. The following are ordered dependencies within one delivery batch,
+The retired static-edge snapshot did not contain the required entity properties
+or a complete Healthcare catalog. The following are ordered dependencies within one delivery batch,
 not independent completion claims.
 
 Implementation status (2026-09-23): the bounded DataFusion property-path layer,
