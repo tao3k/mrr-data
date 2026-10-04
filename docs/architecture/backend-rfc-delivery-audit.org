@@ -1,5 +1,5 @@
 #+TITLE: Shared Backend and GraphAr RFC delivery audit
-#+DATE: 2026-10-04
+#+DATE: 2026-10-05
 #+OPTIONS: toc:2
 
 * Consolidated audit and milestone plan: 2026-10-04
@@ -10,13 +10,13 @@ audit used PR #12 at =aacc25511367391262f4639e5485701406089b21=. The consolidate
 source/dispatch composition was first published at
 =f949c4f5bdbceb93e590ec7408912c2dd66e55cc=. The published integration is now
 based on =e44d642c=, retaining bounded Scheme metadata and the Source
-resource/progress changes, with MRR
-=d137b6d536136982ad0c6d2f0d1bc30c19159899= and GSC
-=5f4ca683e3635b89fa791233147e272699b72321= frozen. Source integration
-=e850fa30= was rebuilt and qualified locally; subsequent commits change
-documentation and retained evidence only. Platform results must refer to their
-exact head; earlier-head green checks
-do not establish all-platform closure.
+resource/progress changes. The current dependency integration at =e9c555cc=
+uses MRR =294cb95c21e6d426c2aea2d272f6e377422cea42= and GSC
+=3635dfa08329f42765e8828b95bf3baf256d582f=. It replaces the inherited
+native stdio path that caused progress writes to fail under backpressure.
+The complete local Source build, semantic filters, standalone resource matrix,
+strict all-target Clippy and facade passed. Platform results must refer to their
+exact head; earlier-head green checks do not establish all-platform closure.
 
 ** Overall assessment
 
@@ -37,7 +37,7 @@ The graph facade and semantic-only consumers need not enable that native fronten
 
 | Composition | Owner and supported scope | Acceptance gate |
 |-------------+---------------------------+-----------------|
-| Root, fuzz and =mrr-property-source= | One MRR revision =d137b6d536136982ad0c6d2f0d1bc30c19159899=; source digest, catalog binding, dispatch and final result admission remain MRR-owned | Locked pin guard; native =source-handoff= Linux/macOS CI |
+| Root, fuzz and =mrr-property-source= | One MRR revision =294cb95c21e6d426c2aea2d272f6e377422cea42=; source digest, catalog binding, dispatch and final result admission remain MRR-owned | Locked pin guard; native =source-handoff= Linux/macOS CI |
 | GraphAr =native-graphar,source-handoff,backend,selective-graphar= with DataFusion =source-handoff= | Combined Healthcare property/relation closure; original GQL, four rows including duplicate/null, cold and same-cache warm restoration on one Backend; complete Dataset binding for selective neighborhoods | Canonical source-handoff Rust caller, cross-profile reuse and separate drift/refusal tests |
 | Shared Backend | Provider-independent admission, transaction authority/history and retained resource drain; simulated metadata in canonical caller | Positive, retirement, lost-ACK and final-clone assertions; native process-exit receipts remain separate |
 | GraphAr =selective-graphar= | Authenticated selective outgoing-range materialization under the declared schema | Paired full-source equivalence; end-to-end performance remains M3 |
@@ -58,22 +58,24 @@ not a native RSS cap. Local and platform qualification remain explicit gates.
 
 ** Current integration and continuous qualification
 
-The integrated =e850fa30= composition retains complete-Dataset selective capture,
+The integrated =e9c555cc= composition retains complete-Dataset selective capture,
 cross-profile original-source reuse and supervised native Cargo builds with
 separate successful executable artifact records. Root, fuzz and optional Source
-agree on MRR =d137b6d5=, including shared SDK command isolation and PackageSpec
-phase diagnostics. Dependency and
-workspace compilers both emit real progress. Original-source execution enables
-the parser's existing artifact decode/verification/admission trace.
+agree on MRR =294cb95c=, whose GSC owner isolates child stdio and forwards real
+bytes without changing the parent's file-status flags. Interrupted, nonblocking
+partial writes and flush backpressure preserve output; terminal I/O errors still
+fail. No compiler optimization, worker count or supervision budget was relaxed.
 
-The current frozen-owner Cargo Source build passed; DataFusion/GraphAr Source
-filters passed (2 and 9 nonignored tests). The resource parent isolates native
-fixture production so it retains ownership of every child's exit status.
-After the Scheme metadata integration, the standalone eight-case matrix passed
-in =29.66s=, full all-target strict Source Clippy in =48.36s= and the facade in
-=29.38s=. Rust verifies one immutable snapshot per shape, independent
-original-query results and final zero reservations. Retained receipts below
-separate the earlier negative wall/CPU results from this latest local run.
+The full current-owner Cargo Source build passed in =8m08s=; DataFusion/GraphAr
+Source filters passed (2 and 9 nonignored tests) in =1.80s= and =3.31s=.
+The resource parent isolates native fixture production so it retains ownership
+of every child's exit status. The standalone eight-case matrix passed in
+=23.48s=, full all-target strict Source Clippy in =1m06s= and the facade in
+=30.91s=. Rust verifies one immutable snapshot per shape, independent
+original-query results and final zero reservations. The latest raw envelope
+is [[file:../../evidence/original-source/original-source-isolated-native-macos.jsonl][the isolated-native Source receipt]]. Earlier receipts and negative wall/CPU
+results remain historical evidence; the latest uniform selective CPU result also
+regresses slightly and does not qualify a production speedup.
 
 | M3 measurement scope | Current evidence and classification |
 |----------------------+-------------------------------------|
@@ -87,9 +89,13 @@ separate the earlier negative wall/CPU results from this latest local run.
 
 Exact-head Linux/macOS/MSRV acceptance remains required. The superseded
 =0912e5bc= Source jobs failed on both native platforms with =compiler artifact
-monitor panicked= before semantic execution. Upstream diagnosis and qualification
-continue with Data pins frozen; a local cached build does not close that
-fresh-platform failure.
+monitor panicked= before semantic execution. At =38538c20= the Linux Source job
+failed at the same monitor; macOS exited its native build-script with status 101
+without exposing a specific panic payload in the available log. A subsequent
+local MRR =dd46dc4b= / GSC =2d20e481= build exposed =Resource temporarily
+unavailable (os error 35)= on progress writes. The current owner fix and local
+checks address that typed cause; fresh Data platform CI must still qualify the
+new composition. Upstream exact-head platform checks remain separately scoped.
 
 Local Python qualification passes =46 tests=; strict Ruff, formatting and
 21-document/7-README checks pass. Collection checkout identity, binary digest
@@ -1826,3 +1832,59 @@ receipt's original-receipt path changes; its historical source hashes remain
 historical inputs. Receipt filenames and root symbols omit format versions;
 the qualification schema declares =metadata-format-version= separately.
 This path and schema-label repair changes no backend runtime source.
+
+* Native stdio isolation and current Source qualification: 2026-10-05
+
+The retained =dd46dc4b= / =2d20e481= Data build failed with
+=write compiler artifact progress: Resource temporarily unavailable (os error 35)=.
+It did not hit the supervision budget and produced no admitted executable
+artifact envelope. An independent inherited-stderr probe observed Gambit change
+the shared open-file description from blocking to nonblocking. The upstream fix
+uses private child stdout/stderr pipes, immediate forwarding, and complete writes
+that retain their offset across =Interrupted= and =WouldBlock=, including flush
+backpressure. Broken pipes and other terminal errors remain failures.
+
+Root, Source and fuzz now agree on MRR
+=294cb95c21e6d426c2aea2d272f6e377422cea42=, with GSC
+=3635dfa08329f42765e8828b95bf3baf256d582f=. Both lockfiles retain all
+non-owner package identities; the exact pin guard passes. Changes to the native
+owner affect build-process supervision, not the semantic source/admission API.
+
+The Data Source build passed in =8m08s= under the unchanged build idle30/wall1200
+budget. PackageSpec completed in =49.422s= and all 59 native objects with the
+default 12 workers completed in =96.622s=, including Cypher and GQL grammar.
+The 2 DataFusion and 9 GraphAr Source tests passed in =1.80s= and =3.31s= under
+test idle5/wall120. The standalone eight-case resource matrix passed in =23.48s=
+with no concurrent build, followed by strict all-target Source Clippy (=1m06s=)
+and the combined GraphAr/DataFusion facade (=30.91s=).
+
+[[file:../../evidence/original-source/original-source-isolated-native-macos.jsonl][The raw nine-record envelope]] identifies the clean collection checkout
+=e9c555ccc65aca76238ff104485e72b27cf2cc35=, test binary SHA256
+=d2a17048289be1ec6384c74230e4479a02bf72c6ea842109dcdadf4e84f169bd=
+and successful Cargo artifact envelope SHA256
+=4c87fffcf0b7308e2065d0d1b0f7ffcf2ee5ada4b709cb502333c1079b220904=.
+The build ran immediately before the dependency commit with the same four
+manifest/lockfile changes; collection checkout identity is recorded separately
+from compiled source identity. There is one immutable snapshot root per shape;
+all eight children verify independent four-row duplicate/null results, final
+admission and zero cleanup reservations.
+
+| Shape/mode | Median request wall ms | Median process CPU ms | Relation bytes / rows / selected edges | Remote bytes |
+|------------+------------------------+-----------------------+----------------------------------------+--------------|
+| uniform cold/full | 125.07 | 72.20 | 49997 / 32 / 16 | 92033 |
+| uniform warm/full | 123.48 | 70.00 | 49997 / 32 / 16 | 0 |
+| uniform warm/selective | 115.69 | 71.24 | 20213 / 14 / 6 | 0 |
+| uniform reused/selective | 5.88 | 2.67 | 20213 / 14 / 6 | 0 |
+| skewed cold/full | 101.86 | 67.64 | 45154 / 32 / 16 | 82540 |
+| skewed warm/full | 116.85 | 63.88 | 45154 / 32 / 16 | 0 |
+| skewed warm/selective | 82.33 | 61.95 | 20213 / 14 / 6 | 0 |
+| skewed reused/selective | 8.67 | 3.86 | 20213 / 14 / 6 | 0 |
+
+Two warmups and three samples per mode retain every observation. Uniform
+selective CPU is about =1.8%= worse than warm/full, despite lower wall time and
+relation work. Earlier negative wall/CPU gates remain retained. OS cache and
+host scheduling are uncontrolled; reused mode excludes fresh preparation.
+Copied bytes, engine spill and streaming first-result metrics remain explicitly
+unsupported/null. These tiny-fixture diagnostics establish local correctness
+and supported measurements, not release-scale performance or current Data
+Linux/macOS CI acceptance. No PR has been merged.
