@@ -1494,8 +1494,8 @@ remain retained; trace does not establish a startup performance improvement.
 
 ** Published diagnostic propagation and current CI boundary
 
-Data root/fuzz now pin MRR =08f33e492c1154ccef354446cf55b572d56a6703=,
-which pins GSC =9175ae2c8ba2ac80abf9120030ee7ab13ba742de=. Registry versions
+Data root/fuzz now pin MRR =659aab5ce28d12a165332bed84dec4e280155fb1=,
+which pins GSC =3f1ba7aaf5957c774c4269dd9deb2a92b2ed637d=. Registry versions
 are preserved. The CI original-query step enables =GERBIL_PARSER_LR_TRACE=1=.
 
 The candidate full-chain local-patch build failed idle30 during PackageSpec
@@ -1667,3 +1667,23 @@ DataFusion pair and eight GraphAr Source cases, then failed strict Clippy at
 =request_controls.rs:183= (=needless_pass_by_value=). The borrow correction is
 already in the published composition. This historical job is not a current-pin
 pass and does not include the new process resource matrix.
+
+** GSC CI executable fixture closure
+
+GSC =9175ae2= Ubuntu native Gerbil passed, but its Cargo aggregate failed when
+the cache test executed a newly written script (ETXTBSY). GSC =3f1ba7a= uses a
+checked-in immutable executable; its production helper source is unchanged.
+The revised Cargo test build passed (1m11s), and eight default regressions
+passed (0.61s), with four native fixtures still ignored. Data now pins MRR
+=659aab5ce28d12a165332bed84dec4e280155fb1= and GSC
+=3f1ba7aaf5957c774c4269dd9deb2a92b2ed637d=. New-head CI remains pending.
+
+The Data =bd4686f8= full source build still refused at idle30 in PackageSpec.
+An owned snapshot showed GCC compiling =native~1.c= with the official Xcode
+assembler; the GCC sample had no usable call graph, and the GXI sample timed
+out. An emitted =native~1.o1= was present before the refusal, so the whole
+quiet interval cannot be attributed solely to GCC. This remains separate from
+the earlier successful fresh-prefix sample of dynamic-module exit cleanup.
+No current-pin original-query executable was admitted from that failed build.
+The concurrent source-resource matrix and progress changes through =0912e5bc=
+were preserved; they are not counted as fresh semantic execution here.
