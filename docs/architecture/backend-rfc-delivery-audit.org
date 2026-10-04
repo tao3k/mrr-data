@@ -2,7 +2,122 @@
 #+DATE: 2026-10-04
 #+OPTIONS: toc:2
 
-* Audit baseline and evidence boundary
+* Consolidated audit and milestone plan: 2026-10-04
+
+This section is the current delivery plan. Later dated receipts describe their
+original slices and do not independently define current completion. The audited
+published baseline is PR #12 at =aacc25511367391262f4639e5485701406089b21=.
+The checkout is clean before this documentation update. At the audit snapshot,
+Python CI passes; the other twelve checks are running or queued. No all-platform
+closure follows from earlier-head green checks.
+
+** Overall assessment
+
+The common architecture is substantially implemented, but framework acceptance
+is not yet consolidated. Shared Backend admission, async cold restoration,
+retained leases, graph dataset publication, authenticated combined native capture,
+simulated authority recovery and narrow engine adapters exist. Original source
+compilation through MRR is still an integration gate on the published branch.
+A separate checkout contains source-handoff/reuse work plus unfinished changes;
+its receipts are not evidence for the published baseline.
+
+Delivery has become fragmented because each interface seam was presented as a
+new milestone, the initial capability tables remain beside later superseding
+receipts, and platform CI is repeatedly restarted while the integration baseline
+moves. Future progress should report complete milestone outcomes and blockers.
+Do not infer complete P0-P2 delivery from cumulative unit-test counts.
+
+| Workstream | Current accepted boundary | Remaining milestone |
+|------------+---------------------------+---------------------|
+| Architecture | One common Production Backend; MRR semantics; GraphAr physical graph; Arrow interchange; optional providers | Reconcile current RFC status and feature/ownership matrix in M0 |
+| Lifecycle | Sync/async admission, cooperative stops, cleanup ownership, final-clone drain | Complete cold-restore/capture/query/admission chain and mixed-profile acceptance in M1/M2 |
+| Graph persistence | Complete combined property/relation descriptors, ACK ordering, cold restore, scope and corruption refusal | Original source-driven query chain on the published branch in M1 |
+| Optional execution | Turso outgoing single hop; DuckDB Arrow; narrow typed DuckGQL adapter; DataFusion property-path execution | Qualify only declared shapes; wider graph language/type coverage is separately scoped |
+| Simulated authority | Rotation/retirement/disclosure and local publication/process-exit recovery | Attach these controls to the canonical integrated caller in M1/M2 |
+| Reuse/performance | Prepared source reuse and physical outgoing-range experiment | Integrated source invalidation and matched end-to-end cold/warm evidence in M2/M3 |
+| Platform evidence | Current local Backend 8 tests; GraphAr 68 tests, 3 explicit ignores; strict lint and isolated facade check | Exact-head Linux/macOS/MSRV/native CI and receipt reconciliation at every exit gate |
+
+** Milestones, dependency order and exit criteria
+
+*** M0: one delivery baseline and one current status
+
+- Reconcile the published branch with separately developed original-source work;
+  preserve both implementations, inspect actual changes, and qualify the resulting
+  dependency pins. Uncommitted work must not be counted as delivered.
+- Make this audit the delivery ledger; RFC 0002/0003 distinguish implemented,
+  qualified and proposed capabilities. Keep historical benchmark/test receipts
+  explicitly historical and link them rather than repeating their status.
+- Maintain a single matrix of source pins, features, supported schemas/operators,
+  owners and acceptance gates. Freeze unrelated dependency/provider expansion.
+- Exit: one integration head, no unresolved overlapping edits, current documents
+  agree with code, and CI covers the actual selected feature compositions.
+
+*** M1: original-query framework acceptance
+
+Deliver one simulated caller covering original Healthcare GQL bytes/digest,
+MRR-owned compilation/catalog binding, combined native publication, protected
+head/recovery, cold restoration under shared admission, native capture, physical
+execution, final MRR admission and typed consumer transport. Keep all ownership
+boundaries visible in that single acceptance path.
+
+- Independently verify expected rows, null versus missing/empty values,
+  duplicate multiplicity, and ordering according to the admitted query contract.
+- Refuse source/catalog/generation/root drift, missing/corrupt children, denied
+  disclosure, stop and uncertain publication outcomes without an admitted result.
+- Exercise cold/warm and reopened-process paths against the same original source.
+- Exit: Rust semantic/lifecycle assertions and Python process/receipt supervision
+  pass, and the same integration head passes required Linux/macOS native CI.
+- Real deployment credentials or a live Lambda/Marlin Host are not prerequisites.
+
+*** M2: common lifecycle and bounded source reuse across profiles
+
+- Qualify the entire restored-closure to captured-source to query-result lifetime,
+  including conversion overlap and retained clones. Select lease transfer from
+  actual caller requirements; avoid a second result model or a provider runtime.
+- Run mixed-profile acceptance on one Backend: shared queue/byte saturation,
+  explicit cancel/deadline, caller abandonment, recovery progress and shutdown.
+- Reuse only under exact snapshot/profile/catalog/generation/schema keys, with
+  bounded ownership. Changed bindings and failed admission must not certify reuse.
+- Qualify the declared optional-provider matrix without implying identical query
+  capabilities across Turso, DuckDB, DataFusion and DuckGQL.
+- Exit: no stale-source admitted result or leaked reservation, cleanup precedes
+  drain, and final result/disclosure admission remains fresh on every reuse.
+
+*** M3: measured optimization and framework release qualification
+
+- Benchmark the same M1 query and source on fresh and reused paths; separate
+  integrity/setup, transfer, capture, engine registration, query and result admission.
+- Record actual verification/execution bytes, materialized rows/copies, CPU and
+  wall time, first/total result, process RSS and supported engine spill evidence.
+- Keep full-source reference and selective/reuse paths paired with independent
+  result equivalence on uniform and skewed fixtures. Declare measurement gates
+  before experiments; do not relabel logical budgets as RSS or warm OS caches as
+  verified cold storage. Optimize only a measured bottleneck.
+- Exit: controlled receipts, supported-scope table, RFC status and exact release
+  head CI agree. Classify each result as pass, failed gate or explicitly deferred;
+  absence of a measurement is not a performance improvement.
+
+** Scope and progress discipline
+
+Critical path: =M0 -> M1 -> M2 -> M3=. P0 means baseline/platform acceptance;
+P1 means complete correctness and lifecycle; P2 means measured reuse/optimization.
+Do not restart the plan around each helper function.
+
+Keep arbitrary graph-language conformance, additional property/n-ary profiles,
+incoming layouts, hard native preemption, generalized SQL plans, releasable VTab
+registration and deployed cloud acceptance in an explicitly scoped backlog.
+DuckGQL's narrow typed port is implemented; broad shapes and extension lifecycle
+are separate gates, and neither blocks GraphAr persistence or the M1 reference path.
+Turso stays =0.8.1=, Cargo parallelism stays default, and Python remains glue-only.
+
+Each milestone update reports: integrated head, delivered caller capability,
+positive/refusal/lifecycle receipts, current-head CI and the next actual blocker.
+Publish milestone-sized batches when reviewable, preserving urgent safety fixes
+as focused exceptions. Full native CI remains mandatory at milestone exits;
+focused local checks qualify intermediate changes. Freeze the head while resolving
+its platform failures instead of repeatedly replacing pending evidence.
+
+* Historical audit baseline and evidence boundary
 
 This slice follows PR #12 at =b3e29acb09d4d014fd6a4efe9bee5a11391e92f5=,
 which delivered the local publication process-exit matrix. New selective-source
@@ -28,7 +143,7 @@ remain =0.8.1=; Cargo build parallelism remains the default.
 See [[file:0001-mrr-data-plane.org][the canonical data plane]], [[file:shared-backend.org][shared Backend]],
 [[file:../rfcs/0002-graphar-arrow-backend.org][RFC 0002]] and [[file:../rfcs/0003-gql-duckdb-turso-backends.org][RFC 0003]].
 
-* Implemented and bounded capability
+* Historical capability table at the initial audit
 
 | Area | Implemented evidence | Remaining boundary |
 |------+----------------------+--------------------|
@@ -38,7 +153,7 @@ See [[file:0001-mrr-data-plane.org][the canonical data plane]], [[file:shared-ba
 | GraphAr | Native bounded projection, complete inventory binding, verified capture, publication/cold restore; ordered snapshot-pinned outgoing topology/property ranges | Broader lossless physical profiles, incoming/path execution and MRR result admission for selective plans |
 | Authority/durability | Authority/version checks, simulated Host policy/key rotation/retirement/disclosure and publication-phase process exit/recovery | Native in-transaction fault expansion; remote exact-head acceptance |
 
-* Findings that change the execution plan
+* Initial findings and subsequent implementation receipts
 
 ** Delivered slice: queued explicit stop
 
@@ -106,7 +221,7 @@ identity/result ordering require separate prototypes. No qualified bridge is
 implemented. Keep that work independent of GraphAr and Turso delivery. Do not
 replay source GQL into a second semantic binder to manufacture completion.
 
-* Delivery order and acceptance
+* Historical P0-P2 slice mapping
 
 | Priority | Slice / owner | Required acceptance | Dependency |
 |----------+---------------+---------------------+------------|
@@ -148,7 +263,7 @@ are not prerequisites. Future product deployment requires its own integration
 acceptance. General graph-query conformance and hard native deadlines remain
 unclaimed until individually qualified.
 
-* Current execution checkpoint
+* Historical execution checkpoints
 
 Implemented this slice: queued explicit cancellation/deadline and consumption
 of physical output into a leased MRR candidate. Focused resource/native tests,

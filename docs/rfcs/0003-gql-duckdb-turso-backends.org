@@ -1,6 +1,13 @@
 #+title: RFC 0003: GraphAr graph foundation and optional execution adapters
 #+options: toc:2
 
+* Current delivery ledger
+
+The [[file:../architecture/backend-rfc-delivery-audit.org][consolidated audit and milestone plan]] records the current published
+baseline, supported-scope boundaries and M0-M3 exit criteria. Initial interface
+tables and dated implementation receipts below retain their original version
+boundaries; later code must not be judged only from an earlier capability table.
+
 * Status
 
 Partially implemented on [[https://github.com/tao3k/mrr-data/pull/12][MRR Data PR #12]]. The shared
