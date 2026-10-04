@@ -9,18 +9,20 @@ repository.workspace = true
 
 [features]
 default = []
-turso-graphar = ["dep:turso", "mrr-data-graphar/native-graphar"]
+turso-graphar = ["dep:turso", "dep:tokio", "mrr-data-graphar/native-graphar"]
+backend-worker = ["turso-graphar", "dep:mrr-data-backend", "mrr-data-backend/turso"]
 
 [dependencies]
 meta-relational-reasoning.workspace = true
 mrr-data-core = { workspace = true, features = ["content-identity"] }
+mrr-data-backend = { workspace = true, optional = true }
 mrr-data-graphar = { path = "../mrr-data-graphar", version = "0.1.0", default-features = false }
 turso = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
 
 [dev-dependencies]
 mrr-data-content.workspace = true
 tempfile.workspace = true
-tokio.workspace = true
 
 [lints]
 workspace = true

@@ -3,6 +3,8 @@ use crate::{SqlQueryError, TursoSingleHopSql};
 use meta_relational_reasoning::{FactId, QueryResultValue};
 use mrr_data_core::{BoundDataQuery, PhysicalQueryOutput};
 use mrr_data_graphar::{BinaryEntityProjection, CapturedGraphArSnapshot};
+#[cfg(feature = "backend-worker")]
+use std::sync::Arc;
 
 /// Preflight and result bounds. These do not constrain Turso native RSS.
 #[derive(Clone, Copy, Debug)]
@@ -112,6 +114,53 @@ pub async fn execute_turso_graphar_single_hop(
         return Err(SqlQueryError::Native);
     }
     result
+}
+/// Inputs owned by a Backend worker while a bounded Turso query runs.
+/// The Host supplies a database and captured, authenticated source. The byte
+/// reservation is a Host estimate of native work, not a measured RSS ceiling.
+#[cfg(feature = "backend-worker")]
+pub struct TursoBackendQuery {
+    pub database: Arc<turso::Database>,
+    pub query: BoundDataQuery,
+    pub source: Arc<CapturedGraphArSnapshot>,
+    pub projection: BinaryEntityProjection,
+    pub limits: SqlQueryLimits,
+    pub reserved_bytes: usize,
+}
+
+/// Run the first Turso slice on Backend's bounded resource worker lane.
+/// The Host runtime must be the same runtime enrolled with Backend. Dropping
+/// this waiter skips queued work; an active native call keeps its reservation
+/// until it finishes. The returned rows have already passed `SqlQueryLimits`,
+/// but MRR still owns result admission.
+/// # Errors
+/// Refuses Backend admission, physical query scope, limits or native failures.
+#[cfg(feature = "backend-worker")]
+pub async fn execute_turso_graphar_on_backend(
+    backend: &mrr_data_backend::Backend,
+    runtime: tokio::runtime::Handle,
+    request: TursoBackendQuery,
+) -> Result<PhysicalQueryOutput, SqlQueryError> {
+    let TursoBackendQuery {
+        database,
+        query,
+        source,
+        projection,
+        limits,
+        reserved_bytes,
+    } = request;
+    backend
+        .run_resource(reserved_bytes, move || {
+            runtime.block_on(execute_turso_graphar_single_hop(
+                &database,
+                &query,
+                &source,
+                &projection,
+                limits,
+            ))
+        })
+        .await
+        .map_err(SqlQueryError::Backend)?
 }
 async fn execute_in_transaction(
     connection: &turso::Connection,

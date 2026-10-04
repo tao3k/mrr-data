@@ -1,5 +1,7 @@
 #![cfg(feature = "turso-graphar")]
 use std::num::NonZeroUsize;
+#[cfg(feature = "backend-worker")]
+use std::sync::Arc;
 
 use meta_relational_reasoning as mrr;
 use mrr_data_core as core;
@@ -8,6 +10,8 @@ use mrr_data_turso_query::{
     SqlQueryError, SqlQueryLimits, TursoSingleHopSql, execute_turso_graphar_single_hop,
     turso_graphar_engine_profile,
 };
+#[cfg(feature = "backend-worker")]
+use mrr_data_turso_query::{TursoBackendQuery, execute_turso_graphar_on_backend};
 
 fn relation() -> mrr::RelationSchema {
     mrr::RelationSchema::new(
@@ -234,4 +238,72 @@ async fn turso_single_hop_preserves_duplicate_edges_and_mrr_admission() {
         execute_turso_graphar_single_hop(&database, &query, &source, &projection, small).await,
         Err(SqlQueryError::Limit("input rows"))
     ));
+}
+
+#[cfg(feature = "backend-worker")]
+#[tokio::test]
+async fn turso_single_hop_uses_backend_resource_worker() {
+    use mrr_data_backend::{Backend, BackendConfig, BackendError, providers::TursoProvider};
+    let (query, projection, source, _) = captured();
+    let directory = tempfile::tempdir().unwrap();
+    let runtime = tokio::runtime::Handle::current();
+    let backend = Backend::open(
+        BackendConfig {
+            max_resources: 1,
+            max_resource_bytes: 2048,
+            ..BackendConfig::default()
+        },
+        TursoProvider::new(directory.path().join("metadata.db"), runtime.clone()),
+        runtime.clone(),
+    )
+    .await
+    .unwrap();
+    let database = Arc::new(
+        turso::Builder::new_local(directory.path().join("query.db").to_str().unwrap())
+            .build()
+            .await
+            .unwrap(),
+    );
+    let source = Arc::new(source);
+    assert!(matches!(
+        execute_turso_graphar_on_backend(
+            &backend,
+            runtime.clone(),
+            TursoBackendQuery {
+                database: database.clone(),
+                query: query.clone(),
+                source: source.clone(),
+                projection: projection.clone(),
+                limits: limits(),
+                reserved_bytes: 2049,
+            },
+        )
+        .await,
+        Err(SqlQueryError::Backend(BackendError::Saturated))
+    ));
+    let output = execute_turso_graphar_on_backend(
+        &backend,
+        runtime,
+        TursoBackendQuery {
+            database,
+            query: query.clone(),
+            source,
+            projection,
+            limits: limits(),
+            reserved_bytes: 2048,
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(output.rows().len(), 2);
+    assert_eq!(backend.status().active_resources, 0);
+    assert_eq!(backend.status().resource_bytes, 0);
+    let candidate = core::project_data_query_output(&query, query.engine(), output).unwrap();
+    mrr::admit_query_result_candidate(
+        query.query(),
+        &candidate,
+        mrr::QueryResultLimits::new(NonZeroUsize::new(2).unwrap(), NonZeroUsize::new(4).unwrap()),
+    )
+    .unwrap();
+    backend.shutdown().await.unwrap();
 }

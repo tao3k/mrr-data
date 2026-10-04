@@ -80,6 +80,25 @@ impl Backend {
             .await
             .map_err(|_| BackendError::WorkerLost)?
     }
+    /// Run one physical operation on the bounded resource worker lane and
+    /// return its owned result. The reservation covers the worker, not the
+    /// returned value; the Host must bound result size before returning it.
+    /// Cancelling a queued waiter skips work. A running worker holds its lease
+    /// until completion, including after waiter cancellation.
+    /// # Errors
+    /// Refuses lifecycle/count/byte limits or reports a lost worker.
+    pub async fn run_resource<T: Send + 'static>(
+        &self,
+        reserved_bytes: usize,
+        run: impl FnOnce() -> T + Send + 'static,
+    ) -> Result<T, BackendError> {
+        let lease = self.inner.scheduler.admit_resource(reserved_bytes)?;
+        self.inner
+            .dispatcher
+            .run_resource(lease, run)
+            .await
+            .map_err(|_| BackendError::WorkerLost)
+    }
     /// Run a fallible physical Arrow producer on shared resource admission.
     /// The Host admits the semantic query/schema and budgets native memory first.
     /// Reservations include retained batches, input/native state and one driver fetch.

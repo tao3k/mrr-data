@@ -68,6 +68,41 @@ impl Dispatcher {
         });
         rx
     }
+    pub(crate) fn run_resource<T: Send + 'static>(
+        &self,
+        lease: ResourceLease,
+        run: impl FnOnce() -> T + Send + 'static,
+    ) -> oneshot::Receiver<T> {
+        let (mut tx, rx) = oneshot::channel();
+        let slots = self.resources.clone();
+        let shared = self.shared.clone();
+        let runtime = self.runtime.clone();
+        self.runtime.spawn(async move {
+            let permit = tokio::select! {
+                biased;
+                () = tx.closed() => return,
+                permit = slots.acquire_owned() => permit.expect("resource slots never closed"),
+            };
+            let shared_permit = tokio::select! {
+                biased;
+                () = tx.closed() => return,
+                permit = shared.acquire_owned() => permit.expect("shared slots never closed"),
+            };
+            let mut lease = lease.submitted();
+            runtime.spawn_blocking(move || {
+                if tx.is_closed() {
+                    return;
+                }
+                let result = run();
+                lease.finished();
+                drop(lease);
+                drop(shared_permit);
+                drop(permit);
+                let _ = tx.send(result);
+            });
+        });
+        rx
+    }
     #[cfg(feature = "arrow-query")]
     pub(crate) fn query(
         &self,

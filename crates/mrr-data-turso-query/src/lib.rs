@@ -19,6 +19,8 @@ use mrr_data_graphar::BinaryEntityProjection;
 mod turso_graphar;
 #[cfg(feature = "turso-graphar")]
 pub use turso_graphar::{SqlQueryLimits, execute_turso_graphar_single_hop};
+#[cfg(feature = "backend-worker")]
+pub use turso_graphar::{TursoBackendQuery, execute_turso_graphar_on_backend};
 
 /// A rejected physical query shape or execution boundary. No variant grants
 /// semantic admission, even if the native statement completed.
@@ -30,6 +32,8 @@ pub enum SqlQueryError {
     Limit(&'static str),
     Native,
     CorruptOutput,
+    #[cfg(feature = "backend-worker")]
+    Backend(mrr_data_backend::BackendError),
 }
 impl std::fmt::Display for SqlQueryError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

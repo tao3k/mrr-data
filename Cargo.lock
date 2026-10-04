@@ -3874,6 +3874,7 @@ name = "mrr-data-turso-query"
 version = "0.1.0"
 dependencies = [
  "meta-relational-reasoning",
+ "mrr-data-backend",
  "mrr-data-content",
  "mrr-data-core",
  "mrr-data-graphar",

@@ -16,6 +16,8 @@ independent =backend-graphar=, =backend-graph-publish= and =backend-arrow-query=
 perform no I/O; databases open under the Host-owned runtime/lifecycle. No SQLite
 provider, =backend-sqlite= feature or backend rusqlite dependency remains. The
 existing Kache cache has its own transitive dependencies and is a separate owner.
+The opt-in =backend-turso-query= facade feature adds a physical GraphAr/Turso
+query adapter; it does not add language parsing to the Backend.
 
 The architecture follows the immutable Cedar
 [[https://github.com/tao3k/cedar-poo-spec/blob/bcacabbdd188a821799dc6be92ebbed4a7c46214/Productions/Backend.org][Production Backend design]]. Commerce and pseudonymization share that exact
@@ -102,6 +104,12 @@ the handle would outlive this accounting. Hosts keep handles until use completes
 drop every clone before awaiting shutdown, and keep their runtime alive through
 the drain barrier. Resource admission closes with the same lifecycle seal as
 metadata admission; provider close waits for all resources as well as mutations.
+
+=Backend::run_resource= uses the same admission and worker permits for one
+bounded operation whose result is returned by value. Its lease ends before the
+result is delivered, so the Host must bound result memory separately. Queued
+cancellation skips execution; cancellation after native work starts does not
+interrupt it, and shutdown still waits for that worker.
 
 The optional GraphAr adapter prepares an immutable captured fact snapshot on this
 lane. Private temporary files and native handles are cleaned during preparation;
@@ -376,6 +384,13 @@ own native buffers and Backend drain leases after result teardown. The Host
 registers its interrupt before execution and owns engine memory/cache/spill.
 Internal materialization for some statements and full semantic type mapping
 remain separate qualifications; streaming output does not establish bounded RSS.
+
+The opt-in [[file:../../crates/mrr-data-turso-query/src/turso_graphar.rs][Turso GraphAr adapter]] uses =run_resource= for its row output. It checks an exact
+=BoundDataQuery=, captured GraphAr scope, input/output limits and fixed SQL
+identifiers; the Host supplies the Turso database, runtime and native-work byte
+reservation. The worker finishes or rolls back the temporary table before it
+returns =PhysicalQueryOutput=. This path has no native interrupt/deadline yet;
+final semantic admission remains with MRR.
 
 [[file:../../crates/mrr-data-backend/tests/integration/arrow_query.rs][Query tests]] cover successful terminal output, late failure, panic, sticky schema
 refusal, retained final clones, row/buffer refusal, pre-fetch byte backpressure,

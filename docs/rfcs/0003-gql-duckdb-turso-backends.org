@@ -17,8 +17,10 @@ outgoing binary-Entity query to a parameterized Turso statement, loads facts
 from a captured GraphAr snapshot into a temporary relation, returns bounded
 =PhysicalQueryOutput=, and leaves final MRR admission to the caller. A native
 fixture proves duplicate-edge preservation, snapshot-drift refusal and MRR
-admission. Backend query-worker integration, additional query shapes, other SQL
-engines and the DuckGQL bridge remain proposed gates.
+admission. The follow-on local slice runs that query through Backend's bounded
+resource worker lane and verifies lease release. Native interrupt/deadline,
+additional query shapes, other SQL engines and the DuckGQL bridge remain
+proposed gates.
 
 * Decision and ownership
 
@@ -54,11 +56,9 @@ same source, semantics and receipt. Even then, prefer a narrow GraphAr scan or
 operator capability over a second general DuckDB SQL compiler.
 
 The existing [[file:../architecture/0001-mrr-data-plane.org][data-plane RFC]] leaves SQL to a downstream package.
-Acceptance of this RFC narrows that decision for optional query adapters in
-this repository. =mrr-data-core=, =mrr-data-graphar=, the generic
-=mrr-data-backend= transaction engine and default facade features remain
-provider-neutral. Update that architecture document when implementation lands;
-this proposed RFC changes no public API by itself.
+The implemented opt-in Turso adapter narrows that decision for this repository.
+=mrr-data-core=, =mrr-data-graphar=, the generic =mrr-data-backend=
+transaction engine and default facade features remain provider-neutral.
 
 * Two execution paths
 

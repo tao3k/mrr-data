@@ -316,6 +316,12 @@ implemented.  The first opt-in engine adapter lowers the admitted single-hop
 binary-Entity slice directly to DataFusion expressions without reparsing SQL.
 It owns no async runtime and rejects every undeclared shape before execution;
 general query execution remains a later engine-specific feature.
+The opt-in =mrr-data-turso-query= adapter compiles only a bound outgoing
+binary-Entity single hop to parameterized Turso SQL. It reads a captured
+GraphAr snapshot through Backend's bounded resource worker and returns physical
+rows for final MRR admission. This adds no query-language frontend or default
+database dependency; native interrupt/deadline and broader query shapes remain
+unqualified. [[file:../rfcs/0003-gql-duckdb-turso-backends.org][RFC 0003]] separates this Turso path from the proposed DuckGQL bridge.
 
 The native GraphAr contract suite covers the first differential engine slice.
 It sends the same admitted binary-Entity facts through an Arrow =RecordBatch=
