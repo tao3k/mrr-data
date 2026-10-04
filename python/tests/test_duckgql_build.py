@@ -5,7 +5,7 @@ import shutil
 import pytest
 
 from mrr_data_testing.duckgql import build
-from mrr_data_testing.process import run
+from mrr_data_testing.process import Limits, run
 
 
 def test_failed_source_preparation_removes_previous_success(tmp_path, monkeypatch):
@@ -86,16 +86,17 @@ def test_rule_partition_preserves_native_linkage_and_results(tmp_path):
     )
     main = tmp_path / "main.cpp"
     main.write_text(
-        '#include "GQLParser.h"\n#include <iostream>\n'
+        '#include "GQLParser.h"\nextern "C" int printf(const char*, ...);\n'
         "int main() { GQLParser::initialize(); GQLParser p; "
-        "std::cout << p.first() << ' ' << p.second(); }\n"
+        'printf("%d %d", p.first(), p.second()); }\n'
     )
     parts = build.parser_units(source, tmp_path / "parts", 2)
     for name, units in (("original", [source]), ("partitioned", parts)):
         binary = tmp_path / name
-        subprocess.run(
+        run(
             [
                 compiler,
+                "-v",
                 "-std=c++17",
                 "-O2",
                 "-I",
@@ -105,9 +106,7 @@ def test_rule_partition_preserves_native_linkage_and_results(tmp_path):
                 "-o",
                 str(binary),
             ],
-            check=True,
-            capture_output=True,
-            timeout=20,
+            limits=Limits(wall_seconds=20, idle_seconds=5),
         )
         assert subprocess.check_output([binary], timeout=5) == b"21 42"
     source.write_text(
