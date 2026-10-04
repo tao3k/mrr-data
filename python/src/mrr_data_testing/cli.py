@@ -12,6 +12,7 @@ COMMANDS = {
     "duckgql-build": "duckgql.build",
     "duckgql-qualify": "duckgql.qualify",
     "query-resources": "duckgql.resources",
+    "source-resources": "source_resources",
     "s3-conformance": "s3.run",
     "kache-probe": "kache.run",
 }

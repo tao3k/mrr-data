@@ -1564,3 +1564,42 @@ remain a separate acceptance gate; old-head CI does not qualify these pins.
 A separate GSC production Cargo build failed idle30 in Rust project-harness
 compilation. The successful direct production-library metadata checks do not
 replace that failed Cargo gate or admit a native integration artifact.
+
+** Source dependency compiler progress and original-query measurement entry point
+
+Ubuntu =18cf4df0= Source job =111464341988= failed the unchanged 30-second
+idle build gate while compiling DataFusion dependencies. Its very-verbose
+commands showed plain dependency =rustc=: only workspace crates had the progress
+wrapper. The Source job now sets both wrapper variables to the installed console
+entry point. Facade and full Source Clippy also use supervised successful Cargo
+records under the existing build limits.
+
+The Rust wrapper additionally enables only type-coercion, borrow-check and
+compiler-phase info events when the host has not selected =RUSTC_LOG=. This
+bridges front-end work before LLVM remarks start. These are real compiler
+events, grouped by the glue recorder; compiler flags, timeouts and heap settings
+retain their prior values. The GraphAr Source test program compiled successfully
+with this diagnostic selection and the prior successful build's exact dependency
+arguments. Its new Rust receiver refusal test passed in =0.01s=. Source execution
+and the resource matrix still hit the unchanged five-second runtime-init idle
+gate on this host, so no new admitted original-query measurement is reported.
+
+The new Rust process matrix defines two source shapes and four modes:
+empty-verified-cache/full scan, warm-cache/full scan, warm-cache/selective read,
+and retained-source/selective read. It verifies identical snapshot roots across
+each shape's modes, expected original-query NULL/duplicate rows, remote-read
+behavior and final zero reservations. Its Schema declares two warmups and three
+samples before measurement. Supported fields cover phase wall time, process CPU
+and peak RSS, actual returned remote bytes, verified capture bytes, materialized
+relation rows and result transport bytes. First materialized-result readiness is
+separate from request completion; streaming first-result, spill and copy-byte
+evidence remain =null=. Cold refers to the verified content cache, not OS-cold
+storage. Reuse retains only the authenticated ordered source and property
+batches; compilation/binding and engine registration remain per request.
+
+Python's =source-resources= entry point supervises this Rust matrix and collects
+one checked envelope with code/binary/Schema identity. The native code compiled
+and strict own-crate lint passed; runtime-init refusal still prevents local
+eight-case acceptance. CI runs the matrix after Source correctness, facade and
+full Clippy, and uploads receipts only after success. M3 remains a qualification
+gate until the matched receipts and exact published-head CI actually pass.

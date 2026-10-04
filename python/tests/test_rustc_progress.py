@@ -10,6 +10,20 @@ from mrr_data_testing.duckgql.build import CompilerOutput
 from mrr_data_testing.process import Limits, run
 
 
+def test_frontend_logging_preserves_explicit_host_configuration(monkeypatch):
+    calls = []
+    monkeypatch.setattr(sys, "argv", ["wrapper", "rustc", "--emit=metadata"])
+    monkeypatch.setattr(rustc_progress.os, "execvp", lambda *args: calls.append(args))
+    monkeypatch.setenv("RUSTC_LOG", "temporary-test-setting")
+    monkeypatch.delenv("RUSTC_LOG")
+    rustc_progress.main()
+    assert "rustc_hir_typeck::coercion=info" in rustc_progress.os.environ["RUSTC_LOG"]
+    assert calls == [("rustc", ["rustc", "--emit=metadata"])]
+    monkeypatch.setenv("RUSTC_LOG", "host-selected-logging")
+    rustc_progress.main()
+    assert rustc_progress.os.environ["RUSTC_LOG"] == "host-selected-logging"
+
+
 def test_workspace_wrapper_preserves_compiler_output_and_failure(tmp_path):
     compiler = shutil.which("rustc")
     if compiler is None:

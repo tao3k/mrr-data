@@ -17,6 +17,10 @@ use mrr_data_backend::{Backend, BackendConfig, ResourceControl};
 use mrr_data_content::MemoryContentStore;
 use std::sync::Arc;
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[path = "resources.rs"]
+mod resources;
+
 #[tokio::test]
 async fn original_source_handoff_selective_dataset_matches_full_reference() {
     verify_dataset(source_fixture(), "reference").await;
