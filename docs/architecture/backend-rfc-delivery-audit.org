@@ -1316,3 +1316,36 @@ explicitly. The existing GraphAr policy binary scanning the changed current
 source passed both policy tests in 1.04 seconds; it is source-policy evidence,
 not freshly compiled original-query qualification. Concurrent Data =b4a2cf25=
 was preserved and its CI was pending behind the prior running batch.
+
+* Published GCC linker follow-up and bounded qualification
+
+GSC PR #19 =09fcfbf79f0190815605836519b487e844aebbf1= additionally observes
+real compiler-written linker intermediates for an SDK explicitly declaring GCC.
+MRR PR #9 =685459849876f84addc0a8bad40de4c00caede7d= consumes it; Data root/fuzz
+manifests and locks now pin that MRR revision. Both locked metadata resolutions
+pass. The production options retain the SDK compiler, ABI flags and =-O2=;
+only this verbose linker operation uses =-save-temps=obj -Q=. Stale files are
+removed before launch, unchanged files emit nothing, exit status remains
+mandatory, and success/failure clean the extra intermediates.
+
+Six default helper library regressions passed, including cache and failed-child
+cleanup; a six-second artifact fixture passed five-second idle supervision.
+The actual generated-linker fixture passed 30-second idle build supervision
+in 21.00s. Direct strict Clippy-driver qualification of current helper/test
+source with the successful Cargo build's exact dependency inputs passed.
+Full Cargo Clippy, including a no-dependencies attempt, still hit 30-second
+idle while checking/compiling the separate Rust project harness; it is an open
+lint/progress gate, not a pass.
+
+The local-patch Data build completed under unchanged 30/1200-second build
+supervision in 2m39s, reusing the earlier qualified module objects. Actual
+linker compilation completed in 22,221ms and archive packaging in 703ms.
+These warm phase durations do not establish a speedup. Fresh DataFusion and
+GraphAr test executables are admitted only from that build's successful Cargo
+artifact record. Its MRR source baseline is still =023a6db= with the current
+helper patched locally; it does not qualify the new published-pin composition
+end to end. Published-pin original-query tests and current-head CI remain gates.
+
+The earlier GSC =5a3bf1d= Ubuntu CI completed successfully; its macOS CI remained
+in progress at observation. These checks do not qualify the later =09fcfbf=
+follow-up or all downstream Data profiles.
