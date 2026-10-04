@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Original-source resource matrix contract",
+  "type": "object",
+  "properties": {
+    "schema_namespace": {"const": "mrr.data.source.resources"},
+    "schema_version": {"const": 1},
+    "shapes": {"const": ["uniform", "skewed"]},
+    "modes": {"const": ["cold-full", "warm-full", "warm-selective", "reused-selective"]},
+    "samples": {"const": 3},
+    "warmups": {"const": 2},
+    "cases": {"type": "array", "minItems": 8, "maxItems": 8}
+  },
+  "required": ["schema_namespace", "schema_version", "cases"],
+  "additionalProperties": false
+}

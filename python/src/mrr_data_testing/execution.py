@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 from mrr_data_testing.process import BUILD_LIMITS, CONTROL_LIMITS, TEST_LIMITS, run
@@ -15,6 +16,7 @@ class CargoArtifactCapture:
         self.pending = b""
         self.finished = []
         self.events = 0
+        self.frontend_events = 0
 
     def __call__(self, block):
         lines = (self.pending + block).splitlines(keepends=True)
@@ -24,6 +26,14 @@ class CargoArtifactCapture:
         forwarded = bytearray()
         for line in lines:
             if not line.startswith(b"{"):
+                if re.match(
+                    rb"^\s*(?:\d+(?:\.\d+)?(?:ns|us|ms|s)\s+)?(?:INFO )?rustc_(?:hir_typeck::coercion|borrowck::region_infer|interface::passes)\b",
+                    line,
+                ):
+                    self.frontend_events += 1
+                    if self.frontend_events >= 256:
+                        forwarded.extend(self.frontend_summary())
+                    continue
                 forwarded.extend(line)
                 continue
             record = json.loads(line)
@@ -50,12 +60,19 @@ class CargoArtifactCapture:
                 forwarded.extend(line)
         if not block and self.events:
             forwarded.extend(self.summary())
+        if not block and self.frontend_events:
+            forwarded.extend(self.frontend_summary())
         self.output.flush()
         return bytes(forwarded)
 
     def summary(self):
         output = f"rust compiler diagnostic events: {self.events}\n".encode()
         self.events = 0
+        return output
+
+    def frontend_summary(self):
+        output = f"rust frontend diagnostic events: {self.frontend_events}\n".encode()
+        self.frontend_events = 0
         return output
 
     def complete(self):

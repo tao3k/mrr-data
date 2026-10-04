@@ -9,8 +9,9 @@ original slices and do not independently define current completion. The initial
 audit used PR #12 at =aacc25511367391262f4639e5485701406089b21=. The consolidated
 source/dispatch composition was first published at
 =f949c4f5bdbceb93e590ec7408912c2dd66e55cc=. The published integration is now
-based on =d75d1aa2= with MRR owner
-=685459849876f84addc0a8bad40de4c00caede7d=. Qualification is recorded
+based on =bd4686f8= with the Source resource/progress changes published at
+=892030bb= and MRR owner =08f33e492c1154ccef354446cf55b572d56a6703=.
+Qualification is recorded
 below. Platform results must refer to their exact head; earlier-head green checks
 do not establish all-platform closure.
 
@@ -33,7 +34,7 @@ The graph facade and semantic-only consumers need not enable that native fronten
 
 | Composition | Owner and supported scope | Acceptance gate |
 |-------------+---------------------------+-----------------|
-| Root, fuzz and =mrr-property-source= | One MRR revision =685459849876f84addc0a8bad40de4c00caede7d=; source digest, catalog binding, dispatch and final result admission remain MRR-owned | Locked pin guard; native =source-handoff= Linux/macOS CI |
+| Root, fuzz and =mrr-property-source= | One MRR revision =08f33e492c1154ccef354446cf55b572d56a6703=; source digest, catalog binding, dispatch and final result admission remain MRR-owned | Locked pin guard; native =source-handoff= Linux/macOS CI |
 | GraphAr =native-graphar,source-handoff,backend,selective-graphar= with DataFusion =source-handoff= | Combined Healthcare property/relation closure; original GQL, four rows including duplicate/null, cold and same-cache warm restoration on one Backend; complete Dataset binding for selective neighborhoods | Canonical source-handoff Rust caller, cross-profile reuse and separate drift/refusal tests |
 | Shared Backend | Provider-independent admission, transaction authority/history and retained resource drain; simulated metadata in canonical caller | Positive, retirement, lost-ACK and final-clone assertions; native process-exit receipts remain separate |
 | GraphAr =selective-graphar= | Authenticated selective outgoing-range materialization under the declared schema | Paired full-source equivalence; end-to-end performance remains M3 |
@@ -54,20 +55,27 @@ not a native RSS cap. Local and platform qualification remain explicit gates.
 
 ** Current integration and continuous qualification
 
-The composition based on =d75d1aa2= retains complete-Dataset selective capture,
+The published =892030bb= composition retains complete-Dataset selective capture,
 cross-profile original-source reuse and supervised native Cargo builds with
 separate successful executable artifact records. Root, fuzz and optional Source
-agree on MRR =68545984=. Original-source controls and uniform/skewed correctness
-are implemented and locally qualified against the preceding =023a6db= owner.
-The changed native-build dependency compiled locally and its DataFusion Source
-pair passed; GraphAr runtime initialization still hit the unchanged idle gate.
-Both Source test crates passed direct strict Clippy with the successful native
-build's exact dependency arguments after the lifecycle assertion helper was
-changed to borrow its result. Full Cargo Clippy and exact-head platform
-acceptance remain separate gates. Matched original-query process measurements
-remain open.
-Local Python qualification after merging passes =42 tests=; strict Ruff,
-formatting, the real checkout owner-pin guard and documentation checks pass.
+agree on MRR =08f33e49=, including shared SDK command isolation. Dependency and
+workspace compilers both emit real progress. Original-source execution enables
+the parser's existing artifact decode/verification/admission trace.
+
+The preceding =68545984= dependency binary was freshly rebuilt with the new
+resource harness. Nine nonignored GraphAr Source cases passed in =14.03s= and
+the matched eight-case resource matrix passed in =58.46s=. Rust verifies one
+immutable snapshot per shape, original-query results and final zero reservations.
+Selective reads reduced bytes and decoded rows; warm/selective request medians
+regressed against warm/full in both shapes. This diagnostic establishes the
+measurement path, not latest-pin acceptance or release-scale performance.
+Own-crate strict Clippy passed with the preceding build's exact dependencies.
+Full current-pin Cargo Clippy and exact-head Linux/macOS acceptance remain open.
+
+Local Python qualification passes =46 tests=; strict Ruff, formatting and
+21-document/7-README checks pass. Collection checkout identity, binary digest
+and successful Cargo artifact digest remain separately scoped in the glue
+receipt. A direct-binary diagnostic does not claim a matching full Cargo build.
 Native acceptance must refer to the rebuilt integration and its selected
 =source-handoff,backend,selective-graphar= composition.
 
@@ -1464,3 +1472,240 @@ qualify the four later GraphAr cases or the =68545984= dependency. The remote
 =18cf4df0= run =37211540167= was still pending native checks at this receipt;
 Python, Arrow IPC fuzz and Ubuntu S3/TLS had passed. Exact published-head
 platform acceptance and M3 original-query measurements remain open.
+** 2026-10-04 cold source trace and compiler localization
+
+The published-pin cold build's 59 object start/completion events identify
+=clan/poo/trie= as the sole unfinished module (58 completed). Owned GCC 16.2.0
+sampling showed RTL PRE load-motion expression-table hashing/comparison.
+Verbose optimization remarks alone reproduced idle30 refusal. A diagnostic
+compile retaining =-O2= and SDK ABI flags, with only =-fno-gcse-lm= added,
+completed under unchanged build supervision. The GSC #18 candidate now applies
+this narrow policy to SDK-declared GCC generated modules independently of
+verbosity and observes actual module intermediates. Full latest-pin archive,
+semantic and performance acceptance remain separate gates.
+
+Enabling the parser's existing =GERBIL_PARSER_LR_TRACE=1= produced actual
+artifact decode/verified/admitted output during initialization. The independently
+supervised admitted local-patch source executables passed DataFusion 2/2 in
+7.55s and GraphAr 4/4 in 9.93s, with idle5 unchanged. This is the earlier
+=023a6db= MRR composition and helper-local patch, not latest-pin qualification.
+The CI original-query step now enables this flag. Earlier startup failures
+remain retained; trace does not establish a startup performance improvement.
+
+** Published diagnostic propagation and current CI boundary
+
+Data root/fuzz now pin MRR =d137b6d536136982ad0c6d2f0d1bc30c19159899=,
+which pins GSC =5f4ca683e3635b89fa791233147e272699b72321=. Registry versions
+are preserved. The CI original-query step enables =GERBIL_PARSER_LR_TRACE=1=.
+
+The candidate full-chain local-patch build failed idle30 during PackageSpec
+preparation before the archive object stage. A direct experiment confirmed
+Gerbil's per-module GSC options follow =-target C=, causing appended runtime
+=-:= and =-verbose= options to be warned as improperly placed and ignored.
+The MRR build helper now preserves the existing SDK mappings and appends real
+collector diagnostics through =GAMBOPT= for GXI and child GSC. The small actual
+GSC module experiment passed with real GC output. A warm package run succeeded;
+the fresh run retained idle30 failure and =unable to execute tool 'ld'= errors.
+The full latest-pin cold Data composition therefore remains unqualified.
+
+Current MRR production helper source passed direct strict Clippy-driver
+checking against qualified cached dependencies. Full local Cargo helper test
+and check attempts still failed idle30 in Rust dependencies. Five Python
+process-supervision regressions passed, including the Darwin exited-child
+signal race and retention of live permission refusal. Cleanup repair preserves
+the timeout refusal; a final =OK= line alone is not process success.
+
+Exact GSC =b20d209= Ubuntu and macOS CI both completed successfully. Earlier
+MRR =f256c13= had two successful Ubuntu native jobs; one macOS native job failed
+idle5 after final harness output and then hit the repaired cleanup race. One
+proof job failed before project tests while downloading Elan (HTTP 403), while
+its companion job passed. Those receipts do not qualify MRR =7d23fd2= or the
+new Data head. Current-head CI and full Data original-query qualification
+remain required, as do paired target-specific performance measurements.
+
+** P0 supervision: exited parents and owned descendants
+
+MRR =ff3aa3eb57e9fffd94616fd70b6ecdd605959ef4= now reaps direct children
+independently of output pipe readiness and kills the owned process group even
+when its parent has already exited. The real fork regression deliberately
+prints all successful receipts and exits zero while a SIGTERM-ignoring child
+retains stdout. The previous supervisor leaked that child; the repair still
+refuses at idle5 with status 124 and cleans the descendant. Six process
+regressions passed in 5.542s. Timeout diagnostics include parent status and pipe
+state, providing evidence for the earlier macOS failure without admitting it.
+
+GSC =b20d209= remains unchanged with exact-head Ubuntu/macOS CI success. The
+previously failing tiny dynamic Scheme module compiled independently, and a
+retry of the existing PackageSpec prefix exited zero with actual GC work. An
+owned GXI sample showed hash/expander/collector work. Those reused-prefix
+receipts do not close the failed fresh-prefix or full current-pin source build.
+P0 full cold build and original-query execution remain the next acceptance
+boundary; P1 ABI/lifecycle and P2 paired release-query/memory evidence retain
+separate gates. No production release or performance gain is claimed here.
+
+** P0 shared SDK command isolation (2026-10-05)
+
+Data root/fuzz synchronize MRR =08f33e492c1154ccef354446cf55b572d56a6703=
+and GSC =9175ae2c8ba2ac80abf9120030ee7ab13ba742de=. MRR uses the public
+GSC =gerbil_command= for PackageSpec and program staging; its duplicate cleanup
+list is removed. The shared boundary now removes =DEVELOPER_DIR= along with
+=SDKROOT= and unrelated C flags, and filters Nix PATH entries. An owned cold
+process tree showed nested Nix =xcrun ld= invocations despite the selected
+Homebrew GCC, demonstrating that PATH cleanup alone was insufficient.
+
+The actual GSC Cargo test build succeeded in 44.82s; eight default regressions
+passed in 0.48s, including actual Darwin linker resolution under the inherited
+Nix developer directory. Four native fixtures remain explicitly ignored.
+Current GSC production-library metadata and the MRR helper passed strict
+direct lint/type checking using qualified cached dependencies. The first MRR
+metadata attempt used a test binary and was rejected (E0463); it was not a pass.
+
+Two fresh Scheme prefixes with the developer override removed gave one
+idle30 refusal and one successful exit under unchanged build limits. Sampling
+the successful run's quiet phase found only GXI, in Gambit dynamic-module
+cleanup and Darwin =dlclose= / unload notifications. This distinguishes
+compilation from process cleanup; it does not establish every earlier idle5
+failure's cause. No synthetic heartbeat, worker cap or relaxed timeout was
+introduced. Full Data native construction and current-pin original-query tests
+remain a separate acceptance gate; old-head CI does not qualify these pins.
+
+A separate GSC production Cargo build failed idle30 in Rust project-harness
+compilation. The successful direct production-library metadata checks do not
+replace that failed Cargo gate or admit a native integration artifact.
+
+** Source dependency compiler progress and original-query measurement entry point
+
+Ubuntu =18cf4df0= Source job =111464341988= failed the unchanged 30-second
+idle build gate while compiling DataFusion dependencies. Its very-verbose
+commands showed plain dependency =rustc=: only workspace crates had the progress
+wrapper. The Source job now sets both wrapper variables to the installed console
+entry point. Facade and full Source Clippy also use supervised successful Cargo
+records under the existing build limits.
+
+The Rust wrapper additionally enables only type-coercion, borrow-check and
+compiler-phase info events when the host has not selected =RUSTC_LOG=. This
+bridges front-end work before LLVM remarks start. These are real compiler
+events, grouped by the glue recorder; compiler flags, timeouts and heap settings
+retain their prior values. The GraphAr Source test program compiled successfully
+with this diagnostic selection and the prior successful build's exact dependency
+arguments. Its new Rust receiver refusal test passed in =0.01s=. Before parser artifact tracing was enabled, Source execution and the resource
+matrix hit the unchanged five-second runtime-init idle gate on this host.
+Those failures remain retained; the later diagnostic qualification follows below.
+
+The new Rust process matrix defines two source shapes and four modes:
+empty-verified-cache/full scan, warm-cache/full scan, warm-cache/selective read,
+and retained-source/selective read. It verifies identical snapshot roots across
+each shape's modes, expected original-query NULL/duplicate rows, remote-read
+behavior and final zero reservations. Its Schema declares two warmups and three
+samples before measurement. Supported fields cover phase wall time, process CPU
+and peak RSS, actual returned remote bytes, verified capture bytes, materialized
+relation rows and result transport bytes. First materialized-result readiness is
+separate from request completion; streaming first-result, spill and copy-byte
+evidence remain =null=. Cold refers to the verified content cache, not OS-cold
+storage. Reuse retains only the authenticated ordered source and property
+batches; compilation/binding and engine registration remain per request.
+
+Python's =source-resources= entry point supervises this Rust matrix and collects
+one checked envelope with code/binary/Schema identity. The native code compiled
+and strict own-crate lint passed. CI runs the matrix after Source correctness, facade and
+full Clippy, and uploads receipts only after success. M3 remains a qualification
+gate until the matched receipts and exact published-head CI actually pass.
+
+** 2026-10-05 matched original-source diagnostic qualification
+
+Enabling the parser's existing actual artifact decode/verification/admission
+trace resolved the local output-inactivity gate without changing idle5 or the
+120-second test deadline. The =68545984= dependency test binary passed all nine
+nonignored GraphAr Source cases in =14.03s=. These are cached-owner diagnostic
+receipts; they do not qualify the newly published =ff3aa3eb= dependency chain.
+
+The first resource-matrix execution correctly refused independently generated
+GraphAr snapshots: native writer output gave each process a different CID.
+The repaired Rust matrix creates one immutable payload closure per shape and
+passes the same authenticated blocks to all four isolated mode processes.
+Snapshot equality remains an admission requirement. Own-crate strict Clippy
+and fresh native test-program compilation passed; the complete eight-case
+matrix then passed in =58.46s=, with two warmups and three measured samples per
+case, expected original-source NULL/duplicate rows and zero final reservations.
+The collection checkout was =b23c46a0= with the fixture repair pending; the
+executable SHA-256 was
+=3ffaf6d9f2ccc7a7bc8885ebfe2b0e5e0d04f7d8adbc28c77867547b332af621=.
+The executable was rebuilt with the earlier successful =68545984= dependency
+arguments, not a full Cargo build against =ff3aa3eb=. Collection HEAD and binary
+hash are distinct evidence; the glue envelope makes that scope explicit.
+
+| Shape | Mode | Median request ms | Median CPU ms | Relation bytes | Decoded rows | Selected edges |
+|-------+------+-------------------+---------------+----------------+--------------+----------------|
+| uniform | cold/full | 199.59 | 70.00 | 49997 | 32 | 16 |
+| uniform | warm/full | 344.10 | 70.33 | 49997 | 32 | 16 |
+| uniform | warm/selective | 356.47 | 71.85 | 20213 | 14 | 6 |
+| uniform | retained/selective | 5.85 | 3.09 | 20213 | 14 | 6 |
+| skewed | cold/full | 446.73 | 66.82 | 45154 | 32 | 16 |
+| skewed | warm/full | 79.51 | 66.03 | 45154 | 32 | 16 |
+| skewed | warm/selective | 109.67 | 65.42 | 20213 | 14 | 6 |
+| skewed | retained/selective | 4.82 | 3.72 | 20213 | 14 | 6 |
+
+Cold remote reads were =92033= bytes (uniform) and =82540= bytes (skewed);
+warm modes read no remote payload bytes. Selectivity reduced relationship
+reads, but warm/selective request time regressed against warm/full in both
+shapes. Retained-source results include an already prepared source and do not
+establish a general runtime speedup. Tiny simulated-remote fixtures, uncontrolled
+OS cache and process RSS high-water marks bound these observations. Exact
+published-head platform acceptance and paired release-scale M3 evidence remain
+open; failed runs produce no admitted matrix envelope.
+
+** Actual compiler span framing and retained macOS Source receipts
+
+The latest-pin local dependency rebuild exposed the compiler's indented span
+format (=rustc_hir_typeck::coercion::coerce= without an =INFO= prefix). The glue
+recorder now groups those actual events as well as timed INFO records, preserving
+unrelated lines, compiler errors and Cargo success requirements. The regression
+covers both formats; no compiler flags or deadlines changed.
+
+Superseded =18cf4df0= macOS Source job =111464341965= passed its original-source
+DataFusion pair and eight GraphAr Source cases, then failed strict Clippy at
+=request_controls.rs:183= (=needless_pass_by_value=). The borrow correction is
+already in the published composition. This historical job is not a current-pin
+pass and does not include the new process resource matrix.
+
+** GSC CI executable fixture closure
+
+GSC =9175ae2= Ubuntu native Gerbil passed, but its Cargo aggregate failed when
+the cache test executed a newly written script (ETXTBSY). GSC =3f1ba7a= uses a
+checked-in immutable executable; its production helper source is unchanged.
+The revised Cargo test build passed (1m11s), and eight default regressions
+passed (0.61s), with four native fixtures still ignored. Data now pins MRR
+=659aab5ce28d12a165332bed84dec4e280155fb1= and GSC
+=3f1ba7aaf5957c774c4269dd9deb2a92b2ed637d=. New-head CI remains pending.
+
+The Data =bd4686f8= full source build still refused at idle30 in PackageSpec.
+An owned snapshot showed GCC compiling =native~1.c= with the official Xcode
+assembler; the GCC sample had no usable call graph, and the GXI sample timed
+out. An emitted =native~1.o1= was present before the refusal, so the whole
+quiet interval cannot be attributed solely to GCC. This remains separate from
+the earlier successful fresh-prefix sample of dynamic-module exit cleanup.
+No current-pin original-query executable was admitted from that failed build.
+The concurrent source-resource matrix and progress changes through =0912e5bc=
+were preserved; they are not counted as fresh semantic execution here.
+
+** PackageSpec compiler phase qualification
+
+The final composition pins MRR =d137b6d536136982ad0c6d2f0d1bc30c19159899= and GSC
+=5f4ca683e3635b89fa791233147e272699b72321=. MRR emits actual build-script entered/returned
+events under positive =GERBIL_BUILD_VERBOSE= while retaining the first-party
+command parser and pending-job wait. The delegated spec and reused-prefix
+build exited zero; invalid compile options exited nonzero without a returned
+event. Successful process exit remains mandatory.
+
+An owned fresh-prefix attempt still refused idle30 after 148.75s before return.
+Quiet snapshots at 15.45s and 28.17s retained GCC compiling =native~1.c=; its
+actual sample traversed DSE/DCE/CCP/dominator passes, while GXI waited in
+=select=. No object was admitted. This establishes a package C-compilation
+quiet phase in that run, separately from earlier dyld cleanup. A preceding
+169.87s refusal had no valid sample because local sandbox denied =ps=.
+
+MRR =659aab5= Ubuntu Scheme package build/tests passed, but the Rust native
+GQL object failed. The available job log did not expose a complete typed
+compiler cause; it is not classified as a proven timeout. Subsequent source
+integration/lint steps were skipped. New-head CI and the full Data native
+build remain gates; these pins do not establish P0-P2 closure.

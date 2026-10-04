@@ -79,7 +79,9 @@ entry point can serve as Cargo's =RUSTC_WORKSPACE_WRAPPER=. When external
 dependencies also require progress, set =RUSTC_WRAPPER= to the same entry point.
 The nested wrapper adds diagnostics only at the direct compiler call. It forwards
 all compiler arguments and adds actual LLVM inline remarks and per-function
-stack-byte records during code generation. Debug-info, optimization and
+stack-byte records during code generation. Front-end type-check, borrow-check
+and phase events use a narrowly selected =RUSTC_LOG= default; an explicitly
+supplied =RUSTC_LOG= remains authoritative. Debug-info, optimization and
 code-generation settings remain those of the caller; the compiler warning about
 absent source locations is preserved, as are compiler output and exit status.
 Registry and Git dependency compilers are included when =RUSTC_WRAPPER= is set.
@@ -99,3 +101,27 @@ their retained bounds are visible in their modules.
 CI keeps native DuckGQL separate from GraphAr, with the existing 75-minute job
 ceiling. Python framework tests have their own five-minute job. Increasing a
 job ceiling requires measured phase evidence and a separate decision.
+
+* Original-source process resource receipts
+
+=source-resources= supervises the Rust original Healthcare query matrix on
+uniform and skewed fixtures. Rust launches one child process for each declared
+mode, checks the same snapshot across modes, independently verifies the four
+expected rows including NULL and duplicates, and checks resource cleanup.
+
+#+begin_src sh
+uv run --locked --project python mrr-data-test source-resources \
+  --cargo-artifacts /path/to/successful-source-build.jsonl \
+  --output /path/to/original-source-resources.jsonl
+#+end_src
+
+The contract lives in =crates/mrr-data-graphar/source-resources-schema.json=.
+Two warmups and three measured samples retain restoration, capture, relation
+read, conversion, original compilation/binding, execution/admission and result
+handoff times, process CPU, peak RSS and actual remote/relationship read bytes.
+Cold means an empty verified content cache; OS page-cache state is uncontrolled.
+Reused selective mode retains the verified source and property batches, while
+original compilation and engine registration still run for every request.
+Streaming first-result, engine spill and copy-byte evidence are unsupported
+fields, represented by =null=. These bounded fixtures qualify the measurement
+path; they do not establish a production-scale speedup or an operator RSS cap.
