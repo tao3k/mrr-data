@@ -564,3 +564,10 @@ The bounded root-authenticating child passes separately (=0.02s=). Core
 and the =21-document / 7-README= documentation checker pass. Existing five-second
 inactivity / 120-second total supervision remains unchanged. No optional matched
 performance experiments were repeated and all nine Turso packages remain =0.8.1=.
+
+Final unified Core/Content/GraphAr library selection at code head =0412b01d=
+completes locked offline compilation; its native executable again reports
+=63 passed, 3 ignored= (=1.01s=), with the bounded child =1 passed= (=0.08s=).
+The isolated =backend-graphar-combined= facade passes locked offline compilation
+under the optimized test profile. Elapsed observations are functional receipts,
+not controlled A/B performance gains. All local preparation jobs complete.
