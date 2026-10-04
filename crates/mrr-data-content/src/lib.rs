@@ -66,8 +66,8 @@ mod combined_graph;
 mod graph_snapshot;
 #[cfg(feature = "graph-snapshot")]
 pub use combined_graph::{
-    CombinedGraphInputs, PreparedCombinedGraph, prepare_combined_graph, publish_combined_graph,
-    restore_combined_graph,
+    CombinedGraphInputs, PreparedCombinedGraph, prepare_combined_graph,
+    prepare_combined_graph_checked, publish_combined_graph, restore_combined_graph,
 };
 #[cfg(feature = "graph-snapshot")]
 pub use graph_snapshot::{

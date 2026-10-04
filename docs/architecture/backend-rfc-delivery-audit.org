@@ -536,3 +536,31 @@ After explicit local SDK discovery, the isolated facade
 compilation check. The facade with selective GraphAr also passes. CI now checks
 the isolated composition after SDK provisioning, in addition to all combined
 native functional tests and strict all-target Clippy.
+
+** P1/P2: reserve before acquiring the combined content closure
+
+The earlier combined request accepted an already-buffered closure. A new content
+request places local content acquisition inside shared Backend resource admission,
+then optionally captures native properties and relation facts on the same worker.
+Payload reads are bounded by both transfer and reservation limits; the publication
+variant returns a retained closure handle. Generic transfer checkpoints preserve
+caller-owned typed stop reasons without depending on Backend or creating a cycle.
+
+Refusal qualification observes actual provider calls under one active reservation.
+It covers no reads on pre-cancel/deadline/saturated admission, cancellation after
+every descriptor/child read, typed stop on a failed read, initial and aggregate
+budget refusal, retained budget across publication, and native capture reuse of
+the same worker path. A controlled in-flight read proves that caller abandonment
+keeps the lease and shutdown barrier until read cleanup; no partial closure or
+native output is exposed. Simulation remains sufficient. No throughput/RSS gain
+or original GQL frontend qualification follows from this resource boundary.
+
+Local resource-boundary qualification on the published MRR pin
+=a7450879af27d08ec1cafd1b43e9375d5ac6af52=: native GraphAr =63 passed,
+3 ignored= (=1.66s=), including seven new content-admission/lifecycle tests.
+The bounded root-authenticating child passes separately (=0.02s=). Core
+=38 passed= (=0.40s=), preserving its legacy snapshot golden CID; Content
+=29 passed= (=0.31s=). Strict Content/GraphAr all-target Clippy, Rust formatting,
+and the =21-document / 7-README= documentation checker pass. Existing five-second
+inactivity / 120-second total supervision remains unchanged. No optional matched
+performance experiments were repeated and all nine Turso packages remain =0.8.1=.

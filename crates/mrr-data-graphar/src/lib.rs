@@ -89,3 +89,9 @@ pub use combined::{
 };
 #[cfg(all(feature = "combined-graph", feature = "backend"))]
 pub use combined::{CombinedGraphArRequest, prepare_combined_graphar};
+
+#[cfg(all(feature = "combined-graph", feature = "backend"))]
+pub use combined::{
+    CombinedGraphArContentRequest, prepare_combined_graph_content,
+    prepare_combined_graphar_from_content,
+};

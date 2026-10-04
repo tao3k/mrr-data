@@ -74,6 +74,8 @@ impl GraphArEntityPropertyReceipt {
 #[derive(Debug)]
 pub enum GraphArEntityPropertyError {
     UnsupportedSchema,
+    #[cfg(feature = "combined-graph")]
+    Transfer(mrr_data_content::GraphTransferError),
     Shape(&'static str),
     Budget(&'static str),
     Scope,
@@ -123,5 +125,12 @@ impl From<std::io::Error> for GraphArEntityPropertyError {
 impl From<mrr_data_backend::ResourceStop> for GraphArEntityPropertyError {
     fn from(stop: mrr_data_backend::ResourceStop) -> Self {
         Self::Stop(stop)
+    }
+}
+
+#[cfg(feature = "combined-graph")]
+impl From<mrr_data_content::GraphTransferError> for GraphArEntityPropertyError {
+    fn from(error: mrr_data_content::GraphTransferError) -> Self {
+        Self::Transfer(error)
     }
 }

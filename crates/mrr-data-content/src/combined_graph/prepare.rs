@@ -146,34 +146,58 @@ pub fn prepare_combined_graph(
     local: &dyn ContentStore,
     input: CombinedGraphInputs<'_>,
 ) -> Result<PreparedCombinedGraph, Error> {
-    let dataset = check(&input)?;
+    prepare_combined_graph_checked(local, input, || Ok::<(), Error>(()))
+}
+/// Prepare with caller-owned lifecycle checkpoints before and after each read.
+/// Blocking store reads cannot be interrupted mid-call. No runtime is created.
+/// # Errors
+/// Preserves the caller's stop type and all scope, integrity and budget refusals.
+pub fn prepare_combined_graph_checked<E>(
+    local: &dyn ContentStore,
+    input: CombinedGraphInputs<'_>,
+    mut checkpoint: impl FnMut() -> Result<(), E>,
+) -> Result<PreparedCombinedGraph, E>
+where
+    E: From<Error>,
+{
+    checkpoint()?;
+    let dataset = check(&input).map_err(E::from)?;
     let cap = input
         .limits
         .max_total_bytes
         .checked_sub(input.snapshot.bytes().len())
-        .ok_or(Error::Limit)?;
-    let bytes = local.get_bounded(
+        .ok_or(Error::Limit)
+        .map_err(E::from)?;
+    let read = local.get_bounded(
         &dataset,
         cap.min(input.limits.max_block_bytes)
             .min(input.dataset_limits.inventory.max_manifest_bytes),
-    )?;
-    let mut prepared = begin(&input, bytes)?;
-    for cid in children(&prepared, input.limits)? {
-        let bytes = local.get_bounded(
+    );
+    checkpoint()?;
+    let bytes = read.map_err(Error::from).map_err(E::from)?;
+    let mut prepared = begin(&input, bytes).map_err(E::from)?;
+    for cid in children(&prepared, input.limits).map_err(E::from)? {
+        checkpoint()?;
+        let read = local.get_bounded(
             &cid,
             input
                 .limits
                 .max_block_bytes
                 .min(input.limits.max_total_bytes - prepared.total_bytes),
-        )?;
+        );
+        checkpoint()?;
+        let bytes = read.map_err(Error::from).map_err(E::from)?;
         insert(
             &mut prepared.blocks,
             cid,
             bytes,
             &mut prepared.total_bytes,
             input.limits,
-        )?;
+        )
+        .map_err(E::from)?;
     }
-    finish(&prepared)?;
+    checkpoint()?;
+    finish(&prepared).map_err(E::from)?;
+    checkpoint()?;
     Ok(prepared)
 }

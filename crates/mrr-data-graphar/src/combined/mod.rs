@@ -9,3 +9,11 @@ pub use capture::capture_combined_graphar;
 mod backend;
 #[cfg(feature = "backend")]
 pub use backend::{CombinedGraphArRequest, prepare_combined_graphar};
+
+#[cfg(feature = "backend")]
+mod content;
+#[cfg(feature = "backend")]
+pub use content::{
+    CombinedGraphArContentRequest, prepare_combined_graph_content,
+    prepare_combined_graphar_from_content,
+};

@@ -664,3 +664,28 @@ The optional facade feature =backend-graphar-combined= selects this composition;
 providers do not create their own Backend runtime. Turso/DuckDB remain optional
 physical providers; neither becomes the graph capability owner. GraphAr retains
 the graph storage/projection role across all Production profiles and cases.
+
+** Content acquisition within shared Backend admission
+
+The low-level transfer API remains useful without a native runtime. Its
+=prepare_combined_graph_checked= variant accepts caller-owned checkpoints and
+preserves the caller's typed stop/error contract. Checks surround every bounded
+provider read, including failed reads, plus closure verification. A blocking
+provider call remains nonpreemptible; a checkpoint prevents partial buffers from
+escaping after the call completes.
+
+=CombinedGraphArContentRequest= adds shared Backend orchestration. The
+reservation is acquired before the descriptor or child payload is loaded, and
+effective payload bytes are capped by the smaller of transfer budget and Host
+reservation. =prepare_combined_graph_content= retains the complete immutable
+closure lease across async publication. =prepare_combined_graphar_from_content=
+loads and captures on one existing worker under one reservation, releasing the
+input payload before exposing captured Arrow properties and MRR facts. These
+functions use the existing scheduler and control; they create no provider runtime.
+
+Admission/cancel/deadline refusals perform no content reads. In-flight caller
+abandonment keeps admission alive until the nonpreemptible read returns, then
+releases partial input and prevents later native phases. Backend shutdown waits
+for that cleanup. Provider/cache storage, decoded metadata and native scratch
+remain separate Host headroom; these payload limits do not enforce a hard RSS
+ceiling. Original-query compilation and result admission remain MRR-owned.
