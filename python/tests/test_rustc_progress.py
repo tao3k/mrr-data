@@ -26,10 +26,30 @@ def test_workspace_wrapper_preserves_compiler_output_and_failure(tmp_path):
         capture_limit=2 * 1024 * 1024,
         output_filter=CompilerOutput(),
     )
-    assert b"Running pass" in result.stdout
-    assert b"Executing Pass" in result.stdout
+    assert b"inline (" in result.stdout
+    assert b"prologepilog (analysis)" in result.stdout
     assert subprocess.check_output([plain], timeout=5) == subprocess.check_output(
         [wrapped], timeout=5
+    )
+    nested = tmp_path / "nested"
+    result = run(
+        [
+            sys.executable,
+            Path(rustc_progress.__file__),
+            Path(rustc_progress.__file__),
+            compiler,
+            *arguments,
+            source,
+            "-o",
+            nested,
+        ],
+        limits=Limits(wall_seconds=10, idle_seconds=5),
+        capture_limit=2 * 1024 * 1024,
+        output_filter=CompilerOutput(),
+    )
+    assert b"inline (" in result.stdout
+    assert subprocess.check_output([plain], timeout=5) == subprocess.check_output(
+        [nested], timeout=5
     )
     source.write_text("fn main() { invalid Rust syntax }")
     refused = subprocess.run(

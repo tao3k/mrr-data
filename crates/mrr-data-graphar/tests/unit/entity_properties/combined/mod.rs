@@ -15,5 +15,6 @@ mod restore_control;
 
 #[cfg(feature = "backend")]
 mod restore_backend;
+
 #[cfg(feature = "source-handoff")]
 mod source_handoff;

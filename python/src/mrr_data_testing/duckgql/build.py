@@ -29,7 +29,11 @@ class CompilerOutput:
         output = bytearray()
         for line in lines:
             event = (
-                line.startswith(
+                (
+                    line.startswith(b"note:")
+                    and (b" inline (" in line or b" prologepilog (" in line)
+                )
+                or line.startswith(
                     (b"Running pass:", b"Running analysis:", b"Invalidating analysis:")
                 )
                 or bool(re.match(rb"\s+Running pass \d+ ", line))

@@ -1,43 +1,36 @@
 //! A simulated caller delegates source compilation and admission to MRR.
 use super::{
-    DataFusionQueryError, EntityChildMode, Fixture, NonZeroUsize, RestoredPropertyQuery,
-    RestoredSnapshot, execute_restored_property_path_query, fixture, limits, mrr, restored,
+    DataFusionQueryError, EntityChildMode, Fixture, NonZeroUsize, fixture, limits, mrr, restored,
 };
-use mrr_property_source::{
-    CompiledPropertySourceQuery, PropertySourceQueryError, compile_property_source_query,
-};
+use mrr_property_source::{CompiledPropertySourceQuery, compile_property_source_query};
 
 const SOURCE: &str = include_str!("../../../fixtures/healthcare-case-profile-relations.gql");
 const SOURCE_DIGEST: &str =
     "sha256:7a3a88a9ebd24cd738d426c0def633247d1a0fc13e9e37cca13bb23e90ba0c63";
 
-struct Executor<'a> {
-    restored: &'a RestoredSnapshot,
-    relations: &'a mrr::RelationCatalog,
-    entities: &'a mrr::EntityCatalog,
-}
-
 #[tokio::test]
 async fn original_source_handoff_refuses_semantic_drift_and_final_admission_budget() {
     let f = source_fixture();
     let (cold, _, relations, entities) = restored(&f, EntityChildMode::Valid).await;
-    let executor = Executor {
+    let executor = crate::RestoredPropertyBackend {
         restored: &cold,
-        relations: &relations,
-        entities: &entities,
+        relation_catalog: &relations,
+        entity_catalog: &entities,
+        limits: limits(),
     };
     let bound = compile().bind(&relations, &entities, &f.semantic).unwrap();
-    let candidate = executor.execute(bound.query()).await.unwrap();
     let error = bound
-        .admit(
-            &candidate,
+        .execute_with(
+            &executor,
             mrr::QueryResultLimits::new(
                 NonZeroUsize::new(1).unwrap(),
                 NonZeroUsize::new(3).unwrap(),
             ),
         )
-        .unwrap_err();
-    assert!(matches!(error, PropertySourceQueryError::Admission(_)));
+        .await
+        .err()
+        .unwrap();
+    assert!(matches!(error, mrr::PropertyExecutionError::Admission(_)));
 
     let generation = mrr::GenerationId::from_canonical_bytes("caller-updated-generation").unwrap();
     let semantic = mrr::SemanticSnapshot::admit(
@@ -52,30 +45,24 @@ async fn original_source_handoff_refuses_semantic_drift_and_final_admission_budg
     )
     .unwrap();
     let bound = compile().bind(&relations, &entities, &semantic).unwrap();
-    let error = executor.execute(bound.query()).await.unwrap_err();
-    assert!(matches!(error, DataFusionQueryError::CatalogMismatch));
+    let error = bound
+        .execute_with(
+            &executor,
+            mrr::QueryResultLimits::new(
+                NonZeroUsize::new(100).unwrap(),
+                NonZeroUsize::new(300).unwrap(),
+            ),
+        )
+        .await
+        .err()
+        .unwrap();
+    assert!(matches!(
+        error,
+        mrr::PropertyExecutionError::Backend(DataFusionQueryError::PhysicalBinding(
+            mrr_data_core::DataQueryBindingError::GenerationMismatch { query, snapshot }
+        )) if query == generation && snapshot == f.semantic.generation()
+    ));
 }
-impl Executor<'_> {
-    async fn execute<'a>(
-        &'a self,
-        query: &'a mrr::CatalogBoundQuery,
-    ) -> Result<mrr::CandidateQueryResult, DataFusionQueryError> {
-        let output = execute_restored_property_path_query(RestoredPropertyQuery {
-            query,
-            restored: self.restored,
-            relation_catalog: self.relations,
-            entity_catalog: self.entities,
-            limits: limits(),
-        })
-        .await?;
-        Ok(mrr::CandidateQueryResult::new(
-            mrr::QueryResultBinding::for_query(query),
-            output.columns().to_vec(),
-            output.rows().to_vec(),
-        ))
-    }
-}
-
 fn compile() -> CompiledPropertySourceQuery {
     compile_property_source_query("case-profile-relations.gql", SOURCE, SOURCE_DIGEST).unwrap()
 }
@@ -157,22 +144,26 @@ async fn original_healthcare_source_reaches_mrr_admission_over_cold_and_warm_res
     let (cold, warm, relations, entities) = restored(&f, EntityChildMode::Valid).await;
     let mut previous = None;
     for snapshot in [&cold, &warm] {
-        let executor = Executor {
+        let executor = crate::RestoredPropertyBackend {
             restored: snapshot,
-            relations: &relations,
-            entities: &entities,
+            relation_catalog: &relations,
+            entity_catalog: &entities,
+            limits: limits(),
         };
         let bound = compile().bind(&relations, &entities, &f.semantic).unwrap();
-        let candidate = executor.execute(bound.query()).await.unwrap();
-        let _admitted = bound
-            .admit(
-                &candidate,
+        let admitted = bound
+            .execute_with(
+                &executor,
                 mrr::QueryResultLimits::new(
                     NonZeroUsize::new(100).unwrap(),
                     NonZeroUsize::new(300).unwrap(),
                 ),
             )
+            .await
             .unwrap();
+        let candidate = admitted.candidate();
+        assert_eq!(admitted.receipt().row_count(), 4);
+        assert_eq!(admitted.physical_evidence().query(), bound.query());
         assert_eq!(bound.compilation().source_digest, SOURCE_DIGEST);
         let scalar = |text: &str| mrr::QueryResultValue::Scalar {
             schema: mrr::ValueSchema::String,

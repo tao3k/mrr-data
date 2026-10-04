@@ -20,12 +20,18 @@ fn compile() -> CompiledPropertySourceQuery {
 struct Executor {
     entities: Vec<mrr_data_datafusion::EntityPropertyTable>,
     relations: Vec<mrr_data_datafusion::BinaryRelationTable>,
+    binding: mrr_data_core::BoundDataQuery,
 }
-impl Executor {
+impl mrr::PropertyQueryBackend for Executor {
+    type PhysicalEvidence = mrr_data_core::BoundDataQuery;
+    type Error = mrr_data_datafusion::DataFusionQueryError;
     async fn execute<'a>(
         &'a self,
         query: &'a mrr::CatalogBoundQuery,
-    ) -> Result<mrr::CandidateQueryResult, mrr_data_datafusion::DataFusionQueryError> {
+    ) -> Result<mrr::PropertyExecutionCandidate<Self::PhysicalEvidence>, Self::Error> {
+        if self.binding.query() != query {
+            return Err(mrr_data_datafusion::DataFusionQueryError::CatalogMismatch);
+        }
         let result = mrr_data_datafusion::execute_property_path_query(
             query,
             &self.entities,
@@ -33,11 +39,13 @@ impl Executor {
             properties::limits(),
         )
         .await?;
-        Ok(mrr::CandidateQueryResult::new(
-            mrr::QueryResultBinding::for_query(query),
-            result.columns().to_vec(),
-            result.rows().to_vec(),
-        ))
+        let profile = mrr_data_datafusion::datafusion_engine_profile()?;
+        let candidate = mrr_data_core::project_data_query_output(&self.binding, &profile, result)
+            .map_err(mrr_data_datafusion::DataFusionQueryError::PhysicalOutput)?;
+        Ok(mrr::PropertyExecutionCandidate {
+            candidate,
+            physical_evidence: self.binding.clone(),
+        })
     }
 }
 #[tokio::test]
@@ -79,20 +87,24 @@ async fn original_source_handoff_native_combined_cold_and_warm_reaches_mrr_admis
                 })
                 .collect(),
             relations: relation_tables(&f, &captured),
+            binding: f.query.clone(),
         };
         let bound = compile()
             .bind(&f.relations, &f.entities, &f.original.semantic)
             .unwrap();
-        let candidate = executor.execute(bound.query()).await.unwrap();
-        let _admitted = bound
-            .admit(
-                &candidate,
+        let admitted = bound
+            .execute_with(
+                &executor,
                 mrr::QueryResultLimits::new(
                     NonZeroUsize::new(100).unwrap(),
                     NonZeroUsize::new(300).unwrap(),
                 ),
             )
+            .await
             .unwrap();
+        let candidate = admitted.candidate();
+        assert_eq!(admitted.receipt().row_count(), 4);
+        assert_eq!(admitted.physical_evidence().query(), bound.query());
         assert_eq!(bound.compilation().source_digest, SOURCE_DIGEST);
         let mut rows = candidate.rows().to_vec();
         rows.sort_by_key(|r| format!("{r:?}"));
