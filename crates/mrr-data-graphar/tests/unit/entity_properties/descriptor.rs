@@ -5,7 +5,7 @@ use super::{
 };
 use crate::{
     GraphArChunkLayout, GraphArEntityPropertyError as Error, GraphArEntityPropertyReceipt,
-    capture_graphar_entity_properties, write_graphar_entity_properties,
+    write_graphar_entity_properties,
 };
 use std::{
     process::Command,
@@ -140,6 +140,9 @@ fn property_descriptor_reopens_in_new_process() {
     )
     .unwrap();
     let block = receipt.descriptor(limits()).unwrap();
+    let root = super::registered::snapshot(&f, &block);
+    std::fs::write(dir.path().join("snapshot.cbor"), root.bytes()).unwrap();
+    std::fs::write(dir.path().join("snapshot.cid"), root.cid().to_string()).unwrap();
     std::fs::write(dir.path().join("manifest.cbor"), block.bytes()).unwrap();
     std::fs::write(dir.path().join("trusted-root.cid"), block.cid().to_string()).unwrap();
     drop((receipt, block, projection, tables, f));
@@ -181,22 +184,28 @@ fn property_descriptor_child_reopens() {
     let (projection, expected) = inputs(&f);
     let source = std::env::current_dir().unwrap().join("source");
     let bytes = std::fs::read("manifest.cbor").unwrap();
-    let root = std::fs::read_to_string("trusted-root.cid")
+    let root: cid::Cid = std::fs::read_to_string("trusted-root.cid")
         .unwrap()
         .parse()
         .unwrap();
-    let receipt = GraphArEntityPropertyReceipt::decode_descriptor_checked(
-        source.clone(),
-        &root,
-        &bytes,
+    assert_eq!(mrr_data_core::dag_cbor_cid(&bytes), root);
+    let root: cid::Cid = std::fs::read_to_string("snapshot.cid")
+        .unwrap()
+        .parse()
+        .unwrap();
+    let snapshot_bytes = std::fs::read("snapshot.cbor").unwrap();
+    let manifest = mrr_data_core::SnapshotManifest::decode_checked(&snapshot_bytes, &root).unwrap();
+    let snapshot = mrr_data_core::SnapshotBlock::encode(manifest).unwrap();
+    let query = super::registered::bound(&f, &snapshot);
+    let captured = crate::capture_registered_graphar_entity_properties(
+        &source,
+        &query,
         &projection,
+        &bytes,
         limits(),
     )
     .unwrap();
-    let captured =
-        capture_graphar_entity_properties(&source, &f.query, &projection, &receipt, limits())
-            .unwrap();
-    let actual = captured.tables(&f.query).unwrap();
+    let actual = captured.tables(&query).unwrap();
     assert_eq!(actual.len(), expected.len());
     for table in actual {
         let expected = expected.iter().find(|t| t.schema == table.schema).unwrap();

@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::profile::{cid_for, validate_cid};
 use crate::snapshot_descriptors::{
     CoverageDescriptor, CoverageKind, EntityDescriptor, GraphProjectionDescriptor,
+    GraphProjectionKind,
 };
 use crate::{
     ARROW_FACT_SCHEMA_NAMESPACE, ARROW_FACT_SCHEMA_VERSION, ARROW_IPC_FILE_FORMAT, CID_VERSION,
@@ -870,7 +871,13 @@ struct GraphProjectionWire {
 impl From<&GraphProjectionDescriptor> for GraphProjectionWire {
     fn from(descriptor: &GraphProjectionDescriptor) -> Self {
         Self {
-            schema: SchemaWire::graphar_binary_entity(),
+            schema: match descriptor.kind {
+                GraphProjectionKind::BinaryEntity => SchemaWire::graphar_binary_entity(),
+                GraphProjectionKind::EntityProperties => SchemaWire {
+                    namespace: crate::GRAPHAR_ENTITY_PROPERTIES_NAMESPACE.into(),
+                    version: crate::GRAPHAR_ENTITY_PROPERTIES_VERSION,
+                },
+            },
             graphar_version: descriptor.graphar_version.clone(),
             manifest_cid: descriptor.manifest_cid,
         }
@@ -879,8 +886,17 @@ impl From<&GraphProjectionDescriptor> for GraphProjectionWire {
 
 impl GraphProjectionWire {
     fn into_descriptor(self) -> Result<GraphProjectionDescriptor, DataError> {
-        self.schema.validate_graphar_binary_entity()?;
-        GraphProjectionDescriptor::new(self.graphar_version, self.manifest_cid)
+        if self.schema.namespace == crate::GRAPHAR_ENTITY_PROPERTIES_NAMESPACE {
+            if self.schema.version != crate::GRAPHAR_ENTITY_PROPERTIES_VERSION {
+                return Err(DataError::UnknownGraphProjectionVersion(
+                    self.schema.version,
+                ));
+            }
+            GraphProjectionDescriptor::entity_properties(self.graphar_version, self.manifest_cid)
+        } else {
+            self.schema.validate_graphar_binary_entity()?;
+            GraphProjectionDescriptor::new(self.graphar_version, self.manifest_cid)
+        }
     }
 }
 

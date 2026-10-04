@@ -37,6 +37,7 @@ harness = false
 required-features = ["selective-graphar"]
 
 [dev-dependencies]
+arrow-ipc.workspace = true
 ipld-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true

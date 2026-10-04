@@ -21,7 +21,9 @@ mod entity_properties;
 pub use entity_properties::{
     CapturedGraphArEntityProperties, GraphArEntityPropertyBlock, GraphArEntityPropertyError,
     GraphArEntityPropertyLimits, GraphArEntityPropertyProjection, GraphArEntityPropertyReceipt,
-    GraphArEntityPropertyTable, capture_graphar_entity_properties, write_graphar_entity_properties,
+    GraphArEntityPropertyTable, RegisteredGraphArEntityProperties,
+    capture_graphar_entity_properties, capture_registered_graphar_entity_properties,
+    write_graphar_entity_properties,
 };
 mod projection;
 #[cfg(feature = "file-inventory")]
@@ -73,4 +75,7 @@ pub use writer::{
 mod tests;
 
 #[cfg(feature = "backend")]
-pub use entity_properties::{GraphArEntityPropertiesRequest, prepare_graphar_entity_properties};
+pub use entity_properties::{
+    GraphArEntityPropertiesRequest, RegisteredGraphArEntityPropertiesRequest,
+    prepare_graphar_entity_properties, prepare_registered_graphar_entity_properties,
+};

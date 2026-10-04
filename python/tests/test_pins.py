@@ -1,4 +1,5 @@
 """Fail before compilation when independent fuzz/workspace pins drift."""
+
 import pytest
 from mrr_data_testing.checks.pins import check_fuzz_mrr_pin
 

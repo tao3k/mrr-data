@@ -880,3 +880,48 @@ fn graph_dataset_root_binds_inventory_and_semantic_scope() {
     let unknown = serde_ipld_dagcbor::to_vec(&value).unwrap();
     assert!(GraphDatasetBinding::decode_checked(&unknown, &dag_cbor_cid(&unknown)).is_err());
 }
+
+#[test]
+fn property_projection_profile_round_trips_and_never_admits_as_binary_topology() {
+    let bytes = manifest_with_graph(false, true).canonical_bytes().unwrap();
+    let mut value: Ipld = serde_ipld_dagcbor::from_slice(&bytes).unwrap();
+    let property = property_descriptor_cid();
+    replace(
+        &mut value,
+        &["graph_projection", "schema", "namespace"],
+        Ipld::String(crate::GRAPHAR_ENTITY_PROPERTIES_NAMESPACE.into()),
+    );
+    replace(
+        &mut value,
+        &["graph_projection", "manifest_cid"],
+        Ipld::Link(property),
+    );
+    let bytes = serde_ipld_dagcbor::to_vec(&value).unwrap();
+    let manifest = SnapshotManifest::decode_canonical(&bytes).unwrap();
+    let graph = manifest.graph_projection().unwrap();
+    assert_eq!(graph.kind(), crate::GraphProjectionKind::EntityProperties);
+    assert_eq!(graph.manifest_cid(), &property);
+    assert!(manifest.referenced_cids().contains(&property));
+    let snapshot = SnapshotBlock::encode(manifest).unwrap();
+    let bound = bind_data_query(
+        &bound_query(Some(1)),
+        &snapshot,
+        &DataEngineProfile::new("properties", true, []).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        admit_graph_projection_source(&bound, relation_id("alpha"), &property),
+        Err(DataGraphSourceBindingError::GraphProjectionProfileMismatch)
+    );
+}
+
+fn property_descriptor_cid() -> cid::Cid {
+    crate::dag_cbor_cid(&[0xa0])
+}
+
+#[test]
+fn graph_projection_kinds_enforce_distinct_metadata_codecs() {
+    assert!(GraphProjectionDescriptor::new("1", property_descriptor_cid()).is_err());
+    assert!(GraphProjectionDescriptor::entity_properties("1", raw_cid(b"native yaml")).is_err());
+    assert!(GraphProjectionDescriptor::entity_properties(" ", property_descriptor_cid()).is_err());
+}

@@ -2,3 +2,4 @@
 mod acceptance;
 mod descriptor;
 mod fixture;
+mod registered;

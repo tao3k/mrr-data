@@ -10,7 +10,7 @@ use mrr_data_core::{GraphDatasetInventory, dag_cbor_cid};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-const NAMESPACE: &str = "mrr.graphar.entity-properties.v1";
+const NAMESPACE: &str = mrr_data_core::GRAPHAR_ENTITY_PROPERTIES_NAMESPACE;
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct Wire {

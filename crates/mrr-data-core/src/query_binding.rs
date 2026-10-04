@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::fmt;
 
 #[cfg(feature = "content-identity")]
-use crate::SnapshotBlock;
+use crate::{GraphProjectionKind, SnapshotBlock};
 #[cfg(feature = "content-identity")]
 use cid::Cid;
 use meta_relational_reasoning::{Binding, GenerationId, QueryResultValue};
@@ -40,6 +40,7 @@ pub struct BoundDataQuery {
     query: CatalogBoundQuery,
     snapshot_root: Cid,
     graph_projection_manifest: Option<Cid>,
+    graph_projection_kind: Option<GraphProjectionKind>,
     engine: DataEngineProfile,
 }
 
@@ -79,6 +80,7 @@ pub enum DataQueryBindingError {
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[cfg(feature = "content-identity")]
 pub enum DataGraphSourceBindingError {
+    GraphProjectionProfileMismatch,
     GraphProjectionRequired,
     SourceRelationUnavailable(RelationId),
     GraphProjectionManifestMismatch {
@@ -174,6 +176,11 @@ impl BoundDataQuery {
     #[must_use]
     pub const fn graph_projection_manifest(&self) -> Option<&Cid> {
         self.graph_projection_manifest.as_ref()
+    }
+
+    #[must_use]
+    pub const fn graph_projection_kind(&self) -> Option<GraphProjectionKind> {
+        self.graph_projection_kind
     }
 
     #[must_use]
@@ -281,6 +288,9 @@ pub fn bind_data_query(
         query: query.clone(),
         snapshot_root: *snapshot.cid(),
         graph_projection_manifest,
+        graph_projection_kind: manifest
+            .graph_projection()
+            .map(crate::GraphProjectionDescriptor::kind),
         engine: engine.clone(),
     })
 }
@@ -305,6 +315,9 @@ pub fn admit_graph_projection_source(
     let expected_manifest = query
         .graph_projection_manifest()
         .ok_or(DataGraphSourceBindingError::GraphProjectionRequired)?;
+    if query.graph_projection_kind() != Some(GraphProjectionKind::BinaryEntity) {
+        return Err(DataGraphSourceBindingError::GraphProjectionProfileMismatch);
+    }
     let relation_is_referenced = query.query().query().graph().paths().iter().any(|path| {
         path.segments()
             .iter()

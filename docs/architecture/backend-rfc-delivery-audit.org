@@ -392,9 +392,9 @@ has a canonical DAG-CBOR descriptor/CID with no serialized local paths. Decoder
 admission verifies bytes, version, unknown-field refusal, limits and the caller
 admitted catalog. A separately launched process reopens the native property
 files from the descriptor and independently compares every canonical row under
-a five-second gate; its fixture CID simulates publication authority. Global
-SnapshotManifest/profile root registration and MRR-owned original-source handoff
-remain integration slices.
+a five-second gate; its fixture CID simulates publication authority. SnapshotManifest/profile property-root registration is now implemented (see the
+registered capture slice below). Combined native topology/property publication
+and MRR-owned original-source handoff remain integration slices.
 
 ** P0: Linux DuckGQL SDK link repair
 
@@ -439,3 +439,48 @@ qualification has 16 passing tests, Ruff passes, and the documentation checker
 validates 21 Org documents and eight Org READMEs. All nine Turso packages remain
 =0.8.1=. Remote native/fuzz checks must be read at the subsequently published
 exact head; prior green jobs are not receipts for this property delivery.
+
+** P2-A: registered property snapshot root
+
+The root projection now distinguishes binary topology (RAW metadata) from
+catalog-declared entity properties (DAG-CBOR descriptor). Existing binary profile
+encoding and snapshot golden CIDs remain unchanged. Property descriptors register
+through the ordinary SnapshotManifest request; referenced CIDs include their exact
+control block. BoundDataQuery retains the profile kind, and topology-source admission
+refuses properties even when a caller supplies the selected CID.
+
+Registered property capture resolves the selected descriptor from the physical
+query binding, validates the full semantic scope and inventory, and retains both
+snapshot root and descriptor CID for reuse. Negative acceptance changes the
+native chunk layout under identical generation/semantic scope, creating another
+root, then verifies rejection of reuse and wrong-descriptor capture before I/O.
+Shared Backend acceptance covers insufficient reservation, pre-cancellation,
+consuming allocation identity, last-clone release and shutdown. The separate
+process worker now decodes/authenticates the complete SnapshotManifest and uses
+this root-bound capture API before its complete independent row comparison.
+
+This closes local property profile registration, not a combined native graph
+publication closure or original query compilation. SnapshotManifest's single
+graph projection selects this property artifact; relation IPC children remain
+separately declared. Native relation/property grouping requires an acyclic
+combined dataset descriptor. Existing generic graph-transfer refusal and binary
+publication checks remain explicit, so this slice never implies provider ACKs.
+
+** P0: Python exact-head format gate
+
+Job =111374446771= at =de743ec7eafc2e628ea1e783740a243d216496d1= failed
+only =ruff format --check= on the two pin-guard files. Both are now formatted;
+the complete Python check, format gate and 16 tests pass locally. This supersedes
+the previous local Ruff lint-only receipt, which did not cover formatting.
+
+Registered-root local qualification: Core =38 passed= (=0.10s=), including the
+unchanged legacy golden CID; native GraphAr =52 passed, 3 ignored= (=0.72s=),
+with its separately launched root-authenticating worker =1 passed= (=0.04s=).
+The native tests include a changed coverage/root under the identical descriptor
+and semantic scope, proving that descriptor equality alone cannot reuse a capture.
+Strict Core/GraphAr all-target Clippy and Rust formatting pass. Python lint,
+formatting, 16 tests and the 21-document/eight-README checker pass. Tests use the
+existing bounded supervisor and process worker timeout. No optional performance
+experiments were repeated; this receipt does not claim new query/RSS gains or
+remote CI closure. All nine Turso packages remain =0.8.1= and Cargo jobs remain
+default.

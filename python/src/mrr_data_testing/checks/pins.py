@@ -1,4 +1,5 @@
 """Keep isolated fuzz types on the same immutable MRR source as the workspace."""
+
 from pathlib import Path
 import tomllib
 
@@ -14,4 +15,6 @@ def check_fuzz_mrr_pin(root: Path) -> None:
     source = f"git+{expected['git']}?rev={expected['rev']}#{expected['rev']}"
     matches = [p for p in lock["package"] if p["name"] == "meta-relational-reasoning"]
     if len(matches) != 1 or matches[0].get("source") != source:
-        raise ValueError("fuzz Cargo.lock must contain exactly the workspace MRR source")
+        raise ValueError(
+            "fuzz Cargo.lock must contain exactly the workspace MRR source"
+        )

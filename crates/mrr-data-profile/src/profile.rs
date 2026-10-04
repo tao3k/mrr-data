@@ -30,3 +30,8 @@ pub const RAW_CODEC: u64 = 0x55;
 pub const DAG_CBOR_CODEC: u64 = 0x71;
 /// Registered multihash number for SHA-256.
 pub const SHA2_256_CODE: u64 = 0x12;
+
+/// Catalog-declared string entity-property artifacts, distinct from topology.
+pub const GRAPHAR_ENTITY_PROPERTIES_NAMESPACE: &str = "mrr.graphar.entity-properties.v1";
+/// Initial property artifact projection profile.
+pub const GRAPHAR_ENTITY_PROPERTIES_VERSION: u64 = 1;

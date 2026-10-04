@@ -569,8 +569,9 @@ and its CID, without local paths. =decode_descriptor_checked= authenticates
 exact bytes, known version/fields, inventory/row/layout limits and the supplied
 admitted MRR catalog; it never constructs a catalog identity from untrusted bytes.
 This is a property artifact descriptor, separate from the existing binary-Entity
-projection descriptor. Global SnapshotManifest/profile root registration remains
-a distinct integration gate.
+projection descriptor. The property profile can now be registered in SnapshotManifest through
+=GraphArEntityPropertyBlock::snapshot_projection=. A registered capture resolves
+its descriptor CID from =BoundDataQuery= and retains the exact physical root.
 
 =capture_graphar_entity_properties= checks that receipt scope against the
 MRR-bound query before I/O, copies only CID-verified files, and reconstructs
@@ -589,9 +590,43 @@ lease. Native calls remain nonpreemptible; reservations are ownership contracts.
 Physical two-hop acceptance consumes these restored tables in the existing
 property executor and admits its candidate through MRR. Direct-IR acceptance
 is distinct from original-source compilation; the parser-owned Healthcare
-caller and global publication-root registration remain separate delivery slices.
+caller and a combined native topology/property publication closure remain separate
+delivery slices.
 Fresh-process acceptance persists descriptor bytes and its trusted fixture CID,
 drops writer objects, then reopens native files in a separate executable process
 and compares complete canonical rows, including null/empty/Unicode values. The
 worker has a strict five-second wall gate; its trusted CID simulates caller root
 authority, rather than establishing production disclosure authorization.
+
+** Snapshot-root registration and profile isolation
+
+The property projection has the explicit =mrr.graphar.entity-properties.v1=
+profile and a DAG-CBOR descriptor CID. =GraphProjectionKind::EntityProperties=
+selects this wire profile. The existing =BinaryEntity= profile still authenticates
+RAW topology metadata; its bytes and golden snapshot roots are unchanged.
+Each kind refuses the other's metadata codec. A bound query retains the selected
+kind, and relation-specific topology admission refuses a property profile.
+The property artifact descriptor remains MRR Data control metadata, not a new
+native GraphAr data-file format.
+
+=capture_registered_graphar_entity_properties= resolves the descriptor from the
+bound SnapshotManifest, then validates its complete catalog/snapshot/generation
+scope and every native file CID. =RegisteredGraphArEntityProperties= additionally
+checks the exact physical snapshot root and descriptor on retained/consuming
+access. Equal generations and semantic digests do not authorize switching roots.
+The registered preparation API uses the same Backend pool, reservations,
+cooperative checks and lease-preserving transformation as other resources.
+A fresh process now authenticates SnapshotManifest bytes using a trusted fixture
+root, binds the MRR query and restores the native property artifact through this
+registered API. No live Host or credentials are required for this framework gate.
+
+SnapshotManifest currently selects one graph projection. This property slice
+can coexist with the root's declared Arrow relation batches; it does not register
+multiple native relation artifacts alongside properties. A future combined
+native dataset profile must reference property and per-relation inventories
+without referencing a binding that points back to the same snapshot root: that
+would create a CID cycle. Caller-derived graph bindings may authenticate the
+already selected root after its closure is fixed. Generic snapshot transfer still
+refuses graph projections, and the existing graph publication API remains for
+binary topology; neither silently accepts this new property artifact profile.
+The combined closure and original MRR source caller remain explicit gates.

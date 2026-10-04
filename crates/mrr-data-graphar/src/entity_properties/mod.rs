@@ -19,3 +19,15 @@ pub use backend::{GraphArEntityPropertiesRequest, prepare_graphar_entity_propert
 
 mod descriptor;
 pub use descriptor::GraphArEntityPropertyBlock;
+
+mod registered;
+pub use registered::{
+    RegisteredGraphArEntityProperties, capture_registered_graphar_entity_properties,
+};
+
+#[cfg(feature = "backend")]
+mod registered_backend;
+#[cfg(feature = "backend")]
+pub use registered_backend::{
+    RegisteredGraphArEntityPropertiesRequest, prepare_registered_graphar_entity_properties,
+};

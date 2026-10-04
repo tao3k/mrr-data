@@ -3808,6 +3808,7 @@ name = "mrr-data-graphar"
 version = "0.1.0"
 dependencies = [
  "arrow-array",
+ "arrow-ipc",
  "arrow-schema",
  "arrow-select",
  "blake3",
