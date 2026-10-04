@@ -556,7 +556,7 @@ digests. Python glue tests cover discovery, malformed/missing protocol output,
 capture limits and descendant cleanup. Semantic and resource assertions remain
 in Rust. CI publishes the checked matrix for both native platforms.
 
-The current [[file:../../python/src/mrr_data_testing/duckgql/receipts/macos-resources.jsonl][macOS ARM64 phase receipt]] passes all nine cases in 18.13 seconds.
+The current [[file:../../python/src/mrr_data_testing/duckgql/receipts/macos-resources.jsonl][macOS ARM64 phase receipt]] passes all nine cases in 16.28 seconds.
 The [[file:../../python/src/mrr_data_testing/duckgql/receipts/macos-build.json][source build receipt]] records the unsigned SDK artifact digest
 =0bbeaac46695077931b2c526d29a62673083373afe45db007e2ede15d5f268a3=,
 13 generated parser units and their digests, with upstream Release optimization.
@@ -565,8 +565,8 @@ scale comparison passed at all three sizes. Both test and matrix execution used
 five-second no-output and 120-second wall limits. The build used the unchanged
 30-second no-output and 1200-second wall limits.
 
-These receipts identify an uncommitted working tree and compiled binary, not
-exact-head remote CI acceptance. Concurrent host compilation affects timing;
+The resource receipt identifies the clean local source head =79619743= and its
+compiled binary. It does not establish remote CI acceptance. Concurrent host compilation affects timing;
 these samples do not establish a performance improvement. OS peak RSS includes
 source capture, Rust and the active native engine. It is a process high-water
 mark, not an enforced operator memory cap.
@@ -576,4 +576,5 @@ prepare; DataFusion observes the first nonempty Arrow batch from execution
 start. Native buffering can precede those observations. These boundaries do
 not qualify operator-only first-result latency, spill peaks or cache effects.
 Original Healthcare source qualification remains a separate native frontend
-gate; the pinned upstream Gerbil dependency closure still requires repair.
+gate. The current root, fuzz and source frontend share MRR pin =542e81bf=; its
+fresh native dependency build is being qualified separately.
