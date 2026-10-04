@@ -510,3 +510,29 @@ corrupt/missing native children, missing/duplicate catalog members, unknown
 metadata version, global transfer/inventory budgets and physical-root reuse.
 No live Host credentials are required. Original GQL frontend invocation, deployed
 provider durability and new performance gains are not established by this slice.
+
+Combined-closure local qualification at code head =62eb27c0=: native GraphAr
+=56 passed, 3 ignored= (=0.89s=), including all four new combined acceptance
+cases. Its root-authenticating process worker passes separately (=0.04s=).
+Core =38 passed= (=0.13s=) retains the legacy golden CID. Content graph-snapshot
+unit qualification =29 passed= (=0.54s=), and legacy graph-publication integration
+=6 passed= (=0.01s=). Strict Core/Content/GraphAr all-target Clippy and Rust
+formatting pass. Python Ruff lint/format and =16 tests= (=2.23s=) pass; the
+rebased documentation checker validates =21 Org documents, 7 Org READMEs=.
+The reduced README count follows removal of the legacy static POO worker in
+parallel =21e853da=; that change is preserved. All nine Turso packages are
+verified =0.8.1=. Cargo jobs remain default. These are functional/simulation
+receipts, not new performance or remote CI qualification.
+
+The isolated facade cold build exposed a local SDK discovery difference:
+Arrow 25.0.1's CMake package could not locate the already-installed utf8proc
+under the restricted SDK search path. Configuring the local GraphAr CMake cache
+with the explicit Homebrew prefix resolves discovery; no tracked dependency,
+Cargo job cap or benchmark environment override is changed. This local SDK
+configuration is separate from the functional receipts and CI's provisioned SDK.
+
+After explicit local SDK discovery, the isolated facade
+=backend-graphar-combined= passes an offline locked optimized-test-profile
+compilation check. The facade with selective GraphAr also passes. CI now checks
+the isolated composition after SDK provisioning, in addition to all combined
+native functional tests and strict all-target Clippy.

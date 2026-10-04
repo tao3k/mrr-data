@@ -251,6 +251,7 @@ jobs:
           cargo check -p mrr-data --no-default-features --features content-identity,graphar-native --locked
           cargo check -p mrr-data --no-default-features --features backend-graphar --locked
           cargo check -p mrr-data --no-default-features --features backend-graphar-selective --locked
+          cargo check -p mrr-data --no-default-features --features backend-graphar-combined --locked
       - name: Qualify Turso query over captured GraphAr
         run: |
           cargo test -p mrr-data-turso-query --features backend-worker --locked
