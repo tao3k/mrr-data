@@ -9,8 +9,9 @@ original slices and do not independently define current completion. The initial
 audit used PR #12 at =aacc25511367391262f4639e5485701406089b21=. The consolidated
 source/dispatch composition was first published at
 =f949c4f5bdbceb93e590ec7408912c2dd66e55cc=. The published integration is now
-based on =d75d1aa2= with MRR owner
-=685459849876f84addc0a8bad40de4c00caede7d=. Qualification is recorded
+based on =bd4686f8= with the Source resource/progress changes published at
+=892030bb= and MRR owner =08f33e492c1154ccef354446cf55b572d56a6703=.
+Qualification is recorded
 below. Platform results must refer to their exact head; earlier-head green checks
 do not establish all-platform closure.
 
@@ -33,7 +34,7 @@ The graph facade and semantic-only consumers need not enable that native fronten
 
 | Composition | Owner and supported scope | Acceptance gate |
 |-------------+---------------------------+-----------------|
-| Root, fuzz and =mrr-property-source= | One MRR revision =685459849876f84addc0a8bad40de4c00caede7d=; source digest, catalog binding, dispatch and final result admission remain MRR-owned | Locked pin guard; native =source-handoff= Linux/macOS CI |
+| Root, fuzz and =mrr-property-source= | One MRR revision =08f33e492c1154ccef354446cf55b572d56a6703=; source digest, catalog binding, dispatch and final result admission remain MRR-owned | Locked pin guard; native =source-handoff= Linux/macOS CI |
 | GraphAr =native-graphar,source-handoff,backend,selective-graphar= with DataFusion =source-handoff= | Combined Healthcare property/relation closure; original GQL, four rows including duplicate/null, cold and same-cache warm restoration on one Backend; complete Dataset binding for selective neighborhoods | Canonical source-handoff Rust caller, cross-profile reuse and separate drift/refusal tests |
 | Shared Backend | Provider-independent admission, transaction authority/history and retained resource drain; simulated metadata in canonical caller | Positive, retirement, lost-ACK and final-clone assertions; native process-exit receipts remain separate |
 | GraphAr =selective-graphar= | Authenticated selective outgoing-range materialization under the declared schema | Paired full-source equivalence; end-to-end performance remains M3 |
@@ -54,20 +55,27 @@ not a native RSS cap. Local and platform qualification remain explicit gates.
 
 ** Current integration and continuous qualification
 
-The composition based on =d75d1aa2= retains complete-Dataset selective capture,
+The published =892030bb= composition retains complete-Dataset selective capture,
 cross-profile original-source reuse and supervised native Cargo builds with
 separate successful executable artifact records. Root, fuzz and optional Source
-agree on MRR =68545984=. Original-source controls and uniform/skewed correctness
-are implemented and locally qualified against the preceding =023a6db= owner.
-The changed native-build dependency compiled locally and its DataFusion Source
-pair passed; GraphAr runtime initialization still hit the unchanged idle gate.
-Both Source test crates passed direct strict Clippy with the successful native
-build's exact dependency arguments after the lifecycle assertion helper was
-changed to borrow its result. Full Cargo Clippy and exact-head platform
-acceptance remain separate gates. Matched original-query process measurements
-remain open.
-Local Python qualification after merging passes =42 tests=; strict Ruff,
-formatting, the real checkout owner-pin guard and documentation checks pass.
+agree on MRR =08f33e49=, including shared SDK command isolation. Dependency and
+workspace compilers both emit real progress. Original-source execution enables
+the parser's existing artifact decode/verification/admission trace.
+
+The preceding =68545984= dependency binary was freshly rebuilt with the new
+resource harness. Nine nonignored GraphAr Source cases passed in =14.03s= and
+the matched eight-case resource matrix passed in =58.46s=. Rust verifies one
+immutable snapshot per shape, original-query results and final zero reservations.
+Selective reads reduced bytes and decoded rows; warm/selective request medians
+regressed against warm/full in both shapes. This diagnostic establishes the
+measurement path, not latest-pin acceptance or release-scale performance.
+Own-crate strict Clippy passed with the preceding build's exact dependencies.
+Full current-pin Cargo Clippy and exact-head Linux/macOS acceptance remain open.
+
+Local Python qualification passes =46 tests=; strict Ruff, formatting and
+21-document/7-README checks pass. Collection checkout identity, binary digest
+and successful Cargo artifact digest remain separately scoped in the glue
+receipt. A direct-binary diagnostic does not claim a matching full Cargo build.
 Native acceptance must refer to the rebuilt integration and its selected
 =source-handoff,backend,selective-graphar= composition.
 
@@ -1645,3 +1653,17 @@ establish a general runtime speedup. Tiny simulated-remote fixtures, uncontrolle
 OS cache and process RSS high-water marks bound these observations. Exact
 published-head platform acceptance and paired release-scale M3 evidence remain
 open; failed runs produce no admitted matrix envelope.
+
+** Actual compiler span framing and retained macOS Source receipts
+
+The latest-pin local dependency rebuild exposed the compiler's indented span
+format (=rustc_hir_typeck::coercion::coerce= without an =INFO= prefix). The glue
+recorder now groups those actual events as well as timed INFO records, preserving
+unrelated lines, compiler errors and Cargo success requirements. The regression
+covers both formats; no compiler flags or deadlines changed.
+
+Superseded =18cf4df0= macOS Source job =111464341965= passed its original-source
+DataFusion pair and eight GraphAr Source cases, then failed strict Clippy at
+=request_controls.rs:183= (=needless_pass_by_value=). The borrow correction is
+already in the published composition. This historical job is not a current-pin
+pass and does not include the new process resource matrix.

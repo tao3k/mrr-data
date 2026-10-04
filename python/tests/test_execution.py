@@ -79,10 +79,16 @@ def test_cargo_capture_groups_real_rust_remarks_without_hiding_errors():
     assert capture(b"") == b""
 
 
-def test_frontend_capture_groups_real_events_and_keeps_compiler_errors():
+@pytest.mark.parametrize(
+    "event",
+    [
+        b"0ms INFO rustc_hir_typeck::coercion return=Ok(real compiler event)\n",
+        b" rustc_hir_typeck::coercion::coerce a=usize, b=usize\n",
+    ],
+)
+def test_frontend_capture_groups_real_events_and_keeps_compiler_errors(event):
     output = io.BytesIO()
     capture = execution.CargoArtifactCapture(output)
-    event = b"0ms INFO rustc_hir_typeck::coercion return=Ok(real compiler event)\n"
     error = b'{"reason":"compiler-message","message":{"level":"error","message":"type refusal"}}\n'
     unrelated = b"INFO rustc_hir_typeck::coercion_other kept as raw output\n"
     payload = event * 256 + unrelated + error

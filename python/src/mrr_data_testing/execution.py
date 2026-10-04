@@ -27,7 +27,7 @@ class CargoArtifactCapture:
         for line in lines:
             if not line.startswith(b"{"):
                 if re.match(
-                    rb"^\s*(?:\d+(?:\.\d+)?(?:ns|us|ms|s)\s+)?INFO rustc_(?:hir_typeck::coercion|borrowck::region_infer|interface::passes)\b",
+                    rb"^\s*(?:\d+(?:\.\d+)?(?:ns|us|ms|s)\s+)?(?:INFO )?rustc_(?:hir_typeck::coercion|borrowck::region_infer|interface::passes)\b",
                     line,
                 ):
                     self.frontend_events += 1
