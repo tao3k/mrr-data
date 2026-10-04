@@ -2,6 +2,7 @@
 use super::{
     DataFusionQueryError, EntityChildMode, Fixture, NonZeroUsize, fixture, limits, mrr, restored,
 };
+use meta_relational_reasoning::PathSegment;
 use mrr_property_source::{CompiledPropertySourceQuery, compile_property_source_query};
 
 const SOURCE: &str = include_str!("../../../fixtures/healthcare-case-profile-relations.gql");
@@ -75,9 +76,11 @@ fn source_fixture() -> Fixture {
     let mut f = fixture();
     // The caller's catalogs use the type identities emitted by MRR's frontend.
     // MRR Data does not infer labels or implement another identity convention.
-    for (table, node) in f.entities.iter_mut().zip(
-        std::iter::once(path.start()).chain(path.segments().iter().map(|segment| segment.node())),
-    ) {
+    for (table, node) in f
+        .entities
+        .iter_mut()
+        .zip(std::iter::once(path.start()).chain(path.segments().iter().map(PathSegment::node)))
+    {
         let [id] = node.types() else {
             panic!("one declared node type")
         };

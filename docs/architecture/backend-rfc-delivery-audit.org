@@ -136,7 +136,19 @@ Python qualification passes =33 tests= with native Rust discovery available;
 strict Ruff and formatting pass. These changes need their own exact-head platform
 run. M0/M1 platform acceptance and M3 measured optimization remain open.
 
-** Current compiler and native engine qualification
+Before publication the remote advances to =33a6f9d8= with the concurrent owner
+dispatch fixtures, compiler diagnostics and bounded native receipts. The batch
+preserves those changes. After merging, Python again passes =33 tests=, strict
+Ruff/formatting pass, and strict all-target test-profile Clippy passes for the five
+selected crates with original-source, shared Backend and selective GraphAr enabled.
+Explicit =PathSegment= imports remove the merged redundant closures without lint
+suppression. Initial post-merge subprocess launches fail with host =Resource
+temporarily unavailable= before tests start; they are not semantic test results.
+The later successful checks are recorded separately. The earlier Turso =5= and
+DuckDB =6= dispatch receipts cover unchanged lifecycle code and binaries; they
+do not requalify the modified source fixtures or the new platform head.
+
+** Concurrent compiler and native engine qualification at c54acd27 (historical)
 
 The =c54acd27= integration uses the published MRR dispatch owner =8f389fd0=.
 Its unified native Source/DataFusion/GraphAr/Turso/DuckGQL test build passed

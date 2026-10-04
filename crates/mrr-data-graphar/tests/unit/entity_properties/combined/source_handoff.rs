@@ -6,6 +6,7 @@ use super::{
 };
 use crate::{capture_combined_graphar, tests::entity_properties::fixture as properties};
 use meta_relational_reasoning as mrr;
+use meta_relational_reasoning::PathSegment;
 use mrr_data_content::{MemoryContentStore, publish_combined_graph, restore_combined_graph};
 use mrr_property_source::{CompiledPropertySourceQuery, compile_property_source_query};
 use std::num::NonZeroUsize;
@@ -128,9 +129,11 @@ fn source_fixture() -> properties::Fixture {
     let mut f = properties::fixture();
     // The caller's catalogs use the type identities emitted by MRR's frontend.
     // MRR Data does not infer labels or implement another identity convention.
-    for (table, node) in f.entities.iter_mut().zip(
-        std::iter::once(path.start()).chain(path.segments().iter().map(|segment| segment.node())),
-    ) {
+    for (table, node) in f
+        .entities
+        .iter_mut()
+        .zip(std::iter::once(path.start()).chain(path.segments().iter().map(PathSegment::node)))
+    {
         let [id] = node.types() else {
             panic!("one declared node type")
         };
