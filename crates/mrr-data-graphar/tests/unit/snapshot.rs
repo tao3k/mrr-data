@@ -19,7 +19,7 @@ use mrr_data_core::{
     SnapshotManifestRequest, bind_data_query, raw_cid,
 };
 
-fn schema() -> RelationSchema {
+pub(super) fn schema() -> RelationSchema {
     RelationSchema::new(
         RelationId::from_canonical_bytes("knows").unwrap(),
         "knows",
@@ -31,7 +31,7 @@ fn schema() -> RelationSchema {
     )
     .unwrap()
 }
-fn fact() -> Fact {
+pub(super) fn fact() -> Fact {
     let entity = |name: &str| EntityId::from_canonical_bytes(name).unwrap();
     Fact::new(
         FactId::from_canonical_bytes("edge").unwrap(),
@@ -47,7 +47,14 @@ fn fact() -> Fact {
         .unwrap(),
     )
 }
-fn query(inventory: &GraphDatasetInventory, generation: &str) -> BoundDataQuery {
+pub(super) fn query(inventory: &GraphDatasetInventory, generation: &str) -> BoundDataQuery {
+    query_for_count(inventory, generation, 1)
+}
+pub(super) fn query_for_count(
+    inventory: &GraphDatasetInventory,
+    generation: &str,
+    rows: u64,
+) -> BoundDataQuery {
     let generation = GenerationId::from_canonical_bytes(generation).unwrap();
     let snapshot = SemanticSnapshot::admit(
         generation,
@@ -117,8 +124,8 @@ fn query(inventory: &GraphDatasetInventory, generation: &str) -> BoundDataQuery 
             vec![
                 RelationDescriptor::new(
                     schema().id(),
-                    1,
-                    vec![BatchDescriptor::new(raw_cid(b"ipc"), 1, 3).unwrap()],
+                    rows,
+                    vec![BatchDescriptor::new(raw_cid(b"ipc"), rows, 3).unwrap()],
                 )
                 .unwrap(),
             ],
@@ -253,7 +260,7 @@ fn capture_checks_fact_generation_even_with_matching_published_scope() {
 }
 
 #[cfg(feature = "backend")]
-mod backend_qualification {
+pub(super) mod backend_qualification {
     use super::{
         GraphArReadLimits, GraphDatasetBinding, GraphInventoryLimits, fact, fixture, query,
     };
@@ -264,7 +271,7 @@ mod backend_qualification {
     };
     use mrr_data_content::{ContentRevision, PublishReceipt};
     use mrr_data_core::GraphFile;
-    struct MetadataStub;
+    pub(crate) struct MetadataStub;
     impl MetadataProvider for MetadataStub {
         fn capabilities(&self) -> ProviderCapabilities {
             ProviderCapabilities {

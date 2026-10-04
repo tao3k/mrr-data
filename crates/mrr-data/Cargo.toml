@@ -37,6 +37,8 @@ filesystem = ["content", "mrr-data-content/filesystem"]
 datafusion = ["arrow", "dep:mrr-data-datafusion"]
 graphar = ["dep:mrr-data-graphar"]
 graphar-native = ["graphar", "mrr-data-graphar/native-graphar"]
+graphar-selective = ["graphar-native", "mrr-data-graphar/selective-graphar"]
+backend-graphar-selective = ["backend-graphar", "graphar-selective"]
 backend-arrow-query = ["backend", "arrow", "mrr-data-backend/arrow-query"]
 backend-graphar = ["backend", "content-identity", "graphar-native", "mrr-data-graphar/backend"]
 

@@ -8,14 +8,28 @@
 mod backend;
 #[cfg(feature = "file-inventory")]
 mod inventory;
+#[cfg(all(feature = "backend", feature = "selective-graphar"))]
+pub use backend::{
+    GraphArOutgoingRequest, GraphArSelectiveSnapshotRequest, prepare_graphar_outgoing,
+    prepare_graphar_selective_snapshot,
+};
 #[cfg(feature = "backend")]
 pub use backend::{GraphArSnapshotRequest, prepare_graphar_snapshot};
 mod projection;
 mod query_source;
 #[cfg(feature = "native-graphar")]
 mod reader;
+#[cfg(feature = "selective-graphar")]
+mod selective;
 #[cfg(feature = "native-graphar")]
 mod snapshot;
+#[cfg(feature = "selective-graphar")]
+pub use selective::{
+    GraphArSelection, GraphArSelectionMetrics, GraphArSelectiveCaptureOptions,
+    GraphArSelectiveCaptureRequest, GraphArSelectiveError, GraphArSelectivePreparationMetrics,
+    GraphArSelectiveSnapshot, capture_graphar_selective_snapshot,
+    capture_graphar_selective_snapshot_checked,
+};
 #[cfg(feature = "native-graphar")]
 mod writer;
 #[cfg(feature = "native-graphar")]
@@ -33,12 +47,13 @@ pub use query_source::GraphArQuerySource;
 pub use reader::{
     GraphArDataset, GraphArNativeEdgeTimings, GraphArPrepareTimings, GraphArReadError,
     GraphArReadLimits, GraphArReadTimings, PreparedGraphArSource, prepare_graphar_source,
-    read_graphar_dataset, read_graphar_dataset_observed,
+    prepare_graphar_source_with_adjacency, read_graphar_dataset, read_graphar_dataset_observed,
 };
 #[cfg(feature = "native-graphar")]
 pub use writer::{
-    GraphArDatasetReceipt, GraphArWriteError, write_graphar_dataset,
-    write_graphar_dataset_with_limits,
+    GraphArAdjacency, GraphArChunkLayout, GraphArDatasetReceipt, GraphArWriteError,
+    GraphArWriteOptions, write_graphar_dataset, write_graphar_dataset_with_limits,
+    write_graphar_dataset_with_options,
 };
 
 #[cfg(test)]

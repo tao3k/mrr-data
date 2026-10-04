@@ -11,9 +11,13 @@ repository.workspace = true
 default = []
 file-inventory = ["dep:mrr-data-core"]
 backend = ["native-graphar", "dep:mrr-data-backend"]
+selective-graphar = ["native-graphar", "dep:parquet", "dep:bytes", "dep:arrow-select"]
 native-graphar = ["file-inventory", "dep:arrow-array", "dep:graphar-rs", "dep:tempfile"]
 
 [dependencies]
+arrow-select = { workspace = true, optional = true }
+parquet = { workspace = true, optional = true }
+bytes = { workspace = true, optional = true }
 arrow-array = { workspace = true, optional = true }
 graphar-rs = { git = "https://github.com/GTrunSec/incubator-graphar", rev = "4d4b29715d9825bd3e9b78589cfb863880b9d1d8", optional = true }
 meta-relational-reasoning.workspace = true

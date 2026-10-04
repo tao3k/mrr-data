@@ -46,6 +46,9 @@ kache-store = { git = "https://github.com/kunobi-ninja/kache", rev = "7461ca7635
 asp-rust = { git = "https://github.com/tao3k/asp-rust", rev = "2419414ee5379bad89506496e3eaab928df68daf", default-features = false }
 asp-rust-build-support = { git = "https://github.com/tao3k/asp-rust", rev = "2419414ee5379bad89506496e3eaab928df68daf" }
 arrow-array = "58.4.0"
+arrow-select = "58.4.0"
+bytes = "1"
+parquet = { version = "=58.4.0", default-features = false, features = ["arrow", "snap", "zstd"] }
 arrow-buffer = "58.4.0"
 arrow-ipc = "58.4.0"
 arrow-schema = "58.4.0"

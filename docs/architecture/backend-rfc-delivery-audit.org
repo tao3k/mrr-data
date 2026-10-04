@@ -4,13 +4,11 @@
 
 * Audit baseline and evidence boundary
 
-This audit reads PR #12 at =d36337b703c0a1f5bd0fa1eaaa62d11178e6507f=.
-Its latest addition pins the DuckGQL interface research gate; runtime changes
-remain those at =16c111c8=. At audit time the exact-head CI had Arrow IPC fuzz
-passing and the other nine jobs still queued/running. This is not all-green
-remote acceptance. The prior local resource/native-query/cleanup receipts are
-functional evidence; they do not establish deployed authorization, process
-crash durability or native RSS/performance. All nine Turso packages in Cargo.lock
+This slice follows PR #12 at =b3e29acb09d4d014fd6a4efe9bee5a11391e92f5=,
+which delivered the local publication process-exit matrix. New selective-source
+acceptance is recorded below; remote acceptance remains a separate exact-head
+CI gate. Simulated Host and local process-exit receipts qualify the framework,
+not deployed authorization, power-loss durability or native RSS. All nine Turso packages in Cargo.lock
 remain =0.8.1=; Cargo build parallelism remains the default.
 
 * Architectural decisions retained
@@ -37,7 +35,7 @@ See [[file:0001-mrr-data-plane.org][the canonical data plane]], [[file:shared-ba
 | Shared execution | Shared worker admission, reserved recovery, retained handles, typed driver refusals, cooperative controls and queued explicit stop | Long native-call interrupt/hard deadline; comprehensive mixed-workload evidence |
 | Turso query | Captured binary-Entity outgoing single hop, distinct endpoint bindings, parameterized SQL, FactId row order, rollback, retained output, MRR admission | General properties/paths, production source reuse, running native load/fetch stop receipts |
 | DuckDB Arrow | Checked/appender input, materialized and fallible streaming output, late error, native interrupt, leased output | Graph-query extension bridge, native RSS/spill; releasable VTab registration |
-| GraphAr | Native bounded projection, complete inventory binding, verified capture, publication/cold restore and finite MRR admission composition | Snapshot-pinned selective adjacency/property access and broader lossless physical profiles |
+| GraphAr | Native bounded projection, complete inventory binding, verified capture, publication/cold restore; ordered snapshot-pinned outgoing topology/property ranges | Broader lossless physical profiles, incoming/path execution and MRR result admission for selective plans |
 | Authority/durability | Authority/version checks, simulated Host policy/key rotation/retirement/disclosure and publication-phase process exit/recovery | Native in-transaction fault expansion; remote exact-head acceptance |
 
 * Findings that change the execution plan
@@ -157,20 +155,22 @@ of physical output into a leased MRR candidate. Focused resource/native tests,
 workspace policy and strict native adapter lint are the local gates. Remote
 exact-head acceptance must be recorded separately after publication.
 
-GraphAr selective native access still requires extending the pinned safe reader:
-current writer uses =UnorderedBySource=, and the reader's safe edge API provides
-whole-source batch export rather than a vertex/chunk range cursor. A full scan
-with a Rust-side filter is not selective I/O. Ordered adjacency publication and
-range/offset-aware safe reader qualification must precede the claimed P1-C gate.
+The pinned native bridge remains the maintained writer and full-source reference.
+Its safe reader has no vertex/range cursor. Optional =selective-graphar= instead
+uses Arrow/Parquet =58.4.0= row selection before batch materialization on the
+controlled =OrderedBySource= binary-Entity layout. This is a safe Rust physical
+reader over native GraphAr output; it neither changes the upstream pin nor
+introduces an alternative graph semantics owner. Default writer layout remains
+unordered and default chunk sizes remain unchanged. Ordered/custom bounded
+chunk layout is selected explicitly by the Host.
 
 Host inputs are simulated in this stage. Use the existing Backend authority
 CAS for policy/key enrollment, rotation and retirement; serialize final protected
 disclosure with those changes in the simulated Host. Historical recovery remains
 a receipt lookup, never fresh disclosure permission. Original Lambda/Marlin
 query bytes and expected rows can run through local simulated callers.
-Publication-phase process-crash fixtures are now implemented below. Selective
-graph access, original property-path expansion and the matched performance
-matrix remain outstanding.
+Publication-phase process-crash fixtures are now implemented below. The ordered outgoing slice is implemented below. Original property-path
+expansion and the full cold/warm/RSS performance matrix remain outstanding.
 
 ** Simulated Host authority contract
 
@@ -224,3 +224,88 @@ suites each pass four harness tests, including all eight child exit points.
 Strict consumer clippy (=--profile test=, =-D warnings=), Org links, formatting
 and diff checks pass. Exact-head Linux/macOS CI remains pending; these local
 receipts do not close the P0 platform acceptance gate.
+
+** Ordered outgoing snapshot source and matched physical work
+
+=GraphArSelectiveSnapshot= authenticates the query/binding/projection, copies
+and CID-verifies every declared inventory file, admits the native vertex index,
+and reads ordered offsets once. It checks first offset zero, nonnegative monotone
+offsets, real vertex tail and padded tail equal the declared edge count. It then
+opens read-only topology/property descriptors and deletes the private directory
+before returning. Original-directory mutation/deletion cannot change retained
+bytes. The final handle closes descriptors without deferred recursive deletion.
+Linux/macOS are the qualified platforms; unlinking open files is not claimed
+as a portable Windows lifetime contract.
+
+Outgoing access uses positional reads, cached offsets, row selection and boundary
+probes. It validates selected source IDs, endpoint bounds, exact topology/property
+row counts and fields, canonical identities, FactId uniqueness within the slice,
+projection and generation. It rejects shifted/truncated offset intervals rather
+than accepting incomplete neighborhoods. A selected slice is physical MRR facts,
+not a whole relation, a general query result or whole-file semantic conformance.
+The MRR-owned plan must perform final result admission. Full reference scans also
+check every source row against its offset partition. Arbitrary property groups,
+incoming layouts and property paths remain separate acceptance slices.
+
+The same Backend runs source preparation and outgoing reads with distinct
+retained leases; checks run between verification files/chunks and before return.
+The source reservation covers at least declared bytes; the Host separately
+estimates index/decompression/conversion overhead. Cooperative stop does not
+interrupt a running native/Parquet call. Fixtures cover two vertex partitions,
+edge chunk boundaries, duplicates with distinct FactIds, self loops, zero degree,
+unknown entities, source deletion, stale scope, bad CID/negative/truncated offsets,
+pre-/mid-chunk cancellation, deadline refusal and fresh retry, parallel positional
+reads, saturated resource budget and last-clone shutdown drain.
+
+The ignored =selective_matched_workload_experiment= compares the same verified
+snapshot and canonical index against a full Rust scan and an independent full
+native read: 4,096 facts, 64 vertices, 128-row physical chunks, uniform and skewed
+degrees, two warmups and 21 measured repetitions. CI runs it on both OS and
+asserts exact facts plus reduced read bytes/materialized rows, without a timing
+threshold. Local macOS receipt:
+
+| Distribution / source | Edges | Full read bytes | Selected read bytes | Full Arrow rows | Selected Arrow rows |
+|-----------------------+-------+-----------------+---------------------+-----------------+---------------------|
+| Uniform / node-0 | 64 | 491520 | 15962 | 8192 | 130 |
+| Uniform / node-1 | 64 | 491520 | 15962 | 8192 | 130 |
+| Skewed / node-0 | 2048 | 510453 | 270955 | 8192 | 4098 |
+| Skewed / node-1 | 33 | 510453 | 15987 | 8192 | 68 |
+
+Full CID setup separately read 501367 / 520300 declared bytes. Arrow rows count
+topology plus property materialization and topology probes, not facts. Read bytes
+count actual positional reader bytes including metadata/repeated probes, not OS
+physical disk I/O. First selected read follows capture/native reference reads and
+is not an OS-cold measurement. Timings are emitted but local contention produced
+large tails, so no latency guarantee is inferred. Native RSS, spill, authenticated
+chunk-cache reuse and full end-to-end MRR query comparison remain P2-B gates.
+
+References: [[https://graphar.apache.org/docs/specification/format/][GraphAr ordered adjacency specification]];
+[[https://docs.rs/parquet/58.4.0/parquet/arrow/arrow_reader/struct.ArrowReaderBuilder.html][pinned Parquet row selection API]].
+
+** P0 cache removal-race repair
+
+Exact remote head =868a9b9fc4e38cf26adbb29da51fda97a7b540b9= failed Linux
+workspace acceptance in =upstream_maintenance_and_removal_races_recover_and_reopen=:
+=Content(Io { operation: "get Kache entry", kind: NotFound })=. Pinned upstream
+Kache checks metadata presence before opening it, so concurrent removal can
+return a contextual I/O =NotFound= between those operations. The content adapter
+now maps this typed case to =ContentError::NotFound(cid)= and preserves other
+errors. Read-through can recover verified remote bytes; no permissive fallback
+for permission/corruption errors is introduced. The existing removal/maintenance
+race and a contextual-error classification fixture qualify this correction.
+
+Local acceptance for this implementation: complete GraphAr selective/Backend
+suite (36 passed, two explicit experiments), strict all-target GraphAr clippy
+with =--profile test -D warnings=, and five Kache blocking acceptance fixtures
+pass. Cargo parallelism remains default and all nine Turso pins remain 0.8.1.
+These receipts do not substitute for the new commit's exact-head remote checks.
+
+The new matched range-read experiment passes. The existing native 10k Scenario
+is not locally closed: during a concurrent native build the paired 5% median
+saving gate failed; after this task's build ended that paired gate passed, while
+prepared admission P95 was =63.974334ms= against the unchanged =50ms= cap
+(P50 =271833ns=). Bridge total P95 =374.460709ms= and semantic-read P95
+=191.665250ms= were within their 500ms caps. No benchmark threshold was relaxed
+and no OS isolation is inferred from stopping this task's build. Exact-head CI
+and separate performance investigation remain required before a performance
+closure claim. The new facade feature check and strict Kache clippy also pass.

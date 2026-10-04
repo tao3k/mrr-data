@@ -58,3 +58,12 @@ pub async fn prepare_graphar_snapshot(
         })
         .await
 }
+
+#[cfg(feature = "selective-graphar")]
+#[path = "backend_selective.rs"]
+mod selective;
+#[cfg(feature = "selective-graphar")]
+pub use selective::{
+    GraphArOutgoingRequest, GraphArSelectiveSnapshotRequest, prepare_graphar_outgoing,
+    prepare_graphar_selective_snapshot,
+};

@@ -142,7 +142,7 @@ pub fn capture_graphar_snapshot(
         facts: dataset.shared_facts(),
     }))
 }
-fn copy_verified_file(
+pub(crate) fn copy_verified_file(
     source: &Path,
     destination: &Path,
     descriptor: &GraphFile,
@@ -194,7 +194,7 @@ fn copy_verified_file(
     )?;
     Ok(())
 }
-fn check_entry(path: &Path, directory: bool) -> Result<(), GraphArCaptureError> {
+pub(crate) fn check_entry(path: &Path, directory: bool) -> Result<(), GraphArCaptureError> {
     let metadata = fs::symlink_metadata(path)?;
     if metadata.file_type().is_symlink() || (directory && !metadata.is_dir()) {
         return Err(GraphArInventoryError::UnsupportedEntry.into());

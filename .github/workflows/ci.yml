@@ -205,22 +205,27 @@ jobs:
             brew install apache-arrow
             arrow_prefix="$(brew --prefix apache-arrow)"
             echo "PKG_CONFIG_PATH=$arrow_prefix/lib/pkgconfig" >> "$GITHUB_ENV"
-            echo "CMAKE_PREFIX_PATH=$arrow_prefix" >> "$GITHUB_ENV"
+            echo "CMAKE_PREFIX_PATH=$arrow_prefix:$(brew --prefix)" >> "$GITHUB_ENV"
             echo "DYLD_FALLBACK_LIBRARY_PATH=$arrow_prefix/lib" >> "$GITHUB_ENV"
             echo "CXXFLAGS=-I$arrow_prefix/include -Wno-error=deprecated-declarations -Wno-error=macro-redefined" >> "$GITHUB_ENV"
           fi
       - name: Test maintained GraphAr round-trip
-        run: cargo test -p mrr-data-graphar --features native-graphar,backend --locked
+        run: cargo test -p mrr-data-graphar --features native-graphar,selective-graphar,backend --locked
       - name: Verify GraphAr Arrow performance parity
         run: >-
-          cargo test -p mrr-data-graphar --features native-graphar,backend --locked
+          cargo test -p mrr-data-graphar --features native-graphar,selective-graphar,backend --locked
           scenario_semantically_reads_ten_thousand_graphar_edges --
           --ignored --nocapture
+      - name: Qualify matched GraphAr range-read work
+        run: >-
+          cargo test -p mrr-data-graphar --features selective-graphar,backend --locked
+          selective_matched_workload_experiment -- --ignored --nocapture
       - name: Check facade GraphAr native feature
         run: |
           cargo check -p mrr-data --no-default-features --features graphar-native --locked
           cargo check -p mrr-data --no-default-features --features content-identity,graphar-native --locked
           cargo check -p mrr-data --no-default-features --features backend-graphar --locked
+          cargo check -p mrr-data --no-default-features --features backend-graphar-selective --locked
       - name: Qualify Turso query over captured GraphAr
         run: |
           cargo test -p mrr-data-turso-query --features backend-worker --locked
@@ -231,7 +236,7 @@ jobs:
           cargo test -p mrr-data --no-default-features --features backend-graphar,backend-graph-publish,backend-turso,backend-arrow-query,datafusion --lib --locked native_graph_publication_restoration_and_admission
           cargo test -p mrr-data --no-default-features --features backend-graphar,backend-graph-publish,backend-duckdb,backend-arrow-query,datafusion --lib --locked native_graph_publication_restoration_and_admission
       - name: Lint maintained GraphAr adapter
-        run: cargo clippy -p mrr-data-graphar --all-targets --features native-graphar,backend --locked -- -D warnings
+        run: cargo clippy -p mrr-data-graphar --all-targets --features native-graphar,selective-graphar,backend --profile test --locked -- -D warnings
 
   property-physical:
     name: Property snapshot and physical query (${{ matrix.os }})

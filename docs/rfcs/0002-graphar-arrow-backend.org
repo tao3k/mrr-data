@@ -495,3 +495,30 @@ no deployed Host or credentials are prerequisites. Each child has a bounded
 watchdog and a required fault exit code. This gate does not claim native COMMIT
 interruption, power-loss durability or native GraphAr decoding from opaque fixture
 blocks. See the [[file:../architecture/backend-rfc-delivery-audit.org][delivery audit]] for the precise evidence boundary.
+
+** Snapshot-pinned ordered outgoing access
+
+Optional =selective-graphar= (facade =graphar-selective= /
+=backend-graphar-selective=) delivers the controlled native ordered-by-source
+binary-Entity profile using pinned Arrow/Parquet 58.4.0 row selection. The
+maintained native writer/full reader remain the format and parity reference.
+The Rust reader uses fixed schemas/paths and explicit bounded chunk dimensions;
+it does not execute source metadata path instructions. Source/destination IDs
+remain physical indexes resolved through admitted canonical MRR identities.
+
+Complete inventory CID verification precedes capture. Preparation retains vertex
+and offset indexes plus read-only descriptors to a private verified copy, removes
+the directory before export, and executes only selected edge/property ranges with
+adjacent topology probes. Exact field/row alignment and selected context/identity
+admission are mandatory; malformed range boundaries refuse the slice. On Linux
+and macOS the last retained handle releases descriptors. Windows descriptor
+unlink lifetime is not qualified. Checkpoints supply cooperative cancellation
+between files/chunks; native calls do not acquire a hard-interrupt guarantee.
+
+The one shared Backend owns workers, preparation/output reservations and drain.
+There is no provider-specific Backend. Selected facts are a physical execution
+input; MRR owns plan semantics and final result admission. Full CID setup remains
+full-source I/O. Ordered layout does not establish arbitrary property profiles,
+incoming traversal, path semantics, globally checked facts outside a slice, RSS
+bounds or end-to-end reduced I/O. The [[file:../architecture/backend-rfc-delivery-audit.org][delivery audit]] records the matched
+uniform/skewed experiment, exact parity/refusal fixtures and remaining gates.

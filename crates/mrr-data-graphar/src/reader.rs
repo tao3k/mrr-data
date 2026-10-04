@@ -3,8 +3,13 @@
 #[path = "reader_prepared.rs"]
 mod prepared;
 
+#[cfg(feature = "selective-graphar")]
+pub(crate) use prepared::admit_selected_batches;
 pub(crate) use prepared::prepare_with_info;
-pub use prepared::{GraphArPrepareTimings, PreparedGraphArSource, prepare_graphar_source};
+pub use prepared::{
+    GraphArPrepareTimings, PreparedGraphArSource, prepare_graphar_source,
+    prepare_graphar_source_with_adjacency,
+};
 
 use std::{
     collections::HashSet,
@@ -18,9 +23,9 @@ use std::{
 
 use arrow_array::{Array, Int64Array, LargeStringArray, RecordBatch, StringArray};
 #[cfg(test)]
-use graphar_rs::reader::scan_edge_arrow_chunks;
+use graphar_rs::{info::AdjListType, reader::scan_edge_arrow_chunks};
 use graphar_rs::{
-    info::{AdjListType, GraphInfo},
+    info::GraphInfo,
     reader::{EdgeArrowReadTimings, read_edge_arrow_batches_observed, read_vertex_string_batch},
 };
 use meta_relational_reasoning::{
@@ -456,14 +461,14 @@ pub fn read_graphar_dataset_observed(
     ))
 }
 
-struct AdmittedVertices {
-    physical_entities: Vec<EntityId>,
+pub(crate) struct AdmittedVertices {
+    pub(crate) physical_entities: Vec<EntityId>,
     count: usize,
     native_read: Duration,
     semantic_admission: Duration,
 }
 
-fn read_and_admit_vertices(
+pub(crate) fn read_and_admit_vertices(
     graph_info: &GraphInfo,
     max_vertices: usize,
 ) -> Result<AdmittedVertices, GraphArReadError> {
@@ -516,6 +521,7 @@ struct PreparedEdges {
 fn read_edge_batches(
     graph_info: &GraphInfo,
     max_edges: usize,
+    adjacency: crate::GraphArAdjacency,
 ) -> Result<PreparedEdges, GraphArReadError> {
     let edge_properties = property_names(&EDGE_PROPERTIES);
     let edge_storage_started = Instant::now();
@@ -524,7 +530,7 @@ fn read_edge_batches(
         ENTITY_TYPE,
         EDGE_TYPE,
         ENTITY_TYPE,
-        AdjListType::UnorderedBySource,
+        adjacency.native(),
         &edge_properties,
         max_edges,
     )?;

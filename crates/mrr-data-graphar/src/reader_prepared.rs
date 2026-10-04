@@ -254,14 +254,44 @@ pub fn prepare_graphar_source(
     prepare_with_info(root, &graph_info, limits, graph_info_started.elapsed())
 }
 
+/// Full native reference read for one explicitly selected physical layout.
+/// # Errors
+/// Refuses malformed native data and resource/semantic reconstruction failures.
+pub fn prepare_graphar_source_with_adjacency(
+    root: impl AsRef<Path>,
+    limits: GraphArReadLimits,
+    adjacency: crate::GraphArAdjacency,
+) -> Result<PreparedGraphArSource, GraphArReadError> {
+    let root = root.as_ref();
+    let started = Instant::now();
+    let graph_info = GraphInfo::load(root.join(GRAPH_INFO_FILE))?;
+    prepare_with_adjacency(root, &graph_info, limits, started.elapsed(), adjacency)
+}
+
 pub(crate) fn prepare_with_info(
     root: &Path,
     graph_info: &GraphInfo,
     limits: GraphArReadLimits,
     graph_info_elapsed: Duration,
 ) -> Result<PreparedGraphArSource, GraphArReadError> {
+    prepare_with_adjacency(
+        root,
+        graph_info,
+        limits,
+        graph_info_elapsed,
+        crate::GraphArAdjacency::UnorderedBySource,
+    )
+}
+
+fn prepare_with_adjacency(
+    root: &Path,
+    graph_info: &GraphInfo,
+    limits: GraphArReadLimits,
+    graph_info_elapsed: Duration,
+    adjacency: crate::GraphArAdjacency,
+) -> Result<PreparedGraphArSource, GraphArReadError> {
     let vertices = read_and_admit_vertices(graph_info, limits.max_vertices)?;
-    let edges = read_edge_batches(graph_info, limits.max_edges)?;
+    let edges = read_edge_batches(graph_info, limits.max_edges, adjacency)?;
     let facts = prepare_facts(&edges.values, edges.count, &vertices.physical_entities)?;
 
     Ok(PreparedGraphArSource {
@@ -491,4 +521,19 @@ fn admit_prepared_facts(
         projection.project(fact)?;
     }
     Ok(fact_admission_started.elapsed())
+}
+
+#[cfg(feature = "selective-graphar")]
+pub(crate) fn admit_selected_batches(
+    batches: &[RecordBatch],
+    physical_entities: &[EntityId],
+    projection: &BinaryEntityProjection,
+) -> Result<Vec<Fact>, GraphArReadError> {
+    let facts = prepare_facts(
+        batches,
+        batches.iter().map(RecordBatch::num_rows).sum(),
+        physical_entities,
+    )?;
+    admit_prepared_facts(&facts.values, &facts.predicates, projection)?;
+    Ok(facts.values)
 }

@@ -11,3 +11,6 @@ mod inventory;
 
 #[cfg(feature = "native-graphar")]
 mod snapshot;
+
+#[cfg(feature = "selective-graphar")]
+mod selective;
