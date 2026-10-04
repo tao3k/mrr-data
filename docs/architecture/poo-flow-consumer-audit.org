@@ -104,3 +104,27 @@ fixed without suppressions. Remote CI, external Protocol execution, deployed
 executor trust, complete Temporal current-cut correspondence, IFC publication
 and recovery remain separate gates. No new model call or performance
 improvement is claimed by this implementation slice.
+
+* Native dependency alignment after public Temporal qualification
+
+The root and independent fuzz manifests and Cargo-generated lockfiles now
+select the same MRR commit =d5beb4030bf875fa851cddc27789030c551154c3=.
+The actual workspace/fuzz pin-identity check passes. DataFusion's 24 baseline
+cases pass under the unchanged five-second genuine-output and 45-second batch
+limits. The optional =source-handoff= feature is a distinct native gate; the
+baseline result does not qualify GQL compilation or native result admission.
+
+The subsequent explicit =source-handoff= native build and run pass all 26
+DataFusion cases in 2.71s under those same limits, including original-source
+compilation, cold/warm physical restoration, semantic-drift refusal and final
+admission-budget refusal. Tests use the original source and admitted result;
+they do not reconstruct an observation from its receipt. POO's downstream
+physical correction and native Temporal re-admission remain a separate gate.
+
+The Python CI job now explicitly prepares Rust 1.95.0 before its compiler
+supervision fixture. The previous CI run timed out in the first unwrapped
+native compiler invocation; neither its ten-second compiler bound nor its
+five-second output bound was widened. The same wrapper/output/failure fixture
+passes locally. The full Python glue project subsequently passes 33/33 cases
+in 8.97s under the five-second actual-output and 45-second total limits.
+Remote qualification on the new commit is still required.
