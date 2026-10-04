@@ -399,7 +399,7 @@ jobs:
         env:
           MRR_NATIVE_PROGRESS: '1'
         run: |
-          cargo test -p mrr-data-datafusion -p mrr-data-graphar --features mrr-data-datafusion/source-handoff,mrr-data-graphar/source-handoff --locked --no-run
-          uv run --locked --project python mrr-data-test run-process --phase test -- cargo test -p mrr-data-datafusion -p mrr-data-graphar --features mrr-data-datafusion/source-handoff,mrr-data-graphar/source-handoff --locked source_handoff -- --nocapture --test-threads=1
+          cargo test -p mrr-data-datafusion -p mrr-data-graphar --features mrr-data-datafusion/source-handoff,mrr-data-graphar/source-handoff,mrr-data-graphar/backend --locked --no-run
+          uv run --locked --project python mrr-data-test run-process --phase test -- cargo test -p mrr-data-datafusion -p mrr-data-graphar --features mrr-data-datafusion/source-handoff,mrr-data-graphar/source-handoff,mrr-data-graphar/backend --locked source_handoff -- --nocapture --test-threads=1
           cargo check -p mrr-data --no-default-features --features backend-graphar-combined,datafusion --profile test --locked
-          cargo clippy -p mrr-data-datafusion -p mrr-data-graphar --all-targets --features mrr-data-datafusion/source-handoff,mrr-data-graphar/source-handoff --profile test --locked -- -D warnings
+          cargo clippy -p mrr-data-datafusion -p mrr-data-graphar --all-targets --features mrr-data-datafusion/source-handoff,mrr-data-graphar/source-handoff,mrr-data-graphar/backend --profile test --locked -- -D warnings

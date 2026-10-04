@@ -23,7 +23,6 @@ use std::{
 
 #[cfg(feature = "source-handoff")]
 mod source_handoff;
-
 #[tokio::test]
 async fn mrr_dispatches_to_data_backend_and_admits_original_physical_candidate() {
     let f = fixture();
