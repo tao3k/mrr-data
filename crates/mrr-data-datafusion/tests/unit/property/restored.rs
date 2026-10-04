@@ -229,6 +229,7 @@ async fn restored(
 async fn verified_cold_and_warm_property_snapshots_reach_the_existing_mrr_admission() {
     let f = fixture();
     let (cold, warm, relations, entities) = restored(&f, EntityChildMode::Valid).await;
+    println!("Cold and warm immutable property snapshots restored");
     assert!(
         warm.sources()
             .values()
@@ -237,31 +238,49 @@ async fn verified_cold_and_warm_property_snapshots_reach_the_existing_mrr_admiss
     let direct = execute_property_path_query(&f.query, &f.entities, &f.relations, limits())
         .await
         .unwrap();
+    println!("Direct property query completed");
+    let result_limits = mrr::QueryResultLimits::new(
+        NonZeroUsize::new(100).unwrap(),
+        NonZeroUsize::new(300).unwrap(),
+    );
+    let cap = NonZeroUsize::new(1024 * 1024).unwrap();
     for snapshot in [&cold, &warm] {
-        let output = execute_restored_property_path_query(RestoredPropertyQuery {
-            query: &f.query,
-            restored: snapshot,
-            relation_catalog: &relations,
-            entity_catalog: &entities,
-            limits: limits(),
-        })
+        let handoff = crate::execute_restored_property_query_handoff(
+            RestoredPropertyQuery {
+                query: &f.query,
+                restored: snapshot,
+                relation_catalog: &relations,
+                entity_catalog: &entities,
+                limits: limits(),
+            },
+            result_limits,
+            cap,
+        )
         .await
         .unwrap();
-        assert_eq!(output.rows(), direct.rows());
-        let candidate = mrr::CandidateQueryResult::new(
-            mrr::QueryResultBinding::for_query(&f.query),
-            output.columns().to_vec(),
-            output.rows().to_vec(),
+        let profile = crate::datafusion_engine_profile().unwrap();
+        let bound =
+            mrr_data_core::bind_data_query(&f.query, snapshot.snapshot(), &profile).unwrap();
+        let candidate =
+            mrr_data_core::project_data_query_output(&bound, &profile, direct.clone()).unwrap();
+        let receipt =
+            mrr::admit_query_result_candidate(&f.query, &candidate, result_limits).unwrap();
+        let bytes = handoff.result_bytes();
+        assert!(bytes.starts_with(b"(object "));
+        let received = handoff.verify(&bound, result_limits, cap).unwrap();
+        assert_eq!(received.candidate(), &candidate);
+        assert_eq!(received.receipt(), &receipt);
+        assert_eq!(bound.snapshot_root(), snapshot.snapshot().cid());
+        assert!(
+            mrr::verify_query_result_transport(
+                &f.query,
+                &bytes[..bytes.len() - 1],
+                result_limits,
+                cap,
+            )
+            .is_err()
         );
-        mrr::admit_query_result_candidate(
-            &f.query,
-            &candidate,
-            mrr::QueryResultLimits::new(
-                NonZeroUsize::new(100).unwrap(),
-                NonZeroUsize::new(300).unwrap(),
-            ),
-        )
-        .unwrap();
+        println!("RESTORED-PROPERTY -> ORIGINAL-MRR-SCHEME-V2 verified");
     }
 }
 

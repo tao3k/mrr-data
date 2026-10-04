@@ -389,6 +389,27 @@ fn physical_execution_injects_binding_then_mrr_admits_the_candidate() {
         )]],
     );
 
+    let limits =
+        QueryResultLimits::new(NonZeroUsize::new(4).unwrap(), NonZeroUsize::new(4).unwrap());
+    let cap = NonZeroUsize::new(16384).unwrap();
+    let handoff =
+        crate::DataQueryResultHandoff::export(&bound, &profile, output.clone(), limits, cap)
+            .unwrap();
+    let received = handoff.verify(&bound, limits, cap).unwrap();
+    assert_eq!(received.candidate().rows(), output.rows());
+    assert!(
+        handoff
+            .verify(&bound, limits, NonZeroUsize::new(1).unwrap())
+            .is_err()
+    );
+    let different_root = SnapshotBlock::encode(manifest_with_graph(false, true)).unwrap();
+    let changed_binding =
+        bind_data_query(&bound_query(Some(1)), &different_root, &profile).unwrap();
+    assert_ne!(changed_binding.snapshot_root(), bound.snapshot_root());
+    assert!(matches!(
+        handoff.verify(&changed_binding, limits, cap),
+        Err(crate::DataQueryHandoffError::PhysicalBindingMismatch)
+    ));
     let expected_rows = output.rows().to_vec();
     let candidate = project_data_query_output(&bound, &profile, output).unwrap();
     assert_eq!(

@@ -96,3 +96,37 @@ CI environment follow-up: the first Ubuntu run passed all six consumer Rust
 tests, then correctly failed because its Rust 1.95 toolchain lacked Clippy. The
 S3 jobs now explicitly install that component. Local independent conformance
 was rerun successfully and its source-bound receipt refreshed for this workflow.
+
+* Native Scheme v2 handoff — 2026-10-04 implementation slice
+
+The workspace now pins MRR =9ee5ace469e7a9319c74b8be0308e9062a47e587=,
+retaining the original property source API and adding result Scheme v2.
+=DataQueryResultHandoff::export= projects physical output with the exact bound
+engine, exports complete original columns/typed rows and native admission digest,
+and retains the selected =BoundDataQuery=. =verify= requires a receiver-selected
+binding to match the root, graph projection, engine and semantic query before
+MRR reconstructs the original result and receipt. Result bytes are never JSON.
+
+The executor is an explicit trusted premise. These bytes and binding equality
+prove identity/typing consistency; they do not prove physical evaluation truth,
+complete inventory or authorization. The Rust handoff is not a serialized
+physical envelope and does not replace the legacy static-edge worker protocol.
+That worker's JSON transport remains an open direct migration task.
+
+The production =execute_restored_property_query_handoff= binds the restored
+root before executing and exporting. The cold/warm property restore tests invoke
+this entrypoint after actual DataFusion
+execution. Core controls reject a changed physical root and an exceeded result
+wire cap. This slice does not qualify an original GQL event/position query into
+POO Temporal in one end-to-end scenario, external S3 service or real-model
+physical lifecycle. Earlier JSON receipts above remain historical qualification
+at their recorded revisions, not evidence for this slice.
+
+Local final checks for this slice: core 36/36 (0.21s), DataFusion 19/19
+(0.25s), each under the five-second genuine-output watchdog. All-target core
+and DataFusion Clippy passed with =-D warnings=. The first core build exposed
+an internal crate-path mistake; the first root-control run exposed a fixture
+that only reordered canonical inputs. Both were corrected before the final
+36-test run. No thresholds were relaxed. POO's separate Scheme v2 native
+Temporal receiver passed at =662a20620b4155c5d2fa50e70ba8d8c67bd2f392=.
+Remote CI and the joined original-GQL Temporal roundtrip remain separate gates.

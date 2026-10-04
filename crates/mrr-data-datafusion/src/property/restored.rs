@@ -48,6 +48,30 @@ pub async fn execute_restored_property_path_query(
     execute_property_path_query(input.query, &entities, &relations, input.limits).await
 }
 
+/// Execute the restored immutable root and retain its complete original MRR
+/// result in a Scheme v2 handoff. No Temporal interpretation occurs here.
+/// # Errors
+/// Rejects physical binding drift, failed restoration/query checks, result
+/// admission failures and exceeded Scheme transport limits.
+pub async fn execute_restored_property_query_handoff(
+    input: RestoredPropertyQuery<'_>,
+    result_limits: meta_relational_reasoning::QueryResultLimits,
+    max_bytes: std::num::NonZeroUsize,
+) -> Result<mrr_data_core::DataQueryResultHandoff> {
+    let profile = crate::datafusion_engine_profile()?;
+    let binding = mrr_data_core::bind_data_query(input.query, input.restored.snapshot(), &profile)
+        .map_err(DataFusionQueryError::PhysicalBinding)?;
+    let output = execute_restored_property_path_query(input).await?;
+    mrr_data_core::DataQueryResultHandoff::export(
+        &binding,
+        &profile,
+        output,
+        result_limits,
+        max_bytes,
+    )
+    .map_err(DataFusionQueryError::ResultHandoff)
+}
+
 fn validate_restored_binding(
     input: &RestoredPropertyQuery<'_>,
     manifest: &SnapshotManifest,

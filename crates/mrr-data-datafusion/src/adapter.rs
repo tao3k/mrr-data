@@ -18,6 +18,8 @@ use mrr_data_core::{DataEngineProfile, PhysicalQueryOutput};
 pub enum DataFusionQueryError {
     InvalidEngineProfile,
     CatalogMismatch,
+    PhysicalBinding(mrr_data_core::DataQueryBindingError),
+    ResultHandoff(mrr_data_core::DataQueryHandoffError),
     ResourceLimit(&'static str),
     UnsupportedShape(&'static str),
     RelationMismatch,
@@ -32,6 +34,10 @@ pub enum DataFusionQueryError {
 impl fmt::Display for DataFusionQueryError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::PhysicalBinding(error) => write!(formatter, "physical binding rejected: {error}"),
+            Self::ResultHandoff(error) => {
+                write!(formatter, "original result handoff rejected: {error}")
+            }
             Self::CatalogMismatch => {
                 formatter.write_str("physical catalog does not match bound query")
             }

@@ -45,8 +45,9 @@ pub use operation_binding::{
 pub use profile::dag_cbor_cid;
 #[cfg(feature = "content-identity")]
 pub use query_binding::{
-    BoundDataQuery, DataGraphSourceBindingError, DataQueryOutputError,
-    admit_graph_projection_source, bind_data_query, project_data_query_output,
+    BoundDataQuery, DataGraphSourceBindingError, DataQueryHandoffError, DataQueryOutputError,
+    DataQueryResultHandoff, admit_graph_projection_source, bind_data_query,
+    project_data_query_output,
 };
 pub use query_binding::{
     DataEngineProfile, DataQueryBindingError, DataQueryFeature, PhysicalQueryOutput,

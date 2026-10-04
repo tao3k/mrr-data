@@ -5,4 +5,7 @@ mod validation;
 pub use execution::{
     BinaryRelationTable, EntityPropertyTable, PropertyQueryLimits, execute_property_path_query,
 };
-pub use restored::{RestoredPropertyQuery, execute_restored_property_path_query};
+pub use restored::{
+    RestoredPropertyQuery, execute_restored_property_path_query,
+    execute_restored_property_query_handoff,
+};

@@ -366,3 +366,90 @@ fn required_features(query: &CatalogBoundQuery) -> BTreeSet<DataQueryFeature> {
     }
     required
 }
+
+/// Original Scheme v2 result and the physical binding selected by a trusted
+/// executor. This is a Rust handoff value, not a signed execution credential.
+#[cfg(feature = "content-identity")]
+#[derive(Clone, Debug)]
+pub struct DataQueryResultHandoff {
+    binding: BoundDataQuery,
+    result: Vec<u8>,
+}
+
+#[cfg(feature = "content-identity")]
+#[derive(Debug)]
+pub enum DataQueryHandoffError {
+    Projection(DataQueryOutputError),
+    Transport(meta_relational_reasoning::QueryResultTransportError),
+    PhysicalBindingMismatch,
+}
+
+#[cfg(feature = "content-identity")]
+impl fmt::Display for DataQueryHandoffError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+#[cfg(feature = "content-identity")]
+impl std::error::Error for DataQueryHandoffError {}
+
+#[cfg(feature = "content-identity")]
+impl DataQueryResultHandoff {
+    /// Preserve the exact root, engine and admitted query with the complete
+    /// original typed result. Does not prove the executor evaluated the root.
+    /// # Errors
+    /// Rejects a different engine, invalid MRR rows or an exceeded wire budget.
+    pub fn export(
+        binding: &BoundDataQuery,
+        engine: &DataEngineProfile,
+        output: PhysicalQueryOutput,
+        limits: meta_relational_reasoning::QueryResultLimits,
+        max_bytes: std::num::NonZeroUsize,
+    ) -> Result<Self, DataQueryHandoffError> {
+        let candidate = project_data_query_output(binding, engine, output)
+            .map_err(DataQueryHandoffError::Projection)?;
+        let result = meta_relational_reasoning::export_query_result_transport(
+            binding.query(),
+            &candidate,
+            limits,
+            max_bytes,
+        )
+        .map_err(DataQueryHandoffError::Transport)?;
+        Ok(Self {
+            binding: binding.clone(),
+            result,
+        })
+    }
+
+    #[must_use]
+    pub fn binding(&self) -> &BoundDataQuery {
+        &self.binding
+    }
+    #[must_use]
+    pub fn result_bytes(&self) -> &[u8] {
+        &self.result
+    }
+
+    /// Compare against the receiver's independently selected physical binding,
+    /// then reconstruct the original candidate and admission receipt in MRR.
+    /// # Errors
+    /// Rejects root, engine, query or catalog drift and invalid result bytes.
+    pub fn verify(
+        &self,
+        expected: &BoundDataQuery,
+        limits: meta_relational_reasoning::QueryResultLimits,
+        max_bytes: std::num::NonZeroUsize,
+    ) -> Result<meta_relational_reasoning::VerifiedQueryResultTransport, DataQueryHandoffError>
+    {
+        if &self.binding != expected {
+            return Err(DataQueryHandoffError::PhysicalBindingMismatch);
+        }
+        meta_relational_reasoning::verify_query_result_transport(
+            expected.query(),
+            &self.result,
+            limits,
+            max_bytes,
+        )
+        .map_err(DataQueryHandoffError::Transport)
+    }
+}
