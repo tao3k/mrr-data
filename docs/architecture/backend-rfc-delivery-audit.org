@@ -38,7 +38,7 @@ See [[file:0001-mrr-data-plane.org][the canonical data plane]], [[file:shared-ba
 | Turso query | Captured binary-Entity outgoing single hop, distinct endpoint bindings, parameterized SQL, FactId row order, rollback, retained output, MRR admission | General properties/paths, production source reuse, running native load/fetch stop receipts |
 | DuckDB Arrow | Checked/appender input, materialized and fallible streaming output, late error, native interrupt, leased output | Graph-query extension bridge, native RSS/spill; releasable VTab registration |
 | GraphAr | Native bounded projection, complete inventory binding, verified capture, publication/cold restore and finite MRR admission composition | Snapshot-pinned selective adjacency/property access and broader lossless physical profiles |
-| Authority/durability | Authority/version checks, simulated Host policy/key rotation/retirement/disclosure and finite close/reopen recovery | Publication-phase process crash fixtures |
+| Authority/durability | Authority/version checks, simulated Host policy/key rotation/retirement/disclosure and publication-phase process exit/recovery | Native in-transaction fault expansion; remote exact-head acceptance |
 
 * Findings that change the execution plan
 
@@ -168,8 +168,9 @@ CAS for policy/key enrollment, rotation and retirement; serialize final protecte
 disclosure with those changes in the simulated Host. Historical recovery remains
 a receipt lookup, never fresh disclosure permission. Original Lambda/Marlin
 query bytes and expected rows can run through local simulated callers.
-Publication-phase process-crash injection, selective graph access, original
-property-path expansion and the matched performance matrix remain outstanding.
+Publication-phase process-crash fixtures are now implemented below. Selective
+graph access, original property-path expansion and the matched performance
+matrix remain outstanding.
 
 ** Simulated Host authority contract
 
@@ -191,3 +192,35 @@ Local simulated-Host acceptance: the same consumer passes with native Turso
 =0.8.1= and DuckDB; strict Backend consumer clippy (=--profile test=,
 =-D warnings=), formatting and diff checks pass. Remote acceptance of the new
 commit remains a separate exact-head CI gate.
+
+** Publication process-exit matrix
+
+=backend_graph_publication::publication_process_exit_preserves_original_operation_and_complete_head=
+runs a native provider in an independent child process and exits without Backend
+shutdown or Rust destructors at eight boundaries: first child write before ACK,
+inventory write before ACK, snapshot write before ACK, before binding-root upload,
+root write before ACK, complete publication ACK before CAS, before provider CAS,
+and after native commit before returning its receipt. Each child has a 30-second
+watchdog; its exit code must identify the configured fault rather than a passing
+or accidentally failing harness.
+
+The parent seeds an existing head and policy guard, reopens native state, and
+recovers only the original operation. Before commit it requires confirmed
+absence and an exact-prior-head retry; after commit it requires the exact next
+revision and validator-free replay. Cold restore reads file-backed simulated
+remote blocks and requires root, block count and byte-count parity. Incomplete
+child/metadata closure is refused; a root written before a lost ACK remains
+restorable but does not advance the selected head.
+
+This qualifies local process exit at publication/provider boundaries with opaque
+transport fixture bytes. Native GraphAr/Arrow format qualification remains in
+its separate facade consumer. It does not interrupt the native COMMIT call or
+attest power loss, filesystem/object-store durability across machine failure, or
+independent deployed services. Existing =backend_consumer= uncommitted-transaction
+process-exit fixtures cover a separate native metadata rollback boundary.
+
+Local receipts for this matrix: native Turso =0.8.1= and DuckDB graph-publication
+suites each pass four harness tests, including all eight child exit points.
+Strict consumer clippy (=--profile test=, =-D warnings=), Org links, formatting
+and diff checks pass. Exact-head Linux/macOS CI remains pending; these local
+receipts do not close the P0 platform acceptance gate.

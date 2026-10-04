@@ -482,3 +482,16 @@ or arbitrary external Arrow clones. A managed lease must accompany every shared
 buffer. SDK-native row-count qualification is not evidence of a native streaming
 memory bound. Historical metadata benchmarks are not reused as query-throughput
 or Turso 0.8.1 measurements. Build parallelism remains Cargo's default.
+
+** Local publication process-exit acceptance
+
+The shared Backend consumer now drives the original graph publication operation
+through child, inventory, snapshot and root ACK-loss exits, pre-root and complete
+publication exits, provider pre-CAS exit, and post-native-commit/pre-receipt exit.
+It reopens the native provider under the persisted policy guard and verifies old
+head preservation or exact committed revision, historical replay, exact-operation
+retry and cold closure parity. The transport is a file-backed local simulation;
+no deployed Host or credentials are prerequisites. Each child has a bounded
+watchdog and a required fault exit code. This gate does not claim native COMMIT
+interruption, power-loss durability or native GraphAr decoding from opaque fixture
+blocks. See the [[file:../architecture/backend-rfc-delivery-audit.org][delivery audit]] for the precise evidence boundary.
