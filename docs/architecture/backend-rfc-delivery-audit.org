@@ -2416,3 +2416,15 @@ and fixture and is not an engine-only cap. Global copy/spill/streaming-first
 result counters remain unsupported; narrower engine observations retain their
 existing scope. OS cache and host scheduling are uncontrolled. These receipts
 qualify the declared fixtures, not arbitrary GQL or a production speedup.
+
+** Fuzz lock source parity repair: 2026-10-05
+
+CI at =010b0930= passed Linux Commerce integration, then the feature
+boundary check refused =fuzz Cargo.lock must contain exactly the workspace
+MRR source=. The separate fuzz lock still held =4ccca987= while both
+manifests and the workspace lock held =719ce0d6=. The repair changes only
+the twelve fuzz MRR source identities to the published workspace pin.
+The exact manifest/lock parity check and full locked fuzz Cargo metadata
+pass; all twelve resolved MRR packages have that same source. Source
+compiler inputs and the measured =100f8dfa= receipts are unchanged. The
+failed [[https://github.com/tao3k/mrr-data/actions/runs/37277512535/job/111659043923][Linux Rust job]] remains a failed predecessor receipt.
