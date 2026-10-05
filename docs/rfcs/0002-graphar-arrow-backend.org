@@ -819,3 +819,11 @@ After explicit process isolation, the combined Source-feature test run passes
 parent then passes in its mandatory isolated invocation. Strict Clippy passes
 again. The earlier 80-pass/one-failure aggregate receipt remains a recorded
 negative control for lifecycle qualification.
+
+CI run =37293719391= at =dc76e246= retains an Ubuntu Source failure at
+Clippy, after native no-run, Source/descriptor tests and facade checks passed.
+CI stable is Clippy 1.99; the local toolchain is 1.95. The newer
+=assert_is_empty= lint refuses =assert!(empty.facts().is_empty())= and requires
+=assert_eq!(empty.facts(), [])= for failure diagnostics. The assertion is changed
+as prescribed; no lint is disabled and neither its semantic condition nor the
+native watchdog changes. The 48-case CI matrix did not run on that failed job.

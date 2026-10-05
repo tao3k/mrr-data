@@ -680,7 +680,7 @@ fn selective_many_coalesces_reads_preserving_duplicate_edges_and_limits() {
         .outgoing_many(&fixture.bound, &fixture.projection, &[absent], 0)
         .unwrap();
     assert_eq!(empty.metrics().read_bytes, 0);
-    assert!(empty.facts().is_empty());
+    assert_eq!(empty.facts(), []);
 }
 
 #[test]
