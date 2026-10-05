@@ -128,6 +128,11 @@ fn forged_wire_order_unknown_fields_and_version_do_not_bypass_admission() {
     for (field, replacement, expected) in [
         ("extra", Ipld::Bool(true), GraphInventoryError::Decode),
         (
+            "namespace",
+            Ipld::String("mrr.graphar.file-inventory.v1".into()),
+            GraphInventoryError::UnsupportedVersion,
+        ),
+        (
             "version",
             Ipld::Integer(2),
             GraphInventoryError::UnsupportedVersion,

@@ -7,10 +7,25 @@ use std::{
 const CASE_TEST: &str = "tests::entity_properties::combined::source_handoff::backend::selective::resources::original_source_resource_case";
 const FIXTURE_TEST: &str = "tests::entity_properties::combined::source_handoff::backend::selective::resources::fixture::original_source_resource_fixture";
 
-fn verify(receipt: &Value, shape: &str, mode: &str, snapshot: Option<&str>) -> bool {
+fn verify(
+    receipt: &Value,
+    shape: &str,
+    mode: &str,
+    snapshot: Option<&str>,
+    scale_rows: usize,
+) -> bool {
     let samples = receipt["samples"].as_array();
     receipt["shape"] == shape
         && receipt["mode"] == mode
+        && receipt["scale_rows"] == scale_rows
+        && receipt["caller_budgets"] == super::scale::receipt(scale_rows)
+        && receipt["input_relation_rows"] == 2 * scale_rows + 8
+        && receipt["input_entity_rows"]
+            == if scale_rows == 4 {
+                11
+            } else {
+                3 * scale_rows + 7
+            }
         && receipt["source_digest"] == super::super::super::super::SOURCE_DIGEST
         && receipt["snapshot_root"].as_str().is_some_and(|root| {
             root.parse::<cid::Cid>().is_ok() && snapshot.is_none_or(|expected| expected == root)
@@ -18,6 +33,15 @@ fn verify(receipt: &Value, shape: &str, mode: &str, snapshot: Option<&str>) -> b
         && receipt["all_results_admitted"] == true
         && receipt["expected_rows"] == 4
         && receipt["cleanup_bytes"] == 0
+        && super::schema()["properties"]["unsupported_measurements"]["const"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|name| {
+                receipt
+                    .get(name.as_str().unwrap())
+                    .is_some_and(Value::is_null)
+            })
         && samples.is_some_and(|samples| {
             samples.len()
                 == usize::try_from(
@@ -91,6 +115,7 @@ fn execute(shape: &str, mode: &str, fixture: &std::path::Path) -> Value {
 #[test]
 #[ignore = "native original-source process matrix; use the glue progress supervisor"]
 fn original_source_resource_matrix() {
+    let scale_rows = super::scale::rows();
     let schema = super::schema();
     let contract = &schema["properties"];
     let mut receipts = Vec::new();
@@ -108,7 +133,7 @@ fn original_source_resource_matrix() {
             let mode = mode.as_str().unwrap();
             let receipt = execute(shape, mode, &fixture);
             assert!(
-                verify(&receipt, shape, mode, snapshot.as_deref()),
+                verify(&receipt, shape, mode, snapshot.as_deref(), scale_rows),
                 "source/admission/resource receipt refused"
             );
             snapshot = Some(receipt["snapshot_root"].as_str().unwrap().to_owned());
@@ -126,7 +151,7 @@ fn original_source_resource_matrix() {
     }
     println!(
         "SOURCE-RESOURCE-MATRIX {}",
-        json!({"schema_namespace":contract["schema_namespace"]["const"],"schema_version":contract["schema_version"]["const"],"cases":receipts})
+        json!({"schema_namespace":contract["schema_namespace"]["const"],"schema_version":contract["schema_version"]["const"],"scale_rows":scale_rows,"cases":receipts})
     );
 }
 
@@ -134,17 +159,58 @@ fn original_source_resource_matrix() {
 fn source_resource_matrix_refuses_unadmitted_and_foreign_source_receipts() {
     let snapshot = mrr_data_core::raw_cid(b"resource-source").to_string();
     let sample = json!({"total_ns":1,"cpu_ns":1,"physical_backend_ns":1,"process_peak_rss_bytes":1,"relation_materialized_rows":1,"relation_selected_edges":1,"relation_read_bytes":1,"remote_read_bytes":0});
-    let valid = json!({"shape":"uniform","mode":"warm-full","source_digest":super::super::super::super::SOURCE_DIGEST,"snapshot_root":snapshot,"all_results_admitted":true,"expected_rows":4,"cleanup_bytes":0,"samples":[sample.clone(),sample.clone(),sample]});
-    assert!(verify(&valid, "uniform", "warm-full", Some(&snapshot)));
-    assert!(!verify(&valid, "uniform", "warm-full", Some("foreign")));
-    assert!(!verify(&valid, "skewed", "warm-full", Some(&snapshot)));
+    let valid = json!({"shape":"uniform","mode":"warm-full","scale_rows":4,"caller_budgets":super::scale::receipt(4),"input_relation_rows":16,"input_entity_rows":11,"spill_bytes":null,"copied_bytes":null,"streaming_first_result_ns":null,"source_digest":super::super::super::super::SOURCE_DIGEST,"snapshot_root":snapshot,"all_results_admitted":true,"expected_rows":4,"cleanup_bytes":0,"samples":[sample.clone(),sample.clone(),sample]});
+    assert!(verify(&valid, "uniform", "warm-full", Some(&snapshot), 4));
+    assert!(!verify(&valid, "uniform", "warm-full", Some("foreign"), 4));
+    assert!(!verify(
+        &valid,
+        "uniform",
+        "warm-full",
+        Some(&snapshot),
+        1000
+    ));
+    assert!(!verify(&valid, "skewed", "warm-full", Some(&snapshot), 4));
+    for (field, wrong) in [
+        ("caller_budgets", json!({})),
+        ("copied_bytes", json!(0)),
+        ("input_relation_rows", json!(17)),
+        ("scale_rows", json!(1000)),
+    ] {
+        let mut invalid = valid.clone();
+        invalid[field] = wrong;
+        assert!(!verify(
+            &invalid,
+            "uniform",
+            "warm-full",
+            Some(&snapshot),
+            4
+        ));
+    }
     let mut invalid = valid.clone();
     invalid["all_results_admitted"] = json!(false);
-    assert!(!verify(&invalid, "uniform", "warm-full", Some(&snapshot)));
+    assert!(!verify(
+        &invalid,
+        "uniform",
+        "warm-full",
+        Some(&snapshot),
+        4
+    ));
     invalid = valid.clone();
     invalid["cleanup_bytes"] = json!(1);
-    assert!(!verify(&invalid, "uniform", "warm-full", Some(&snapshot)));
+    assert!(!verify(
+        &invalid,
+        "uniform",
+        "warm-full",
+        Some(&snapshot),
+        4
+    ));
     invalid = valid;
     invalid["samples"][0]["remote_read_bytes"] = json!(1);
-    assert!(!verify(&invalid, "uniform", "warm-full", Some(&snapshot)));
+    assert!(!verify(
+        &invalid,
+        "uniform",
+        "warm-full",
+        Some(&snapshot),
+        4
+    ));
 }

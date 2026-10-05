@@ -74,7 +74,7 @@ pub fn write_graphar_entity_properties(
                 .join(format!("{}.vertex.yaml", label(schema))),
         )?;
     }
-    GraphInfo::builder("mrr_entity_properties_v1")
+    GraphInfo::builder("mrr_entity_properties")
         .vertex_infos(infos)
         .prefix(format!(
             "{}/",

@@ -15,6 +15,7 @@ turso = ["dep:turso"]
 duckdb = ["dep:duckdb", "arrow-query"]
 
 [dependencies]
+mrr-data-profile.workspace = true
 mrr-data-content.workspace = true
 cid.workspace = true
 tokio = { workspace = true, features = ["sync", "time"] }

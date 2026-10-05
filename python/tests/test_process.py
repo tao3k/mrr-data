@@ -57,6 +57,22 @@ def test_successful_process_completes():
     assert result.returncode == 0
 
 
+def test_stderr_progress_after_stdout_close_retains_idle_and_wall_limits():
+    script = "import os,time; os.close(1)\nwhile True:\n os.write(2,b'actual stderr output\\n'); time.sleep(0.02)"
+    with pytest.raises(ProgressTimeout, match="wall deadline"):
+        run(
+            [sys.executable, "-u", "-c", script],
+            limits=Limits(wall_seconds=1, idle_seconds=0.5),
+            stderr_filter=lambda block: block,
+        )
+    with pytest.raises(ProgressTimeout, match="no output progress"):
+        run(
+            [sys.executable, "-c", "import os,time; os.close(1); time.sleep(10)"],
+            limits=Limits(wall_seconds=2, idle_seconds=0.1),
+            stderr_filter=lambda block: block,
+        )
+
+
 def test_receipt_capture_preserves_exact_output_and_refuses_excess_bytes():
     result = run([sys.executable, "-c", "print('receipt')"], capture_limit=100)
     assert result.stdout == b"receipt\n"

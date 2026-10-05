@@ -7,6 +7,7 @@ pub(super) fn read(
     source: &CapturedCombinedGraphArSelective,
     selective: bool,
 ) -> (Vec<CapturedGraphArRelation>, usize, usize, usize) {
+    let row_limit = super::scale::physical(super::scale::rows()).max_input_rows;
     let first = f.original.relations[0].schema.id();
     let second = f.original.relations[1].schema.id();
     let mut rows = 0;
@@ -14,7 +15,7 @@ pub(super) fn read(
     let mut relations = Vec::new();
     if selective {
         let selection = source
-            .outgoing(&f.query, first, properties::entity("s1"), 100)
+            .outgoing(&f.query, first, properties::entity("s1"), row_limit)
             .unwrap();
         let targets = selection
             .facts()
@@ -34,7 +35,9 @@ pub(super) fn read(
         });
         let mut facts = Vec::new();
         for target in targets {
-            let selection = source.outgoing(&f.query, second, target, 100).unwrap();
+            let selection = source
+                .outgoing(&f.query, second, target, row_limit)
+                .unwrap();
             rows += selection.metrics().materialized_rows;
             bytes += selection.metrics().read_bytes;
             facts.extend(selection.into_facts());
@@ -45,7 +48,7 @@ pub(super) fn read(
         });
     } else {
         for relation in [first, second] {
-            let selection = source.scan_all(&f.query, relation, 100).unwrap();
+            let selection = source.scan_all(&f.query, relation, row_limit).unwrap();
             rows += selection.metrics().materialized_rows;
             bytes += selection.metrics().read_bytes;
             relations.push(CapturedGraphArRelation {

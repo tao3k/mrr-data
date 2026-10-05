@@ -3,9 +3,9 @@
 use super::{MetadataTransaction, ProviderResult, TransactionProvider};
 use crate::BackendError;
 use mrr_data_content::ConditionalCommitPortError as PortError;
+use mrr_data_profile::BACKEND_TURSO_SCHEMA;
 use std::{path::PathBuf, sync::Mutex, time::Duration};
 use tokio::runtime::Handle;
-const SCHEMA: &str = "mrr-data-backend.turso.v2";
 /// Local Turso connections using the Host executor. No global allocator, remote
 /// replica, automatic runtime or process signal handler is enabled.
 pub struct TursoProvider {
@@ -224,12 +224,15 @@ fn initialize(
                 (),
             ))
             .map_err(failure)?;
-        tx.put("mrr.backend.schema", SCHEMA.as_bytes())?;
+        tx.put(
+            "mrr.backend.schema",
+            &crate::scheme_record::schema_marker(BACKEND_TURSO_SCHEMA),
+        )?;
     } else if tx
         .get("mrr.backend.schema")
         .map_err(|_| BackendError::Corrupt)?
         .as_deref()
-        != Some(SCHEMA.as_bytes())
+        != Some(crate::scheme_record::schema_marker(BACKEND_TURSO_SCHEMA).as_slice())
     {
         return Err(BackendError::Corrupt);
     }

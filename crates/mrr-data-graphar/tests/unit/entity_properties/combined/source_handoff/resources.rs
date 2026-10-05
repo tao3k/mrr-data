@@ -1,17 +1,11 @@
 //! Matched original-source measurements; cold means an empty verified cache.
 use super::{authority, executor, metadata, restore};
+use crate::CapturedCombinedGraphArSelective;
 use crate::tests::entity_properties::combined::source_handoff::{
     backend::{RESERVED, execution_transport},
     compile,
 };
-use crate::tests::entity_properties::{
-    combined::{
-        fixture::{Fixture, capture_limits},
-        remote::Remote,
-    },
-    fixture as properties,
-};
-use crate::{CapturedCombinedGraphArSelective, GraphArChunkLayout};
+use crate::tests::entity_properties::combined::{fixture::Fixture, remote::Remote};
 use meta_relational_reasoning as mrr;
 use mrr::PropertyQueryBackend;
 use mrr_data_backend::{Backend, BackendConfig, ResourceControl, ResourceHandle, ResourceStop};
@@ -34,6 +28,8 @@ mod fixture;
 mod matrix;
 #[path = "resources/reads.rs"]
 mod reads;
+#[path = "resources/scale.rs"]
+mod scale;
 
 fn schema() -> Value {
     serde_json::from_str(include_str!("../../../../../source-resources-schema.json")).unwrap()
@@ -93,6 +89,8 @@ impl Case {
         let query = self.f.query.clone();
         let relations = self.f.relations.clone();
         let projection = self.f.projection.clone();
+        let limits = self.f.capture_limits;
+        let layout = scale::layout(scale::rows());
         let started = Instant::now();
         let source = self
             .backend
@@ -102,8 +100,8 @@ impl Case {
                     &query,
                     &relations,
                     &projection,
-                    capture_limits(),
-                    GraphArChunkLayout::new(2, 2).unwrap(),
+                    limits,
+                    layout,
                 )
             })
             .await
@@ -150,7 +148,7 @@ impl Case {
                 relations: crate::tests::entity_properties::combined::acceptance::fact_tables(
                     &self.f, &facts,
                 ),
-                limits: properties::limits(),
+                limits: scale::physical(scale::rows()),
             },
             elapsed: physical_ns.clone(),
         };
@@ -211,6 +209,7 @@ impl Case {
 async fn original_source_resource_case() {
     let shape = std::env::var("MRR_DATA_SOURCE_SHAPE").unwrap();
     let mode = std::env::var("MRR_DATA_SOURCE_MODE").unwrap();
+    let scale_rows = scale::rows();
     let contract = schema();
     assert!(
         contract["properties"]["shapes"]["const"]
@@ -271,6 +270,6 @@ async fn original_source_resource_case() {
     assert_eq!(case.backend.status().resource_bytes, 0);
     println!(
         "SOURCE-RESOURCE {}",
-        json!({"shape":shape,"mode":mode,"source_digest":super::super::super::SOURCE_DIGEST,"snapshot_root":snapshot,"fixture_setup_ns":fixture_setup_ns,"warmups":warmups,"setup":setup,"baseline_peak_rss_bytes":baseline_peak_rss_bytes,"samples":samples,"all_results_admitted":true,"expected_rows":4,"cleanup_bytes":0,"spill_bytes":null,"copied_bytes":null,"streaming_first_result_ns":null})
+        json!({"shape":shape,"mode":mode,"scale_rows":scale_rows,"caller_budgets":scale::receipt(scale_rows),"input_entity_rows":case.f.original.entities.iter().map(|t|t.batch.num_rows()).sum::<usize>(),"input_relation_rows":case.f.original.relations.iter().map(|t|t.batch.num_rows()).sum::<usize>(),"source_digest":super::super::super::SOURCE_DIGEST,"snapshot_root":snapshot,"fixture_setup_ns":fixture_setup_ns,"warmups":warmups,"setup":setup,"baseline_peak_rss_bytes":baseline_peak_rss_bytes,"samples":samples,"all_results_admitted":true,"expected_rows":4,"cleanup_bytes":0,"spill_bytes":null,"copied_bytes":null,"streaming_first_result_ns":null})
     );
 }

@@ -21,7 +21,7 @@ def digest(path):
         return hashlib.file_digest(source, "sha256").hexdigest()
 
 
-def matrix_from_output(output):
+def matrix_from_output(output, scale_rows=None):
     receipts = [
         json.loads(line.removeprefix("SOURCE-RESOURCE-MATRIX "))
         for line in output.decode().splitlines()
@@ -33,6 +33,7 @@ def matrix_from_output(output):
     if (
         matrix.get("schema_namespace") != SCHEMA["schema_namespace"]["const"]
         or matrix.get("schema_version") != SCHEMA["schema_version"]["const"]
+        or (scale_rows is not None and matrix.get("scale_rows") != scale_rows)
         or not isinstance(matrix.get("cases"), list)
     ):
         raise ValueError("Rust Source matrix protocol Schema mismatch")
@@ -71,24 +72,34 @@ def main():
             ["git", "-C", str(root), "status", "--porcelain"]
         ),
         "rust_matrix": MATRIX_TEST,
+        "scales": SCHEMA["scales"]["const"],
+        "scale_unit": "additional relation edges per relation; large scopes add unique Case and Profile entities",
+        "unsupported_measurements": SCHEMA["unsupported_measurements"]["const"],
+        "progress_limits_scope": "each complete Rust scale matrix retains idle5/wall120; every mode shares one immutable shape/scale closure",
         "cache_scope": "cold is an empty verified content cache; OS page-cache state is uncontrolled",
         "rss_scope": "isolated process high-water mark including fixture, Rust and native engine",
         "physical_scope": "physical_backend_ns includes DataFusion execution and candidate projection; registration and spill are not separately observed",
     }
-    result = run(
-        [
-            binary,
-            MATRIX_TEST,
-            "--exact",
-            "--ignored",
-            "--nocapture",
-            "--test-threads=1",
-        ],
-        limits=TEST_LIMITS,
-        env=dict(os.environ, MRR_NATIVE_PROGRESS="1"),
-        capture_limit=2 << 20,
-    )
-    cases = matrix_from_output(result.stdout)
+    cases = []
+    for scale_rows in SCHEMA["scales"]["const"]:
+        result = run(
+            [
+                binary,
+                MATRIX_TEST,
+                "--exact",
+                "--ignored",
+                "--nocapture",
+                "--test-threads=1",
+            ],
+            limits=TEST_LIMITS,
+            env=dict(
+                os.environ,
+                MRR_NATIVE_PROGRESS="1",
+                MRR_DATA_SOURCE_SCALE=str(scale_rows),
+            ),
+            capture_limit=2 << 20,
+        )
+        cases.extend(matrix_from_output(result.stdout, scale_rows))
     with output.open("w") as stream:
         stream.write(json.dumps({"metadata": metadata}, sort_keys=True) + "\n")
         for case in cases:

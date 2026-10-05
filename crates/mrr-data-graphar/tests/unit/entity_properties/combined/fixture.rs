@@ -27,6 +27,8 @@ pub struct Fixture {
     pub snapshot: SnapshotBlock,
     pub dataset: GraphDatasetDescriptor,
     pub local: MemoryContentStore,
+    pub capture_limits: CombinedGraphArLimits,
+    pub transfer_limits: GraphTransferLimits,
 }
 pub fn capture_limits() -> CombinedGraphArLimits {
     CombinedGraphArLimits {
@@ -57,6 +59,22 @@ impl Fixture {
         original: properties::Fixture,
         options: crate::GraphArWriteOptions,
     ) -> Self {
+        Self::with_original_options_and_limits(
+            original,
+            options,
+            capture_limits(),
+            transfer_limits(),
+            GraphArChunkLayout::new(2, 4).unwrap(),
+        )
+    }
+    pub(super) fn with_original_options_and_limits(
+        original: properties::Fixture,
+        options: crate::GraphArWriteOptions,
+        capture: CombinedGraphArLimits,
+        transfer: GraphTransferLimits,
+        property_layout: GraphArChunkLayout,
+    ) -> Self {
+        let property_limits = capture.properties;
         let (projection, tables) = inputs(&original);
         let relations = mrr::RelationCatalog::admit(
             original
@@ -75,25 +93,31 @@ impl Fixture {
             &projection,
             &original.semantic,
             &tables,
-            GraphArChunkLayout::new(2, 4).unwrap(),
-            limits(),
+            property_layout,
+            property_limits,
         )
         .unwrap();
-        let property = receipt.descriptor(limits()).unwrap();
+        let property = receipt.descriptor(property_limits).unwrap();
         let property = GraphEntityPropertyDescriptor::decode_checked(
             property.bytes(),
             property.cid(),
-            limits().inventory,
-            limits().max_rows,
+            property_limits.inventory,
+            property_limits.max_rows,
         )
         .unwrap();
-        properties::native_relations_with_options(&original, directory.path(), options);
+        properties::native_relations_with_options_and_limits(
+            &original,
+            directory.path(),
+            options,
+            capture.topology,
+        );
         let local = MemoryContentStore::default();
         let mut members = Vec::new();
         store_inventory(&local, receipt.root(), receipt.inventory());
         for (index, table) in original.relations.iter().enumerate() {
             let source = directory.path().join(format!("relation-{index}"));
-            let inventory = inventory_graphar_directory(&source, limits().inventory).unwrap();
+            let inventory =
+                inventory_graphar_directory(&source, property_limits.inventory).unwrap();
             store_inventory(&local, &source, &inventory);
             members.push(GraphRelationMember {
                 relation: table.schema.id(),
@@ -105,16 +129,23 @@ impl Fixture {
             &relations,
             property,
             members,
-            capture_limits().dataset,
+            capture.dataset,
         )
         .unwrap();
         local
             .put(ContentBlock::new(
                 ContentCodec::DagCbor,
-                &dataset.canonical_bytes(capture_limits().dataset).unwrap(),
+                &dataset.canonical_bytes(capture.dataset).unwrap(),
             ))
             .unwrap();
-        let snapshot = snapshot(&original, &relations, &entities, &dataset, &local);
+        let snapshot = snapshot(
+            &original,
+            &relations,
+            &entities,
+            &dataset,
+            &local,
+            capture.dataset,
+        );
         let query = bind_data_query(
             &original.query,
             &snapshot,
@@ -132,6 +163,8 @@ impl Fixture {
             snapshot,
             dataset,
             local,
+            capture_limits: capture,
+            transfer_limits: transfer,
         }
     }
     pub fn inputs(&self) -> CombinedGraphInputs<'_> {
@@ -140,8 +173,8 @@ impl Fixture {
             snapshot: &self.snapshot,
             relations: &self.relations,
             entities: &self.entities,
-            dataset_limits: capture_limits().dataset,
-            limits: transfer_limits(),
+            dataset_limits: self.capture_limits.dataset,
+            limits: self.transfer_limits,
         }
     }
     pub fn prepare(&self) -> PreparedCombinedGraph {
@@ -183,6 +216,7 @@ fn snapshot(
     entities: &mrr::EntityCatalog,
     dataset: &GraphDatasetDescriptor,
     local: &MemoryContentStore,
+    dataset_limits: GraphDatasetLimits,
 ) -> SnapshotBlock {
     let relation_batches = original
         .relations
@@ -222,11 +256,7 @@ fn snapshot(
                 CoverageDescriptor::new(CoverageKind::Complete, raw_cid(coverage)).unwrap(),
             )
             .with_entities(property_batches)
-            .with_graph_projection(
-                dataset
-                    .snapshot_projection(capture_limits().dataset)
-                    .unwrap(),
-            ),
+            .with_graph_projection(dataset.snapshot_projection(dataset_limits).unwrap()),
         )
         .unwrap(),
     )

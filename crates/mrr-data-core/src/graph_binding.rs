@@ -5,9 +5,10 @@ use crate::{
 };
 use cid::Cid;
 use meta_relational_reasoning::{GenerationId, RelationId};
+use mrr_data_profile::GRAPHAR_DATASET_BINDING_SCHEMA;
 use serde::{Deserialize, Serialize};
 
-const NAMESPACE: &str = "mrr.graphar.dataset-binding.v1";
+const NAMESPACE: &str = GRAPHAR_DATASET_BINDING_SCHEMA.namespace;
 const MAX_BYTES: usize = 4096;
 /// Binds the complete inventory to one semantic snapshot and relation.
 /// The Host must authenticate this root separately: the legacy snapshot's RAW
@@ -51,7 +52,7 @@ impl GraphDatasetBinding {
         let semantic = query.query();
         Ok(Self {
             namespace: NAMESPACE.into(),
-            version: 1,
+            version: GRAPHAR_DATASET_BINDING_SCHEMA.version,
             snapshot_root: *query.snapshot_root(),
             generation: semantic.generation(),
             semantic_digest: semantic.snapshot_digest().to_vec(),
@@ -151,7 +152,7 @@ impl GraphDatasetBinding {
         Ok(value)
     }
     fn validate(&self) -> Result<(), GraphInventoryError> {
-        if self.namespace != NAMESPACE || self.version != 1 {
+        if !GRAPHAR_DATASET_BINDING_SCHEMA.accepts(&self.namespace, self.version) {
             return Err(GraphInventoryError::UnsupportedVersion);
         }
         if self.semantic_digest.len() != 32

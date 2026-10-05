@@ -237,9 +237,22 @@ pub(super) fn native_relations_with_options(
     root: &std::path::Path,
     options: crate::GraphArWriteOptions,
 ) -> Vec<BinaryRelationTable> {
+    native_relations_with_options_and_limits(
+        f,
+        root,
+        options,
+        crate::GraphArReadLimits::new(100, 100),
+    )
+}
+pub(super) fn native_relations_with_options_and_limits(
+    f: &Fixture,
+    root: &std::path::Path,
+    options: crate::GraphArWriteOptions,
+    read_limits: crate::GraphArReadLimits,
+) -> Vec<BinaryRelationTable> {
     use crate::{
-        BinaryEntityProjection, GraphArReadLimits, prepare_graphar_source_with_adjacency,
-        verify_graphar_directory, write_graphar_dataset_with_options,
+        BinaryEntityProjection, prepare_graphar_source_with_adjacency, verify_graphar_directory,
+        write_graphar_dataset_with_options,
     };
     use arrow_array::Array;
     use std::str::FromStr;
@@ -299,14 +312,11 @@ pub(super) fn native_relations_with_options(
                 mrr_data_core::GraphInventoryLimits::default(),
             )
             .unwrap();
-            let restored = prepare_graphar_source_with_adjacency(
-                &source,
-                GraphArReadLimits::new(100, 100),
-                options.adjacency,
-            )
-            .unwrap()
-            .admit(&projection)
-            .unwrap();
+            let restored =
+                prepare_graphar_source_with_adjacency(&source, read_limits, options.adjacency)
+                    .unwrap()
+                    .admit(&projection)
+                    .unwrap();
             let mut values = [Vec::new(), Vec::new()];
             for fact in restored.facts() {
                 assert_eq!(fact.context().generation(), f.query.generation());

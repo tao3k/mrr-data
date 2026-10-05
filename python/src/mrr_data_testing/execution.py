@@ -11,8 +11,9 @@ from mrr_data_testing.process import BUILD_LIMITS, CONTROL_LIMITS, TEST_LIMITS, 
 class CargoArtifactCapture:
     """Keep Cargo records separate from live, very-verbose build diagnostics."""
 
-    def __init__(self, output):
+    def __init__(self, output, *, parse_json=True):
         self.output = output
+        self.parse_json = parse_json
         self.pending = b""
         self.finished = []
         self.events = 0
@@ -25,7 +26,28 @@ class CargoArtifactCapture:
             self.pending = lines.pop()
         forwarded = bytearray()
         for line in lines:
-            if not line.startswith(b"{"):
+            if not self.parse_json or not line.startswith(b"{"):
+                if (
+                    line.startswith(
+                        (
+                            b"Running pass:",
+                            b" Running pass ",
+                            b"Running analysis:",
+                            b"Invalidating analysis:",
+                        )
+                    )
+                    or re.match(
+                        rb"^\s*INFO rustc_codegen_ssa::base codegen_instance\(", line
+                    )
+                    or re.match(
+                        rb"\[[^]]+\] 0x[0-9a-f]+\s+(Executing Pass|Freeing Pass|Made Modification) '",
+                        line,
+                    )
+                ):
+                    self.events += 1
+                    if self.events >= 256:
+                        forwarded.extend(self.summary())
+                    continue
                 if re.match(
                     rb"^\s*(?:\d+(?:\.\d+)?(?:ns|us|ms|s)\s+)?(?:INFO )?rustc_(?:hir_typeck::coercion|borrowck::region_infer|interface::passes)\b",
                     line,
@@ -126,7 +148,13 @@ def main():
             try:
                 with args.cargo_artifacts.open("wb") as output:
                     capture = CargoArtifactCapture(output)
-                    run(command, limits=BUILD_LIMITS, output_filter=capture)
+                    diagnostics = CargoArtifactCapture(output, parse_json=False)
+                    run(
+                        command,
+                        limits=BUILD_LIMITS,
+                        output_filter=capture,
+                        stderr_filter=diagnostics,
+                    )
                     capture.complete()
             except BaseException:
                 args.cargo_artifacts.unlink(missing_ok=True)

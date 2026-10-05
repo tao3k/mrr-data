@@ -1,11 +1,12 @@
 //! Each shape shares one immutable payload closure across isolated mode processes.
-use crate::tests::entity_properties::combined::source_handoff::backend::selective::shaped_fixture;
+use crate::tests::entity_properties::combined::source_handoff::{
+    backend::selective::{append, shaped_fixture},
+    source_fixture,
+};
+use crate::tests::entity_properties::fixture as properties;
 use crate::tests::entity_properties::{
     acceptance::inputs,
-    combined::{
-        fixture::{Fixture, capture_limits},
-        remote::Remote,
-    },
+    combined::{fixture::Fixture, remote::Remote},
 };
 use crate::{GraphArAdjacency, GraphArChunkLayout, GraphArWriteOptions};
 use meta_relational_reasoning as mrr;
@@ -19,6 +20,7 @@ use std::path::Path;
 #[derive(Serialize, Deserialize)]
 struct Payload {
     shape: String,
+    scale_rows: usize,
     snapshot: String,
     dataset: String,
     blocks: Vec<(String, Vec<u8>)>,
@@ -33,12 +35,21 @@ async fn original_source_resource_fixture() {
 }
 async fn write(shape: &str, path: &Path) {
     println!("original-source shared fixture preparation started shape={shape}");
-    let f = Fixture::with_original_options(
-        shaped_fixture(shape == "skewed"),
+    let rows = super::scale::rows();
+    let layout = super::scale::layout(rows);
+    let f = Fixture::with_original_options_and_limits(
+        original(shape, rows),
         GraphArWriteOptions {
             adjacency: GraphArAdjacency::OrderedBySource,
-            layout: GraphArChunkLayout::new(2, 2).unwrap(),
+            layout,
             ..GraphArWriteOptions::default()
+        },
+        super::scale::capture(rows),
+        super::scale::transfer(rows),
+        if rows == 4 {
+            GraphArChunkLayout::new(2, 4).unwrap()
+        } else {
+            layout
         },
     );
     let prepared = f.prepare();
@@ -48,10 +59,11 @@ async fn write(shape: &str, path: &Path) {
         .unwrap();
     let payload = Payload {
         shape: shape.into(),
+        scale_rows: rows,
         snapshot: f.snapshot.cid().to_string(),
         dataset: prepared
             .dataset()
-            .snapshot_projection(capture_limits().dataset)
+            .snapshot_projection(super::scale::capture(rows).dataset)
             .unwrap()
             .manifest_cid()
             .to_string(),
@@ -69,7 +81,9 @@ async fn write(shape: &str, path: &Path) {
 pub(super) fn load(shape: &str) -> Fixture {
     let path = std::env::var("MRR_DATA_SOURCE_FIXTURE").unwrap();
     let payload: Payload = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+    let rows = super::scale::rows();
     assert_eq!(payload.shape, shape);
+    assert_eq!(payload.scale_rows, rows);
     let local = MemoryContentStore::default();
     for (root, bytes) in payload.blocks {
         let cid = root.parse::<cid::Cid>().unwrap();
@@ -89,10 +103,10 @@ pub(super) fn load(shape: &str) -> Fixture {
     let dataset = GraphDatasetDescriptor::decode_checked(
         &local.get(&root).unwrap(),
         &root,
-        capture_limits().dataset,
+        super::scale::capture(rows).dataset,
     )
     .unwrap();
-    let original = shaped_fixture(shape == "skewed");
+    let original = original(shape, rows);
     let (projection, _) = inputs(&original);
     let relations = mrr::RelationCatalog::admit(
         original
@@ -120,5 +134,41 @@ pub(super) fn load(shape: &str) -> Fixture {
         snapshot,
         dataset,
         local,
+        capture_limits: super::scale::capture(rows),
+        transfer_limits: super::scale::transfer(rows),
     }
+}
+
+fn original(shape: &str, rows: usize) -> properties::Fixture {
+    if rows == 4 {
+        return shaped_fixture(shape == "skewed");
+    }
+    let mut original = source_fixture();
+    let ids = |kind: &str| {
+        (0..rows)
+            .map(|index| properties::entity(&format!("resource-{kind}-{index}")).to_string())
+            .collect::<Vec<_>>()
+    };
+    let scenarios = ids("scenario");
+    let cases = ids("case");
+    let profiles = ids("profile");
+    // Each added Case has one Profile; skew changes the source degree without
+    // multiplying the physical join or changing the admitted healthcare result.
+    for (index, entity_ids) in [scenarios.clone(), cases.clone(), profiles.clone()]
+        .into_iter()
+        .enumerate()
+    {
+        append(
+            &mut original.entities[index].batch,
+            &[entity_ids, vec!["other".into(); rows]],
+        );
+    }
+    let sources = if shape == "skewed" {
+        vec![properties::entity("s2").to_string(); rows]
+    } else {
+        scenarios
+    };
+    append(&mut original.relations[0].batch, &[sources, cases.clone()]);
+    append(&mut original.relations[1].batch, &[cases, profiles]);
+    original
 }

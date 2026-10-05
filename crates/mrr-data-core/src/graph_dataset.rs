@@ -6,6 +6,7 @@ use crate::{
 };
 use cid::Cid;
 use meta_relational_reasoning::{CatalogBoundQuery, EntityCatalog, RelationCatalog, RelationId};
+use mrr_data_profile::GRAPHAR_DATASET_SCHEMA;
 use serde::{Deserialize, Serialize};
 
 /// Aggregate metadata and physical inventory bounds across the entire dataset.
@@ -27,7 +28,7 @@ pub struct GraphRelationMember {
 #[serde(deny_unknown_fields)]
 pub struct GraphDatasetDescriptor {
     namespace: String,
-    version: u8,
+    version: u64,
     relation_catalog: [u8; 32],
     properties: GraphEntityPropertyDescriptor,
     relations: Vec<GraphRelationMember>,
@@ -45,7 +46,7 @@ impl GraphDatasetDescriptor {
         relations.sort_unstable_by_key(|r| r.relation);
         let value = Self {
             namespace: GRAPHAR_DATASET_NAMESPACE.into(),
-            version: 1,
+            version: GRAPHAR_DATASET_SCHEMA.version,
             relation_catalog: *catalog.digest().as_bytes(),
             properties,
             relations,
@@ -109,7 +110,7 @@ impl GraphDatasetDescriptor {
     /// # Errors
     /// Refuses malformed/duplicate members and global file/count/byte/encoding limits.
     pub fn canonical_bytes(&self, limits: GraphDatasetLimits) -> Result<Vec<u8>, Error> {
-        if self.namespace != GRAPHAR_DATASET_NAMESPACE || self.version != 1 {
+        if !GRAPHAR_DATASET_SCHEMA.accepts(&self.namespace, self.version) {
             return Err(Error::UnsupportedVersion);
         }
         if limits.max_relations == 0

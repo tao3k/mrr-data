@@ -874,8 +874,8 @@ impl From<&GraphProjectionDescriptor> for GraphProjectionWire {
             schema: match descriptor.kind {
                 GraphProjectionKind::BinaryEntity => SchemaWire::graphar_binary_entity(),
                 GraphProjectionKind::Dataset => SchemaWire {
-                    namespace: crate::GRAPHAR_DATASET_NAMESPACE.into(),
-                    version: 1,
+                    namespace: mrr_data_profile::GRAPHAR_DATASET_SCHEMA.namespace.into(),
+                    version: mrr_data_profile::GRAPHAR_DATASET_SCHEMA.version,
                 },
                 GraphProjectionKind::EntityProperties => SchemaWire {
                     namespace: crate::GRAPHAR_ENTITY_PROPERTIES_NAMESPACE.into(),
@@ -891,7 +891,7 @@ impl From<&GraphProjectionDescriptor> for GraphProjectionWire {
 impl GraphProjectionWire {
     fn into_descriptor(self) -> Result<GraphProjectionDescriptor, DataError> {
         if self.schema.namespace == crate::GRAPHAR_DATASET_NAMESPACE {
-            if self.schema.version != 1 {
+            if self.schema.version != mrr_data_profile::GRAPHAR_DATASET_SCHEMA.version {
                 return Err(DataError::UnknownGraphProjectionVersion(
                     self.schema.version,
                 ));

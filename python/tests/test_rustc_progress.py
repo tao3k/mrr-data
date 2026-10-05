@@ -24,7 +24,7 @@ def test_frontend_logging_preserves_explicit_host_configuration(monkeypatch):
     assert rustc_progress.os.environ["RUSTC_LOG"] == "host-selected-logging"
 
 
-def test_workspace_wrapper_preserves_compiler_output_and_failure(tmp_path):
+def test_workspace_wrapper_preserves_compiler_output_and_failure(tmp_path, monkeypatch):
     compiler = shutil.which("rustc")
     if compiler is None:
         pytest.skip("native Rust compiler unavailable")
@@ -33,6 +33,7 @@ def test_workspace_wrapper_preserves_compiler_output_and_failure(tmp_path):
     plain, wrapped = tmp_path / "plain", tmp_path / "wrapped"
     arguments = ["--crate-name", "fixture", "--emit=link", "-C", "opt-level=1"]
     subprocess.run([compiler, *arguments, source, "-o", plain], check=True, timeout=10)
+    monkeypatch.setenv("MRR_DATA_RUSTC_PHASE_TRACE_CRATES", "fixture")
     wrapper = [sys.executable, Path(rustc_progress.__file__), compiler]
     result = run(
         [*wrapper, *arguments, source, "-o", wrapped],
@@ -74,3 +75,23 @@ def test_workspace_wrapper_preserves_compiler_output_and_failure(tmp_path):
     assert refused.returncode != 0
     assert b"error" in refused.stderr
     assert not (tmp_path / "refused").exists()
+
+
+def test_phase_trace_is_owned_and_never_duplicated(monkeypatch):
+    calls = []
+    monkeypatch.setattr(rustc_progress.os, "execvp", lambda *args: calls.append(args))
+    monkeypatch.setenv(
+        "MRR_DATA_RUSTC_PHASE_TRACE_CRATES", "mrr_data_core,mrr_data_content,asp_rust"
+    )
+    for compiler, crate, enabled in [
+        ("rustc", "mrr_data_core", True),
+        ("rustc", "mrr_data_content", True),
+        ("rustc", "asp_rust", True),
+        ("rustc", "foreign", False),
+        ("wrapper", "mrr_data_core", False),
+    ]:
+        monkeypatch.setattr(
+            sys, "argv", ["wrapper", compiler, "--crate-name", crate, "--emit=link"]
+        )
+        rustc_progress.main()
+        assert ("llvm-args=--print-pass-numbers" in calls[-1][1]) is enabled

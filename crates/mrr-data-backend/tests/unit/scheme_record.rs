@@ -104,9 +104,40 @@ fn key_parts_are_unambiguous_scheme_strings() {
     let Datum::List(parts) = reader.datum(0).unwrap() else {
         panic!("key must be a list")
     };
-    assert_eq!(parts.len(), 3);
-    let Datum::List(parts) = &parts[2] else {
+    assert_eq!(parts.len(), 4);
+    let Datum::List(parts) = &parts[3] else {
         panic!("key parts must be a list")
     };
     assert_eq!(parts.len(), 2);
+}
+
+#[test]
+fn record_schema_fields_and_provider_markers_are_independent() {
+    use mrr_data_profile::{BACKEND_DUCKDB_SCHEMA, BACKEND_REVISION_SCHEMA};
+    let root: Cid = "bafkreigh2akiscaildcw4535x3wkd4jkfvxvygqrj3brp6a4p7ch5yqxtu"
+        .parse()
+        .unwrap();
+    let encoded = encode(&StoredRevision { revision: 7, root }).unwrap();
+    let expected = format!(
+        "(\"{}\" {} 7 \"{}\")",
+        BACKEND_REVISION_SCHEMA.namespace, BACKEND_REVISION_SCHEMA.version, root
+    );
+    assert_eq!(encoded, expected.as_bytes());
+    for head in [
+        "\"mrr.backend.revision\" 3",
+        "\"mrr.backend.revision\" #t",
+        "\"mrr.backend.revision\" \"2\"",
+        "\"mrr.backend.revision.v2\" 2",
+        "\"mrr.backend.revision\"",
+    ] {
+        let bytes = format!("({head} 7 \"{root}\")");
+        assert!(matches!(
+            decode::<StoredRevision>(bytes.as_bytes()),
+            Err(crate::BackendError::Corrupt)
+        ));
+    }
+    assert_eq!(
+        super::schema_marker(BACKEND_DUCKDB_SCHEMA),
+        b"(\"mrr-data-backend.duckdb\" 2)"
+    );
 }

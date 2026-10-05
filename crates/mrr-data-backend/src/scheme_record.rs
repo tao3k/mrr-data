@@ -1,9 +1,10 @@
-//! Bounded inert Scheme records for metadata v2. No evaluator or JSON fallback.
+//! Bounded inert Scheme records with separately admitted Schema identities.
 use crate::{
     AuthorityChange, AuthorityExpectation, AuthorityKey, AuthorityProposal, AuthorityState,
     AuthorityStatus, BackendError, StoredRevision, StoredWrite,
 };
 use cid::Cid;
+use mrr_data_profile as schema;
 use std::fmt::Write;
 const LIMIT: usize = 65_536;
 #[derive(Debug)]
@@ -96,16 +97,33 @@ pub(crate) fn encode<T: Record>(value: &T) -> Result<Vec<u8>, BackendError> {
     }
     Ok(text.into_bytes())
 }
+#[cfg(any(feature = "turso", feature = "duckdb", test))]
+pub(crate) fn schema_marker(schema: schema::SchemaIdentity) -> Vec<u8> {
+    let mut text = String::new();
+    emit(
+        &Datum::List(vec![
+            Datum::Text(schema.namespace.into()),
+            Datum::Natural(schema.version),
+        ]),
+        &mut text,
+    );
+    text.into_bytes()
+}
 pub(crate) fn key(kind: &str, parts: &[&str]) -> Result<String, BackendError> {
     let mut remaining = 8192;
-    spend(&mut remaining, 6 + parts.len().saturating_sub(1))?;
-    text_budget("mrr.backend.key.v2", &mut remaining)?;
+    spend(&mut remaining, 7 + parts.len().saturating_sub(1))?;
+    spend(
+        &mut remaining,
+        schema::BACKEND_KEY_SCHEMA.version.to_string().len(),
+    )?;
+    text_budget(schema::BACKEND_KEY_SCHEMA.namespace, &mut remaining)?;
     text_budget(kind, &mut remaining)?;
     for part in parts {
         text_budget(part, &mut remaining)?;
     }
     let value = Datum::List(vec![
-        Datum::Text("mrr.backend.key.v2".into()),
+        Datum::Text(schema::BACKEND_KEY_SCHEMA.namespace.into()),
+        Datum::Natural(schema::BACKEND_KEY_SCHEMA.version),
         Datum::Text(kind.into()),
         Datum::List(parts.iter().map(|s| Datum::Text((*s).into())).collect()),
     ]);
@@ -342,17 +360,20 @@ impl Record for AuthorityStatus {
     }
 }
 macro_rules! record {
-    ($ty:ty, $tag:literal, {$($name:ident:$field:ty),* $(,)?}) => {
+    ($ty:ty, $schema:expr, {$($name:ident:$field:ty),* $(,)?}) => {
         impl Record for $ty {
             fn budget(&self, remaining:&mut usize)->Result<(),BackendError> {
-                spend(remaining,2+[$(stringify!($name)),*].len())?;
-                text_budget($tag,remaining)?; $(self.$name.budget(remaining)?;)* Ok(()) }
-            fn datum(&self)->Datum { Datum::List(vec![Datum::Text($tag.into()),$(self.$name.datum()),*]) }
+                spend(remaining,3+[$(stringify!($name)),*].len())?;
+                $schema.version.budget(remaining)?;
+                text_budget($schema.namespace,remaining)?; $(self.$name.budget(remaining)?;)* Ok(()) }
+            fn datum(&self)->Datum { Datum::List(vec![Datum::Text($schema.namespace.into()),Datum::Natural($schema.version),$(self.$name.datum()),*]) }
             fn read(value:Datum)->Result<Self,BackendError> {
                 let Datum::List(values)=value else { return corrupt(); };
-                if values.len()!=1+[$(stringify!($name)),*].len() { return corrupt(); }
+                if values.len()!=2+[$(stringify!($name)),*].len() { return corrupt(); }
                 let mut values=values.into_iter();
-                if String::read(values.next().ok_or(BackendError::Corrupt)?)? != $tag { return corrupt(); }
+                let namespace = String::read(values.next().ok_or(BackendError::Corrupt)?)?;
+                let version = u64::read(values.next().ok_or(BackendError::Corrupt)?)?;
+                if !$schema.accepts(&namespace,version) { return corrupt(); }
                 Ok(Self { $($name: <$field>::read(values.next().ok_or(BackendError::Corrupt)?)?),* })
             }
         }
@@ -366,15 +387,15 @@ pub(crate) struct AuthorityCompletion {
     pub change: AuthorityChange,
     pub committed: AuthorityState,
 }
-record!(StoredRevision,"mrr.backend.revision.v2",{revision:u64,root:Cid});
-record!(AuthorityState,"mrr.backend.authority.v2",{generation:u64,commitment:Cid,status:AuthorityStatus});
-record!(AuthorityExpectation,"mrr.backend.expectation.v2",{authority_id:String,state:AuthorityState});
-record!(StoredWrite,"mrr.backend.write.v2",{profile:String,namespace:String,scope:String,operation_id:String,expected:Option<StoredRevision>,replacement:Cid,authorities:Vec<AuthorityExpectation>});
-record!(AuthorityKey,"mrr.backend.authority-key.v2",{profile:String,namespace:String,scope:String,authority_id:String});
-record!(AuthorityProposal,"mrr.backend.authority-proposal.v2",{authority_id:String,expected:Option<AuthorityState>,replacement:Cid,status:AuthorityStatus});
-record!(AuthorityChange,"mrr.backend.authority-change.v2",{key:AuthorityKey,proposal:AuthorityProposal});
-record!(Completion,"mrr.backend.completion.v2",{write:StoredWrite,committed:StoredRevision});
-record!(AuthorityCompletion,"mrr.backend.authority-completion.v2",{change:AuthorityChange,committed:AuthorityState});
+record!(StoredRevision,schema::BACKEND_REVISION_SCHEMA,{revision:u64,root:Cid});
+record!(AuthorityState,schema::BACKEND_AUTHORITY_SCHEMA,{generation:u64,commitment:Cid,status:AuthorityStatus});
+record!(AuthorityExpectation,schema::BACKEND_EXPECTATION_SCHEMA,{authority_id:String,state:AuthorityState});
+record!(StoredWrite,schema::BACKEND_WRITE_SCHEMA,{profile:String,namespace:String,scope:String,operation_id:String,expected:Option<StoredRevision>,replacement:Cid,authorities:Vec<AuthorityExpectation>});
+record!(AuthorityKey,schema::BACKEND_AUTHORITY_KEY_SCHEMA,{profile:String,namespace:String,scope:String,authority_id:String});
+record!(AuthorityProposal,schema::BACKEND_AUTHORITY_PROPOSAL_SCHEMA,{authority_id:String,expected:Option<AuthorityState>,replacement:Cid,status:AuthorityStatus});
+record!(AuthorityChange,schema::BACKEND_AUTHORITY_CHANGE_SCHEMA,{key:AuthorityKey,proposal:AuthorityProposal});
+record!(Completion,schema::BACKEND_COMPLETION_SCHEMA,{write:StoredWrite,committed:StoredRevision});
+record!(AuthorityCompletion,schema::BACKEND_AUTHORITY_COMPLETION_SCHEMA,{change:AuthorityChange,committed:AuthorityState});
 
 #[cfg(test)]
 #[path = "../tests/unit/scheme_record.rs"]

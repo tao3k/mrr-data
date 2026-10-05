@@ -1,4 +1,5 @@
-//! Frozen V1 schema and physical profile identifiers.
+//! Admitted schema and physical profile identifiers.
+use crate::{GRAPHAR_DATASET_SCHEMA, GRAPHAR_ENTITY_PROPERTIES_SCHEMA};
 
 /// Stable namespace of the content snapshot schema; version is a separate field.
 pub const SNAPSHOT_SCHEMA_NAMESPACE: &str = "mrr.data.snapshot";
@@ -32,9 +33,9 @@ pub const DAG_CBOR_CODEC: u64 = 0x71;
 pub const SHA2_256_CODE: u64 = 0x12;
 
 /// Catalog-declared string entity-property artifacts, distinct from topology.
-pub const GRAPHAR_ENTITY_PROPERTIES_NAMESPACE: &str = "mrr.graphar.entity-properties.v1";
+pub const GRAPHAR_ENTITY_PROPERTIES_NAMESPACE: &str = GRAPHAR_ENTITY_PROPERTIES_SCHEMA.namespace;
 /// Initial property artifact projection profile.
-pub const GRAPHAR_ENTITY_PROPERTIES_VERSION: u64 = 1;
+pub const GRAPHAR_ENTITY_PROPERTIES_VERSION: u64 = GRAPHAR_ENTITY_PROPERTIES_SCHEMA.version;
 
 /// Acyclic combined native dataset control profile.
-pub const GRAPHAR_DATASET_NAMESPACE: &str = "mrr.graphar.dataset.v1";
+pub const GRAPHAR_DATASET_NAMESPACE: &str = GRAPHAR_DATASET_SCHEMA.namespace;

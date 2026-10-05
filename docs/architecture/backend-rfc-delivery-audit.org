@@ -18,10 +18,74 @@ The complete local Source build, semantic filters, standalone resource matrix,
 strict all-target Clippy and facade passed. Platform results must refer to their
 exact head; earlier-head green checks do not establish all-platform closure.
 
+** Namespace/Schema correction and next execution plan: 2026-10-05
+
+Namespace identifies a stable owning contract. It must not contain =V1=, =V2=,
+=.v1=, =.v2= or another format-version suffix. The Schema owner declares the
+numeric version, admissible fields, canonical encoding and compatibility/refusal
+rules. Filenames and root symbols follow the same stable naming rule. This is
+an execution gate for the current batch. The working implementation is written;
+compiled admission and current-head platform qualification remain pending.
+
+The prior receipt filename/root-symbol corrections did not finish production
+Namespace migration. The following findings describe published baseline =14ee37e3=;
+the working slice now implements their corrections:
+
+| Owner | Published baseline finding | Working correction awaiting qualification |
+|-------+-----------------+----------------------|
+| =mrr-data-profile= | GraphAr entity-properties and dataset namespaces embed =.v1= | Stable namespaces; versions remain explicit Schema constants |
+| =mrr-data-core= | Dataset-binding and file-inventory namespaces embed =.v1=; version checks are local literals | Move their Schema identities/version policy into the common Schema owner and consume that owner during construction and admission |
+| =mrr-data-backend/scheme_record= | Key tag and nine record tags embed =.v2= | Stable record/key namespaces; encode and validate numeric Schema version separately through one shared contract |
+| =mrr-data-backend/providers= | DuckDB and Turso schema markers embed =.v2= | Stable provider Schema namespace plus independently admitted numeric version; check marker before any stored authority/recovery record is used |
+| =mrr-data-arrow= | Field value labels embed =:v1= or =-v1=; metadata version uses =v1= text | Stable value labels; common Schema owner provides numeric version, rendered as decimal text for Arrow metadata |
+
+The next execution order is:
+
+1. Complete this Namespace/Schema migration across the above owners in one
+   coherent composition. For example, GraphAr uses namespace
+   =mrr.graphar.dataset= with numeric Schema version =1=; Backend revision
+   records use namespace =mrr.backend.revision= with numeric Schema version
+   declared by the Backend metadata Schema. No parser derives a version from
+   a name, and no second namespace or compatibility alias stands in for Schema
+   admission. Keys and records share the declared Schema policy and budgets.
+2. Verify canonical round trips, unknown/missing/malformed version refusal,
+   namespace mismatch, old version-bearing records and native provider reopen.
+   Preserve authority history, pending operations, lost-ACK recovery and explicit
+   refusal of unsupported stores. A version change must not silently select an
+   empty deployment namespace, reset a store or erase recovery obligations.
+3. Requalify the original-query Source path and immutable graph publication,
+   full/selective equivalence, cross-profile reuse and stale-source refusal,
+   native recovery, cleanup and final-clone drain. Rust owns contract assertions;
+   Python only supervises processes, artifacts and receipts. Publish the coherent
+   composition and qualify Linux/macOS/MSRV at its exact head.
+4. Continue M3 only after the naming/admission gate closes: choose the supported
+   measurement scopes, add representative scale and paired cold/warm/selective/
+   reuse measurements, retain regressions, and classify every metric as measured,
+   failed or explicitly deferred/unsupported. Tiny-fixture diagnostics do not
+   establish production speedup. Copies, engine spill and streamed first-result
+   currently remain unsupported rather than measured zero.
+
+The production Schema identifiers above are the first owned slice. External
+protocol paths, dependency release versions and authenticated upstream fixture
+identities have their own owners; their occurrence in an audit is evidence, not
+an instruction to reinterpret those contracts as Data namespaces.
+
+The prepared M3 matrix keeps the original tiny diagnostic scope and adds 1,000
+and 10,000 extra edges to each relation. Large scopes add distinct Scenario, Case
+and Profile rows; skew changes source degree without multiplying actual matching
+join rows. The original Healthcare source and four admitted rows, including its
+duplicate and NULL, remain the semantic control. Caller-owned capture, transfer,
+input, potential join, execution-memory and result budgets are recorded. Each
+complete scale matrix retains test idle5/wall120; build idle30/wall1200 is unchanged.
+No expanded-scale measurement is qualified before the new binaries execute.
+Copies, spill and streamed first-result remain explicit unsupported NULL fields.
+
 ** Overall assessment
 
-The common architecture is substantially implemented, but framework acceptance
-is not yet consolidated. Shared Backend admission, async cold restoration,
+The common architecture is substantially implemented. Exact-head platform
+acceptance passed at =14ee37e3=, but the Namespace/Schema migration above is
+written but unqualified, and expanded-scale performance remains unqualified.
+Shared Backend admission, async cold restoration,
 retained leases, graph dataset publication, authenticated combined native capture,
 simulated authority recovery and narrow engine adapters exist. Original source
 compilation through MRR was an integration gate on that published baseline.
@@ -85,7 +149,8 @@ regresses slightly and does not qualify a production speedup.
 | Warm/full versus warm/selective performance | Mixed results across runs; retained negative gates prevent a production speedup claim |
 | Already prepared source reuse | Measured separately; excludes fresh preparation and cannot qualify general runtime speedup |
 | Copied bytes, engine spill and streamed first-result timing | Explicitly deferred/unsupported; null values are not measured zeroes |
-| Release-scale and exact-head native platform qualification | Open; tiny fixtures and earlier-head successes do not close these gates |
+| Exact-head native platform qualification | Pass at =14ee37e3=; 14 Data CI jobs successful, including both Source platforms |
+| Release-scale qualification and Namespace/Schema migration | Open; tiny fixtures do not qualify production performance, and existing version-bearing namespaces still require migration |
 
 Exact-head Linux/macOS/MSRV acceptance remains required. The superseded
 =0912e5bc= Source jobs failed on both native platforms with =compiler artifact
@@ -94,8 +159,13 @@ failed at the same monitor; macOS exited its native build-script with status 101
 without exposing a specific panic payload in the available log. A subsequent
 local MRR =dd46dc4b= / GSC =2d20e481= build exposed =Resource temporarily
 unavailable (os error 35)= on progress writes. The current owner fix and local
-checks address that typed cause; fresh Data platform CI must still qualify the
-new composition. Upstream exact-head platform checks remain separately scoped.
+checks address that typed cause. The new composition subsequently passed all
+14 Data CI jobs at =14ee37e383531dd27ae72000c1db7e50e33fe32e= in
+[[https://github.com/tao3k/mrr-data/actions/runs/37225678652][run 37225678652]], including Linux/macOS Source, GraphAr, DuckGQL and Rust,
+MSRV, Python, S3, fuzz and aggregate acceptance. Upstream MRR =294cb95c=
+and GSC =3635dfa= also passed their own exact-head platform checks. These
+results qualify the published implementation; they do not close the newly
+identified Namespace/Schema migration or release-scale performance gates.
 
 Local Python qualification passes =46 tests=; strict Ruff, formatting and
 21-document/7-README checks pass. Collection checkout identity, binary digest

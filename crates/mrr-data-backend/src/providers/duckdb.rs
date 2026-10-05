@@ -3,8 +3,8 @@ use super::{MetadataTransaction, ProviderResult, TransactionProvider, duckdb_dat
 use crate::BackendError;
 use duckdb::{Connection, OptionalExt, params};
 use mrr_data_content::ConditionalCommitPortError as PortError;
+use mrr_data_profile::BACKEND_DUCKDB_SCHEMA;
 use std::{path::PathBuf, sync::Mutex};
-const SCHEMA: &str = "mrr-data-backend.duckdb.v2";
 /// Local `DuckDB` metadata capability. Deploy within a single writer process;
 /// this adapter does not declare a distributed/multi-process write service.
 pub struct DuckDbProvider {
@@ -167,12 +167,15 @@ fn initialize(conn: &Connection, existed: bool) -> Result<(), BackendError> {
             "CREATE TABLE mrr_backend_kv (key VARCHAR PRIMARY KEY NOT NULL, value BLOB NOT NULL)",
         )
         .map_err(failure)?;
-        tx.put("mrr.backend.schema", SCHEMA.as_bytes())?;
+        tx.put(
+            "mrr.backend.schema",
+            &crate::scheme_record::schema_marker(BACKEND_DUCKDB_SCHEMA),
+        )?;
     } else if tx
         .get("mrr.backend.schema")
         .map_err(|_| BackendError::Corrupt)?
         .as_deref()
-        != Some(SCHEMA.as_bytes())
+        != Some(crate::scheme_record::schema_marker(BACKEND_DUCKDB_SCHEMA).as_slice())
     {
         return Err(BackendError::Corrupt);
     }

@@ -93,7 +93,7 @@ pub(crate) fn capture_checked(
         check()?;
         crate::snapshot::copy_verified_file(source, directory.path(), file, limits.inventory)?;
     }
-    let info = GraphInfo::builder("mrr_entity_properties_v1")
+    let info = GraphInfo::builder("mrr_entity_properties")
         .vertex_infos(infos)
         .prefix(format!(
             "{}/",

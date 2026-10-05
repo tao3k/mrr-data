@@ -6,7 +6,7 @@ use crate::{
     tests::entity_properties::{
         combined::{
             acceptance::{alternate_root, relation_tables},
-            fixture::{Fixture, capture_limits, transfer_limits},
+            fixture::{Fixture, capture_limits},
             remote::Remote,
         },
         fixture as properties,
@@ -40,8 +40,8 @@ async fn restore(
             query: f.query.clone(),
             relations: f.relations.clone(),
             entities: f.entities.clone(),
-            dataset: capture_limits().dataset,
-            transfer: transfer_limits(),
+            dataset: f.capture_limits.dataset,
+            transfer: f.transfer_limits,
         },
         RESERVED,
         ResourceControl::default(),

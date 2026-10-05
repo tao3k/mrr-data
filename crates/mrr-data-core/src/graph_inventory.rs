@@ -1,6 +1,7 @@
 //! Bounded content inventory; native metadata traversal and sealing are separate gates.
 use crate::{RAW_CODEC, dag_cbor_cid, profile::validate_cid, raw_cid};
 use cid::Cid;
+use mrr_data_profile::GRAPHAR_FILE_INVENTORY_SCHEMA;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -152,7 +153,7 @@ pub struct GraphDatasetInventory {
     entry: String,
     files: Vec<GraphFile>,
 }
-const NAMESPACE: &str = "mrr.graphar.file-inventory.v1";
+const NAMESPACE: &str = GRAPHAR_FILE_INVENTORY_SCHEMA.namespace;
 impl GraphDatasetInventory {
     /// Sort a complete caller-declared inventory by portable logical path.
     /// # Errors
@@ -174,7 +175,7 @@ impl GraphDatasetInventory {
         files.sort_unstable_by(|a, b| a.path.cmp(&b.path));
         let value = Self {
             namespace: NAMESPACE.into(),
-            version: 1,
+            version: GRAPHAR_FILE_INVENTORY_SCHEMA.version,
             entry,
             files,
         };
@@ -229,7 +230,7 @@ impl GraphDatasetInventory {
     }
     fn validate(&self, limits: GraphInventoryLimits) -> Result<(), GraphInventoryError> {
         validate_limits(limits)?;
-        if self.namespace != NAMESPACE || self.version != 1 {
+        if !GRAPHAR_FILE_INVENTORY_SCHEMA.accepts(&self.namespace, self.version) {
             return Err(GraphInventoryError::UnsupportedVersion);
         }
         if self.files.is_empty() || self.files.len() > limits.max_files {

@@ -358,7 +358,22 @@ async fn bounds_bad_configuration_and_corruption_refuse_before_ready_or_write() 
     } else {
         b"mrr-data-backend.duckdb.v1".as_slice()
     };
-    for version in [b"unknown-version".as_slice(), legacy] {
+    let namespace = if cfg!(feature = "turso") {
+        "mrr-data-backend.turso"
+    } else {
+        "mrr-data-backend.duckdb"
+    };
+    let unsupported = format!("(\"{namespace}\" 3)");
+    let missing = format!("(\"{namespace}\")");
+    let legacy_current = format!("{namespace}.v2");
+    for version in [
+        b"unknown-version".as_slice(),
+        legacy,
+        legacy_current.as_bytes(),
+        unsupported.as_bytes(),
+        missing.as_bytes(),
+        b"(\"foreign\" 2)",
+    ] {
         tamper(
             &path,
             "UPDATE mrr_backend_kv SET value=?1 WHERE key='mrr.backend.schema'",

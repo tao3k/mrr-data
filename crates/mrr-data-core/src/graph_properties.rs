@@ -5,6 +5,7 @@ use crate::{
 };
 use cid::Cid;
 use meta_relational_reasoning::GenerationId;
+use mrr_data_profile::GRAPHAR_ENTITY_PROPERTIES_SCHEMA;
 use serde::{Deserialize, Serialize};
 
 /// Physical declarations; these bytes confer no semantic or publication authority.
@@ -21,7 +22,7 @@ pub struct GraphEntityPropertyScope {
 #[serde(deny_unknown_fields)]
 pub struct GraphEntityPropertyDescriptor {
     namespace: String,
-    version: u8,
+    version: u64,
     inventory: GraphDatasetInventory,
     catalog: [u8; 32],
     generation: GenerationId,
@@ -40,7 +41,7 @@ impl GraphEntityPropertyDescriptor {
     ) -> Result<Self, Error> {
         let value = Self {
             namespace: GRAPHAR_ENTITY_PROPERTIES_NAMESPACE.into(),
-            version: 1,
+            version: GRAPHAR_ENTITY_PROPERTIES_SCHEMA.version,
             inventory,
             catalog: scope.catalog,
             generation: scope.generation,
@@ -86,7 +87,7 @@ impl GraphEntityPropertyDescriptor {
         Ok(value)
     }
     fn validate(&self, limits: GraphInventoryLimits, max_rows: usize) -> Result<(), Error> {
-        if self.namespace != GRAPHAR_ENTITY_PROPERTIES_NAMESPACE || self.version != 1 {
+        if !GRAPHAR_ENTITY_PROPERTIES_SCHEMA.accepts(&self.namespace, self.version) {
             return Err(Error::UnsupportedVersion);
         }
         self.inventory.canonical_bytes(limits)?;
