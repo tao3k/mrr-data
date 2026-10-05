@@ -2365,6 +2365,54 @@ allocation file-growth observations, followed by four passing Source tests.
 Earlier =5afdc175= Source, recovery and 48-case measured receipts remain bound
 to their recorded compiler/dependency identity. They are historical local
 qualification, not receipts for this new dependency composition. The fresh
-Data Source/native integration and exact published-head platform checks must
-qualify the new pinned composition before acceptance. See the upstream
+local Data qualification below binds the new Source composition. Exact
+published-head platform checks remain required before acceptance. See the upstream
 [[https://github.com/tao3k/gerbil-scheme-rust/blob/9acf9753f9ebff560ea70f942260ff0adeab1e5e/docs/30-39-status/30.02-gcc-allocation-progress.org][GCC qualification receipt]] and the [[https://github.com/tao3k/mrr-data/pull/12][PR 12 checks]].
+
+
+** Fresh allocation-file Source composition: 2026-10-05
+
+Compiled clean Source head =100f8dfac30454397ddc11aba276c8da0fca92b2=
+fixes MRR =719ce0d= and GSC =9acf975=. All 362 tracked compilation inputs
+match that commit; only Cargo.toml and Cargo.lock differ from the earlier
+=5afdc175= compilation inputs. The six-library no-run build completes in
+3m24s using the SDK-declared GCC 16 and actual allocation file growth.
+The [[file:../../evidence/original-source/original-source-allocation-build.json][allocation composition receipt]] records binary/profile/fresh identities,
+compiler versions, committed source hashes and the retained wall1200 failure.
+
+Profile 3, Core 38, Backend 10, Arrow 14 and DataFusion 27 tests pass.
+GraphAr's descriptor parent passes in a fresh process; the remaining 77 tests
+pass separately, with eight explicitly ignored workers/live matrices. The
+actual publisher termination/recovery matrix passes with independent children
+and zero final reservations. This is a single-writer test file transaction
+fixture, not database concurrency or power-loss durability qualification.
+
+The [[file:../../evidence/original-source/original-source-allocation-native-macos.jsonl][new 48-case Source receipt]] binds binary SHA-256
+=27ea6140daf125972f731e75fab967ba025a06559f3bb151557d62912916b3dc=.
+The same six declared workload/extra-row scopes, two shapes and four modes
+retain independent Rust result admission, duplicate/null rows, matched roots
+and cleanup checks. The following within-shape/scale medians are milliseconds;
+retained requests exclude their separately measured one-time preparation.
+
+| Workload/extra rows/shape | Warm full wall/CPU | Warm selective wall/CPU | Retained request wall |
+|--------------------------+--------------------+-------------------------+-----------------------|
+| 1/4/uniform | 40.69/40.51 | 47.01/43.48 | 2.58 |
+| 1/4/skewed | 36.07/35.82 | 35.87/35.27 | 2.38 |
+| 8/4/uniform | 22.38/22.25 | 21.72/21.54 | 2.55 |
+| 8/4/skewed | 22.68/22.71 | 21.96/21.96 | 2.52 |
+| 64/4/uniform | 36.58/36.53 | 36.00/35.98 | 2.66 |
+| 64/4/skewed | 26.02/26.02 | 25.41/25.38 | 2.50 |
+| 256/4/uniform | 83.57/81.79 | 76.65/76.15 | 2.43 |
+| 256/4/skewed | 45.22/44.81 | 41.01/39.95 | 2.59 |
+| 1/1000/uniform | 75.87/75.03 | 76.43/76.09 | 2.97 |
+| 1/1000/skewed | 63.24/63.14 | 59.06/58.83 | 2.88 |
+| 1/10000/uniform | 657.88/653.12 | 597.79/593.36 | 7.11 |
+| 1/10000/skewed | 493.69/492.61 | 454.67/453.71 | 6.95 |
+
+Uniform workload 1/four-row selective reads are slower in both wall and CPU;
+uniform 1000-row selective reads are also slightly slower. Retained requests
+charge their preparation separately. Process RSS includes the native runtime
+and fixture and is not an engine-only cap. Global copy/spill/streaming-first
+result counters remain unsupported; narrower engine observations retain their
+existing scope. OS cache and host scheduling are uncontrolled. These receipts
+qualify the declared fixtures, not arbitrary GQL or a production speedup.
