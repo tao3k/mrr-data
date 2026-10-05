@@ -122,7 +122,7 @@ Data root/fuzz pins now agree on published MRR
 resolves with =--locked=. Completed binaries, P1 process recovery and scaled P2
 results are still required before publishing a completion claim.
 
-* Current Namespace/Schema composition and local qualification: 2026-10-05
+* Historical Namespace/Schema composition and local qualification: 2026-10-05
 
 The compiled Source head is =5afdc1755d8cfbf307100b0aa11cd76a51174ee7=.
 It preserves both integration histories, including published =9e0d755b= and the
@@ -2335,3 +2335,36 @@ commands. This forwards actual build-script output rather than relying on
 unrelated concurrent Rust completions. The build idle30/wall1200 and test
 idle5/wall120 budgets, provider features, optimizer and Cargo concurrency remain
 unchanged. The complete successor exact-head CI is required before acceptance.
+
+
+* GCC allocation diagnostic file progress repair: 2026-10-05
+
+The macOS Source no-run build at Data =4557405a= in run =37267812006=
+fails at its unchanged 1200-second Cargo wall deadline. Its retained log is
+approximately 1.5 GiB, including detailed per-instruction IRA/LRA costs;
+continued diagnostic output does not qualify a successful build.
+
+GSC =9acf9753f9ebff560ea70f942260ff0adeab1e5e= moves detailed GCC
+allocation/reload dumps to exact object-owned files. The existing monitor
+reports only actual new bytes and removes all four intermediate files before
+and after the command, including failed commands. Compiler warnings, errors
+and nonzero status retain their diagnostic channels. Verified object cache
+identity, optimizer/ABI flags, worker counts and all watchdog limits remain
+unchanged. The SDK still declares its own compiler.
+
+MRR =719ce0d642f9e2f439381be31594d05f9a6bfe63= fixes this GSC dependency;
+root, fuzz and Source now share that exact MRR revision. Upstream local gates
+pass: GSC library 17 and integration 19 tests, six-second actual file-growth
+regression, strict all-target Clippy, and direct generated GQL grammar object
+compilation. A matched trie input produces byte-identical objects while
+console diagnostics decrease from 199711828 to 3323381 bytes. These one-shot
+diagnostics are not an application performance claim. MRR's current SDK declares
+GCC 16; its actual native Source interface build completes in 2m13s with 384
+allocation file-growth observations, followed by four passing Source tests.
+
+Earlier =5afdc175= Source, recovery and 48-case measured receipts remain bound
+to their recorded compiler/dependency identity. They are historical local
+qualification, not receipts for this new dependency composition. The fresh
+Data Source/native integration and exact published-head platform checks must
+qualify the new pinned composition before acceptance. See the upstream
+[[https://github.com/tao3k/gerbil-scheme-rust/blob/9acf9753f9ebff560ea70f942260ff0adeab1e5e/docs/30-39-status/30.02-gcc-allocation-progress.org][GCC qualification receipt]] and the [[https://github.com/tao3k/mrr-data/pull/12][PR 12 checks]].
