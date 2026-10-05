@@ -4,8 +4,9 @@
 mod adapter;
 mod property;
 pub use property::{
-    BinaryRelationTable, EntityPropertyTable, PropertyQueryLimits, RestoredPropertyBackend,
-    RestoredPropertyQuery, execute_property_path_query, execute_restored_property_path_query,
+    BinaryRelationTable, EntityPropertyTable, PropertyExecutionMetrics, PropertyQueryLimits,
+    RestoredPropertyBackend, RestoredPropertyQuery, execute_property_path_query,
+    execute_property_path_query_observed, execute_restored_property_path_query,
     execute_restored_property_query_handoff,
 };
 

@@ -500,7 +500,7 @@ Library ports. Metadata types have no Serde derives, and the Backend has no
 direct Serde or JSON runtime dependency. No JSON decoder, evaluator, or v1
 fallback is present.
 
-Keys are =("mrr.backend.key" 2 "kind" ("part" ...))= and are bounded to
+Keys are =("mrr.backend.key" 1 "kind" ("part" ...))= and are bounded to
 8192 encoded bytes. Values are bounded to 65536 encoded bytes before output
 allocation, with recursive datum depth at most 32 (root depth is zero). Authority inventories have at most
 16 entries. Unsigned numbers retain the complete =u64= range; booleans are
@@ -512,13 +512,15 @@ Products have stable string namespaces and a separately checked numeric Schema
 version for revision, authority, expectation,
 write, authority-key, authority-proposal, authority-change, completion and
 authority-completion. The Schema identities are declared in =mrr-data-profile= and shared by key,
-record and provider admission. Their positional fields follow the corresponding typed
+record and provider admission. Numeric native Scheme versions remain fixed at 1;
+a representation change does not authorize a version bump. Their positional fields follow the corresponding typed
 Rust records in =scheme_record.rs=. Commit and authority transactions retain
 the same atomic operation/head and home sequence logic.
 
-Turso and DuckDB markers are =("mrr-data-backend.turso" 2)= and
-=("mrr-data-backend.duckdb" 2)=. Missing/unknown versions and legacy version-bearing
-namespaces fail before Ready; the Library does not delete, reset, automatically
+Turso and DuckDB markers are =("mrr-data-backend.turso" 1)= and
+=("mrr-data-backend.duckdb" 1)=. Missing/unknown versions and legacy version-bearing
+namespaces, retired native Scheme =mrr.backend.store.v1= tuples and unapproved
+numeric version 2 markers fail before Ready; the Library does not delete, reset, automatically
 migrate a store or move its pending authority to another namespace. Any offline
 data migration requires separately qualified tooling outside this API.
 

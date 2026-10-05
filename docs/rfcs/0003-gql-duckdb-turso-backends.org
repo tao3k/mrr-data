@@ -8,6 +8,18 @@ baseline, supported-scope boundaries and M0-M3 exit criteria. Initial interface
 tables and dated implementation receipts below retain their original version
 boundaries; later code must not be judged only from an earlier capability table.
 
+Current platform baseline =14ee37e3= passed required Linux/macOS checks with
+MRR =294cb95= and GSC =3635dfa=. Historical interface tables below describe
+their original checkpoints. Current supported scope includes combined original
+Healthcare source, shared admission/lifecycle, full/ordered-outgoing selective
+reads and retained consumers. The current local composition additionally passes actual process-crash recovery,
+a distinct Research catalog case and 32 matched resource cases at scales
+1/8/64/256. GSC =072acac= and MRR =4ccca98= are published; Data integration
+and current-head platform CI remain acceptance gates. Selective scale 8 reads
+more bytes than full mode and skewed scale 8 is slower; retained timings exclude
+setup. Global copies/spill and consumer streaming first-result remain unknown.
+Release-scale performance remains outside the qualified fixture scope.
+
 * Status
 
 Partially implemented on [[https://github.com/tao3k/mrr-data/pull/12][MRR Data PR #12]]. The shared

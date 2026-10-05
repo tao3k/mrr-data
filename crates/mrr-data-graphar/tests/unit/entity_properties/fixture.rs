@@ -45,12 +45,32 @@ fn values(input: &[&str]) -> Vec<Option<String>> {
 fn ids(input: &[&str]) -> Vec<Option<String>> {
     input.iter().map(|s| Some(entity(s).to_string())).collect()
 }
+// A bounded test workload contract. No production default or engine heap change.
+pub(super) fn workload_scale() -> usize {
+    let scale = std::env::var("MRR_DATA_SOURCE_SCALE")
+        .map_or(1, |s| s.parse().expect("integer workload scale"));
+    assert!(
+        (1..=256).contains(&scale),
+        "workload scale outside declared 1..=256"
+    );
+    scale
+}
+pub(super) fn workload_rows() -> usize {
+    100.max(32 * workload_scale())
+}
+pub(super) fn workload_layout() -> crate::GraphArChunkLayout {
+    if workload_scale() == 1 {
+        crate::GraphArChunkLayout::new(2, 2).unwrap()
+    } else {
+        crate::GraphArChunkLayout::new(64, 256).unwrap()
+    }
+}
 pub(super) fn limits() -> PropertyQueryLimits {
     PropertyQueryLimits {
-        max_input_rows: 100,
+        max_input_rows: workload_rows(),
         max_input_bytes: 1024 * 1024,
-        max_join_rows: 100,
-        max_output_cells: 300,
+        max_join_rows: 100.max((4 * workload_scale() + 8).pow(2)),
+        max_output_cells: 300.max(3 * (4 * workload_scale() + 8).pow(2)),
         execution_memory_bytes: 16 * 1024 * 1024,
     }
 }
@@ -237,22 +257,9 @@ pub(super) fn native_relations_with_options(
     root: &std::path::Path,
     options: crate::GraphArWriteOptions,
 ) -> Vec<BinaryRelationTable> {
-    native_relations_with_options_and_limits(
-        f,
-        root,
-        options,
-        crate::GraphArReadLimits::new(100, 100),
-    )
-}
-pub(super) fn native_relations_with_options_and_limits(
-    f: &Fixture,
-    root: &std::path::Path,
-    options: crate::GraphArWriteOptions,
-    read_limits: crate::GraphArReadLimits,
-) -> Vec<BinaryRelationTable> {
     use crate::{
-        BinaryEntityProjection, prepare_graphar_source_with_adjacency, verify_graphar_directory,
-        write_graphar_dataset_with_options,
+        BinaryEntityProjection, GraphArReadLimits, prepare_graphar_source_with_adjacency,
+        verify_graphar_directory, write_graphar_dataset_with_options,
     };
     use arrow_array::Array;
     use std::str::FromStr;
@@ -312,11 +319,14 @@ pub(super) fn native_relations_with_options_and_limits(
                 mrr_data_core::GraphInventoryLimits::default(),
             )
             .unwrap();
-            let restored =
-                prepare_graphar_source_with_adjacency(&source, read_limits, options.adjacency)
-                    .unwrap()
-                    .admit(&projection)
-                    .unwrap();
+            let restored = prepare_graphar_source_with_adjacency(
+                &source,
+                GraphArReadLimits::new(workload_rows(), workload_rows()),
+                options.adjacency,
+            )
+            .unwrap()
+            .admit(&projection)
+            .unwrap();
             let mut values = [Vec::new(), Vec::new()];
             for fact in restored.facts() {
                 assert_eq!(fact.context().generation(), f.query.generation());

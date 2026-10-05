@@ -63,13 +63,13 @@ def test_stderr_progress_after_stdout_close_retains_idle_and_wall_limits():
         run(
             [sys.executable, "-u", "-c", script],
             limits=Limits(wall_seconds=1, idle_seconds=0.5),
-            stderr_filter=lambda block: block,
+            stderr_output_filter=lambda block: block,
         )
     with pytest.raises(ProgressTimeout, match="no output progress"):
         run(
             [sys.executable, "-c", "import os,time; os.close(1); time.sleep(10)"],
             limits=Limits(wall_seconds=2, idle_seconds=0.1),
-            stderr_filter=lambda block: block,
+            stderr_output_filter=lambda block: block,
         )
 
 

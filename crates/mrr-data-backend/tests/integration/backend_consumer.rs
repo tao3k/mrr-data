@@ -363,16 +363,23 @@ async fn bounds_bad_configuration_and_corruption_refuse_before_ready_or_write() 
     } else {
         "mrr-data-backend.duckdb"
     };
-    let unsupported = format!("(\"{namespace}\" 3)");
+    let unsupported = format!("(\"{namespace}\" 2)");
     let missing = format!("(\"{namespace}\")");
     let legacy_current = format!("{namespace}.v2");
+    let provider = if cfg!(feature = "turso") {
+        "turso"
+    } else {
+        "duckdb"
+    };
+    let legacy_scheme = format!("(\"mrr.backend.store.v1\" \"{provider}\" \"scheme\")");
     for version in [
         b"unknown-version".as_slice(),
         legacy,
         legacy_current.as_bytes(),
+        legacy_scheme.as_bytes(),
         unsupported.as_bytes(),
         missing.as_bytes(),
-        b"(\"foreign\" 2)",
+        b"(\"foreign\" 1)",
     ] {
         tamper(
             &path,

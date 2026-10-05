@@ -2,10 +2,152 @@
 #+DATE: 2026-10-05
 #+OPTIONS: toc:2
 
+* Current acceptance and P0-P2 execution: 2026-10-05
+
+The accepted integration baseline is Data =14ee37e383531dd27ae72000c1db7e50e33fe32e=,
+MRR =294cb95c21e6d426c2aea2d272f6e377422cea42= and GSC
+=3635dfa08329f42765e8828b95bf3baf256d582f=. Exact-head Ubuntu/macOS,
+MSRV, Source, maintained GraphAr, DuckGQL, Python, Arrow fuzz, S3 and
+snapshot-distribution checks passed. Earlier pending/failed checkpoints below
+are historical evidence, not the current platform status. This baseline is
+not a claim of arbitrary GQL coverage or release-scale performance.
+
+| Priority | Complete delivery | Required evidence |
+|----------+-------------------+-------------------|
+| P0 | Current capability table and one source/pin/feature ledger | Current exact-head CI and supported scope agree |
+| P1 | Original-source publication followed by actual process termination and independent recovery/query | Successful commit retained; original root/source and four independent null/duplicate rows admitted; retired disclosure refused; zero final reservations |
+| P1 | A distinct Production query/catalog case through the same shared Backend | Independent expected values and cross-case capture/admission refusal |
+| P2 | Parameterized uniform/skewed original-source workloads, full versus selective and retained paths | Matched immutable roots, result equivalence, phase bytes/rows/CPU/wall/RSS; unsupported metrics remain explicit |
+| P2 | Optimize only measured work and qualify supported release scope | Negative results retained; integrity/coverage and resource lifecycle unchanged; current-head CI |
+
+GraphAr remains the common physical graph foundation. Full initial verification
+and contextual scans remain charged to cold preparation; selected reads do not
+weaken coverage. Shared Backend owns one lifecycle. All authorization is simulated.
+Rust owns semantic/resource assertions; Python supervises process and receipt
+collection. No default Cargo parallelism cap or idle/wall relaxation is permitted.
+
+** Current composition receipt
+
+Published owners are GSC =072acac90dd4a83849826c75b1b5633721ce2ef0= (sole
+open PR 18) and MRR =4ccca987c97065499a366b9d1980419a574032a8= (PR 9).
+Data retains =b37aa9ab= and pins these owners in root/fuzz. Full Source metadata
+resolves with =--locked=. Current GSC Ubuntu/macOS checks pass. MRR Ubuntu checks pass; one
+macOS native check is still running. Data's published =b37aa9ab= has one failed Ubuntu Source
+check; its other platform checks pass. This dirty integration is not yet a
+published or CI-qualified P0-P2 completion.
+
+| Slice | Current local evidence | Remaining acceptance |
+|-------+------------------------+----------------------|
+| Native progress | GSC helper build; 16 library tests; real six-second output test; actual grammar module in 90.13 seconds | MRR current macOS CI |
+| Source/facade | Source build; DataFusion 2 and GraphAr 10 tests; distinct Research catalog; Arrow nullable/copy test; facade check | Current Data CI |
+| Actual recovery | Real SIGKILL before and after protected commit; independent recovery/admission; retirement refusal; zero reservations | Current Data CI |
+| Resource matrix | 32 cases across four scales, two shapes and four modes; independent Rust admission/cleanup controls | Current Data CI; release-size workloads remain outside this scope |
+
+All process budgets remain build idle30/wall1200 and test idle5/wall120.
+Apple compiler selection fixes the ambient Nix =-liconv= discovery failure;
+explicit installed Arrow/OpenSSL CMake paths fix the local facade discovery
+failure. No dependency installation, optimizer cap or concurrency override was
+used. The complete Python regression suite has 56 passing tests. Strict all-target
+Source Clippy, Rust/Python formatting, Ruff and Org-document checks also pass.
+
+** Native progress diagnosis history
+
+The following diagnostic attempts retain their original failed/pending states;
+the current composition receipt above and the final receipt below supersede
+those status statements.
+
+
+The new P1/P2 composition is not yet accepted. MRR =9adea59= moves the
+runtime diagnostics regression into the required =tests/unit= mount; six
+build-library tests and all 16 ASP architecture tests pass locally. Exact-head Ubuntu/macOS native, Rust source proofs, TLA/Lean and shared
+proof/replay checks now pass at =9adea5915be0e767498ff0c848f5eb49219948d9=.
+This remains separate from qualification of the upcoming GSC/Data composition.
+
+Rust 1.95 performs metadata encoding between its pre-codegen statistics and
+LLVM execution ([[https://github.com/rust-lang/rust/blob/1.95.0/compiler/rustc_metadata/src/fs.rs][Rust 1.95 metadata writer]]). LLVM pass diagnostics alone do not cover this phase. The Python
+compiler wrapper observes only =full.rmeta=/=stub.rmeta= and incremental =dep-graph.part.bin= writable descriptors opened by
+its own compiler PID and reports actual file-size increases. Adjacent artifacts,
+unchanged files and elapsed time produce no progress. The writable incremental generation lock additionally identifies the compiler's
+private =*-working= directory. New/growing CGU object, LTO bitcode and cache
+files there count even after their descriptor closes; existing files are
+baselined, and shared/adjacent directories are excluded. Linux uses =/proc/PID/fd=;
+macOS uses =lsof=, and unavailable descriptor discovery produces no events.
+Compiler stdout/stderr are inherited separately, Cargo JSON records stay on
+stdout, jobserver descriptors remain inherited, and nonzero/signal exits remain
+failures. No timeout, compiler optimization or Cargo concurrency cap changes.
+
+The actual =asp_rust= build has crossed metadata encoding and reached LLVM.
+A first GSC harness attempt still failed the unchanged quiet-output gate;
+its replacement, after correcting inherited jobserver descriptors, still
+failed after metadata encoding. The next build adds Rust 1.95
+=rustc_codegen_ssa::base= function-codegen INFO events, covering IR creation
+before LLVM optimization. Read-only descriptor inspection also confirms the
+compiler's own incremental dependency graph grows from 91,023,900 to
+105,573,783 bytes during this interval; the wrapper now observes this bounded
+artifact class under the same writable-descriptor ownership rule. These are progress observations, not successful final Cargo build
+receipts. Full LLVM pass diagnostics generated over 190 MiB of logs; those diagnostic
+builds were cancelled and do not qualify acceptance. The final wrapper omits
+the new-PM pass-number flag and retains actual writable artifact growth,
+function-codegen events and the original inline/prologepilog remarks. The
+first reduced build still failed after 12 minutes at the LLVM backend; selected
+crates were tried with legacy =-debug-pass=Executions= machine-pass events.
+That attempt kept real output live but failed the unchanged 1200-second wall
+gate. The final wrapper removes both full pass-trace options and adds only
+=asm-printer= remarks for selected heavy crates. An actual Rust 1.95 / LLVM
+22.1.2 probe emits a 39-instruction function completion event; this is a
+compiler observation, not a runtime performance result. The first asm-remark
+build completed one harness variant but the other still hit idle refusal at
+the tail; its locked CGU/LTO directory is now included under the rule above.
+The locked-directory attempt also refused idle30. The subsequent independent
+quiet-tail stack sample identifies one new-PM ThinLTO worker executing
+=IndVarSimplify=/ScalarEvolution and other loop/function transformations while
+the compiler/coordinator wait for it. It is not a completed link or native SDK
+phase. Sampling output is not forwarded as progress and changes neither watchdog
+budget. A targeted retry now adds only new-PM =--print-pass-numbers= alongside
+the existing code-generation remarks; actual pass events are grouped in counts
+of 256 without IR dumps or legacy machine-pass tracing. Its 27 focused Python
+regressions pass. The new-PM retry completes the previously quiet
+=rust_lang_project_harness= variant, but full Cargo fails because the ambient
+Nix =cc= cannot find macOS =-liconv=. The next environment-only retry selects
+Apple =/usr/bin/cc= and preserves all optimizer/concurrency/watchdog settings.
+The raw interleaved diagnostic transcript is 351,821,324 bytes; this is an
+observability cost, not a performance gain. Interleaved-header aggregation now
+retains mixed JSON/errors; its 19 focused capture tests pass. Full Cargo success
+and final source tests remain unqualified. The Python
+regression suite currently has 55 passing tests; Ruff, formatting and all 28
+Org-document checks pass. The concurrent Data =b37aa9ab= v1 metadata/store marker fix is retained.
+Data root/fuzz pins now agree on published MRR
+=a4fbc0cfa58de228de1db61442f37aaf62daca86=, retaining the qualified
+=9adea59= diagnostics fix and the new workspace qualification evidence; the Source-feature dependency graph
+resolves with =--locked=. Completed binaries, P1 process recovery and scaled P2
+results are still required before publishing a completion claim.
+
+* Current Namespace/Schema composition after concurrent P0-P2 integration
+
+This candidate combines the locally qualified stable Namespace/Schema slice and
+its 24-case additional-row receipt with published =9e0d755b=. Native Scheme
+metadata retains the published numeric Schema version =1= in the common Schema
+owner; namespaces remain stable and no legacy version-bearing name is an alias.
+MRR root, fuzz and Source now use =4ccca987=, retaining the remote second original
+query, native process recovery, physical output metrics and compiler artifact
+observer. Prior =e9a47066= and =9e0d755b= receipts qualify their own source slices.
+They do not qualify this combined candidate before fresh execution.
+
+The resource Schema declares two distinct caller axes: workload multipliers
+=1/8/64/256= and additional rows =4/1,000/10,000=. Large additional-row cases
+use base multiplier =1=. Six independent complete matrices share unchanged
+=idle5/wall120= limits and produce 48 cases, with no duplicate baseline or hidden
+Cartesian workload. Rust checks both axes, caller budgets, input counts, source
+and result admission, observed metric types and cleanup. Python only supervises
+processes, artifact identity and the opaque admitted protocol. Local and
+published-head qualification of this combined candidate remain pending.
+
 * Consolidated audit and milestone plan: 2026-10-04
 
-This section is the current delivery plan. Later dated receipts describe their
-original slices and do not independently define current completion. The initial
+This section records the 2026-10-04 plan. The current acceptance and execution
+ledger above supersedes its moving-head and pending-status statements. Later
+dated receipts describe their original slices and do not independently define
+current completion. The initial
 audit used PR #12 at =aacc25511367391262f4639e5485701406089b21=. The consolidated
 source/dispatch composition was first published at
 =f949c4f5bdbceb93e590ec7408912c2dd66e55cc=. The published integration is now
@@ -2032,3 +2174,77 @@ Copied bytes, engine spill and streaming first-result metrics remain explicitly
 unsupported/null. These tiny-fixture diagnostics establish local correctness
 and supported measurements, not release-scale performance or current Data
 Linux/macOS CI acceptance. No PR has been merged.
+
+* Current native owner integration receipt: 2026-10-05
+
+GSC =072acac90dd4a83849826c75b1b5633721ce2ef0= is published on the sole open
+PR 18. Its helper build and 16 ordinary tests pass. The six-second real-output
+regression passes idle5 (6.06 seconds), and the actual OpenCypher grammar object
+passes idle30/wall1200 (90.13 seconds), including intermediate cleanup. The
+unconfigured-verbosity invocation remains an idle failure. MRR
+=4ccca987c97065499a366b9d1980419a574032a8= retains the concurrent v1 fixes and
+pins this owner on PR 9. Data root and fuzz now pin that MRR head; the complete
+Source feature graph resolves with =--locked=. Current-head platform CI and the
+Data Source composition remain separate gates. Compiler diagnostic counts can
+include Cargo cache replay and are not active-phase or performance evidence;
+only the exact successful build/artifact and actual process tests qualify the
+local result.
+
+The first current-pin Source Cargo build completed native compilation and then
+refused a moved-query test error; binding once fixes that ownership error. The
+subsequent complete Source build succeeds. Two DataFusion and ten GraphAr
+original-source tests pass, including the distinct Research catalog; the observed
+Arrow test independently verifies nullable rows and 51 decoded UTF-8 bytes. The
+first actual crash-recovery matrix identifies a profile mismatch: the immutable
+producer uses ordered/chunked topology, while legacy full capture reconstructs
+default unordered topology. Recovery now uses the layout-aware Source API with
+=scan_all= and unmodified original-query admission. No crash checkpoint, row/null/
+duplicate, retired-disclosure or cleanup assertion is removed. Layout-aware
+full/selective access and the legacy default capture are distinct supported
+physical profiles. The complete real-process matrix now passes (4.94 seconds),
+including both actual termination checkpoints and all independent recovery,
+admission, retirement and zero-reservation assertions.
+
+** Four-scale resource receipt
+
+The successful Source artifact envelope and isolated Rust resource matrix
+produce [[file:../../evidence/original-source/original-source-p0p2-scaled-macos.jsonl][33 JSONL records]]: one metadata record and 32 cases. Each case contains
+two warmups and three samples. The collection checkout is =b37aa9ab= with this
+integration dirty; executable SHA-256 is
+=c2c04eb98118c88ed0e920fad351df52ff8ac19898a40c658905e68015292c81=;
+Cargo artifact envelope SHA-256 is
+=b269e56b28afe11ca5ae90a7596206b6f7a1b7c1cd07997afda710657c2b829c=.
+These identities describe the tested artifact, not a clean published commit.
+
+The rows below give medians. Wall/CPU milliseconds include result admission;
+relation bytes/rows describe the physical relation phase. Layout is 2/2 at
+scale 1 and 64/256 at the larger scales. Compare modes within the same scale
+and shape; no cross-layout performance claim follows.
+
+| Scale/shape | Warm full wall/CPU ms | Warm selective wall/CPU ms | Full bytes/rows | Selective bytes/rows | Retained request wall ms |
+|-------------+-----------------------+----------------------------+-----------------+----------------------+--------------------------|
+| 1 uniform | 43.34 / 42.82 | 45.88 / 45.18 | 49997 / 32 | 20213 / 14 | 2.99 |
+| 1 skewed | 40.05 / 39.41 | 41.91 / 39.74 | 45154 / 32 | 20213 / 14 | 3.15 |
+| 8 uniform | 28.92 / 27.71 | 27.32 / 26.98 | 15928 / 144 | 23861 / 17 | 3.33 |
+| 8 skewed | 23.59 / 23.58 | 32.73 / 29.62 | 15638 / 144 | 23571 / 16 | 4.86 |
+| 64 uniform | 43.86 / 43.63 | 45.30 / 44.31 | 78706 / 1040 | 62338 / 17 | 2.80 |
+| 64 skewed | 34.73 / 34.30 | 33.47 / 32.52 | 61980 / 1040 | 56773 / 16 | 3.61 |
+| 256 uniform | 99.41 / 94.00 | 95.67 / 95.02 | 283973 / 4112 | 62336 / 17 | 3.48 |
+| 256 skewed | 50.71 / 50.55 | 47.54 / 47.10 | 216597 / 4112 | 56773 / 16 | 3.23 |
+
+All cases admit four independent null/duplicate rows, preserve matched roots
+and finish with zero reservations. Output UTF-8 decoding copies 70 bytes;
+this is not a global copied-byte counter. Reporting operators observe zero
+spill in these runs; global engine spill remains unknown. First nonempty
+engine batch precedes MRR admission and excludes planning; true consumer
+streaming first-result time remains unsupported.
+
+Selective reads are not a universal speedup. Scale 8 repeats physical chunk
+reads and uses more relation bytes than full mode; skewed scale 8 is also
+slower. Uniform scale 1 and 64 selective modes are slower despite fewer rows.
+Cold contextual verification is charged. Retained request medians exclude
+one-time retained preparation, separately recorded by the fixture setup.
+Process RSS (approximately 428-442 MiB) includes the native runtime and fixture;
+it is not an engine-only peak or a physical memory cap. OS cache and host
+scheduling are uncontrolled. These bounded results qualify the declared
+fixtures, not release-scale performance, global zero-copy or arbitrary GQL.

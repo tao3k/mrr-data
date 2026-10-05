@@ -409,6 +409,7 @@ jobs:
           MRR_NATIVE_PROGRESS: '1'
           GERBIL_PARSER_LR_TRACE: '1'
           GERBIL_BUILD_VERBOSE: '9'
+          MRR_DATA_RUSTC_PHASE_TRACE_CRATES: 'asp_rust,rust_lang_project_harness'
           RUSTC_WRAPPER: '${{ github.workspace }}/python/.venv/bin/mrr-data-rustc-progress'
           RUSTC_WORKSPACE_WRAPPER: '${{ github.workspace }}/python/.venv/bin/mrr-data-rustc-progress'
         run: |
@@ -416,7 +417,8 @@ jobs:
           uv run --locked --project python mrr-data-test run-process --phase test --cargo-artifacts "$RUNNER_TEMP/mrr-source-artifacts.jsonl" --test-target mrr_data_datafusion --test-target mrr_data_graphar -- source_handoff --nocapture --test-threads=1
           uv run --locked --project python mrr-data-test run-process --phase build --cargo-artifacts "$RUNNER_TEMP/mrr-source-facade.jsonl" -- cargo check -p mrr-data --no-default-features --features backend-graphar-combined,datafusion --profile test --locked --message-format=json
           uv run --locked --project python mrr-data-test run-process --phase build --cargo-artifacts "$RUNNER_TEMP/mrr-source-clippy.jsonl" -- cargo clippy -p mrr-data-datafusion -p mrr-data-graphar --all-targets --features mrr-data-datafusion/source-handoff,mrr-data-graphar/source-handoff,mrr-data-graphar/backend,mrr-data-graphar/selective-graphar --profile test --locked --message-format=json -- -D warnings
-          uv run --locked --project python mrr-data-test source-resources --cargo-artifacts "$RUNNER_TEMP/mrr-source-artifacts.jsonl" --output "$RUNNER_TEMP/original-source-resources.jsonl"
+          uv run --locked --project python mrr-data-test run-process --phase test --cargo-artifacts "$RUNNER_TEMP/mrr-source-artifacts.jsonl" --test-target mrr_data_graphar -- tests::entity_properties::combined::source_handoff::backend::process_recovery::original_source_process_recovery_matrix --exact --ignored --nocapture --test-threads=1
+          uv run --locked --project python mrr-data-test source-resources --scales 1 8 64 256 --cargo-artifacts "$RUNNER_TEMP/mrr-source-artifacts.jsonl" --output "$RUNNER_TEMP/original-source-resources.jsonl"
       - uses: actions/upload-artifact@v4
         with:
           name: original-source-resources-${{ matrix.os }}

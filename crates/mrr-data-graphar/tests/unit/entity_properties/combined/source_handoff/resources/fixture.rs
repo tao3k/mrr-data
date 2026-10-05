@@ -21,6 +21,7 @@ use std::path::Path;
 struct Payload {
     shape: String,
     scale_rows: usize,
+    scale: usize,
     snapshot: String,
     dataset: String,
     blocks: Vec<(String, Vec<u8>)>,
@@ -46,7 +47,7 @@ async fn write(shape: &str, path: &Path) {
         },
         super::scale::capture(rows),
         super::scale::transfer(rows),
-        if rows == 4 {
+        if rows == 4 && properties::workload_scale() == 1 {
             GraphArChunkLayout::new(2, 4).unwrap()
         } else {
             layout
@@ -60,6 +61,7 @@ async fn write(shape: &str, path: &Path) {
     let payload = Payload {
         shape: shape.into(),
         scale_rows: rows,
+        scale: properties::workload_scale(),
         snapshot: f.snapshot.cid().to_string(),
         dataset: prepared
             .dataset()
@@ -84,6 +86,7 @@ pub(super) fn load(shape: &str) -> Fixture {
     let rows = super::scale::rows();
     assert_eq!(payload.shape, shape);
     assert_eq!(payload.scale_rows, rows);
+    assert_eq!(payload.scale, properties::workload_scale());
     let local = MemoryContentStore::default();
     for (root, bytes) in payload.blocks {
         let cid = root.parse::<cid::Cid>().unwrap();
@@ -143,6 +146,11 @@ fn original(shape: &str, rows: usize) -> properties::Fixture {
     if rows == 4 {
         return shaped_fixture(shape == "skewed");
     }
+    assert_eq!(
+        properties::workload_scale(),
+        1,
+        "large additional-row scope requires the base workload"
+    );
     let mut original = source_fixture();
     let ids = |kind: &str| {
         (0..rows)

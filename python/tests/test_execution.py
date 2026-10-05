@@ -8,7 +8,6 @@ import pytest
 
 from mrr_data_testing import execution
 from mrr_data_testing.process import BUILD_LIMITS, TEST_LIMITS
-from mrr_data_testing.process import Limits, run
 
 
 def record(name, executable, *, test=True, kind=None):
@@ -23,40 +22,6 @@ def record(name, executable, *, test=True, kind=None):
 def write_artifacts(path, records):
     path.write_text("\n".join(json.dumps(record) for record in records))
     return path
-
-
-def test_cargo_json_isolated_from_interleaved_stderr_and_failure(tmp_path):
-    artifact = record("owned", tmp_path / "owned")
-    artifact["compiler_payload"] = "unicode😀" * 10000
-    payload = json.dumps(artifact).encode() + b"\n"
-    payload += b'{"reason":"build-finished","success":true}\n'
-    script = (
-        "import os,sys\n"
-        "payload=sys.stdin.buffer.read()\n"
-        "for offset in range(0,len(payload),257):\n"
-        " os.write(1,payload[offset:offset+257])\n"
-        " os.write(2,b'{not cargo JSON: compiler diagnostic}\\n')\n"
-        "raise SystemExit(7)\n"
-    )
-    source = tmp_path / "child.py"
-    source.write_text(
-        script.replace("payload=sys.stdin.buffer.read()", f"payload={payload!r}")
-    )
-    output = io.BytesIO()
-    capture = execution.CargoArtifactCapture(output)
-    diagnostics = execution.CargoArtifactCapture(output, parse_json=False)
-    with pytest.raises(subprocess.CalledProcessError) as refused:
-        run(
-            [sys.executable, source],
-            limits=Limits(wall_seconds=5, idle_seconds=1),
-            output_filter=capture,
-            stderr_filter=diagnostics,
-        )
-    assert refused.value.returncode == 7
-    assert [json.loads(line) for line in output.getvalue().splitlines()] == [
-        artifact,
-        {"reason": "build-finished", "success": True},
-    ]
 
 
 def test_verbose_cargo_capture_keeps_live_bytes_and_only_machine_records():
@@ -266,13 +231,40 @@ def test_artifact_execution_uses_the_unchanged_test_policy(tmp_path, monkeypatch
     ]
 
 
-def test_cargo_capture_groups_actual_llvm_passes_without_inventing_idle_events():
-    output = io.BytesIO()
-    capture = execution.CargoArtifactCapture(output)
+def test_artifact_protocol_survives_interleaved_raw_stderr(tmp_path):
+    artifacts = io.BytesIO()
+    capture = execution.CargoArtifactCapture(artifacts)
+    diagnostics = execution.CargoArtifactCapture(None, protocol=False)
+    script = "import os; os.write(1,b'{\"reason\":\"build-'); os.write(2,b'{not-json LLVM diagnostic\\n'); os.write(1,b'finished\",\"success\":true}\\n')"
+    execution.run(
+        [sys.executable, "-c", script],
+        limits=TEST_LIMITS,
+        output_filter=capture,
+        stderr_output_filter=diagnostics,
+    )
+    capture.complete()
+    assert json.loads(artifacts.getvalue()) == {
+        "reason": "build-finished",
+        "success": True,
+    }
+    assert diagnostics.finished == []
+
+
+def test_new_pm_pass_events_are_grouped_without_hiding_stderr_errors():
+    capture = execution.CargoArtifactCapture(None, protocol=False)
+    event = b" Running pass 42 IndVarSimplifyPass on real_function\n"
+    error = b"error: actual compiler refusal\n"
+    payload = event * 256 + error
+    forwarded = capture(payload[:13]) + capture(payload[13:])
+    assert forwarded == b"LLVM new-PM pass events: 256\n" + error
+    assert capture(event) == b""
+    assert capture(b"") == b"LLVM new-PM pass events: 1\n"
     assert capture(b"") == b""
-    event = b" Running pass 42 InstCombinePass on owned_function\n"
-    assert capture(event * 256) == b"rust compiler diagnostic events: 256\n"
+
+
+def test_interleaved_new_pm_headers_keep_mixed_errors_raw():
+    capture = execution.CargoArtifactCapture(None, protocol=False)
+    event = b" Running pass 4 Running pass 8 SROAPass on real_function\n"
+    mixed = b' Running pass 9 {"level":"error","message":"backend refusal"}\n'
+    assert capture(event * 128 + mixed) == b"LLVM new-PM pass events: 256\n" + mixed
     assert capture(b"") == b""
-    error = b'{"reason":"compiler-message","message":{"level":"error","message":"failed"}}\n'
-    assert capture(error) == error
-    assert output.getvalue() == b""

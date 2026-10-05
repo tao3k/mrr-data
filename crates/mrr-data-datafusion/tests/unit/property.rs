@@ -495,3 +495,32 @@ async fn integer_properties_preserve_extremes_and_null_without_coercion() {
         ))
     ));
 }
+
+#[tokio::test]
+async fn observed_property_execution_preserves_nulls_and_counts_only_decoded_utf8() {
+    let f = fixture();
+    let reference = execute_property_path_query(&f.query, &f.entities, &f.relations, limits())
+        .await
+        .unwrap();
+    let (observed, metrics) =
+        crate::execute_property_path_query_observed(&f.query, &f.entities, &f.relations, limits())
+            .await
+            .unwrap();
+    assert_eq!(observed.columns(), reference.columns());
+    assert_eq!(observed.rows(), reference.rows());
+    // Three independent expected rows, including one null: 10+3+6, 10+3, 10+3+6.
+    assert_eq!(metrics.decoded_utf8_bytes, 51);
+    assert!(metrics.first_nonempty_batch.is_some());
+    assert!(metrics.output_batches > 0);
+    assert_eq!(
+        metrics.observed_spill_bytes.is_some(),
+        metrics.spill_reporting_operators > 0
+    );
+    let mut rejected = limits();
+    rejected.max_join_rows = 1;
+    assert!(matches!(
+        crate::execute_property_path_query_observed(&f.query, &f.entities, &f.relations, rejected)
+            .await,
+        Err(DataFusionQueryError::ResourceLimit("join rows"))
+    ));
+}

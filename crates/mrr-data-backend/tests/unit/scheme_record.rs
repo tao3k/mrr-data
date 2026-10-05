@@ -124,9 +124,11 @@ fn record_schema_fields_and_provider_markers_are_independent() {
     );
     assert_eq!(encoded, expected.as_bytes());
     for head in [
+        "\"mrr.backend.revision\" 2",
         "\"mrr.backend.revision\" 3",
         "\"mrr.backend.revision\" #t",
-        "\"mrr.backend.revision\" \"2\"",
+        "\"mrr.backend.revision\" \"1\"",
+        "\"mrr.backend.revision.v1\" 1",
         "\"mrr.backend.revision.v2\" 2",
         "\"mrr.backend.revision\"",
     ] {
@@ -138,6 +140,6 @@ fn record_schema_fields_and_provider_markers_are_independent() {
     }
     assert_eq!(
         super::schema_marker(BACKEND_DUCKDB_SCHEMA),
-        b"(\"mrr-data-backend.duckdb\" 2)"
+        b"(\"mrr-data-backend.duckdb\" 1)"
     );
 }

@@ -17,7 +17,7 @@ pub(super) fn result_limits() -> meta_relational_reasoning::QueryResultLimits {
 }
 
 pub(super) fn rows() -> usize {
-    let rows = std::env::var("MRR_DATA_SOURCE_SCALE")
+    let rows = std::env::var("MRR_DATA_SOURCE_EXTRA_ROWS")
         .unwrap_or_else(|_| "4".into())
         .parse::<usize>()
         .unwrap();
@@ -27,11 +27,25 @@ pub(super) fn rows() -> usize {
             .unwrap()
             .contains(&json!(rows))
     );
+    let workload = properties::workload_scale();
+    assert!(
+        super::schema()["properties"]["workload_scales"]["const"]
+            .as_array()
+            .unwrap()
+            .contains(&json!(workload))
+    );
+    assert!(
+        rows == 4 || workload == 1,
+        "large additional-row scope requires base workload"
+    );
     rows
 }
 pub(super) fn layout(rows: usize) -> GraphArChunkLayout {
-    let chunk = if rows == 4 { 2 } else { 256 };
-    GraphArChunkLayout::new(chunk, chunk).unwrap()
+    if rows == 4 {
+        properties::workload_layout()
+    } else {
+        GraphArChunkLayout::new(256, 256).unwrap()
+    }
 }
 pub(super) fn capture(rows: usize) -> CombinedGraphArLimits {
     if rows == 4 {

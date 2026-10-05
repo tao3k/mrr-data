@@ -39,8 +39,16 @@ def test_scale_processes_preserve_native_payloads_and_phase_limits(
         envelope = {
             "schema_namespace": SCHEMA["schema_namespace"]["const"],
             "schema_version": SCHEMA["schema_version"]["const"],
-            "scale_rows": int(env["MRR_DATA_SOURCE_SCALE"]),
-            "cases": [{"opaque_native_payload": env["MRR_DATA_SOURCE_SCALE"]}],
+            "scale": int(env["MRR_DATA_SOURCE_SCALE"]),
+            "scale_rows": int(env["MRR_DATA_SOURCE_EXTRA_ROWS"]),
+            "cases": [
+                {
+                    "opaque_native_payload": [
+                        env["MRR_DATA_SOURCE_SCALE"],
+                        env["MRR_DATA_SOURCE_EXTRA_ROWS"],
+                    ]
+                }
+            ],
         }
         return SimpleNamespace(
             stdout=f"SOURCE-RESOURCE-MATRIX {json.dumps(envelope)}\n".encode()
@@ -60,11 +68,12 @@ def test_scale_processes_preserve_native_payloads_and_phase_limits(
         ["source-resources", "--test-binary", str(binary), "--output", str(output)],
     )
     source_resources.main()
-    assert [call[2]["MRR_DATA_SOURCE_SCALE"] for call in calls] == [
-        str(rows) for rows in SCHEMA["scales"]["const"]
-    ]
+    scopes = [(str(scale), "4") for scale in SCHEMA["workload_scales"]["const"]]
+    scopes.extend(("1", str(rows)) for rows in SCHEMA["scales"]["const"] if rows != 4)
+    assert [
+        (call[2]["MRR_DATA_SOURCE_SCALE"], call[2]["MRR_DATA_SOURCE_EXTRA_ROWS"])
+        for call in calls
+    ] == scopes
     assert all(call[1] is source_resources.TEST_LIMITS for call in calls)
     records = [json.loads(line) for line in output.read_text().splitlines()]
-    assert records[1:] == [
-        {"opaque_native_payload": str(rows)} for rows in SCHEMA["scales"]["const"]
-    ]
+    assert records[1:] == [{"opaque_native_payload": list(scope)} for scope in scopes]

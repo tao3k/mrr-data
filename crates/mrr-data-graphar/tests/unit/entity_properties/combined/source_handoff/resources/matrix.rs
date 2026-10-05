@@ -7,6 +7,14 @@ use std::{
 const CASE_TEST: &str = "tests::entity_properties::combined::source_handoff::backend::selective::resources::original_source_resource_case";
 const FIXTURE_TEST: &str = "tests::entity_properties::combined::source_handoff::backend::selective::resources::fixture::original_source_resource_fixture";
 
+fn observed_spill_has_declared_scope(sample: &Value) -> bool {
+    match sample["spill_reporting_operators"].as_u64() {
+        Some(0) => sample["observed_spill_bytes"].is_null(),
+        Some(_) => sample["observed_spill_bytes"].as_u64().is_some(),
+        None => false,
+    }
+}
+
 fn verify(
     receipt: &Value,
     shape: &str,
@@ -15,14 +23,20 @@ fn verify(
     scale_rows: usize,
 ) -> bool {
     let samples = receipt["samples"].as_array();
-    receipt["shape"] == shape
+    receipt["scale"] == crate::tests::entity_properties::fixture::workload_scale()
+        && receipt["shape"] == shape
         && receipt["mode"] == mode
         && receipt["scale_rows"] == scale_rows
         && receipt["caller_budgets"] == super::scale::receipt(scale_rows)
-        && receipt["input_relation_rows"] == 2 * scale_rows + 8
+        && receipt["input_relation_rows"]
+            == if scale_rows == 4 {
+                8 * crate::tests::entity_properties::fixture::workload_scale() + 8
+            } else {
+                2 * scale_rows + 8
+            }
         && receipt["input_entity_rows"]
             == if scale_rows == 4 {
-                12
+                4 * crate::tests::entity_properties::fixture::workload_scale() + 8
             } else {
                 3 * scale_rows + 8
             }
@@ -55,6 +69,8 @@ fn verify(
                         "total_ns",
                         "cpu_ns",
                         "physical_backend_ns",
+                        "engine_first_nonempty_batch_ns",
+                        "output_batches",
                         "process_peak_rss_bytes",
                         "relation_materialized_rows",
                         "relation_selected_edges",
@@ -62,6 +78,8 @@ fn verify(
                     ]
                     .iter()
                     .all(|field| sample[field].as_u64().is_some_and(|value| value > 0))
+                        && sample["decoded_utf8_copy_bytes"] == 70
+                        && observed_spill_has_declared_scope(sample)
                         && sample["remote_read_bytes"].as_u64().is_some_and(|bytes| {
                             if mode == "cold-full" {
                                 bytes > 0
@@ -151,15 +169,15 @@ fn original_source_resource_matrix() {
     }
     println!(
         "SOURCE-RESOURCE-MATRIX {}",
-        json!({"schema_namespace":contract["schema_namespace"]["const"],"schema_version":contract["schema_version"]["const"],"scale_rows":scale_rows,"cases":receipts})
+        json!({"scale":crate::tests::entity_properties::fixture::workload_scale(),"schema_namespace":contract["schema_namespace"]["const"],"schema_version":contract["schema_version"]["const"],"scale_rows":scale_rows,"cases":receipts})
     );
 }
 
 #[test]
 fn source_resource_matrix_refuses_unadmitted_and_foreign_source_receipts() {
     let snapshot = mrr_data_core::raw_cid(b"resource-source").to_string();
-    let sample = json!({"total_ns":1,"cpu_ns":1,"physical_backend_ns":1,"process_peak_rss_bytes":1,"relation_materialized_rows":1,"relation_selected_edges":1,"relation_read_bytes":1,"remote_read_bytes":0});
-    let valid = json!({"shape":"uniform","mode":"warm-full","scale_rows":4,"caller_budgets":super::scale::receipt(4),"input_relation_rows":16,"input_entity_rows":12,"spill_bytes":null,"copied_bytes":null,"streaming_first_result_ns":null,"source_digest":super::super::super::super::SOURCE_DIGEST,"snapshot_root":snapshot,"all_results_admitted":true,"expected_rows":4,"cleanup_bytes":0,"samples":[sample.clone(),sample.clone(),sample]});
+    let sample = json!({"total_ns":1,"cpu_ns":1,"physical_backend_ns":1,"engine_first_nonempty_batch_ns":1,"output_batches":1,"decoded_utf8_copy_bytes":70,"observed_spill_bytes":null,"spill_reporting_operators":0,"process_peak_rss_bytes":1,"relation_materialized_rows":1,"relation_selected_edges":1,"relation_read_bytes":1,"remote_read_bytes":0});
+    let valid = json!({"scale":crate::tests::entity_properties::fixture::workload_scale(),"shape":"uniform","mode":"warm-full","scale_rows":4,"caller_budgets":super::scale::receipt(4),"input_relation_rows":8 * crate::tests::entity_properties::fixture::workload_scale()+8,"input_entity_rows":4 * crate::tests::entity_properties::fixture::workload_scale()+8,"spill_bytes":null,"copied_bytes":null,"streaming_first_result_ns":null,"source_digest":super::super::super::super::SOURCE_DIGEST,"snapshot_root":snapshot,"all_results_admitted":true,"expected_rows":4,"cleanup_bytes":0,"samples":[sample.clone(),sample.clone(),sample]});
     assert!(verify(&valid, "uniform", "warm-full", Some(&snapshot), 4));
     assert!(!verify(&valid, "uniform", "warm-full", Some("foreign"), 4));
     assert!(!verify(
@@ -170,6 +188,41 @@ fn source_resource_matrix_refuses_unadmitted_and_foreign_source_receipts() {
         1000
     ));
     assert!(!verify(&valid, "skewed", "warm-full", Some(&snapshot), 4));
+    for (field, wrong) in [
+        ("decoded_utf8_copy_bytes", json!(71)),
+        ("engine_first_nonempty_batch_ns", json!(0)),
+        ("output_batches", json!(0)),
+        ("spill_reporting_operators", json!(-1)),
+        ("observed_spill_bytes", json!(0)),
+    ] {
+        let mut invalid = valid.clone();
+        invalid["samples"][0][field] = wrong;
+        assert!(!verify(
+            &invalid,
+            "uniform",
+            "warm-full",
+            Some(&snapshot),
+            4
+        ));
+    }
+    let mut reported = valid.clone();
+    reported["samples"][0]["spill_reporting_operators"] = json!(1);
+    reported["samples"][0]["observed_spill_bytes"] = json!(0);
+    assert!(verify(
+        &reported,
+        "uniform",
+        "warm-full",
+        Some(&snapshot),
+        4
+    ));
+    reported["samples"][0]["observed_spill_bytes"] = json!("unknown");
+    assert!(!verify(
+        &reported,
+        "uniform",
+        "warm-full",
+        Some(&snapshot),
+        4
+    ));
     for (field, wrong) in [
         ("caller_budgets", json!({})),
         ("copied_bytes", json!(0)),

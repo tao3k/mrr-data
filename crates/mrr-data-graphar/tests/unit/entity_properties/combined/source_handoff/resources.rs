@@ -18,7 +18,7 @@ use nix::sys::{
 use serde_json::{Value, json};
 use std::{
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicU64, Ordering},
     },
     time::Instant,
@@ -58,6 +58,7 @@ fn rss_bytes() -> u64 {
 struct MeasuredPhysical {
     inner: executor::CapturedBackend,
     elapsed: Arc<AtomicU64>,
+    metrics: Arc<Mutex<Option<mrr_data_datafusion::PropertyExecutionMetrics>>>,
 }
 impl PropertyQueryBackend for MeasuredPhysical {
     type PhysicalEvidence = mrr_data_core::BoundDataQuery;
@@ -67,7 +68,25 @@ impl PropertyQueryBackend for MeasuredPhysical {
         query: &'a mrr::CatalogBoundQuery,
     ) -> Result<mrr::PropertyExecutionCandidate<Self::PhysicalEvidence>, Self::Error> {
         let started = Instant::now();
-        let result = self.inner.execute(query).await;
+        assert_eq!(query, self.inner.binding.query());
+        let (output, metrics) = mrr_data_datafusion::execute_property_path_query_observed(
+            query,
+            &self.inner.tables,
+            &self.inner.relations,
+            self.inner.limits,
+        )
+        .await?;
+        *self.metrics.lock().unwrap() = Some(metrics);
+        let candidate = mrr_data_core::project_data_query_output(
+            &self.inner.binding,
+            &mrr_data_datafusion::datafusion_engine_profile()?,
+            output,
+        )
+        .map_err(mrr_data_datafusion::DataFusionQueryError::PhysicalOutput)?;
+        let result = Ok(mrr::PropertyExecutionCandidate {
+            candidate,
+            physical_evidence: self.inner.binding.clone(),
+        });
         self.elapsed.store(nanoseconds(started), Ordering::Relaxed);
         result
     }
@@ -162,6 +181,7 @@ impl Case {
             })
             .collect();
         let physical_ns = Arc::new(AtomicU64::new(0));
+        let metrics = Arc::new(Mutex::new(None));
         let physical = MeasuredPhysical {
             inner: executor::CapturedBackend {
                 binding: self.f.query.clone(),
@@ -172,6 +192,7 @@ impl Case {
                 limits: scale::physical(scale::rows()),
             },
             elapsed: physical_ns.clone(),
+            metrics: metrics.clone(),
         };
         let conversion_ns = nanoseconds(registration);
         let binding = Instant::now();
@@ -225,7 +246,9 @@ impl Case {
             }
         );
         let total_ns = nanoseconds(started);
-        json!({"result_ready_ns":result_ready_ns,"exported_result_bytes":exported_result_bytes,"total_ns":total_ns,"cpu_ns":cpu_ns()-cpu,"restore_ns":restore_ns,"capture_ns":capture_ns,"read_ns":read_ns,"conversion_ns":conversion_ns,"compile_bind_ns":compile_bind_ns,"execute_admit_ns":execute_admit_ns,"physical_backend_ns":physical_ns.load(Ordering::Relaxed),"transport_ns":transport_ns,"remote_read_bytes":remote_read_bytes,"remote_read_blocks":remote_read_blocks,"relation_read_bytes":read_bytes,"relation_materialized_rows":materialized_rows,"relation_selected_edges":selected_edges,"capture_verified_bytes":if self.reuse.is_some() {0} else {preparation.iter().map(|m| m.preparation.verified_bytes).sum::<u64>()},"capture_validation_rows":if self.reuse.is_some() {0} else {preparation.iter().map(|m| m.validation.materialized_rows).sum::<usize>()},"process_peak_rss_bytes":rss_bytes()})
+        let metrics = metrics.lock().unwrap().unwrap();
+        let duration_ns = |d: std::time::Duration| u64::try_from(d.as_nanos()).unwrap();
+        json!({"engine_planning_ns":duration_ns(metrics.planning),"engine_first_nonempty_batch_ns":metrics.first_nonempty_batch.map(duration_ns),"engine_fetch_ns":duration_ns(metrics.fetch_batches),"engine_decode_ns":duration_ns(metrics.decode_output),"decoded_utf8_copy_bytes":metrics.decoded_utf8_bytes,"observed_spill_bytes":metrics.observed_spill_bytes,"spill_reporting_operators":metrics.spill_reporting_operators,"output_batches":metrics.output_batches,"result_ready_ns":result_ready_ns,"exported_result_bytes":exported_result_bytes,"total_ns":total_ns,"cpu_ns":cpu_ns()-cpu,"restore_ns":restore_ns,"capture_ns":capture_ns,"read_ns":read_ns,"conversion_ns":conversion_ns,"compile_bind_ns":compile_bind_ns,"execute_admit_ns":execute_admit_ns,"physical_backend_ns":physical_ns.load(Ordering::Relaxed),"transport_ns":transport_ns,"remote_read_bytes":remote_read_bytes,"remote_read_blocks":remote_read_blocks,"relation_read_bytes":read_bytes,"relation_materialized_rows":materialized_rows,"relation_selected_edges":selected_edges,"capture_verified_bytes":if self.reuse.is_some() {0} else {preparation.iter().map(|m| m.preparation.verified_bytes).sum::<u64>()},"capture_validation_rows":if self.reuse.is_some() {0} else {preparation.iter().map(|m| m.validation.materialized_rows).sum::<usize>()},"process_peak_rss_bytes":rss_bytes()})
     }
 }
 
@@ -297,6 +320,10 @@ async fn original_source_resource_case() {
     assert_eq!(case.backend.status().resource_bytes, 0);
     println!(
         "SOURCE-RESOURCE {}",
-        json!({"shape":shape,"mode":mode,"scale_rows":scale_rows,"caller_budgets":scale::receipt(scale_rows),"input_entity_rows":case.f.original.entities.iter().map(|t|t.batch.num_rows()).sum::<usize>(),"input_relation_rows":case.f.original.relations.iter().map(|t|t.batch.num_rows()).sum::<usize>(),"source_digest":super::super::super::SOURCE_DIGEST,"snapshot_root":snapshot,"fixture_setup_ns":fixture_setup_ns,"warmups":warmups,"setup":setup,"baseline_peak_rss_bytes":baseline_peak_rss_bytes,"samples":samples,"all_results_admitted":true,"expected_rows":4,"cleanup_bytes":0,"spill_bytes":null,"copied_bytes":null,"streaming_first_result_ns":null})
+        json!({"scale":crate::tests::entity_properties::fixture::workload_scale(),"shape":shape,"mode":mode,"scale_rows":scale_rows,"caller_budgets":scale::receipt(scale_rows),"input_entity_rows":case.f.original.entities.iter().map(|t|t.batch.num_rows()).sum::<usize>(),"input_relation_rows":case.f.original.relations.iter().map(|t|t.batch.num_rows()).sum::<usize>(),"source_digest":super::super::super::SOURCE_DIGEST,"snapshot_root":snapshot,"fixture_setup_ns":fixture_setup_ns,"warmups":warmups,"setup":setup,"baseline_peak_rss_bytes":baseline_peak_rss_bytes,"samples":samples,"all_results_admitted":true,"expected_rows":4,"cleanup_bytes":0,"spill_bytes":null,"copied_bytes":null,"streaming_first_result_ns":null})
     );
+}
+
+pub(super) fn load_fixture(shape: &str) -> Fixture {
+    fixture::load(shape)
 }

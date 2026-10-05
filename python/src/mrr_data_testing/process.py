@@ -40,13 +40,9 @@ def run(
     env=None,
     capture_limit=None,
     output_filter=None,
-    stderr_filter=None,
+    stderr_output_filter=None,
 ):
-    """Forward real output; terminate the entire process group on refusal.
-
-    A stderr filter selects a separate pipe so stdout protocol frames cannot be
-    corrupted by concurrent diagnostics. Both pipes retain the same deadlines.
-    """
+    """Forward real output; terminate the entire process group on refusal."""
     command = list(map(str, argv))
     if capture_limit is not None and capture_limit <= 0:
         raise ValueError("capture limit must be positive")
@@ -57,14 +53,16 @@ def run(
         cwd=cwd,
         env=env,
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT if stderr_filter is None else subprocess.PIPE,
+        stderr=subprocess.STDOUT if stderr_output_filter is None else subprocess.PIPE,
         start_new_session=True,
     ) as child:
         try:
             with selectors.DefaultSelector() as selector:
                 selector.register(child.stdout, selectors.EVENT_READ, output_filter)
-                if stderr_filter is not None:
-                    selector.register(child.stderr, selectors.EVENT_READ, stderr_filter)
+                if stderr_output_filter is not None:
+                    selector.register(
+                        child.stderr, selectors.EVENT_READ, stderr_output_filter
+                    )
                 while selector.get_map() or child.poll() is None:
                     now = time.monotonic()
                     if now - started >= limits.wall_seconds:
@@ -78,17 +76,17 @@ def run(
                             limits.idle_seconds - (now - last_output),
                         )
                     ):
-                        stream_filter = key.data
+                        filter_block = key.data
                         block = os.read(key.fileobj.fileno(), 65536)
                         if not block:
-                            if stream_filter is not None:
-                                sys.stdout.buffer.write(stream_filter(b""))
+                            if filter_block is not None:
+                                sys.stdout.buffer.write(filter_block(b""))
                                 sys.stdout.buffer.flush()
                             selector.unregister(key.fileobj)
                             continue
                         last_output = time.monotonic()
                         sys.stdout.buffer.write(
-                            block if stream_filter is None else stream_filter(block)
+                            block if filter_block is None else filter_block(block)
                         )
                         sys.stdout.buffer.flush()
                         if captured is not None:

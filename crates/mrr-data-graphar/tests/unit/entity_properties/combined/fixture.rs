@@ -35,10 +35,10 @@ pub fn capture_limits() -> CombinedGraphArLimits {
         dataset: GraphDatasetLimits {
             inventory: limits().inventory,
             max_relations: 8,
-            max_property_rows: 100,
+            max_property_rows: properties::workload_rows(),
         },
         properties: limits(),
-        topology: GraphArReadLimits::new(100, 100),
+        topology: GraphArReadLimits::new(properties::workload_rows(), properties::workload_rows()),
     }
 }
 pub fn transfer_limits() -> GraphTransferLimits {
@@ -64,7 +64,11 @@ impl Fixture {
             options,
             capture_limits(),
             transfer_limits(),
-            GraphArChunkLayout::new(2, 4).unwrap(),
+            if properties::workload_scale() == 1 {
+                GraphArChunkLayout::new(2, 4).unwrap()
+            } else {
+                properties::workload_layout()
+            },
         )
     }
     pub(super) fn with_original_options_and_limits(

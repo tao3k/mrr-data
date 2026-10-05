@@ -3,17 +3,79 @@
   "title": "Original-source resource matrix contract",
   "type": "object",
   "properties": {
-    "schema_namespace": {"const": "mrr.data.source.resources"},
-    "schema_version": {"const": 2},
-    "scale_rows": {"enum": [4, 1000, 10000]},
-    "scales": {"const": [4, 1000, 10000]},
-    "shapes": {"const": ["uniform", "skewed"]},
-    "modes": {"const": ["cold-full", "warm-full", "warm-selective", "reused-selective"]},
-    "samples": {"const": 3},
-    "unsupported_measurements": {"const": ["spill_bytes", "copied_bytes", "streaming_first_result_ns"]},
-    "warmups": {"const": 2},
-    "cases": {"type": "array", "minItems": 8, "maxItems": 8}
+    "schema_namespace": {
+      "const": "mrr.data.source.resources"
+    },
+    "schema_version": {
+      "const": 2
+    },
+    "scale_rows": {
+      "enum": [
+        4,
+        1000,
+        10000
+      ]
+    },
+    "scales": {
+      "const": [
+        4,
+        1000,
+        10000
+      ]
+    },
+    "shapes": {
+      "const": [
+        "uniform",
+        "skewed"
+      ]
+    },
+    "modes": {
+      "const": [
+        "cold-full",
+        "warm-full",
+        "warm-selective",
+        "reused-selective"
+      ]
+    },
+    "samples": {
+      "const": 3
+    },
+    "unsupported_measurements": {
+      "const": [
+        "spill_bytes",
+        "copied_bytes",
+        "streaming_first_result_ns"
+      ]
+    },
+    "warmups": {
+      "const": 2
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8
+    },
+    "scale": {
+      "enum": [
+        1,
+        8,
+        64,
+        256
+      ]
+    },
+    "workload_scales": {
+      "const": [
+        1,
+        8,
+        64,
+        256
+      ]
+    }
   },
-  "required": ["schema_namespace", "schema_version", "cases"],
+  "required": [
+    "schema_namespace",
+    "schema_version",
+    "cases"
+  ],
   "additionalProperties": false
 }

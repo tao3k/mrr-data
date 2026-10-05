@@ -11,7 +11,7 @@ use std::num::NonZeroUsize;
 
 pub(super) fn limits() -> GraphArEntityPropertyLimits {
     GraphArEntityPropertyLimits {
-        max_rows: 100,
+        max_rows: fixture::workload_rows(),
         max_types: 8,
         max_properties: 16,
         max_value_bytes: 1 << 20,
