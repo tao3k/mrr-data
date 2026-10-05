@@ -60,6 +60,14 @@ pub(super) fn transfer(rows: usize) -> GraphTransferLimits {
         max_total_bytes: 128 << 20,
     }
 }
+pub(super) fn reserved(rows: usize) -> usize {
+    if rows == 4 {
+        super::super::super::RESERVED
+    } else {
+        // The restore API caps payload bytes by the admitted reservation.
+        transfer(rows).max_total_bytes
+    }
+}
 pub(super) fn physical(rows: usize) -> PropertyQueryLimits {
     if rows == 4 {
         return properties::limits();
@@ -94,7 +102,9 @@ pub(super) fn receipt(rows: usize) -> Value {
         "admitted_result_rows": RESULT_ROWS,
         "admitted_result_cells": RESULT_CELLS,
         "execution_memory_bytes": physical.execution_memory_bytes,
-        "resource_handle_reserved_bytes": super::RESERVED,
+        "resource_handle_reserved_bytes": reserved(rows),
+        "backend_resource_bytes": 3 * reserved(rows),
+        "effective_transfer_total_bytes": transfer.max_total_bytes.min(reserved(rows)),
         "chunk_vertices": layout(rows).vertex_chunk_size(),
         "chunk_edges": layout(rows).edge_chunk_size(),
     })

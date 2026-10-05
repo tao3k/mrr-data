@@ -1,11 +1,12 @@
 //! Matched original-source measurements; cold means an empty verified cache.
-use super::{authority, executor, metadata, restore};
-use crate::CapturedCombinedGraphArSelective;
+use super::{authority, executor, metadata};
 use crate::tests::entity_properties::combined::source_handoff::{
-    backend::{RESERVED, execution_transport},
-    compile,
+    backend::execution_transport, compile,
 };
 use crate::tests::entity_properties::combined::{fixture::Fixture, remote::Remote};
+use crate::{
+    CapturedCombinedGraphArSelective, CombinedGraphArRestoreRequest, restore_combined_graph_content,
+};
 use meta_relational_reasoning as mrr;
 use mrr::PropertyQueryBackend;
 use mrr_data_backend::{Backend, BackendConfig, ResourceControl, ResourceHandle, ResourceStop};
@@ -77,6 +78,7 @@ struct Case {
     remote: Arc<Remote>,
     cache: Arc<MemoryContentStore>,
     reuse: Option<ResourceHandle<CapturedCombinedGraphArSelective>>,
+    reserved_bytes: usize,
 }
 impl Case {
     async fn capture(
@@ -84,7 +86,22 @@ impl Case {
         cache: Arc<MemoryContentStore>,
     ) -> (ResourceHandle<CapturedCombinedGraphArSelective>, u64, u64) {
         let started = Instant::now();
-        let restored = restore(&self.f, &self.backend, self.remote.clone(), cache).await;
+        let restored = restore_combined_graph_content(
+            &self.backend,
+            CombinedGraphArRestoreRequest {
+                local: cache,
+                remote: self.remote.clone(),
+                query: self.f.query.clone(),
+                relations: self.f.relations.clone(),
+                entities: self.f.entities.clone(),
+                dataset: self.f.capture_limits.dataset,
+                transfer: self.f.transfer_limits,
+            },
+            self.reserved_bytes,
+            ResourceControl::default(),
+        )
+        .await
+        .unwrap();
         let restore_ns = nanoseconds(started);
         let query = self.f.query.clone();
         let relations = self.f.relations.clone();
@@ -94,16 +111,20 @@ impl Case {
         let started = Instant::now();
         let source = self
             .backend
-            .prepare_resource_controlled(RESERVED, ResourceControl::default(), move |_| {
-                crate::capture_combined_graphar_selective(
-                    restored.get(),
-                    &query,
-                    &relations,
-                    &projection,
-                    limits,
-                    layout,
-                )
-            })
+            .prepare_resource_controlled(
+                self.reserved_bytes,
+                ResourceControl::default(),
+                move |_| {
+                    crate::capture_combined_graphar_selective(
+                        restored.get(),
+                        &query,
+                        &relations,
+                        &projection,
+                        limits,
+                        layout,
+                    )
+                },
+            )
             .await
             .unwrap();
         (source, restore_ns, nanoseconds(started))
@@ -166,7 +187,7 @@ impl Case {
         let output = self
             .backend
             .prepare_resource_async_controlled(
-                RESERVED,
+                self.reserved_bytes,
                 ResourceControl::default(),
                 move |control| async move {
                     control.check()?;
@@ -197,7 +218,11 @@ impl Case {
         }
         assert_eq!(
             self.backend.status().resource_bytes,
-            if self.reuse.is_some() { RESERVED } else { 0 }
+            if self.reuse.is_some() {
+                self.reserved_bytes
+            } else {
+                0
+            }
         );
         let total_ns = nanoseconds(started);
         json!({"result_ready_ns":result_ready_ns,"exported_result_bytes":exported_result_bytes,"total_ns":total_ns,"cpu_ns":cpu_ns()-cpu,"restore_ns":restore_ns,"capture_ns":capture_ns,"read_ns":read_ns,"conversion_ns":conversion_ns,"compile_bind_ns":compile_bind_ns,"execute_admit_ns":execute_admit_ns,"physical_backend_ns":physical_ns.load(Ordering::Relaxed),"transport_ns":transport_ns,"remote_read_bytes":remote_read_bytes,"remote_read_blocks":remote_read_blocks,"relation_read_bytes":read_bytes,"relation_materialized_rows":materialized_rows,"relation_selected_edges":selected_edges,"capture_verified_bytes":if self.reuse.is_some() {0} else {preparation.iter().map(|m| m.preparation.verified_bytes).sum::<u64>()},"capture_validation_rows":if self.reuse.is_some() {0} else {preparation.iter().map(|m| m.validation.materialized_rows).sum::<usize>()},"process_peak_rss_bytes":rss_bytes()})
@@ -226,9 +251,10 @@ async fn original_source_resource_case() {
     println!("original-source resource fixture preparation started shape={shape} mode={mode}");
     let startup = Instant::now();
     let f = fixture::load(&shape);
+    let reserved_bytes = scale::reserved(scale_rows);
     let backend = Backend::open(
         BackendConfig {
-            max_resource_bytes: 3 * RESERVED,
+            max_resource_bytes: 3 * reserved_bytes,
             ..BackendConfig::default()
         },
         metadata::SimulatedMetadata::default(),
@@ -244,6 +270,7 @@ async fn original_source_resource_case() {
         remote,
         cache: Arc::new(MemoryContentStore::default()),
         reuse: None,
+        reserved_bytes,
     };
     let mut setup = json!({"restore_ns":0,"capture_ns":0});
     if mode != "cold-full" {
