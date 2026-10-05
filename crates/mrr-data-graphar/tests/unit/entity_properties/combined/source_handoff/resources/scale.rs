@@ -4,6 +4,17 @@ use crate::{CombinedGraphArLimits, GraphArChunkLayout, GraphArReadLimits};
 use mrr_data_content::GraphTransferLimits;
 use mrr_data_datafusion::PropertyQueryLimits;
 use serde_json::{Value, json};
+use std::num::NonZeroUsize;
+
+const RESULT_ROWS: usize = 100;
+const RESULT_CELLS: usize = 300;
+
+pub(super) fn result_limits() -> meta_relational_reasoning::QueryResultLimits {
+    meta_relational_reasoning::QueryResultLimits::new(
+        NonZeroUsize::new(RESULT_ROWS).unwrap(),
+        NonZeroUsize::new(RESULT_CELLS).unwrap(),
+    )
+}
 
 pub(super) fn rows() -> usize {
     let rows = std::env::var("MRR_DATA_SOURCE_SCALE")
@@ -53,11 +64,14 @@ pub(super) fn physical(rows: usize) -> PropertyQueryLimits {
     if rows == 4 {
         return properties::limits();
     }
+    let potential_join_rows = (rows + 8).checked_mul(rows + 8).unwrap();
     PropertyQueryLimits {
         max_input_rows: 5 * rows + 32,
         max_input_bytes: 64 << 20,
-        max_join_rows: (rows + 8).checked_mul(rows + 8).unwrap(),
-        max_output_cells: 300,
+        max_join_rows: potential_join_rows,
+        // DataFusion checks this bound before the Healthcare filter. MRR's
+        // admitted result keeps its independent 100-row / 300-cell limit.
+        max_output_cells: potential_join_rows.checked_mul(3).unwrap(),
         execution_memory_bytes: 128 << 20,
     }
 }
@@ -76,7 +90,9 @@ pub(super) fn receipt(rows: usize) -> Value {
         "input_rows": physical.max_input_rows,
         "input_bytes": physical.max_input_bytes,
         "join_rows_before_filters": physical.max_join_rows,
-        "output_cells": physical.max_output_cells,
+        "physical_output_cells_bound": physical.max_output_cells,
+        "admitted_result_rows": RESULT_ROWS,
+        "admitted_result_cells": RESULT_CELLS,
         "execution_memory_bytes": physical.execution_memory_bytes,
         "resource_handle_reserved_bytes": super::RESERVED,
         "chunk_vertices": layout(rows).vertex_chunk_size(),

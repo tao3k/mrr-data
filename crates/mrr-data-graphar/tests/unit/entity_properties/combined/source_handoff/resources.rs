@@ -171,7 +171,7 @@ impl Case {
                 move |control| async move {
                     control.check()?;
                     let output = bound
-                        .execute_with(&physical, super::super::result_limits())
+                        .execute_with(&physical, scale::result_limits())
                         .await
                         .unwrap();
                     control.check()?;
