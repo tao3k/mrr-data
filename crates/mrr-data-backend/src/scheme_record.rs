@@ -1,4 +1,4 @@
-//! Bounded inert Scheme records for metadata v2. No evaluator or JSON fallback.
+//! Bounded inert Scheme records for metadata v1. No evaluator or JSON fallback.
 use crate::{
     AuthorityChange, AuthorityExpectation, AuthorityKey, AuthorityProposal, AuthorityState,
     AuthorityStatus, BackendError, StoredRevision, StoredWrite,
@@ -99,13 +99,13 @@ pub(crate) fn encode<T: Record>(value: &T) -> Result<Vec<u8>, BackendError> {
 pub(crate) fn key(kind: &str, parts: &[&str]) -> Result<String, BackendError> {
     let mut remaining = 8192;
     spend(&mut remaining, 6 + parts.len().saturating_sub(1))?;
-    text_budget("mrr.backend.key.v2", &mut remaining)?;
+    text_budget("mrr.backend.key.v1", &mut remaining)?;
     text_budget(kind, &mut remaining)?;
     for part in parts {
         text_budget(part, &mut remaining)?;
     }
     let value = Datum::List(vec![
-        Datum::Text("mrr.backend.key.v2".into()),
+        Datum::Text("mrr.backend.key.v1".into()),
         Datum::Text(kind.into()),
         Datum::List(parts.iter().map(|s| Datum::Text((*s).into())).collect()),
     ]);
@@ -366,15 +366,15 @@ pub(crate) struct AuthorityCompletion {
     pub change: AuthorityChange,
     pub committed: AuthorityState,
 }
-record!(StoredRevision,"mrr.backend.revision.v2",{revision:u64,root:Cid});
-record!(AuthorityState,"mrr.backend.authority.v2",{generation:u64,commitment:Cid,status:AuthorityStatus});
-record!(AuthorityExpectation,"mrr.backend.expectation.v2",{authority_id:String,state:AuthorityState});
-record!(StoredWrite,"mrr.backend.write.v2",{profile:String,namespace:String,scope:String,operation_id:String,expected:Option<StoredRevision>,replacement:Cid,authorities:Vec<AuthorityExpectation>});
-record!(AuthorityKey,"mrr.backend.authority-key.v2",{profile:String,namespace:String,scope:String,authority_id:String});
-record!(AuthorityProposal,"mrr.backend.authority-proposal.v2",{authority_id:String,expected:Option<AuthorityState>,replacement:Cid,status:AuthorityStatus});
-record!(AuthorityChange,"mrr.backend.authority-change.v2",{key:AuthorityKey,proposal:AuthorityProposal});
-record!(Completion,"mrr.backend.completion.v2",{write:StoredWrite,committed:StoredRevision});
-record!(AuthorityCompletion,"mrr.backend.authority-completion.v2",{change:AuthorityChange,committed:AuthorityState});
+record!(StoredRevision,"mrr.backend.revision.v1",{revision:u64,root:Cid});
+record!(AuthorityState,"mrr.backend.authority.v1",{generation:u64,commitment:Cid,status:AuthorityStatus});
+record!(AuthorityExpectation,"mrr.backend.expectation.v1",{authority_id:String,state:AuthorityState});
+record!(StoredWrite,"mrr.backend.write.v1",{profile:String,namespace:String,scope:String,operation_id:String,expected:Option<StoredRevision>,replacement:Cid,authorities:Vec<AuthorityExpectation>});
+record!(AuthorityKey,"mrr.backend.authority-key.v1",{profile:String,namespace:String,scope:String,authority_id:String});
+record!(AuthorityProposal,"mrr.backend.authority-proposal.v1",{authority_id:String,expected:Option<AuthorityState>,replacement:Cid,status:AuthorityStatus});
+record!(AuthorityChange,"mrr.backend.authority-change.v1",{key:AuthorityKey,proposal:AuthorityProposal});
+record!(Completion,"mrr.backend.completion.v1",{write:StoredWrite,committed:StoredRevision});
+record!(AuthorityCompletion,"mrr.backend.authority-completion.v1",{change:AuthorityChange,committed:AuthorityState});
 
 #[cfg(test)]
 #[path = "../tests/unit/scheme_record.rs"]

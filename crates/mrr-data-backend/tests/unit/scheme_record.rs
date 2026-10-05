@@ -45,13 +45,14 @@ fn records_have_exact_tags_arity_and_nested_types() {
         },
     };
     let bytes = encode(&completion).unwrap();
+    assert!(bytes.starts_with(b"(\"mrr.backend.completion.v1\" "));
     let read = decode::<Completion>(&bytes).unwrap();
     assert_eq!(read.write, completion.write);
     assert_eq!(read.committed, completion.committed);
     for invalid in [
-        b"(\"mrr.backend.revision.v2\" 1)".as_slice(),
-        b"(\"mrr.backend.revision.v1\" 1 \"bad\")",
-        b"(\"mrr.backend.revision.v2\" #t \"bad\")",
+        b"(\"mrr.backend.revision.v1\" 1)".as_slice(),
+        b"(\"mrr.backend.revision.v2\" 1 \"bafkreigh2akiscaildcw4535x3wkd4jkfvxvygqrj3brp6a4p7ch5yqxtu\")",
+        b"(\"mrr.backend.revision.v1\" #t \"bad\")",
     ] {
         assert!(decode::<StoredRevision>(invalid).is_err());
     }
@@ -105,6 +106,7 @@ fn key_parts_are_unambiguous_scheme_strings() {
         panic!("key must be a list")
     };
     assert_eq!(parts.len(), 3);
+    assert!(matches!(&parts[0], Datum::Text(tag) if tag == "mrr.backend.key.v1"));
     let Datum::List(parts) = &parts[2] else {
         panic!("key parts must be a list")
     };
