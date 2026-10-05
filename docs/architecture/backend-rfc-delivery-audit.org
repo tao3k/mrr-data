@@ -2,7 +2,7 @@
 #+DATE: 2026-10-05
 #+OPTIONS: toc:2
 
-* Current acceptance and P0-P2 execution: 2026-10-05
+* Historical accepted baseline and P0-P2 execution: 2026-10-05
 
 The accepted integration baseline is Data =14ee37e383531dd27ae72000c1db7e50e33fe32e=,
 MRR =294cb95c21e6d426c2aea2d272f6e377422cea42= and GSC
@@ -26,7 +26,7 @@ weaken coverage. Shared Backend owns one lifecycle. All authorization is simulat
 Rust owns semantic/resource assertions; Python supervises process and receipt
 collection. No default Cargo parallelism cap or idle/wall relaxation is permitted.
 
-** Current composition receipt
+** Earlier P0-P2 composition receipt
 
 Published owners are GSC =072acac90dd4a83849826c75b1b5633721ce2ef0= (sole
 open PR 18) and MRR =4ccca987c97065499a366b9d1980419a574032a8= (PR 9).
@@ -122,25 +122,94 @@ Data root/fuzz pins now agree on published MRR
 resolves with =--locked=. Completed binaries, P1 process recovery and scaled P2
 results are still required before publishing a completion claim.
 
-* Current Namespace/Schema composition after concurrent P0-P2 integration
+* Current Namespace/Schema composition and local qualification: 2026-10-05
 
-This candidate combines the locally qualified stable Namespace/Schema slice and
-its 24-case additional-row receipt with published =9e0d755b=. Native Scheme
-metadata retains the published numeric Schema version =1= in the common Schema
-owner; namespaces remain stable and no legacy version-bearing name is an alias.
-MRR root, fuzz and Source now use =4ccca987=, retaining the remote second original
-query, native process recovery, physical output metrics and compiler artifact
-observer. Prior =e9a47066= and =9e0d755b= receipts qualify their own source slices.
-They do not qualify this combined candidate before fresh execution.
+The compiled Source head is =5afdc1755d8cfbf307100b0aa11cd76a51174ee7=.
+It preserves both integration histories, including published =9e0d755b= and the
+prior =51b59379= additional-row qualification. All 17 stable wire namespaces use
+numeric versions from the common Schema owner. Native Scheme metadata retains
+the published numeric version =1=; no version-bearing namespace is an alias.
+Provider stores with legacy, missing, foreign or unknown headers refuse before
+Ready without reset. Root/fuzz/Source pin MRR =4ccca987c97065499a366b9d1980419a574032a8=
+and its GSC owner =072acac90dd4a83849826c75b1b5633721ce2ef0=.
 
-The resource Schema declares two distinct caller axes: workload multipliers
-=1/8/64/256= and additional rows =4/1,000/10,000=. Large additional-row cases
-use base multiplier =1=. Six independent complete matrices share unchanged
-=idle5/wall120= limits and produce 48 cases, with no duplicate baseline or hidden
-Cartesian workload. Rust checks both axes, caller budgets, input counts, source
-and result admission, observed metric types and cleanup. Python only supervises
-processes, artifact identity and the opaque admitted protocol. Local and
-published-head qualification of this combined candidate remain pending.
+The final compilation inputs match 362 tracked files at the committed clean
+source. The [[file:../../evidence/original-source/original-source-composed-build.json][composition build receipt]] records source hashes, binary/artifact
+identity, exact gate scope and retained failed attempts. The
+[[file:../../evidence/original-source/original-source-composed-native-macos.jsonl][48-case original Source receipt]] was collected from binary
+=90d566788a478e76066777414fc45a875ca92419cf4144537cb27ff1e44a5d79=.
+Subsequent documentation/evidence commits do not change those compilation inputs.
+Published-head platform acceptance is supplied by the exact commit's
+[[https://github.com/tao3k/mrr-data/pull/12][PR 12 checks]]; local execution alone does not qualify another platform.
+
+| Gate | Successful local evidence | Boundary |
+|------+---------------------------+----------|
+| Schema and owner libraries | Profile 3, Core 38, Backend 10, Arrow 14 | Version-bearing namespace and malformed header refusal retained |
+| Physical and native graph units | DataFusion 27; GraphAr descriptor parent 1 in a fresh process, remaining 77 with 8 ignored | Separate process receipts; no combined-process pass claim |
+| Final Source filter | DataFusion 2, GraphAr 10 with 5 ignored | Original Healthcare and distinct Research catalog/query; final Source binary |
+| Native metadata consumers | DuckDB 15; Turso 13, isolated feature builds | Current numeric v1 store markers and reopen/history/refusal tests |
+| Actual process recovery | One parent; two killed publishers, two fixture children and two independent recovery children | Real SIGKILL before/after protected commit in a test single-writer file transaction fixture; retirement refusal and zero final reservations |
+| Strict integration checks | Six-owner all-target Source/native Clippy with =-D warnings=; unified facade; Ruff/format; 21 Org documents and 7 Org READMEs | Optimizer, worker counts and build idle30/wall1200 unchanged |
+| Python process supervision | 58 tests | Process/transport/artifact glue; semantic and resource admission remains in Rust |
+| Resource qualification | Six complete Rust matrices, 48 cases, two shapes and four modes | Each matrix retains test idle5/wall120; immutable root per shape and scope; result equivalence and cleanup checked in Rust |
+
+The resource Schema owns two caller axes: workload multipliers =1/8/64/256=
+and additional rows =4/1,000/10,000=. Large additional-row scopes use multiplier
+=1=. The six scopes are =(1,4), (8,4), (64,4), (256,4), (1,1000), (1,10000)=;
+there is no duplicate baseline or Cartesian workload. Large scopes declare
+256/256 chunk layouts, 128 MiB per-handle reservations and transfer/engine
+envelopes (384 MiB total Backend reservation cap), and physical
+pre-filter bounds; final MRR admission remains =100 rows / 300 cells=. Production
+default budgets remain unchanged. The 10,000-row input has =30,008= entity rows
+and =20,008= relation rows; all modes admit the same four duplicate/NULL results.
+
+** Matched observations and negative results
+
+The table reports each case's three-sample median. CPU/wall are milliseconds;
+RSS is isolated process high-water MiB, including fixture/native engine.
+=Full/selective= RSS belongs to the two warm paths. Cold means empty verified
+content cache; OS page-cache state and host scheduling are uncontrolled.
+These bounded observations do not establish a general production speedup or
+release-size coverage.
+
+| Workload factor / additional rows | Shape | Warm full CPU | Warm selective CPU | CPU change | Warm full wall | Warm selective wall | Reused selective CPU | Full/selective RSS |
+|-----------------------------------+-------+---------------+--------------------+------------+----------------+---------------------+----------------------+--------------------|
+| 1 / 4 | uniform | 45.85 | 48.87 | +6.6% | 46.11 | 50.50 | 2.96 | 428.55 / 428.48 |
+| 1 / 4 | skewed | 40.22 | 45.15 | +12.3% | 40.44 | 51.34 | 2.80 | 428.33 / 426.75 |
+| 8 / 4 | uniform | 27.50 | 25.90 | -5.8% | 28.30 | 26.63 | 2.93 | 426.98 / 428.67 |
+| 8 / 4 | skewed | 26.53 | 23.11 | -12.9% | 32.83 | 23.09 | 2.89 | 426.83 / 428.69 |
+| 64 / 4 | uniform | 40.37 | 36.38 | -9.9% | 40.63 | 36.91 | 2.95 | 429.00 / 429.33 |
+| 64 / 4 | skewed | 30.29 | 40.13 | +32.5% | 30.32 | 77.01 | 5.28 | 430.39 / 429.84 |
+| 256 / 4 | uniform | 125.40 | 113.15 | -9.8% | 244.28 | 253.02 | 4.71 | 441.84 / 441.12 |
+| 256 / 4 | skewed | 72.35 | 66.14 | -8.6% | 136.74 | 105.78 | 4.26 | 439.41 / 437.69 |
+| 1 / 1,000 | uniform | 80.84 | 77.22 | -4.5% | 82.24 | 78.67 | 6.16 | 441.50 / 443.41 |
+| 1 / 1,000 | skewed | 66.25 | 61.73 | -6.8% | 67.55 | 65.06 | 3.02 | 439.91 / 440.47 |
+| 1 / 10,000 | uniform | 660.35 | 610.83 | -7.5% | 696.67 | 632.49 | 10.71 | 555.38 / 569.25 |
+| 1 / 10,000 | skewed | 609.15 | 532.18 | -12.6% | 754.34 | 777.78 | 11.97 | 568.95 / 563.12 |
+
+Selective execution is slower for both tiny shapes and for the factor-64 skewed
+CPU/wall case. At 10,000 additional rows, selective CPU falls about 7.5%/12.6%
+for uniform/skewed, while skewed wall increases about 3.1%; uniform selective
+RSS also increases. Retained capture avoids repeated preparation, with median
+CPU =2.80-11.97 ms= here, but retains resources and does not establish a general
+memory reduction. Earlier =e9a47066= and =9e0d755b= receipts retain their own
+positive and negative results and do not qualify this newer composition.
+
+=copied_bytes=, =spill_bytes= and =streaming_first_result_ns= remain null and
+unsupported. =decoded_utf8_copy_bytes= records only output decoding; each sample
+observes =70= bytes. =engine_first_nonempty_batch_ns= excludes planning and
+precedes MRR admission. =observed_spill_bytes= covers reporting operators only;
+no reporters means null rather than an asserted zero. Rust refusal controls
+reject malformed observation types, zero first-batch/batch-count, foreign
+source/root, unadmitted results, incorrect caller budgets and nonzero cleanup.
+
+The first combined Python run failed because a local test still used the remote
+API's former keyword. The first combined compile refused =E0425= after merge
+omitted an explicit native relation read-budget helper. The first strict Clippy
+run refused a 102-line sample function. The final fixes retain the keyword/API,
+restore the caller-budget helper, and extract the reservation assertion without
+changing budgets. Original failure hashes/diagnostics and raw Python failures
+remain in the receipt; none of those attempts is admitted as a pass.
 
 * Consolidated audit and milestone plan: 2026-10-04
 
