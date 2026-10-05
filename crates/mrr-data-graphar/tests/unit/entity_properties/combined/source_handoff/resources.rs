@@ -148,6 +148,16 @@ impl Case {
             .unwrap();
         (source, restore_ns, nanoseconds(started))
     }
+    fn assert_sample_reservations(&self) {
+        assert_eq!(
+            self.backend.status().resource_bytes,
+            if self.reuse.is_some() {
+                self.reserved_bytes
+            } else {
+                0
+            }
+        );
+    }
     async fn sample(&self, mode: &str) -> Value {
         println!("original-source resource sample started mode={mode}");
         let cpu = cpu_ns();
@@ -237,14 +247,7 @@ impl Case {
         } else {
             assert_eq!(remote_read_bytes, 0);
         }
-        assert_eq!(
-            self.backend.status().resource_bytes,
-            if self.reuse.is_some() {
-                self.reserved_bytes
-            } else {
-                0
-            }
-        );
+        self.assert_sample_reservations();
         let total_ns = nanoseconds(started);
         let metrics = metrics.lock().unwrap().unwrap();
         let duration_ns = |d: std::time::Duration| u64::try_from(d.as_nanos()).unwrap();
