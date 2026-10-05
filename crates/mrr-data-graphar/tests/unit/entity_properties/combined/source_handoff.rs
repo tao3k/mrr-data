@@ -1,4 +1,6 @@
 //! Original MRR source admission over the existing native combined closure.
+#[cfg(unix)]
+mod child_ownership;
 use super::{
     acceptance::relation_tables,
     fixture::{Fixture, capture_limits, transfer_limits},

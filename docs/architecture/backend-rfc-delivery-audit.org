@@ -2,6 +2,23 @@
 #+DATE: 2026-10-05
 #+OPTIONS: toc:2
 
+* Current acceptance and native ownership gate: 2026-10-05
+
+The latest accepted Data head is =f21b270733f996b19d0463923da7e14d1c180a88=:
+CI =37298063038= passed all 14 required checks. Its Source artifacts on both
+Ubuntu and macOS each admit 48 cases and 144 measured samples. MRR remains
+=719ce0d642f9e2f439381be31594d05f9a6bfe63= and GSC remains
+=9acf9753f9ebff560ea70f942260ff0adeab1e5e=. New local ownership probes are
+additional qualification, not evidence that a later head has passed CI.
+
+The [[file:native-child-process-ownership.org][native child-process ownership audit]] now binds the installed Gerbil to
+its exact Gambit submodule and reproduces Host =ECHILD= without descriptor I/O.
+Positive fresh-process controls pass; the shared-process diagnostic fails and
+retains genuine exit 101. Runtime reaping of arbitrary Host children remains an
+unqualified capability. The ordered P0/P1/P2 ownership gates in that audit
+supplement the accepted shared Backend/GraphAr scope, without changing provider
+authority, simulated authorization, watchdogs or Cargo concurrency.
+
 * Historical accepted baseline and P0-P2 execution: 2026-10-05
 
 The accepted integration baseline is Data =14ee37e383531dd27ae72000c1db7e50e33fe32e=,

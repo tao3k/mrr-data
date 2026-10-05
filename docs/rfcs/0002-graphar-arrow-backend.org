@@ -797,6 +797,10 @@ Ten original-source tests and the real process-recovery matrix pass; the full
 
 An additional all-feature single-process run records 80 passes and one failure:
 =property_descriptor_reopens_in_new_process= receives =ECHILD= from =try_wait=.
+The later [[file:../architecture/native-child-process-ownership.org][native child-ownership audit]] reproduces the failure without
+descriptor I/O and identifies the exact pinned Gambit global reaper. It
+supersedes the root-cause hypothesis below, while retaining this historical
+failed receipt. Shared-process repair remains a separate unqualified gate.
 The same descriptor test passes in a fresh isolated process. Native Scheme
 initialization occurs earlier in the failing combined run; a process-reaping
 interaction is a hypothesis, not a proven upstream root cause. Keep this failed
