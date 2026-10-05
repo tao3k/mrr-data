@@ -306,3 +306,13 @@ mod request_controls;
 #[cfg(feature = "selective-graphar")]
 #[path = "selective.rs"]
 mod selective;
+
+#[cfg(all(
+    feature = "selective-graphar",
+    any(target_os = "linux", target_os = "macos")
+))]
+#[path = "process_recovery.rs"]
+mod process_recovery;
+
+#[path = "research.rs"]
+mod research;

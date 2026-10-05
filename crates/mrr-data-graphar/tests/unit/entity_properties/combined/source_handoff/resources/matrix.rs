@@ -9,7 +9,8 @@ const FIXTURE_TEST: &str = "tests::entity_properties::combined::source_handoff::
 
 fn verify(receipt: &Value, shape: &str, mode: &str, snapshot: Option<&str>) -> bool {
     let samples = receipt["samples"].as_array();
-    receipt["shape"] == shape
+    receipt["scale"] == crate::tests::entity_properties::fixture::workload_scale()
+        && receipt["shape"] == shape
         && receipt["mode"] == mode
         && receipt["source_digest"] == super::super::super::super::SOURCE_DIGEST
         && receipt["snapshot_root"].as_str().is_some_and(|root| {
@@ -31,6 +32,8 @@ fn verify(receipt: &Value, shape: &str, mode: &str, snapshot: Option<&str>) -> b
                         "total_ns",
                         "cpu_ns",
                         "physical_backend_ns",
+                        "engine_first_nonempty_batch_ns",
+                        "output_batches",
                         "process_peak_rss_bytes",
                         "relation_materialized_rows",
                         "relation_selected_edges",
@@ -38,6 +41,9 @@ fn verify(receipt: &Value, shape: &str, mode: &str, snapshot: Option<&str>) -> b
                     ]
                     .iter()
                     .all(|field| sample[field].as_u64().is_some_and(|value| value > 0))
+                        && sample["decoded_utf8_copy_bytes"] == 70
+                        && sample["observed_spill_bytes"].is_null()
+                            == (sample["spill_reporting_operators"] == 0)
                         && sample["remote_read_bytes"].as_u64().is_some_and(|bytes| {
                             if mode == "cold-full" {
                                 bytes > 0
@@ -133,8 +139,8 @@ fn original_source_resource_matrix() {
 #[test]
 fn source_resource_matrix_refuses_unadmitted_and_foreign_source_receipts() {
     let snapshot = mrr_data_core::raw_cid(b"resource-source").to_string();
-    let sample = json!({"total_ns":1,"cpu_ns":1,"physical_backend_ns":1,"process_peak_rss_bytes":1,"relation_materialized_rows":1,"relation_selected_edges":1,"relation_read_bytes":1,"remote_read_bytes":0});
-    let valid = json!({"shape":"uniform","mode":"warm-full","source_digest":super::super::super::super::SOURCE_DIGEST,"snapshot_root":snapshot,"all_results_admitted":true,"expected_rows":4,"cleanup_bytes":0,"samples":[sample.clone(),sample.clone(),sample]});
+    let sample = json!({"total_ns":1,"cpu_ns":1,"physical_backend_ns":1,"engine_first_nonempty_batch_ns":1,"output_batches":1,"decoded_utf8_copy_bytes":70,"observed_spill_bytes":null,"spill_reporting_operators":0,"process_peak_rss_bytes":1,"relation_materialized_rows":1,"relation_selected_edges":1,"relation_read_bytes":1,"remote_read_bytes":0});
+    let valid = json!({"scale":crate::tests::entity_properties::fixture::workload_scale(),"shape":"uniform","mode":"warm-full","source_digest":super::super::super::super::SOURCE_DIGEST,"snapshot_root":snapshot,"all_results_admitted":true,"expected_rows":4,"cleanup_bytes":0,"samples":[sample.clone(),sample.clone(),sample]});
     assert!(verify(&valid, "uniform", "warm-full", Some(&snapshot)));
     assert!(!verify(&valid, "uniform", "warm-full", Some("foreign")));
     assert!(!verify(&valid, "skewed", "warm-full", Some(&snapshot)));

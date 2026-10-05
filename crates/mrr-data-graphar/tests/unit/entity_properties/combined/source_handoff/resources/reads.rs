@@ -14,7 +14,12 @@ pub(super) fn read(
     let mut relations = Vec::new();
     if selective {
         let selection = source
-            .outgoing(&f.query, first, properties::entity("s1"), 100)
+            .outgoing(
+                &f.query,
+                first,
+                properties::entity("s1"),
+                properties::workload_rows(),
+            )
             .unwrap();
         let targets = selection
             .facts()
@@ -34,7 +39,9 @@ pub(super) fn read(
         });
         let mut facts = Vec::new();
         for target in targets {
-            let selection = source.outgoing(&f.query, second, target, 100).unwrap();
+            let selection = source
+                .outgoing(&f.query, second, target, properties::workload_rows())
+                .unwrap();
             rows += selection.metrics().materialized_rows;
             bytes += selection.metrics().read_bytes;
             facts.extend(selection.into_facts());
@@ -45,7 +52,9 @@ pub(super) fn read(
         });
     } else {
         for relation in [first, second] {
-            let selection = source.scan_all(&f.query, relation, 100).unwrap();
+            let selection = source
+                .scan_all(&f.query, relation, properties::workload_rows())
+                .unwrap();
             rows += selection.metrics().materialized_rows;
             bytes += selection.metrics().read_bytes;
             relations.push(CapturedGraphArRelation {

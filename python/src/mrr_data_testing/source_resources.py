@@ -44,6 +44,13 @@ def main():
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--test-binary", type=Path)
     source.add_argument("--cargo-artifacts", type=Path)
+    parser.add_argument(
+        "--scales",
+        nargs="+",
+        type=int,
+        default=[1],
+        help="bounded Rust fixture scales; each matrix has its own unchanged watchdog",
+    )
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
     binary = (
@@ -71,24 +78,29 @@ def main():
             ["git", "-C", str(root), "status", "--porcelain"]
         ),
         "rust_matrix": MATRIX_TEST,
+        "requested_scales": args.scales,
         "cache_scope": "cold is an empty verified content cache; OS page-cache state is uncontrolled",
         "rss_scope": "isolated process high-water mark including fixture, Rust and native engine",
-        "physical_scope": "physical_backend_ns includes DataFusion execution and candidate projection; registration and spill are not separately observed",
+        "physical_scope": "physical_backend_ns includes execution and candidate projection; engine_first_nonempty_batch_ns excludes planning and precedes MRR admission; decoded_utf8_copy_bytes is only output decoding; observed spill counts reporting operators only",
     }
-    result = run(
-        [
-            binary,
-            MATRIX_TEST,
-            "--exact",
-            "--ignored",
-            "--nocapture",
-            "--test-threads=1",
-        ],
-        limits=TEST_LIMITS,
-        env=dict(os.environ, MRR_NATIVE_PROGRESS="1"),
-        capture_limit=2 << 20,
-    )
-    cases = matrix_from_output(result.stdout)
+    cases = []
+    for scale in args.scales:
+        result = run(
+            [
+                binary,
+                MATRIX_TEST,
+                "--exact",
+                "--ignored",
+                "--nocapture",
+                "--test-threads=1",
+            ],
+            limits=TEST_LIMITS,
+            env=dict(
+                os.environ, MRR_NATIVE_PROGRESS="1", MRR_DATA_SOURCE_SCALE=str(scale)
+            ),
+            capture_limit=2 << 20,
+        )
+        cases.extend(matrix_from_output(result.stdout))
     with output.open("w") as stream:
         stream.write(json.dumps({"metadata": metadata}, sort_keys=True) + "\n")
         for case in cases:

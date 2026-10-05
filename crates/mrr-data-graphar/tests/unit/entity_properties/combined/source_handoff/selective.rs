@@ -36,7 +36,7 @@ async fn original_source_handoff_uniform_and_skewed_selective_dataset_match_full
 
 fn shaped_fixture(skewed: bool) -> properties::Fixture {
     let mut original = source_fixture();
-    let extra = (0..4)
+    let extra = (0..4 * properties::workload_scale())
         .map(|index| properties::entity(&format!("other-scenario-{index}")))
         .collect::<Vec<_>>();
     let ids = extra.iter().map(ToString::to_string).collect::<Vec<_>>();
@@ -261,4 +261,78 @@ fn assert_slice(full: &CapturedGraphArRelation, source: mrr::EntityId, selected:
         .cloned()
         .collect::<Vec<_>>();
     assert_eq!(selected, expected);
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(super) fn process_fixture(shape: &str) -> Fixture {
+    resources::load_fixture(shape)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(super) async fn process_query_transport(
+    f: &Fixture,
+    backend: &Backend,
+    remote: Arc<Remote>,
+    cache: Arc<MemoryContentStore>,
+    home: &mrr_data_backend::ProfilePort,
+    policy: mrr_data_backend::AuthorityState,
+) -> mrr_data_backend::ResourceHandle<mrr_data_core::DataQueryResultHandoff> {
+    let restored = restore(f, backend, remote, cache).await;
+    let query = f.query.clone();
+    let catalog = f.relations.clone();
+    let projection = f.projection.clone();
+    // The immutable producer declares ordered, chunked topology. The legacy
+    // capture uses the default unordered profile; this owner uses the declared
+    // layout and a full scan, preserving all rows before original MRR admission.
+    let source = backend
+        .prepare_resource_controlled(RESERVED, ResourceControl::default(), move |_| {
+            crate::capture_combined_graphar_selective(
+                restored.get(),
+                &query,
+                &catalog,
+                &projection,
+                capture_limits(),
+                properties::workload_layout(),
+            )
+        })
+        .await
+        .unwrap();
+    let relations = f
+        .original
+        .relations
+        .iter()
+        .map(|relation| {
+            let scan = source
+                .get()
+                .scan_all(&f.query, relation.schema.id(), properties::workload_rows())
+                .unwrap();
+            CapturedGraphArRelation {
+                relation: relation.schema.id(),
+                facts: scan.into_facts().into(),
+            }
+        })
+        .collect::<Vec<_>>();
+    let tables = source
+        .get()
+        .tables(&f.query)
+        .unwrap()
+        .iter()
+        .map(|table| mrr_data_datafusion::EntityPropertyTable {
+            schema: table.schema.clone(),
+            batch: table.batch.clone(),
+        })
+        .collect();
+    let physical = executor::CapturedBackend {
+        binding: f.query.clone(),
+        tables,
+        relations: crate::tests::entity_properties::combined::acceptance::fact_tables(
+            f, &relations,
+        ),
+        limits: properties::limits(),
+    };
+    let execution = dispatch(f, backend, source, physical).await;
+    let transport = execution_transport(f, execution);
+    assert!(authority::disclose(home, policy).await);
+    assert_eq!(backend.status().resource_bytes, RESERVED);
+    transport
 }

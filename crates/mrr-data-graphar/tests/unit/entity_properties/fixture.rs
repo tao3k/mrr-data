@@ -45,12 +45,32 @@ fn values(input: &[&str]) -> Vec<Option<String>> {
 fn ids(input: &[&str]) -> Vec<Option<String>> {
     input.iter().map(|s| Some(entity(s).to_string())).collect()
 }
+// A bounded test workload contract. No production default or engine heap change.
+pub(super) fn workload_scale() -> usize {
+    let scale = std::env::var("MRR_DATA_SOURCE_SCALE")
+        .map_or(1, |s| s.parse().expect("integer workload scale"));
+    assert!(
+        (1..=256).contains(&scale),
+        "workload scale outside declared 1..=256"
+    );
+    scale
+}
+pub(super) fn workload_rows() -> usize {
+    100.max(32 * workload_scale())
+}
+pub(super) fn workload_layout() -> crate::GraphArChunkLayout {
+    if workload_scale() == 1 {
+        crate::GraphArChunkLayout::new(2, 2).unwrap()
+    } else {
+        crate::GraphArChunkLayout::new(64, 256).unwrap()
+    }
+}
 pub(super) fn limits() -> PropertyQueryLimits {
     PropertyQueryLimits {
-        max_input_rows: 100,
+        max_input_rows: workload_rows(),
         max_input_bytes: 1024 * 1024,
-        max_join_rows: 100,
-        max_output_cells: 300,
+        max_join_rows: 100.max((4 * workload_scale() + 8).pow(2)),
+        max_output_cells: 300.max(3 * (4 * workload_scale() + 8).pow(2)),
         execution_memory_bytes: 16 * 1024 * 1024,
     }
 }
@@ -301,7 +321,7 @@ pub(super) fn native_relations_with_options(
             .unwrap();
             let restored = prepare_graphar_source_with_adjacency(
                 &source,
-                GraphArReadLimits::new(100, 100),
+                GraphArReadLimits::new(workload_rows(), workload_rows()),
                 options.adjacency,
             )
             .unwrap()

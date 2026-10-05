@@ -7,7 +7,7 @@ use crate::tests::entity_properties::{
         remote::Remote,
     },
 };
-use crate::{GraphArAdjacency, GraphArChunkLayout, GraphArWriteOptions};
+use crate::{GraphArAdjacency, GraphArWriteOptions};
 use meta_relational_reasoning as mrr;
 use mrr_data_content::{
     ContentBlock, ContentCodec, ContentStore, MemoryContentStore, publish_combined_graph,
@@ -19,6 +19,7 @@ use std::path::Path;
 #[derive(Serialize, Deserialize)]
 struct Payload {
     shape: String,
+    scale: usize,
     snapshot: String,
     dataset: String,
     blocks: Vec<(String, Vec<u8>)>,
@@ -37,7 +38,7 @@ async fn write(shape: &str, path: &Path) {
         shaped_fixture(shape == "skewed"),
         GraphArWriteOptions {
             adjacency: GraphArAdjacency::OrderedBySource,
-            layout: GraphArChunkLayout::new(2, 2).unwrap(),
+            layout: crate::tests::entity_properties::fixture::workload_layout(),
             ..GraphArWriteOptions::default()
         },
     );
@@ -48,6 +49,7 @@ async fn write(shape: &str, path: &Path) {
         .unwrap();
     let payload = Payload {
         shape: shape.into(),
+        scale: crate::tests::entity_properties::fixture::workload_scale(),
         snapshot: f.snapshot.cid().to_string(),
         dataset: prepared
             .dataset()
@@ -70,6 +72,10 @@ pub(super) fn load(shape: &str) -> Fixture {
     let path = std::env::var("MRR_DATA_SOURCE_FIXTURE").unwrap();
     let payload: Payload = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
     assert_eq!(payload.shape, shape);
+    assert_eq!(
+        payload.scale,
+        crate::tests::entity_properties::fixture::workload_scale()
+    );
     let local = MemoryContentStore::default();
     for (root, bytes) in payload.blocks {
         let cid = root.parse::<cid::Cid>().unwrap();

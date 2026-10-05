@@ -229,3 +229,42 @@ def test_artifact_execution_uses_the_unchanged_test_policy(tmp_path, monkeypatch
             {"limits": TEST_LIMITS},
         )
     ]
+
+
+def test_artifact_protocol_survives_interleaved_raw_stderr(tmp_path):
+    artifacts = io.BytesIO()
+    capture = execution.CargoArtifactCapture(artifacts)
+    diagnostics = execution.CargoArtifactCapture(None, protocol=False)
+    script = "import os; os.write(1,b'{\"reason\":\"build-'); os.write(2,b'{not-json LLVM diagnostic\\n'); os.write(1,b'finished\",\"success\":true}\\n')"
+    execution.run(
+        [sys.executable, "-c", script],
+        limits=TEST_LIMITS,
+        output_filter=capture,
+        stderr_output_filter=diagnostics,
+    )
+    capture.complete()
+    assert json.loads(artifacts.getvalue()) == {
+        "reason": "build-finished",
+        "success": True,
+    }
+    assert diagnostics.finished == []
+
+
+def test_new_pm_pass_events_are_grouped_without_hiding_stderr_errors():
+    capture = execution.CargoArtifactCapture(None, protocol=False)
+    event = b" Running pass 42 IndVarSimplifyPass on real_function\n"
+    error = b"error: actual compiler refusal\n"
+    payload = event * 256 + error
+    forwarded = capture(payload[:13]) + capture(payload[13:])
+    assert forwarded == b"LLVM new-PM pass events: 256\n" + error
+    assert capture(event) == b""
+    assert capture(b"") == b"LLVM new-PM pass events: 1\n"
+    assert capture(b"") == b""
+
+
+def test_interleaved_new_pm_headers_keep_mixed_errors_raw():
+    capture = execution.CargoArtifactCapture(None, protocol=False)
+    event = b" Running pass 4 Running pass 8 SROAPass on real_function\n"
+    mixed = b' Running pass 9 {"level":"error","message":"backend refusal"}\n'
+    assert capture(event * 128 + mixed) == b"LLVM new-PM pass events: 256\n" + mixed
+    assert capture(b"") == b""

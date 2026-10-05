@@ -7,7 +7,7 @@ use mrr_data_content::{
     ConditionalContentCommitPort, ConditionalContentWrite, publish_combined_graph,
 };
 const SCOPE: &str = "dataset";
-fn operation(root: cid::Cid) -> ConditionalContentWrite<'static> {
+pub(super) fn operation(root: cid::Cid) -> ConditionalContentWrite<'static> {
     ConditionalContentWrite {
         scope: SCOPE,
         operation_id: "original-source",
@@ -68,10 +68,20 @@ pub(super) async fn publish_for(
     let receipt = publish_combined_graph(&prepared, &f.local, remote, remote, || async { Ok(()) })
         .await
         .unwrap();
+    #[cfg(all(
+        feature = "selective-graphar",
+        any(target_os = "linux", target_os = "macos")
+    ))]
+    super::process_recovery::checkpoint(f, remote, "before-commit");
     guarded
         .commit(write, Some(&receipt), |_| Ok::<_, ()>(()))
         .await
         .unwrap();
+    #[cfg(all(
+        feature = "selective-graphar",
+        any(target_os = "linux", target_os = "macos")
+    ))]
+    super::process_recovery::checkpoint(f, remote, "after-commit");
     assert_eq!(
         guarded
             .recover(write)

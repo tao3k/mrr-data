@@ -11,12 +11,14 @@ from mrr_data_testing.process import BUILD_LIMITS, CONTROL_LIMITS, TEST_LIMITS, 
 class CargoArtifactCapture:
     """Keep Cargo records separate from live, very-verbose build diagnostics."""
 
-    def __init__(self, output):
+    def __init__(self, output, *, protocol=True):
         self.output = output
+        self.protocol = protocol
         self.pending = b""
         self.finished = []
         self.events = 0
         self.frontend_events = 0
+        self.pass_events = 0
 
     def __call__(self, block):
         lines = (self.pending + block).splitlines(keepends=True)
@@ -25,9 +27,21 @@ class CargoArtifactCapture:
             self.pending = lines.pop()
         forwarded = bytearray()
         for line in lines:
-            if not line.startswith(b"{"):
+            if not self.protocol or not line.startswith(b"{"):
+                if (
+                    re.match(rb"^\s*Running pass\b", line)
+                    and b'{"' not in line
+                    and b"error:" not in line
+                    and b"warning:" not in line
+                ):
+                    # LLVM worker threads can interleave pass headers. Count
+                    # actual header occurrences; retain mixed JSON/errors raw.
+                    self.pass_events += line.count(b"Running pass")
+                    if self.pass_events >= 256:
+                        forwarded.extend(self.pass_summary())
+                    continue
                 if re.match(
-                    rb"^\s*(?:\d+(?:\.\d+)?(?:ns|us|ms|s)\s+)?(?:INFO )?rustc_(?:hir_typeck::coercion|borrowck::region_infer|interface::passes)\b",
+                    rb"^\s*(?:\d+(?:\.\d+)?(?:ns|us|ms|s)\s+)?(?:INFO )?rustc_(?:hir_typeck::coercion|borrowck::region_infer|interface::passes|codegen_ssa::base)\b",
                     line,
                 ):
                     self.frontend_events += 1
@@ -50,7 +64,7 @@ class CargoArtifactCapture:
                 and message.get("level") == "note"
                 and any(
                     event in message.get("message", "")
-                    for event in (" inline (", " prologepilog (")
+                    for event in (" inline (", " prologepilog (", " asm-printer (")
                 )
             ):
                 self.events += 1
@@ -58,12 +72,20 @@ class CargoArtifactCapture:
                     forwarded.extend(self.summary())
             else:
                 forwarded.extend(line)
+        if not block and self.pass_events:
+            forwarded.extend(self.pass_summary())
         if not block and self.events:
             forwarded.extend(self.summary())
         if not block and self.frontend_events:
             forwarded.extend(self.frontend_summary())
-        self.output.flush()
+        if self.output is not None:
+            self.output.flush()
         return bytes(forwarded)
+
+    def pass_summary(self):
+        output = f"LLVM new-PM pass events: {self.pass_events}\n".encode()
+        self.pass_events = 0
+        return output
 
     def summary(self):
         output = f"rust compiler diagnostic events: {self.events}\n".encode()
@@ -126,7 +148,12 @@ def main():
             try:
                 with args.cargo_artifacts.open("wb") as output:
                     capture = CargoArtifactCapture(output)
-                    run(command, limits=BUILD_LIMITS, output_filter=capture)
+                    run(
+                        command,
+                        limits=BUILD_LIMITS,
+                        output_filter=capture,
+                        stderr_output_filter=CargoArtifactCapture(None, protocol=False),
+                    )
                     capture.complete()
             except BaseException:
                 args.cargo_artifacts.unlink(missing_ok=True)
