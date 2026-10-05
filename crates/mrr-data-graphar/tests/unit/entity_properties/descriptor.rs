@@ -126,6 +126,10 @@ fn descriptor_refuses_unknown_fields_versions_and_layout() {
 }
 
 #[test]
+#[cfg_attr(
+    feature = "source-handoff",
+    ignore = "fresh-process qualification; Source CI invokes this exact parent separately"
+)]
 fn property_descriptor_reopens_in_new_process() {
     let f = fixture::fixture();
     let (projection, tables) = inputs(&f);

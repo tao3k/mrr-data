@@ -568,9 +568,11 @@ digests; watchdogs fail silent/stalled children and reclaim them. Complete CID
 verification remains mandatory. OS caches are uncontrolled and engine spill is
 not measured. See [[file:../../crates/mrr-data-graphar/benches/README.org][the experiment contract]].
 
-P2 property-path execution still requires declared lossless entity-property
-mapping and an MRR-owned original-source plan/admission receipt. Binary-Entity
-outgoing access and synthetic physical measurements do not close that gate.
+At this historical physical slice, P2 property-path execution still required
+declared lossless entity-property mapping and an MRR-owned original-source
+plan/admission receipt. Later combined-source slices below and the current
+acceptance ledger close the simulated original-source gate; this early slice
+alone did not close it.
 A simulated Host/caller is the current acceptance boundary; deployed services
 or credentials are not prerequisites for this framework stage.
 
@@ -754,3 +756,66 @@ transfer and reservation limits before cache/remote reads. The returned immutabl
 closure retains its shared Backend drain barrier. Cache copies and provider
 scratch remain additional Host headroom; this is not a hard RSS guarantee. Native
 capture remains a separate blocking phase and must retain appropriate admission.
+
+** Current acceptance and request-local range coalescing (2026-10-05)
+
+The accepted baseline =a4e36c20= passed all 14 PR checks, including original
+Source handoff and GraphAr on Ubuntu/macOS. Its 48 cases per platform cover
+cold/warm full, warm selective and retained selective paths over uniform/skewed
+sources, with original MRR admission, aggregate budgets and process recovery.
+This closes the simulated P0-P2 framework gate. See the current acceptance
+section of [[https://github.com/tao3k/mrr-data/pull/12][PR 12]] for immutable run/artifact identities. It does not establish
+power-loss durability, multi-writer metadata, hard RSS isolation or deployed Host
+qualification.
+
+=outgoing_many= extends the same authenticated source with source-set semantics:
+duplicate source IDs are ignored and physical duplicate edges remain intact.
+All selected edges count against one aggregate limit before physical reads.
+Request-local planning groups neighborhoods by partition/chunk. Topology guard
+ranges are merged and read once per chunk; selected property ranges are merged
+and read once per chunk. Every original neighborhood retains its boundary probe,
+including empty neighborhoods. Arrow slices share the selected batch buffers;
+no retained payload cache, mutable catalog authority or full-source shortcut is
+introduced. Generation checks and final scope admission remain mandatory.
+
+This uses Parquet [[https://arrow.apache.org/rust/parquet/arrow/arrow_reader/struct.RowSelection.html][RowSelection]] before column materialization. The linked current
+API documentation describes the principle; the implementation remains pinned to
+Parquet 58.4.0. Coalescing readers within one request does not guarantee that
+compressed-page I/O contains only selected rows. Actual positioned read bytes
+and materialized rows are measured separately. The second-hop Source resource
+consumer uses this API; the existing single-source path remains a matched control.
+Elapsed time, native scratch and consumer-visible streaming are separate claims.
+
+Local qualification for this slice keeps the unchanged idle5/wall120 tests and
+idle30/wall1200 builds. Eight selective tests pass, including source deletion,
+duplicate-edge parity, aggregate-limit refusal, stale scope, truncated offsets,
+noncontiguous/chunk-boundary reads, cancellation and fresh retry. A matched
+same-capture fixture records =10522 -> 5261= actual read bytes and =10 -> 9=
+materialized rows; this is a bounded I/O result, not an elapsed-time claim.
+Ten original-source tests and the real process-recovery matrix pass; the full
+48-case matrix admits all results and returns zero cleanup bytes. Clippy passes.
+
+An additional all-feature single-process run records 80 passes and one failure:
+=property_descriptor_reopens_in_new_process= receives =ECHILD= from =try_wait=.
+The same descriptor test passes in a fresh isolated process. Native Scheme
+initialization occurs earlier in the failing combined run; a process-reaping
+interaction is a hypothesis, not a proven upstream root cause. Keep this failed
+receipt; do not count the aggregate run as passing or hide the failure with an
+exit-marker fallback. The maintained GraphAr and Source CI feature groups remain
+separate gates. Cross-platform elapsed-time comparisons and fixture roots from
+separate runs do not establish a speedup.
+
+The Source feature qualifies the descriptor parent in its own exec process via
+Python process supervision and requires its genuine exit status plus the Rust
+child's semantic receipt. This exact test is explicitly invoked by Source CI on
+both operating systems; the maintained GraphAr feature group still runs it by
+default. Under Source it is marked as requiring fresh-process qualification,
+as the existing recovery/resource process suites are. This closes test lifecycle
+ownership without claiming to repair the native runtime's process-wide signal
+behavior; no signals are reset and no missing child status is accepted.
+
+After explicit process isolation, the combined Source-feature test run passes
+80 tests with nine separately driven/experimental workers ignored. The descriptor
+parent then passes in its mandatory isolated invocation. Strict Clippy passes
+again. The earlier 80-pass/one-failure aggregate receipt remains a recorded
+negative control for lifecycle qualification.

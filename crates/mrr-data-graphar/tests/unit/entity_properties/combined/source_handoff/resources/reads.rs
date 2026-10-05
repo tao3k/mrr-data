@@ -33,15 +33,13 @@ pub(super) fn read(
             relation: first,
             facts: selection.into_facts().into(),
         });
-        let mut facts = Vec::new();
-        for target in targets {
-            let selection = source
-                .outgoing(&f.query, second, target, row_limit)
-                .unwrap();
-            rows += selection.metrics().materialized_rows;
-            bytes += selection.metrics().read_bytes;
-            facts.extend(selection.into_facts());
-        }
+        let targets = targets.into_iter().collect::<Vec<_>>();
+        let selection = source
+            .outgoing_many(&f.query, second, &targets, row_limit)
+            .unwrap();
+        rows += selection.metrics().materialized_rows;
+        bytes += selection.metrics().read_bytes;
+        let facts = selection.into_facts();
         relations.push(CapturedGraphArRelation {
             relation: second,
             facts: facts.into(),

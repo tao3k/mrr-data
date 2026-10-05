@@ -1,6 +1,8 @@
 //! Snapshot-bound ordered adjacency, offset indexing and selective Arrow reads.
 #[path = "selective_io.rs"]
 mod io;
+#[path = "selective_many.rs"]
+mod many;
 use crate::{
     BinaryEntityProjection, GraphArAdjacency, GraphArCaptureError, GraphArChunkLayout,
     GraphArReadError,
@@ -186,6 +188,32 @@ impl GraphArSelectiveSnapshot {
         validate_scope(query, &self.binding, projection)?;
         self.physical
             .outgoing_checked(projection, source, max_edges, check)
+    }
+    /// Read a set of source neighborhoods, coalescing ranges within each chunk.
+    /// Duplicate source IDs are ignored; duplicate edges remain intact.
+    /// # Errors
+    /// Refuses foreign scope, malformed boundaries and aggregate edge limits.
+    pub fn outgoing_many(
+        &self,
+        query: &BoundDataQuery,
+        projection: &BinaryEntityProjection,
+        sources: &[EntityId],
+        max_edges: usize,
+    ) -> Result<GraphArSelection, GraphArSelectiveError> {
+        self.outgoing_many_checked(query, projection, sources, max_edges, || Ok(()))
+    }
+    pub(crate) fn outgoing_many_checked(
+        &self,
+        query: &BoundDataQuery,
+        projection: &BinaryEntityProjection,
+        sources: &[EntityId],
+        max_edges: usize,
+        mut check: impl FnMut() -> Result<(), GraphArSelectiveError>,
+    ) -> Result<GraphArSelection, GraphArSelectiveError> {
+        check()?;
+        validate_scope(query, &self.binding, projection)?;
+        self.physical
+            .outgoing_many_checked(projection, sources, max_edges, check)
     }
     /// Matched full scan of the same authenticated physical source.
     /// # Errors

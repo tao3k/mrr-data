@@ -94,9 +94,33 @@ pub(super) fn read_range(
     rows: Range<usize>,
     meter: &mut ReadMeter,
 ) -> Result<RecordBatch, Error> {
-    if rows.start >= rows.end || rows.end > expected_rows {
+    read_ranges(file, name, fields, expected_rows, &[rows], meter)
+}
+
+pub(super) fn read_ranges(
+    file: Arc<File>,
+    name: &str,
+    fields: &[&str],
+    expected_rows: usize,
+    ranges: &[Range<usize>],
+    meter: &mut ReadMeter,
+) -> Result<RecordBatch, Error> {
+    let mut position = 0;
+    let mut wanted = 0;
+    let mut selectors = Vec::new();
+    for range in ranges {
+        if range.start < position || range.start >= range.end || range.end > expected_rows {
+            return Err(Error::Layout);
+        }
+        selectors.push(RowSelector::skip(range.start - position));
+        selectors.push(RowSelector::select(range.len()));
+        wanted += range.len();
+        position = range.end;
+    }
+    if wanted == 0 {
         return Err(Error::Layout);
     }
+    selectors.push(RowSelector::skip(expected_rows - position));
     let reader = CountedFile {
         length: file.metadata()?.len(),
         file,
@@ -118,13 +142,7 @@ pub(super) fn read_range(
     {
         return Err(Error::Layout);
     }
-    let wanted = rows.len();
-    let selection: RowSelection = vec![
-        RowSelector::skip(rows.start),
-        RowSelector::select(wanted),
-        RowSelector::skip(expected_rows - rows.end),
-    ]
-    .into();
+    let selection: RowSelection = selectors.into();
     let batches = builder
         .with_row_selection(selection)
         .with_batch_size(wanted)

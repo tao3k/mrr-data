@@ -226,7 +226,7 @@ fn read_relations(
         })
         .collect::<std::collections::BTreeSet<_>>();
     let mut downstream = Vec::new();
-    for target in targets {
+    for &target in &targets {
         let slice = source.outgoing(&f.query, second, target, 100).unwrap();
         assert_slice(&full[1], target, slice.facts());
         println!(
@@ -235,6 +235,22 @@ fn read_relations(
             slice.metrics().read_bytes
         );
         downstream.extend(slice.into_facts());
+    }
+    let sources = targets.into_iter().collect::<Vec<_>>();
+    let batch = source
+        .outgoing_many(&f.query, second, &sources, 100)
+        .unwrap();
+    let mut expected = downstream;
+    expected.sort_by_key(mrr::Fact::id);
+    let mut downstream = batch.into_facts();
+    downstream.sort_by_key(mrr::Fact::id);
+    assert_eq!(downstream, expected);
+    if !downstream.is_empty() {
+        assert!(
+            source
+                .outgoing_many(&f.query, second, &sources, downstream.len() - 1)
+                .is_err()
+        );
     }
     let selected = vec![
         CapturedGraphArRelation {

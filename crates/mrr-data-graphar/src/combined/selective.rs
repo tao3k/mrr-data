@@ -70,6 +70,21 @@ impl CapturedCombinedGraphArSelective {
             .physical
             .outgoing_checked(&member.projection, source, max_edges, || Ok(()))?)
     }
+    /// Read a source set with one topology/property reader per physical chunk.
+    /// # Errors
+    /// Refuses foreign scope/member, malformed boundaries and aggregate limits.
+    pub fn outgoing_many(
+        &self,
+        query: &BoundDataQuery,
+        relation: RelationId,
+        sources: &[EntityId],
+        max_edges: usize,
+    ) -> Result<GraphArSelection, Error> {
+        let member = self.member(query, relation)?;
+        Ok(member
+            .physical
+            .outgoing_many_checked(&member.projection, sources, max_edges, || Ok(()))?)
+    }
     /// Reference scan over the same storage and indexes used by outgoing reads.
     /// # Errors
     /// Refuses foreign scope/member, malformed rows and aggregate edge limits.

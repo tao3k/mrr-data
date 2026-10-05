@@ -356,6 +356,10 @@ fn selective_capture_and_ranges_refuse_corrupt_or_truncated_offsets() {
         snapshot.outgoing(&truncated.bound, &truncated.projection, alice, 10),
         Err(GraphArSelectiveError::Layout)
     ));
+    assert!(matches!(
+        snapshot.outgoing_many(&truncated.bound, &truncated.projection, &[alice], 10),
+        Err(GraphArSelectiveError::Layout)
+    ));
 }
 
 #[cfg(feature = "backend")]
@@ -613,4 +617,127 @@ fn compare_workload(
         first.metrics().files_read,
         first.metrics().elapsed.as_nanos()
     );
+}
+
+#[test]
+fn selective_many_coalesces_reads_preserving_duplicate_edges_and_limits() {
+    let fixture =
+        OrderedFixture::with_layout(facts(), crate::GraphArChunkLayout::new(64, 256).unwrap());
+    let snapshot = fixture.capture().unwrap();
+    std::fs::remove_dir_all(&fixture.source).unwrap();
+    let alice = EntityId::from_canonical_bytes("alice").unwrap();
+    let bob = EntityId::from_canonical_bytes("bob").unwrap();
+    let absent = EntityId::from_canonical_bytes("absent").unwrap();
+    let mut reference = Vec::new();
+    let mut bytes = 0;
+    let mut rows = 0;
+    for source in [alice, bob] {
+        let selected = snapshot
+            .outgoing(&fixture.bound, &fixture.projection, source, 10)
+            .unwrap();
+        bytes += selected.metrics().read_bytes;
+        rows += selected.metrics().materialized_rows;
+        reference.extend(selected.into_facts());
+    }
+    let batched = snapshot
+        .outgoing_many(
+            &fixture.bound,
+            &fixture.projection,
+            &[alice, bob, alice, absent],
+            10,
+        )
+        .unwrap();
+    reference.sort_by_key(Fact::id);
+    let metrics = batched.metrics();
+    let mut actual = batched.into_facts();
+    actual.sort_by_key(Fact::id);
+    assert_eq!(actual, reference);
+    let mut expected = fixture
+        .expected
+        .iter()
+        .filter(|fact| [Value::Entity(alice), Value::Entity(bob)].contains(&fact.values()[0]))
+        .cloned()
+        .collect::<Vec<_>>();
+    expected.sort_by_key(Fact::id);
+    assert_eq!(actual, expected);
+    assert_eq!(actual.len(), 4);
+    assert!(metrics.read_bytes < bytes);
+    assert!(metrics.materialized_rows < rows);
+    println!(
+        "BATCH-READ-OK single_bytes={bytes} batch_bytes={} single_rows={rows} batch_rows={}",
+        metrics.read_bytes, metrics.materialized_rows
+    );
+    assert!(matches!(
+        snapshot.outgoing_many(&fixture.bound, &fixture.projection, &[alice, bob], 3),
+        Err(GraphArSelectiveError::Limit)
+    ));
+    let stale = query(fixture.receipt.inventory(), "other-generation");
+    assert!(matches!(
+        snapshot.outgoing_many(&stale, &fixture.projection, &[alice], 10),
+        Err(GraphArSelectiveError::Scope)
+    ));
+    let empty = snapshot
+        .outgoing_many(&fixture.bound, &fixture.projection, &[absent], 0)
+        .unwrap();
+    assert_eq!(empty.metrics().read_bytes, 0);
+    assert!(empty.facts().is_empty());
+}
+
+#[test]
+fn selective_many_stop_refuses_partial_result_and_fresh_retry_succeeds() {
+    let fixture = OrderedFixture::new(facts());
+    let snapshot = fixture.capture().unwrap();
+    let alice = EntityId::from_canonical_bytes("alice").unwrap();
+    let mut checkpoints = 0;
+    let result =
+        snapshot.outgoing_many_checked(&fixture.bound, &fixture.projection, &[alice], 10, || {
+            checkpoints += 1;
+            if checkpoints == 5 {
+                Err(GraphArSelectiveError::Cancelled)
+            } else {
+                Ok(())
+            }
+        });
+    assert!(matches!(result, Err(GraphArSelectiveError::Cancelled)));
+    assert_eq!(checkpoints, 5);
+    assert_eq!(
+        snapshot
+            .outgoing_many(&fixture.bound, &fixture.projection, &[alice], 10)
+            .unwrap()
+            .facts()
+            .len(),
+        3
+    );
+}
+
+#[test]
+fn selective_many_matches_noncontiguous_sources_across_chunks_and_empty_guards() {
+    let entity = |name| EntityId::from_canonical_bytes(name).unwrap();
+    for (vertices, edges) in [(2, 2), (64, 256)] {
+        let fixture = OrderedFixture::with_layout(
+            facts(),
+            crate::GraphArChunkLayout::new(vertices, edges).unwrap(),
+        );
+        let snapshot = fixture.capture().unwrap();
+        for names in [["alice", "carol"], ["carol", "dave"], ["dave", "absent"]] {
+            let sources = names.map(entity);
+            let mut expected = fixture
+                .expected
+                .iter()
+                .filter(|fact| {
+                    sources
+                        .iter()
+                        .any(|source| fact.values()[0] == Value::Entity(*source))
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            expected.sort_by_key(Fact::id);
+            let mut actual = snapshot
+                .outgoing_many(&fixture.bound, &fixture.projection, &sources, 10)
+                .unwrap()
+                .into_facts();
+            actual.sort_by_key(Fact::id);
+            assert_eq!(actual, expected);
+        }
+    }
 }
