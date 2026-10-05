@@ -22,9 +22,9 @@ fn verify(
         && receipt["input_relation_rows"] == 2 * scale_rows + 8
         && receipt["input_entity_rows"]
             == if scale_rows == 4 {
-                11
+                12
             } else {
-                3 * scale_rows + 7
+                3 * scale_rows + 8
             }
         && receipt["source_digest"] == super::super::super::super::SOURCE_DIGEST
         && receipt["snapshot_root"].as_str().is_some_and(|root| {
@@ -159,7 +159,7 @@ fn original_source_resource_matrix() {
 fn source_resource_matrix_refuses_unadmitted_and_foreign_source_receipts() {
     let snapshot = mrr_data_core::raw_cid(b"resource-source").to_string();
     let sample = json!({"total_ns":1,"cpu_ns":1,"physical_backend_ns":1,"process_peak_rss_bytes":1,"relation_materialized_rows":1,"relation_selected_edges":1,"relation_read_bytes":1,"remote_read_bytes":0});
-    let valid = json!({"shape":"uniform","mode":"warm-full","scale_rows":4,"caller_budgets":super::scale::receipt(4),"input_relation_rows":16,"input_entity_rows":11,"spill_bytes":null,"copied_bytes":null,"streaming_first_result_ns":null,"source_digest":super::super::super::super::SOURCE_DIGEST,"snapshot_root":snapshot,"all_results_admitted":true,"expected_rows":4,"cleanup_bytes":0,"samples":[sample.clone(),sample.clone(),sample]});
+    let valid = json!({"shape":"uniform","mode":"warm-full","scale_rows":4,"caller_budgets":super::scale::receipt(4),"input_relation_rows":16,"input_entity_rows":12,"spill_bytes":null,"copied_bytes":null,"streaming_first_result_ns":null,"source_digest":super::super::super::super::SOURCE_DIGEST,"snapshot_root":snapshot,"all_results_admitted":true,"expected_rows":4,"cleanup_bytes":0,"samples":[sample.clone(),sample.clone(),sample]});
     assert!(verify(&valid, "uniform", "warm-full", Some(&snapshot), 4));
     assert!(!verify(&valid, "uniform", "warm-full", Some("foreign"), 4));
     assert!(!verify(
@@ -174,6 +174,7 @@ fn source_resource_matrix_refuses_unadmitted_and_foreign_source_receipts() {
         ("caller_budgets", json!({})),
         ("copied_bytes", json!(0)),
         ("input_relation_rows", json!(17)),
+        ("input_entity_rows", json!(11)),
         ("scale_rows", json!(1000)),
     ] {
         let mut invalid = valid.clone();
