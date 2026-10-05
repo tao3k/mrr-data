@@ -24,14 +24,16 @@ Namespace identifies a stable owning contract. It must not contain =V1=, =V2=,
 =.v1=, =.v2= or another format-version suffix. The Schema owner declares the
 numeric version, admissible fields, canonical encoding and compatibility/refusal
 rules. Filenames and root symbols follow the same stable naming rule. This is
-an execution gate for the current batch. The working implementation is written;
-compiled admission and current-head platform qualification remain pending.
+an execution gate for the current batch. Production migration at =e18ae4f3=
+is locally qualified. The corrected expanded Source caller at =e9a47066=
+passes all three scale matrices. Final publication still requires checks at the
+exact published commit; the receipt below captures local qualification.
 
 The prior receipt filename/root-symbol corrections did not finish production
 Namespace migration. The following findings describe published baseline =14ee37e3=;
-the working slice now implements their corrections:
+the locally qualified slice implements their corrections:
 
-| Owner | Published baseline finding | Working correction awaiting qualification |
+| Owner | Published baseline finding | Locally qualified correction |
 |-------+-----------------+----------------------|
 | =mrr-data-profile= | GraphAr entity-properties and dataset namespaces embed =.v1= | Stable namespaces; versions remain explicit Schema constants |
 | =mrr-data-core= | Dataset-binding and file-inventory namespaces embed =.v1=; version checks are local literals | Move their Schema identities/version policy into the common Schema owner and consume that owner during construction and admission |
@@ -39,52 +41,124 @@ the working slice now implements their corrections:
 | =mrr-data-backend/providers= | DuckDB and Turso schema markers embed =.v2= | Stable provider Schema namespace plus independently admitted numeric version; check marker before any stored authority/recovery record is used |
 | =mrr-data-arrow= | Field value labels embed =:v1= or =-v1=; metadata version uses =v1= text | Stable value labels; common Schema owner provides numeric version, rendered as decimal text for Arrow metadata |
 
-The next execution order is:
+The execution sequence is now locally qualified:
 
-1. Complete this Namespace/Schema migration across the above owners in one
-   coherent composition. For example, GraphAr uses namespace
-   =mrr.graphar.dataset= with numeric Schema version =1=; Backend revision
-   records use namespace =mrr.backend.revision= with numeric Schema version
-   declared by the Backend metadata Schema. No parser derives a version from
-   a name, and no second namespace or compatibility alias stands in for Schema
-   admission. Keys and records share the declared Schema policy and budgets.
-2. Verify canonical round trips, unknown/missing/malformed version refusal,
-   namespace mismatch, old version-bearing records and native provider reopen.
-   Preserve authority history, pending operations, lost-ACK recovery and explicit
-   refusal of unsupported stores. A version change must not silently select an
-   empty deployment namespace, reset a store or erase recovery obligations.
-3. Requalify the original-query Source path and immutable graph publication,
-   full/selective equivalence, cross-profile reuse and stale-source refusal,
-   native recovery, cleanup and final-clone drain. Rust owns contract assertions;
-   Python only supervises processes, artifacts and receipts. Publish the coherent
-   composition and qualify Linux/macOS/MSRV at its exact head.
-4. Continue M3 only after the naming/admission gate closes: choose the supported
-   measurement scopes, add representative scale and paired cold/warm/selective/
-   reuse measurements, retain regressions, and classify every metric as measured,
-   failed or explicitly deferred/unsupported. Tiny-fixture diagnostics do not
-   establish production speedup. Copies, engine spill and streamed first-result
-   currently remain unsupported rather than measured zero.
+1. One common =mrr-data-profile::SchemaIdentity= owner declares 17 stable
+   GraphAr, Backend and Arrow namespaces with independent numeric versions.
+   Canonical construction and admission use that owner. No version is parsed
+   from a namespace, and old version-bearing namespaces are not aliases.
+2. Schema round trips and missing/unknown/malformed version refusal pass.
+   Independent native DuckDB and Turso consumers pass =15= and =13= tests,
+   including provider marker refusal, history/reopen, pending operations,
+   lost-ACK recovery and process-exit atomicity where supported by the provider.
+   Unsupported stores are refused before Ready; no store is reset or erased.
+3. Original-query Source tests pass =2 DataFusion + 9 GraphAr= on the corrected
+   caller. Local production owner tests pass =65=; full DataFusion passes =26=.
+   GraphAr passes =77= nonignored tests across a fresh descriptor parent and a
+   separate remaining-test process. Full six-owner all-target strict Clippy,
+   edited GraphAr Source Clippy, Source facade, formatting and documentation
+   checks pass. Rust owns contract assertions; Python supervises artifacts and
+   processes. Publication and exact-head Linux/macOS/MSRV checks remain the
+   separate platform gate.
+4. The supported M3 process matrix passes =24 cases= at =4, 1,000, 10,000=
+   added edges per relation across uniform/skewed and cold/full, warm/full,
+   warm/selective and prepared/selective reuse. CPU, phase wall, RSS and
+   physical counters are measured with retained regressions. Copies, spill and
+   streamed first-result remain explicitly unsupported. These comparisons do
+   not qualify a general production speedup.
 
 The production Schema identifiers above are the first owned slice. External
 protocol paths, dependency release versions and authenticated upstream fixture
 identities have their own owners; their occurrence in an audit is evidence, not
 an instruction to reinterpret those contracts as Data namespaces.
 
-The prepared M3 matrix keeps the original tiny diagnostic scope and adds 1,000
-and 10,000 extra edges to each relation. Large scopes add distinct Scenario, Case
-and Profile rows; skew changes source degree without multiplying actual matching
-join rows. The original Healthcare source and four admitted rows, including its
-duplicate and NULL, remain the semantic control. Caller-owned capture, transfer,
-input, potential join, execution-memory and result budgets are recorded. Each
-complete scale matrix retains test idle5/wall120; build idle30/wall1200 is unchanged.
-No expanded-scale measurement is qualified before the new binaries execute.
-Copies, spill and streamed first-result remain explicit unsupported NULL fields.
+The expanded M3 matrix preserves the original Healthcare query and its four
+admitted rows, duplicate and NULL. Added Case and Profile identities keep actual
+matching joins bounded while skew changes source degree. Each complete scale
+retains =idle5/wall120=; build =idle30/wall1200=, compiler optimization and worker
+counts are unchanged. Large callers explicitly declare 16 MiB property values,
+64 MiB physical input, 128 MiB engine execution memory and 128 MiB transfer and
+resource-handle reservation, with a 384 MiB Backend reservation ceiling. Tiny
+callers retain their 8 MiB handle reservation. Physical pre-filter output bounds
+are separate from MRR's unchanged 100-row/300-cell admitted-result limit.
+Reservations are logical admission, not a hard RSS cap. Complete caller budgets
+and effective transfer ceilings accompany every Rust receipt.
+
+** Namespace and expanded Source local receipt: 2026-10-05
+
+The clean matching source is =e9a47066759f1b3a6bdd18f80fe54f221c05c152=.
+The [[file:../../evidence/original-source/original-source-expanded-build.json][compiled-source provenance]] records 40 committed source hashes, successful
+Cargo artifact identity, native provider binaries, gate scope and retained
+failures. The final Source test binary SHA256 is
+=6c522d6bb84215084e4d98199694276d42258f1af2615e2c34ec6d39616792df=;
+the successful Cargo artifact SHA256 is
+=53984a9ea694a88e4d0a1519b942defbff9455f04dcbf5687afbf815756e47f5=.
+Rust =1.95.0= / LLVM =22.1.2= on =aarch64-apple-darwin= compiled this local slice.
+MRR =294cb95c= and GSC =3635dfa= remain unchanged. This is local source/artifact
+identity; final published-commit CI is a separate acceptance record.
+
+The final Source build passes in =2m52s=, Source filters in =2.37s + 1.41s=,
+and edited GraphAr strict Clippy in =8.22s=. The earlier full six-owner
+all-target strict Clippy passes in =2m33s= and Source facade in =6.29s=;
+the subsequent corrections affect only GraphAr test callers. Local Python
+qualification passes =51 tests= with strict Ruff. The generic Backend normal
+dependency guard finds none of its eight forbidden provider/domain packages.
+
+The [[file:../../evidence/original-source/original-source-expanded-native-macos.jsonl][24-case Rust receipt]] and [[file:../../evidence/original-source/original-source-expanded-run.log.gz][raw successful matrix run]] retain two warmups and three samples per case,
+one immutable snapshot per shape/scale, four MRR-admitted results and zero final
+reservations. The 10,000-edge-per-relation matrix completes in =51.73s= inside
+the unchanged 120-second gate. It has =20,008= relation rows and =30,008= entity
+rows. Every selective mode selects six edges; full mode selects =20,008=.
+
+The following are sample medians. CPU and wall are milliseconds; read bytes
+are the relation-reader counter; RSS is whole-process MiB, including fixture,
+Rust and native engine. Reuse excludes fresh source preparation from its sample
+and is not equivalent to a cold request.
+
+| Added edges / shape | CPU full / selective / reuse ms | Selective CPU change | Wall full / selective ms | Relation bytes full / selective | RSS full / selective MiB |
+|---------------------+----------------------------------+----------------------+--------------------------+---------------------------------+--------------------------|
+| 4 / uniform | 40.21 / 42.66 / 2.59 | +6.1% | 40.51 / 43.33 | 49,997 / 20,213 | 427.6 / 428.6 |
+| 4 / skewed | 36.89 / 36.05 / 2.73 | -2.3% | 37.02 / 36.44 | 45,154 / 20,213 | 427.1 / 428.0 |
+| 1000 / uniform | 74.66 / 78.42 / 4.10 | +5.0% | 78.28 / 85.00 | 279,085 / 52,614 | 441.5 / 443.5 |
+| 1000 / skewed | 67.98 / 67.62 / 3.33 | -0.5% | 70.51 / 77.28 | 255,068 / 41,367 | 441.1 / 442.5 |
+| 10000 / uniform | 744.41 / 706.60 / 13.97 | -5.1% | 992.85 / 1437.26 | 2,773,062 / 52,947 | 556.6 / 558.9 |
+| 10000 / skewed | 500.45 / 435.38 / 7.79 | -13.0% | 513.40 / 441.50 | 2,493,837 / 40,527 | 538.6 / 544.2 |
+
+Uniform tiny and 1,000-edge selective CPU regress by =6.1%= and =5.0%=.
+At 10,000 uniform edges CPU drops =5.1%= while wall regresses about =44.8%=;
+skewed CPU drops =13.0%=. Selective RSS does not improve, and prepared reuse can
+have a higher process high-water mark despite less sampled work. The prior tiny
+uniform CPU regression (=+1.8%=) remains in its historical raw receipt. Host
+scheduling and OS page-cache state are uncontrolled; cold means an empty verified
+content cache. These negatives and scope differences prevent a production
+speedup claim. =copied_bytes=, =spill_bytes= and =streaming_first_result_ns=
+remain unsupported NULL values, never measured zeroes.
+
+Failed gates were corrected and retained:
+
+| Source slice | Typed failure | Correction and evidence boundary |
+|--------------+---------------+----------------------------------|
+| =e18ae4f3= | [[file:../../evidence/original-source/expanded-failed-entity-count.log.gz][Rust parent rejects tiny entity row count]]: emitted 12, expected 11 | Fixture has 2 Scenario + 3 Case + 3 Profile, plus 4 tiny Scenario rows; correct expectations are 12 and 3n+8; wrong count remains refused |
+| =dd7aa0a5= | [[file:../../evidence/original-source/expanded-failed-physical-budget.log.gz][DataFusion output-cells resource refusal]] at 1,000 edges | Caller declares the physical pre-filter product bound separately; MRR final 100-row/300-cell limit stays fixed |
+| =7f8b6676= | [[file:../../evidence/original-source/expanded-failed-reservation.log.gz][Cold transfer Remote TooLarge]] at 10,000 edges | Restore API caps payload by reservation; large caller now admits its declared 128 MiB ceiling, identically across modes |
+| Mixed full GraphAr process | [[file:../../evidence/original-source/graphar-mixed-process-failed.log.gz][Parent try_wait returns ECHILD]] after child prints success | Parent success was not admitted; its fresh-process run retains the actual child wait status; all other nonignored tests pass separately |
+
+Two combined native diagnostic builds also reached =wall1200= without a
+successful Cargo artifact admission. Independent provider builds then pass in
+=3m57s= (DuckDB) and =4m32s= (Turso). First-start inactivity failures remain in
+raw diagnostics; later independent formal runs qualify their own executions.
+No failed process is converted into a pass, and neither the mixed-process failure
+nor the initial inactivity failures have a proven host-load cause. The split
+GraphAr test result does not establish a successful mixed native-runtime and
+child-wait process. Exact-head platform checks must use the published PR commit.
 
 ** Overall assessment
 
 The common architecture is substantially implemented. Exact-head platform
-acceptance passed at =14ee37e3=, but the Namespace/Schema migration above is
-written but unqualified, and expanded-scale performance remains unqualified.
+acceptance passed at the historical =14ee37e3=. The Namespace/Schema migration
+and supported expanded-scale process matrix above are locally qualified at
+=e9a47066=; final published-head platform checks remain separate. General
+production speedup and the three unsupported measurements remain unqualified.
 Shared Backend admission, async cold restoration,
 retained leases, graph dataset publication, authenticated combined native capture,
 simulated authority recovery and narrow engine adapters exist. Original source
@@ -120,7 +194,7 @@ does not establish process-exit or power-loss durability and does not replace
 the native provider recovery matrix. Resource bytes are declared reservations,
 not a native RSS cap. Local and platform qualification remain explicit gates.
 
-** Current integration and continuous qualification
+** Published baseline integration and continuous qualification: 14ee37e3
 
 The integrated =e9c555cc= composition retains complete-Dataset selective capture,
 cross-profile original-source reuse and supervised native Cargo builds with
@@ -136,7 +210,7 @@ The resource parent isolates native fixture production so it retains ownership
 of every child's exit status. The standalone eight-case matrix passed in
 =23.48s=, full all-target strict Source Clippy in =1m06s= and the facade in
 =30.91s=. Rust verifies one immutable snapshot per shape, independent
-original-query results and final zero reservations. The latest raw envelope
+original-query results and final zero reservations. The baseline raw envelope
 is [[file:../../evidence/original-source/original-source-isolated-native-macos.jsonl][the isolated-native Source receipt]]. Earlier receipts and negative wall/CPU
 results remain historical evidence; the latest uniform selective CPU result also
 regresses slightly and does not qualify a production speedup.
