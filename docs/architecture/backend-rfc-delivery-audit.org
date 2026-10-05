@@ -2317,3 +2317,21 @@ Process RSS (approximately 428-442 MiB) includes the native runtime and fixture;
 it is not an engine-only peak or a physical memory cap. OS cache and host
 scheduling are uncontrolled. These bounded results qualify the declared
 fixtures, not release-scale performance, global zero-copy or arbitrary GQL.
+
+
+* Exact-head Ubuntu facade visibility repair: 2026-10-05
+
+Run =37265072067= at =9e0d755be34d5fa4ddd403beeab1ae0d37462ce8=
+completes the original Source build in 12m24s, followed by DataFusion 2 and
+GraphAr 10 passing Source tests (including Research). The subsequent facade
+check starts a new =graphar-rs= native build at 05:20:20 UTC. Its output is
+buffered because CI omits Cargo =-vv=; after the last unrelated Rust artifact
+at 05:21:02 UTC, idle30 refuses at 05:21:32 UTC. No =graphar-rs= completed
+artifact is reported for that phase. Recovery and scale collection were not
+reached and are not counted as CI passes.
+
+CI facade and strict Source Clippy now use =-vv=, matching the locally qualified
+commands. This forwards actual build-script output rather than relying on
+unrelated concurrent Rust completions. The build idle30/wall1200 and test
+idle5/wall120 budgets, provider features, optimizer and Cargo concurrency remain
+unchanged. The complete successor exact-head CI is required before acceptance.
