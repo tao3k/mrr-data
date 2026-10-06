@@ -159,10 +159,11 @@ def main():
                 }
             ),
             "ring": bool(enabled & {"protected-envelope", "protected-publish", "s3"}),
-            "zeroize": bool(
-                enabled
-                & {"protected-envelope", "protected-publish", "s3", "commerce-cedar"}
-            ),
+            # MRR's signed transformation grants require Ed25519 in the
+            # shared semantic core, independently of Data envelope features.
+            "ed25519-dalek": identity
+            or bool(enabled & {"arrow", "datafusion", "graphar"}),
+            "zeroize": identity or bool(enabled & {"arrow", "datafusion", "graphar"}),
             "cid": identity,
             "serde_ipld_dagcbor": identity,
             "fvm_ipld_car": "car" in enabled,
