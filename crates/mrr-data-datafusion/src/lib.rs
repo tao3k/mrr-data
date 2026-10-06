@@ -9,7 +9,8 @@ pub use property::{
     execute_property_path_query, execute_property_path_query_observed,
     execute_restored_property_path_query, execute_restored_property_query_handoff,
     property_transformation_artifact, property_transformation_endpoint,
-    property_transformation_root, reference_property_path_query, verify_property_path_output,
+    property_transformation_grant_catalog, property_transformation_root,
+    reference_property_path_query, verify_property_path_output,
     verify_restored_property_path_output,
 };
 

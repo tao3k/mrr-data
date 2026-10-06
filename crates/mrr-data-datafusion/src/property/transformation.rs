@@ -3,10 +3,11 @@
 //! This runtime does not manufacture a certificate or authenticate that owner.
 use super::{RestoredPropertyBackend, RestoredPropertyQuery, verify_restored_property_path_output};
 use meta_relational_reasoning::{
-    AdmittedPropertyExecution, AsyncTransformationRuntime, CatalogBoundQuery, QueryResultLimits,
-    TransformationAdmission, TransformationBinding, TransformationEndpoint, TransformationError,
-    TransformationStep, Value, ValueSchema, export_query_result_transport,
-    verify_query_result_transport,
+    AdmittedPropertyExecution, AsyncTransformationRuntime, AuthenticatedTransformationGrant,
+    CatalogBoundQuery, QueryResultLimits, TransformationAdmission, TransformationBinding,
+    TransformationEndpoint, TransformationError, TransformationGrantOperation as GrantOp,
+    TransformationLimits, TransformationStep, Value, ValueSchema, export_query_result_transport,
+    transformation_grant_binding_digest, verify_query_result_transport,
 };
 use mrr_data_core::{BoundDataQuery, PhysicalQueryOutput};
 use sha2::{Digest, Sha256};
@@ -14,7 +15,7 @@ use std::{
     num::NonZeroUsize,
     sync::{
         Mutex,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
 };
 
@@ -68,6 +69,20 @@ pub fn property_transformation_root(restored: &mrr_data_content::RestoredSnapsho
     hash.finalize().into()
 }
 
+/// Signed grant cut for this physical query, root and implementation closure.
+#[must_use]
+pub fn property_transformation_grant_catalog(
+    query: &CatalogBoundQuery,
+    restored: &mrr_data_content::RestoredSnapshot,
+) -> [u8; 32] {
+    let mut hash = Sha256::new();
+    hash.update(b"mrr-data.property-transformation-grant-cut.v1");
+    hash.update(property_transformation_artifact("dependencies"));
+    hash.update(query.digest());
+    hash.update(property_transformation_root(restored));
+    hash.finalize().into()
+}
+
 /// One immutable query/root, one previously admitted identity edge, one solver.
 /// Input binds the original catalog-bound query digest and physical root. Answer bytes retain MRR's
 /// full typed result transport; extraction never invents or projects rows.
@@ -76,6 +91,8 @@ pub struct PropertyTransformationRuntime<'a> {
     query: &'a CatalogBoundQuery,
     backend: RestoredPropertyBackend<'a>,
     edge: TransformationAdmission,
+    authority: AuthenticatedTransformationGrant,
+    operations: AtomicU64,
     parameters: [u8; 32],
     solver: [u8; 32],
     identity: [u8; 32],
@@ -90,14 +107,28 @@ impl<'a> PropertyTransformationRuntime<'a> {
     /// is also rechecked by the caller's verifier at every async return.
     /// # Errors
     /// Rejects mismatched endpoint, artifacts, physical root or source binding.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "Constructor binds query, backend, certified edge and separate authenticated authority with their explicit bounds."
+    )]
     pub fn new(
         query: &'a CatalogBoundQuery,
         backend: RestoredPropertyBackend<'a>,
         edge: TransformationAdmission,
+        authority: AuthenticatedTransformationGrant,
+        authority_limits: TransformationLimits,
         parameters: [u8; 32],
         result_limits: QueryResultLimits,
         max_bytes: NonZeroUsize,
     ) -> Result<Self, TransformationError> {
+        if authority.binding_digest()
+            != &transformation_grant_binding_digest(edge.binding(), authority_limits)?
+            || authority.catalog_digest()
+                != &property_transformation_grant_catalog(query, backend.restored)
+        {
+            return Err(TransformationError::BindingMismatch);
+        }
+        authority.check_current()?;
         let definition = edge.definition();
         let endpoint = property_transformation_endpoint(query);
         if definition.source != endpoint
@@ -133,6 +164,7 @@ impl<'a> PropertyTransformationRuntime<'a> {
         // a portable semantic definition or interchange encoding.
         hash.update(format!("{result_limits:?}").as_bytes());
         hash.update(edge.digest());
+        hash.update(authority.identity());
         let identity: [u8; 32] = hash.finalize().into();
         let mut hash = Sha256::new();
         hash.update(property_transformation_artifact("solve"));
@@ -142,6 +174,8 @@ impl<'a> PropertyTransformationRuntime<'a> {
             query,
             backend,
             edge,
+            authority,
+            operations: AtomicU64::new(0),
             parameters,
             solver,
             identity,
@@ -180,10 +214,65 @@ impl<'a> PropertyTransformationRuntime<'a> {
             .map_err(|_| TransformationError::Unknown)
             .map(|mut stored| stored.take())
     }
+    /// Persist nonce revocation, including for a newly opened runtime.
+    /// # Errors
+    /// Returns the ledger persistence error; the live runtime stays revoked.
+    pub fn revoke_source_grant(&self) -> Result<(), TransformationError> {
+        self.revoked.store(true, Ordering::Release);
+        self.authority.revoke()
+    }
+    /// Commit owner-provided publication under a current authenticated lease.
+    /// The action must be synchronous; uncertain persistence remains its error.
+    /// # Errors
+    /// Rejects revoked grants, denied permission and exhausted budgets.
+    /// Expiry or local revocation after the action is `PublicationUncertain`.
+    pub fn publish<T>(
+        &self,
+        value_bytes: u64,
+        action: impl FnOnce() -> Result<T, TransformationError>,
+    ) -> Result<T, TransformationError> {
+        self.current(self.edge.binding())?;
+        let n = self.next_operation()?;
+        let mut started = false;
+        let result = self
+            .authority
+            .authorize(GrantOp::Publish, n, value_bytes, || {
+                if self.revoked.load(Ordering::Acquire) {
+                    return Err(TransformationError::Revoked);
+                }
+                started = true;
+                let value = action()?;
+                if self.revoked.load(Ordering::Acquire) {
+                    return Err(TransformationError::PublicationUncertain);
+                }
+                Ok(value)
+            });
+        match result {
+            Err(TransformationError::Revoked) if started => {
+                Err(TransformationError::PublicationUncertain)
+            }
+            other => other,
+        }
+    }
+    fn next_operation(&self) -> Result<u64, TransformationError> {
+        self.operations
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| n.checked_add(1))
+            .map(|n| n + 1)
+            .map_err(|_| TransformationError::Budget)
+    }
+    fn authorize(&self, op: GrantOp, value: &Value) -> Result<(), TransformationError> {
+        let Value::ByteString(bytes) = value else {
+            return Err(TransformationError::InvalidSchema);
+        };
+        let n = self.next_operation()?;
+        self.authority
+            .authorize(op, n, bytes.len() as u64, || Ok(()))
+    }
     fn current(&self, binding: &TransformationBinding) -> Result<(), TransformationError> {
         if self.revoked.load(Ordering::Acquire) {
             return Err(TransformationError::Revoked);
         }
+        self.authority.check_current()?;
         if binding != self.edge.binding() {
             return Err(TransformationError::BindingMismatch);
         }
@@ -204,7 +293,11 @@ impl<'a> PropertyTransformationRuntime<'a> {
 }
 impl AsyncTransformationRuntime for PropertyTransformationRuntime<'_> {
     fn identity(&self) -> [u8; 32] {
-        self.identity
+        if self.current(self.edge.binding()).is_err() {
+            [0; 32]
+        } else {
+            self.identity
+        }
     }
     async fn forward(
         &self,
@@ -215,6 +308,7 @@ impl AsyncTransformationRuntime for PropertyTransformationRuntime<'_> {
         self.current(binding)?;
         self.step(step)?;
         self.instance(input)?;
+        self.authorize(GrantOp::Forward, input)?;
         Ok(input.clone())
     }
     async fn solve(
@@ -229,6 +323,7 @@ impl AsyncTransformationRuntime for PropertyTransformationRuntime<'_> {
         if solver != &self.solver || target != &self.edge.definition().target {
             return Err(TransformationError::BindingMismatch);
         }
+        self.authorize(GrantOp::Solve, input)?;
         let physical = self
             .query
             .execute_with(&self.backend, self.result_limits)
@@ -242,6 +337,12 @@ impl AsyncTransformationRuntime for PropertyTransformationRuntime<'_> {
             self.max_bytes,
         )
         .map_err(|_| TransformationError::Budget)?;
+        self.authority.authorize(
+            GrantOp::Solve,
+            self.operations.load(Ordering::Acquire),
+            bytes.len() as u64,
+            || Ok(()),
+        )?;
         self.current(binding)?;
         *self
             .physical
@@ -264,6 +365,7 @@ impl AsyncTransformationRuntime for PropertyTransformationRuntime<'_> {
             Value::ByteString(_) => return Err(TransformationError::Budget),
             _ => return Err(TransformationError::InvalidSchema),
         }
+        self.authorize(GrantOp::Extract, answer)?;
         Ok(answer.clone())
     }
     async fn check_answer(
@@ -278,6 +380,7 @@ impl AsyncTransformationRuntime for PropertyTransformationRuntime<'_> {
         if endpoint != &self.edge.definition().target {
             return Err(TransformationError::EndpointMismatch);
         }
+        self.authorize(GrantOp::Solve, answer)?;
         let Value::ByteString(bytes) = answer else {
             return Err(TransformationError::InvalidSchema);
         };

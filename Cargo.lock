@@ -3624,7 +3624,7 @@ dependencies = [
 [[package]]
 name = "meta-relational-reasoning"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0a2053cd964cd5a92d67bb9ae81079f36fd79fa6#0a2053cd964cd5a92d67bb9ae81079f36fd79fa6"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0f4594c944317aab4e873abcaf28264ead5f45cf#0f4594c944317aab4e873abcaf28264ead5f45cf"
 dependencies = [
  "ciborium",
  "ed25519-dalek",
@@ -3701,7 +3701,7 @@ dependencies = [
 [[package]]
 name = "mrr-bundle"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0a2053cd964cd5a92d67bb9ae81079f36fd79fa6#0a2053cd964cd5a92d67bb9ae81079f36fd79fa6"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0f4594c944317aab4e873abcaf28264ead5f45cf#0f4594c944317aab4e873abcaf28264ead5f45cf"
 dependencies = [
  "ciborium",
  "mrr-identity",
@@ -3862,6 +3862,7 @@ dependencies = [
  "arrow-schema",
  "cid",
  "datafusion",
+ "ed25519-dalek",
  "futures",
  "meta-relational-reasoning",
  "mrr-data-arrow",
@@ -3870,6 +3871,7 @@ dependencies = [
  "mrr-data-core",
  "mrr-property-source",
  "sha2 0.10.9",
+ "tempfile",
  "tokio",
 ]
 
@@ -3996,7 +3998,7 @@ dependencies = [
 [[package]]
 name = "mrr-deduction"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0a2053cd964cd5a92d67bb9ae81079f36fd79fa6#0a2053cd964cd5a92d67bb9ae81079f36fd79fa6"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0f4594c944317aab4e873abcaf28264ead5f45cf#0f4594c944317aab4e873abcaf28264ead5f45cf"
 dependencies = [
  "mrr-bundle",
  "mrr-gerbil",
@@ -4010,7 +4012,7 @@ dependencies = [
 [[package]]
 name = "mrr-frontends"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0a2053cd964cd5a92d67bb9ae81079f36fd79fa6#0a2053cd964cd5a92d67bb9ae81079f36fd79fa6"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0f4594c944317aab4e873abcaf28264ead5f45cf#0f4594c944317aab4e873abcaf28264ead5f45cf"
 dependencies = [
  "icu_properties",
  "mrr-gerbil",
@@ -4021,7 +4023,7 @@ dependencies = [
 [[package]]
 name = "mrr-gerbil"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0a2053cd964cd5a92d67bb9ae81079f36fd79fa6#0a2053cd964cd5a92d67bb9ae81079f36fd79fa6"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0f4594c944317aab4e873abcaf28264ead5f45cf#0f4594c944317aab4e873abcaf28264ead5f45cf"
 dependencies = [
  "blake3",
  "gerbil-scheme-sys",
@@ -4038,7 +4040,7 @@ dependencies = [
 [[package]]
 name = "mrr-gerbil-native-build"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0a2053cd964cd5a92d67bb9ae81079f36fd79fa6#0a2053cd964cd5a92d67bb9ae81079f36fd79fa6"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0f4594c944317aab4e873abcaf28264ead5f45cf#0f4594c944317aab4e873abcaf28264ead5f45cf"
 dependencies = [
  "gerbil-scheme-native-build",
  "sha2 0.10.9",
@@ -4047,7 +4049,7 @@ dependencies = [
 [[package]]
 name = "mrr-identity"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0a2053cd964cd5a92d67bb9ae81079f36fd79fa6#0a2053cd964cd5a92d67bb9ae81079f36fd79fa6"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0f4594c944317aab4e873abcaf28264ead5f45cf#0f4594c944317aab4e873abcaf28264ead5f45cf"
 dependencies = [
  "serde",
  "sha2 0.10.9",
@@ -4056,7 +4058,7 @@ dependencies = [
 [[package]]
 name = "mrr-intent"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0a2053cd964cd5a92d67bb9ae81079f36fd79fa6#0a2053cd964cd5a92d67bb9ae81079f36fd79fa6"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0f4594c944317aab4e873abcaf28264ead5f45cf#0f4594c944317aab4e873abcaf28264ead5f45cf"
 dependencies = [
  "mrr-identity",
  "sha2 0.10.9",
@@ -4065,7 +4067,7 @@ dependencies = [
 [[package]]
 name = "mrr-lineage"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0a2053cd964cd5a92d67bb9ae81079f36fd79fa6#0a2053cd964cd5a92d67bb9ae81079f36fd79fa6"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0f4594c944317aab4e873abcaf28264ead5f45cf#0f4594c944317aab4e873abcaf28264ead5f45cf"
 dependencies = [
  "mrr-identity",
  "mrr-relation",
@@ -4074,7 +4076,7 @@ dependencies = [
 [[package]]
 name = "mrr-logic"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0a2053cd964cd5a92d67bb9ae81079f36fd79fa6#0a2053cd964cd5a92d67bb9ae81079f36fd79fa6"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0f4594c944317aab4e873abcaf28264ead5f45cf#0f4594c944317aab4e873abcaf28264ead5f45cf"
 dependencies = [
  "mrr-identity",
  "mrr-query",
@@ -4085,7 +4087,7 @@ dependencies = [
 [[package]]
 name = "mrr-property-source"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0a2053cd964cd5a92d67bb9ae81079f36fd79fa6#0a2053cd964cd5a92d67bb9ae81079f36fd79fa6"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0f4594c944317aab4e873abcaf28264ead5f45cf#0f4594c944317aab4e873abcaf28264ead5f45cf"
 dependencies = [
  "meta-relational-reasoning",
  "mrr-frontends",
@@ -4094,7 +4096,7 @@ dependencies = [
 [[package]]
 name = "mrr-query"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0a2053cd964cd5a92d67bb9ae81079f36fd79fa6#0a2053cd964cd5a92d67bb9ae81079f36fd79fa6"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0f4594c944317aab4e873abcaf28264ead5f45cf#0f4594c944317aab4e873abcaf28264ead5f45cf"
 dependencies = [
  "ciborium",
  "mrr-identity",
@@ -4105,7 +4107,7 @@ dependencies = [
 [[package]]
 name = "mrr-relation"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0a2053cd964cd5a92d67bb9ae81079f36fd79fa6#0a2053cd964cd5a92d67bb9ae81079f36fd79fa6"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0f4594c944317aab4e873abcaf28264ead5f45cf#0f4594c944317aab4e873abcaf28264ead5f45cf"
 dependencies = [
  "mrr-identity",
  "serde",
@@ -4114,7 +4116,7 @@ dependencies = [
 [[package]]
 name = "mrr-revision"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0a2053cd964cd5a92d67bb9ae81079f36fd79fa6#0a2053cd964cd5a92d67bb9ae81079f36fd79fa6"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0f4594c944317aab4e873abcaf28264ead5f45cf#0f4594c944317aab4e873abcaf28264ead5f45cf"
 dependencies = [
  "mrr-identity",
  "sha2 0.10.9",
@@ -4123,7 +4125,7 @@ dependencies = [
 [[package]]
 name = "mrr-search"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0a2053cd964cd5a92d67bb9ae81079f36fd79fa6#0a2053cd964cd5a92d67bb9ae81079f36fd79fa6"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0f4594c944317aab4e873abcaf28264ead5f45cf#0f4594c944317aab4e873abcaf28264ead5f45cf"
 dependencies = [
  "mrr-gerbil",
  "mrr-identity",
@@ -4134,7 +4136,7 @@ dependencies = [
 [[package]]
 name = "mrr-transition"
 version = "0.1.0"
-source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0a2053cd964cd5a92d67bb9ae81079f36fd79fa6#0a2053cd964cd5a92d67bb9ae81079f36fd79fa6"
+source = "git+https://github.com/tao3k/meta-relational-reasoning.git?rev=0f4594c944317aab4e873abcaf28264ead5f45cf#0f4594c944317aab4e873abcaf28264ead5f45cf"
 dependencies = [
  "mrr-identity",
  "mrr-relation",

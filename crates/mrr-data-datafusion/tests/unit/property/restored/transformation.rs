@@ -2,7 +2,8 @@
 use super::{EntityChildMode, fixture, limits, mrr, restored};
 use crate::{
     PropertyTransformationRuntime, RestoredPropertyBackend, property_transformation_artifact,
-    property_transformation_endpoint, property_transformation_root,
+    property_transformation_endpoint, property_transformation_grant_catalog,
+    property_transformation_root,
 };
 use std::{cell::Cell, num::NonZeroUsize};
 
@@ -95,7 +96,7 @@ fn owner(
         parameters: property_transformation_root(cold),
     }
 }
-fn edge(owner: &TestOwner) -> mrr::TransformationAdmission {
+fn self_edge(owner: &TestOwner) -> mrr::TransformationAdmission {
     let definition = &owner.definition;
     let evidence = mrr::TransformationEvidence {
         transformation: mrr::transformation_identity(definition, transform_limits()).unwrap(),
@@ -118,6 +119,66 @@ fn edge(owner: &TestOwner) -> mrr::TransformationAdmission {
     )
     .unwrap()
 }
+fn grant(
+    query: &mrr::CatalogBoundQuery,
+    cold: &mrr_data_content::RestoredSnapshot,
+    edge: &mrr::TransformationAdmission,
+    publish: bool,
+) -> (mrr::AuthenticatedTransformationGrant, tempfile::TempDir) {
+    use ed25519_dalek::{Signer, SigningKey};
+    let key = SigningKey::from_bytes(&[173; 32]);
+    let directory = tempfile::tempdir().unwrap();
+    let ledger = mrr::TransformationGrantLedger::open(
+        directory.path().join("grant.cbor"),
+        key.verifying_key().to_bytes(),
+        transform_limits(),
+    )
+    .unwrap();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let binding =
+        mrr::transformation_grant_binding_digest(edge.binding(), transform_limits()).unwrap();
+    let catalog = property_transformation_grant_catalog(query, cold);
+    let grant = mrr::TransformationSourceGrant {
+        version: 1,
+        issuer: key.verifying_key().to_bytes(),
+        nonce: [174; 32],
+        binding,
+        catalog,
+        not_before: now,
+        expires: now + 3600,
+        capabilities: mrr::TransformationCapabilities {
+            forward: true,
+            solve: true,
+            extract: true,
+            publish,
+        },
+        resources: mrr::TransformationExecutionBudget {
+            max_operations: 100,
+            max_value_bytes: 1_048_576,
+        },
+    };
+    let signed = mrr::SignedTransformationSourceGrant {
+        signature: key
+            .sign(&grant.signing_bytes(transform_limits()).unwrap())
+            .to_bytes()
+            .to_vec(),
+        grant,
+    };
+    (
+        mrr::AuthenticatedTransformationGrant::authenticate(
+            signed,
+            ledger,
+            binding,
+            catalog,
+            transform_limits(),
+        )
+        .unwrap(),
+        directory,
+    )
+}
 fn result_limits() -> mrr::QueryResultLimits {
     mrr::QueryResultLimits::new(
         NonZeroUsize::new(100).unwrap(),
@@ -129,8 +190,8 @@ async fn property_transform_executes_actual_root_and_retains_original_physical_e
     let fixture = fixture();
     let (cold, _, relations, entities) = restored(&fixture, EntityChildMode::Valid).await;
     let owner = owner(&fixture.query, &fixture.semantic, &cold);
-    let edge = edge(&owner);
-    let cap = NonZeroUsize::new(1_048_576).unwrap();
+    let edge = self_edge(&owner);
+    let (grant, _directory) = grant(&fixture.query, &cold, &edge, false);
     let runtime = PropertyTransformationRuntime::new(
         &fixture.query,
         RestoredPropertyBackend {
@@ -140,9 +201,11 @@ async fn property_transform_executes_actual_root_and_retains_original_physical_e
             limits: limits(),
         },
         edge.clone(),
+        grant,
+        transform_limits(),
         owner.parameters,
         result_limits(),
-        cap,
+        transform_limits().max_bytes,
     )
     .unwrap();
     owner.solver.set(*runtime.solver());
@@ -176,45 +239,17 @@ async fn property_transform_executes_actual_root_and_retains_original_physical_e
     .await
     .unwrap();
     #[cfg(feature = "source-handoff")]
-    let execution = {
-        let edges: Vec<_> = plan
-            .steps
-            .iter()
-            .map(|step| step.admission.clone())
-            .collect();
-        let native = mrr::execute_native_transformation_plan_async(
-            mrr::NativeTransformationExecutionRequest {
-                edges: &edges,
-                candidate: &plan,
-                input,
-                limits: transform_limits(),
-                closure_limits: mrr::DeductionLimits::new(
-                    NonZeroUsize::new(16).unwrap(),
-                    NonZeroUsize::new(16).unwrap(),
-                    NonZeroUsize::new(16).unwrap(),
-                )
-                .closure_limits(),
-            },
-            &owner,
-            &runtime,
-        )
-        .await
-        .unwrap();
-        assert!(
-            native
-                .search()
-                .routes()
-                .iter()
-                .any(|route| route.edges == vec![*plan.steps[0].admission.digest()])
-        );
-        assert_eq!(native.execution().plan_digest(), admitted.digest());
-        native.execution().clone()
-    };
+    let execution = execute_native(&plan, &admitted, input, &owner, &runtime).await;
     let mrr::Value::ByteString(answer) = execution.answer() else {
         panic!("typed transport required")
     };
-    let verified =
-        mrr::verify_query_result_transport(&fixture.query, answer, result_limits(), cap).unwrap();
+    let verified = mrr::verify_query_result_transport(
+        &fixture.query,
+        answer,
+        result_limits(),
+        transform_limits().max_bytes,
+    )
+    .unwrap();
     assert_eq!(verified.receipt().row_count(), 3);
     let physical = runtime.take_physical_execution().unwrap().unwrap();
     assert_eq!(physical.candidate(), verified.candidate());
@@ -232,6 +267,8 @@ async fn property_checker_rejects_typed_empty_answer_and_live_revocation() {
     let (cold, _, relations, entities) = restored(&fixture, EntityChildMode::Valid).await;
     let owner = owner(&fixture.query, &fixture.semantic, &cold);
     let cap = NonZeroUsize::new(1_048_576).unwrap();
+    let grant_edge = self_edge(&owner);
+    let (grant, _directory) = grant(&fixture.query, &cold, &grant_edge, false);
     let runtime = PropertyTransformationRuntime::new(
         &fixture.query,
         RestoredPropertyBackend {
@@ -240,7 +277,9 @@ async fn property_checker_rejects_typed_empty_answer_and_live_revocation() {
             entity_catalog: &entities,
             limits: limits(),
         },
-        edge(&owner),
+        grant_edge,
+        grant,
+        transform_limits(),
         owner.parameters,
         result_limits(),
         cap,
@@ -272,7 +311,17 @@ async fn property_checker_rejects_typed_empty_answer_and_live_revocation() {
             .unwrap_err(),
         mrr::TransformationError::Rejected
     );
-    runtime.revoke();
+    let called = Cell::new(false);
+    assert!(
+        runtime
+            .publish(1, || {
+                called.set(true);
+                Ok(())
+            })
+            .is_err()
+    );
+    assert!(!called.get());
+    runtime.revoke_source_grant().unwrap();
     assert_eq!(
         runtime
             .solve(
@@ -286,4 +335,88 @@ async fn property_checker_rejects_typed_empty_answer_and_live_revocation() {
         mrr::TransformationError::Revoked
     );
     assert!(runtime.take_physical_execution().unwrap().is_none());
+}
+
+#[tokio::test]
+async fn granted_publication_never_acknowledges_a_locally_revoked_action() {
+    let f = fixture();
+    let (cold, _, relations, entities) = restored(&f, EntityChildMode::Valid).await;
+    let owner = owner(&f.query, &f.semantic, &cold);
+    let edge = self_edge(&owner);
+    let (grant, _directory) = grant(&f.query, &cold, &edge, true);
+    let runtime = PropertyTransformationRuntime::new(
+        &f.query,
+        RestoredPropertyBackend {
+            restored: &cold,
+            relation_catalog: &relations,
+            entity_catalog: &entities,
+            limits: limits(),
+        },
+        edge,
+        grant,
+        transform_limits(),
+        owner.parameters,
+        result_limits(),
+        NonZeroUsize::new(1_048_576).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(runtime.publish(1, || Ok(7)).unwrap(), 7);
+    assert_eq!(
+        runtime.publish(1, || {
+            runtime.revoke();
+            Ok(8)
+        }),
+        Err(mrr::TransformationError::PublicationUncertain)
+    );
+    let called = Cell::new(false);
+    assert_eq!(
+        runtime.publish(1, || {
+            called.set(true);
+            Ok(9)
+        }),
+        Err(mrr::TransformationError::Revoked)
+    );
+    assert!(!called.get());
+}
+
+#[cfg(feature = "source-handoff")]
+async fn execute_native(
+    plan: &mrr::TransformationPlanCandidate,
+    admitted: &mrr::TransformationPlanAdmission,
+    input: mrr::Value,
+    owner: &TestOwner,
+    runtime: &PropertyTransformationRuntime<'_>,
+) -> mrr::TransformationExecutionReceipt {
+    let edges: Vec<_> = plan
+        .steps
+        .iter()
+        .map(|step| step.admission.clone())
+        .collect();
+    let native = mrr::execute_native_transformation_plan_async(
+        mrr::NativeTransformationExecutionRequest {
+            edges: &edges,
+            candidate: plan,
+            input,
+            limits: transform_limits(),
+            closure_limits: mrr::DeductionLimits::new(
+                NonZeroUsize::new(16).unwrap(),
+                NonZeroUsize::new(16).unwrap(),
+                NonZeroUsize::new(16).unwrap(),
+            )
+            .closure_limits(),
+        },
+        owner,
+        runtime,
+    )
+    .await
+    .unwrap();
+    assert!(
+        native
+            .search()
+            .routes()
+            .iter()
+            .any(|route| route.edges == vec![*plan.steps[0].admission.digest()])
+    );
+    assert_eq!(native.execution().plan_digest(), admitted.digest());
+    native.execution().clone()
 }

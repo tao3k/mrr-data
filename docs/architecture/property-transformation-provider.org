@@ -27,13 +27,24 @@ await before continuing, including before extraction and final release.
 
 ** Evidence and remaining gates
 
-Local portable qualification: 27 property tests, including real restored
+Local portable qualification: 28 property tests, including real restored
 execution, malformed-but-well-typed empty answer rejection, live revocation,
 generation-stable endpoints, duplicate multiplicity, null and integer extremes;
 strict lib/test Clippy passes. These tests use a visibly named TestOwner.
 That fixture is not a production certificate issuer.
+Signed authorization uses an explicit test issuer and the real persistent grant
+ledger; runtime admission requires both the previously admitted edge and an
+authenticated grant. The runtime checks the exact physical cut and current
+binding, counts operations, checks permissions/transport byte budgets and
+refreshes authority after async work. Its identity binds the complete signed
+statement including expiry and bounds. Durable nonce revocation prevents new
+execution; reopening behavior is qualified by the MRR grant negative fixture.
+Publication runs the owner-provided synchronous action under a read lease.
+Expiry/local revocation after an action returns PublicationUncertain, with no
+new acknowledged result. The callback does not implement a physical store.
 
-MRR is pinned to 0a2053cd964cd5a92d67bb9ae81079f36fd79fa6. Its current CI
+MRR root and fuzz workspaces are both pinned to
+0f4594c944317aab4e873abcaf28264ead5f45cf. The preceding 0a2053c CI
 qualified async native dispatch, portable execution, and six production table
 access source-refinement theorems on both configured platforms. The table
 proofs do not prove this provider, DataFusion, codecs or arbitrary effects.
@@ -44,7 +55,7 @@ current-head result must be checked after submission; portable results cannot
 substitute for that native gate. No additional CI job is introduced.
 
 Still open: a production identity-transport admission owner binding an audited
-proof and authenticated source grant; persistent grant revocation/publication;
+proof; a concrete persisted physical-result store and durable support index;
 source refinement for the async driver, result codecs, oracle and DataFusion;
 general decision/partial/optimization providers and arbitrary effect/resource
 claims. The production runtime requires an already admitted edge and current
@@ -59,3 +70,8 @@ and redundant explicit GSC/GXPKG overrides. This submission uses verbosity 1
 and the SDK's configured tool discovery from the installed release environment.
 The wall/progress limits are preserved. This configuration change is not yet
 performance or current-head native-success evidence.
+
+The latest Arrow IPC fuzz failure was an E0308 type split: the fuzz workspace
+still pinned 3de6747 while the physical crates used the newer MRR revision.
+Both manifests and lockfiles now use the same fixed source; local locked fuzz
+compile and strict Clippy pass. This does not substitute for the sanitizer CI.

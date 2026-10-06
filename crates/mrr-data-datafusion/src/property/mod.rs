@@ -5,7 +5,8 @@ mod reference;
 mod transformation;
 pub use transformation::{
     PropertyTransformationRuntime, property_transformation_artifact,
-    property_transformation_endpoint, property_transformation_root,
+    property_transformation_endpoint, property_transformation_grant_catalog,
+    property_transformation_root,
 };
 mod restored;
 mod validation;

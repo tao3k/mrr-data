@@ -24,6 +24,8 @@ mrr-data-core.workspace = true
 mrr-property-source = { workspace = true, optional = true }
 
 [dev-dependencies]
+ed25519-dalek = "2.2.0"
+tempfile.workspace = true
 cid.workspace = true
 mrr-data-arrow.workspace = true
 mrr-data-asp-rust-build-support.workspace = true
