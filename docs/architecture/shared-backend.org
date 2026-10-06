@@ -575,3 +575,9 @@ for commit =9db8c41eed07513808e4ce1278a01b4b33e52334= with MRR
 artifacts and results are recorded in
 [[file:../../evidence/qualifications/backend-scheme-merged-head.ss][the merged dependency qualification receipt]].
 The original receipt remains historical evidence for its own source graph.
+
+The following package-only MRR pin =542b4225= selects POO =c3367536=, which
+ships the embedded Temporal owner module closure. The installed-only owner
+import control passes without a POO source-checkout load path. The Source
+retention semantics qualified at =196b6f48= are unchanged; complete clean
+package/platform CI at the new dependency graph remains a separate gate.
