@@ -7,7 +7,8 @@ use meta_relational_reasoning::{
     CatalogBoundQuery, QueryResultLimits, TransformationAdmission, TransformationBinding,
     TransformationEndpoint, TransformationError, TransformationGrantOperation as GrantOp,
     TransformationLimits, TransformationStep, Value, ValueSchema, export_query_result_transport,
-    transformation_grant_binding_digest, verify_query_result_transport,
+    transformation_grant_binding_digest, transport_transformation_bytes,
+    verify_query_result_transport,
 };
 use mrr_data_core::{BoundDataQuery, PhysicalQueryOutput};
 use sha2::{Digest, Sha256};
@@ -309,7 +310,10 @@ impl AsyncTransformationRuntime for PropertyTransformationRuntime<'_> {
         self.step(step)?;
         self.instance(input)?;
         self.authorize(GrantOp::Forward, input)?;
-        Ok(input.clone())
+        let Value::ByteString(bytes) = input else {
+            return Err(TransformationError::InvalidSchema);
+        };
+        Ok(Value::ByteString(transport_transformation_bytes(bytes)))
     }
     async fn solve(
         &self,
@@ -366,7 +370,10 @@ impl AsyncTransformationRuntime for PropertyTransformationRuntime<'_> {
             _ => return Err(TransformationError::InvalidSchema),
         }
         self.authorize(GrantOp::Extract, answer)?;
-        Ok(answer.clone())
+        let Value::ByteString(bytes) = answer else {
+            return Err(TransformationError::InvalidSchema);
+        };
+        Ok(Value::ByteString(transport_transformation_bytes(bytes)))
     }
     async fn check_answer(
         &self,

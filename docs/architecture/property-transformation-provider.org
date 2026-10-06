@@ -44,7 +44,7 @@ Expiry/local revocation after an action returns PublicationUncertain, with no
 new acknowledged result. The callback does not implement a physical store.
 
 MRR root and fuzz workspaces are both pinned to
-0f4594c944317aab4e873abcaf28264ead5f45cf. The preceding 0a2053c CI
+9b63ad408f8864bb0c0340dbf42dbaaab2a596ef. The preceding 0a2053c CI
 qualified async native dispatch, portable execution, and six production table
 access source-refinement theorems on both configured platforms. The table
 proofs do not prove this provider, DataFusion, codecs or arbitrary effects.
@@ -75,3 +75,10 @@ The latest Arrow IPC fuzz failure was an E0308 type split: the fuzz workspace
 still pinned 3de6747 while the physical crates used the newer MRR revision.
 Both manifests and lockfiles now use the same fixed source; local locked fuzz
 compile and strict Clippy pass. This does not substitute for the sanitizer CI.
+
+Forward and extraction now call MRR's actual =transport_transformation_bytes=
+primitive. Its source freshness gate and seventh Lean axiom-audited theorem
+prove exact byte preservation for arbitrary model slices. This is a source
+refinement of the primitive; provider guards, codecs and solver/oracle remain
+outside that theorem, and the production certificate admission owner remains
+open. No test verifier is promoted to that owner.
