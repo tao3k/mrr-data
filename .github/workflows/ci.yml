@@ -386,8 +386,6 @@ jobs:
         shell: bash
         run: |
           "$MRR_FRONTEND_OWNER/.github/scripts/install-gerbil-release.sh" "$RUNNER_TEMP/mrr-gerbil"
-          echo "GERBIL_GSC=$RUNNER_TEMP/mrr-gerbil/bin/gsc" >> "$GITHUB_ENV"
-          echo "GERBIL_GXPKG=$RUNNER_TEMP/mrr-gerbil/bin/gxpkg" >> "$GITHUB_ENV"
           echo "GERBIL_BUILD_VERBOSE=1" >> "$GITHUB_ENV"
       - name: Build the MRR-owned source frontend package
         shell: bash
@@ -408,7 +406,7 @@ jobs:
         env:
           MRR_NATIVE_PROGRESS: '1'
           GERBIL_PARSER_LR_TRACE: '1'
-          GERBIL_BUILD_VERBOSE: '9'
+          GERBIL_BUILD_VERBOSE: '1'
           MRR_DATA_RUSTC_PHASE_TRACE_CRATES: 'asp_rust,rust_lang_project_harness'
           RUSTC_WRAPPER: '${{ github.workspace }}/python/.venv/bin/mrr-data-rustc-progress'
           RUSTC_WORKSPACE_WRAPPER: '${{ github.workspace }}/python/.venv/bin/mrr-data-rustc-progress'

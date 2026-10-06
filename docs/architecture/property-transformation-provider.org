@@ -50,3 +50,12 @@ general decision/partial/optimization providers and arbitrary effect/resource
 claims. The production runtime requires an already admitted edge and current
 verifier and never manufactures those credentials. Deployment credentials and
 Lambda/Marlin integration are separate product gates.
+
+** CI diagnostic correction
+
+The previous #12 macOS property run failed at the existing cargo wall deadline
+while emitting real compiler events. Its native step used Gerbil verbosity 9
+and redundant explicit GSC/GXPKG overrides. This submission uses verbosity 1
+and the SDK's configured tool discovery from the installed release environment.
+The wall/progress limits are preserved. This configuration change is not yet
+performance or current-head native-success evidence.
