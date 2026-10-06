@@ -54,9 +54,10 @@ with actual native ASCENT route discovery before physical execution. Its
 current-head result must be checked after submission; portable results cannot
 substitute for that native gate. No additional CI job is introduced.
 
-Still open: a production identity-transport admission owner binding an audited
-proof; a concrete persisted physical-result store and durable support index;
-source refinement for the async driver, result codecs, oracle and DataFusion;
+Implemented for this bounded identity profile: the production admission owner
+below, a concrete persisted physical-result store and durable support index.
+Still open as separate claims: complete source refinement for the provider
+guards, async driver, result codecs, oracle and DataFusion;
 general decision/partial/optimization providers and arbitrary effect/resource
 claims. The production runtime requires an already admitted edge and current
 verifier and never manufactures those credentials. Deployment credentials and
@@ -77,7 +78,7 @@ Both manifests and lockfiles now use the same fixed source; local locked fuzz
 compile and strict Clippy pass. This does not substitute for the sanitizer CI.
 
 Forward and extraction now call MRR's actual =transport_transformation_bytes=
-primitive. Its source freshness gate and seventh Lean axiom-audited theorem
+primitive. Its source freshness gate and nine Lean axiom-audited theorems
 prove exact byte preservation for arbitrary model slices. This is a source
 refinement of the primitive; provider guards, codecs and solver/oracle remain
 outside that theorem. The selected production identity owner below composes
@@ -124,3 +125,9 @@ composition and physical checker remain audited trusted code; this is neither
 an automatic Lean proof checker for arbitrary imported certificates nor a
 machine proof of DataFusion, codecs or the entire provider wrapper. Current-head
 source proof and native CI are required before qualifying this implementation.
+
+The SDK build-time discovery gap observed on Brew is corrected upstream in
+=gerbil-scheme-rust= PR #18. MRR consumes the shared discovery API. The native
+archive owner rejects Ghostscript, recognizes development Gambit version output
+and infers the selected installation environment. Data does not add GSC/PATH
+compiler overrides. Current PR checks still determine final qualification.
