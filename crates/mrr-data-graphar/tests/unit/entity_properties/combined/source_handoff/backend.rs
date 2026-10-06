@@ -23,7 +23,8 @@ mod authority;
 mod executor;
 #[path = "metadata.rs"]
 mod metadata;
-type Execution = mrr::AdmittedPropertyExecution<mrr_data_core::BoundDataQuery>;
+type Execution =
+    mrr_property_source::AdmittedPropertySourceExecution<mrr_data_core::BoundDataQuery>;
 const RESERVED: usize = 8 << 20;
 
 async fn restore(
@@ -246,6 +247,9 @@ fn execution_transport(
     f: &Fixture,
     output: ResourceHandle<Execution>,
 ) -> ResourceHandle<DataQueryResultHandoff> {
+    assert_eq!(output.get().compilation().source_digest, SOURCE_DIGEST);
+    assert_eq!(output.get().query(), f.query.query());
+    assert_eq!(output.get().physical_evidence(), &f.query);
     let mut rows = output.get().candidate().rows().to_vec();
     rows.sort_by_key(|row| format!("{row:?}"));
     let mut expected = crate::tests::entity_properties::acceptance::expected();
@@ -259,10 +263,13 @@ fn execution_transport(
     let cap = NonZeroUsize::new(1 << 20).unwrap();
     let insufficient =
         mrr::QueryResultLimits::new(NonZeroUsize::new(1).unwrap(), NonZeroUsize::new(1).unwrap());
-    assert!(DataQueryResultHandoff::export_execution(output.get(), insufficient, cap).is_err());
+    assert!(
+        DataQueryResultHandoff::export_execution(output.get().execution(), insufficient, cap)
+            .is_err()
+    );
     let transport = output
         .try_transform(|execution| {
-            DataQueryResultHandoff::export_execution(&execution, limits, cap)
+            DataQueryResultHandoff::export_execution(execution.execution(), limits, cap)
         })
         .unwrap_or_else(|_| panic!("unique candidate transport conversion"));
     transport.get().verify(&f.query, limits, cap).unwrap();

@@ -894,7 +894,7 @@ conditional creation, idempotent publication, corrupt-object non-overwrite,
 bounded reads and genuine Arrow snapshot cold restore through Kache.
 
 The reproducible =python/src/mrr_data_testing/s3/run.py= isolates the server build and
-records its binary hash; see [[file:../../evidence/s3-conformance-receipt.json][the conformance receipt]].
+records its binary hash; see the conformance receipt (historical local/CI artifact; not stored in Git).
 The test server uses Rust 1.96.0; MRR Data stays at Rust 1.95.0. No default
 feature or production dependency changed. A dedicated Ubuntu/macOS CI job runs
 this conformance gate, but its remote execution has not been observed.

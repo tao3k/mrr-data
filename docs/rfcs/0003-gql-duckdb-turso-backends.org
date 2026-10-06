@@ -168,7 +168,7 @@ carry a logical program whose version is a Schema field. This interface bypasses
 GQL parsing for the read. The checked-in
 [[file:../../python/src/mrr_data_testing/duckgql/qualify.py][qualification runner]],
 [[file:../../crates/mrr-data-duckgql-query/schema.json][Schema]] and
-[[file:../../python/src/mrr_data_testing/duckgql/receipts/macos-native.jsonl][artifact-hashed receipt]] qualify three ordered rows, duplicate edges,
+artifact-hashed receipt (historical local/CI artifact; not stored in Git) qualify three ordered rows, duplicate edges,
 canonical physical labels and refusal of an unknown program version. A fixed
 GQL text query is an independent registration control, not an MRR execution
 fallback. The Community registry source reference inspected for this package
@@ -220,7 +220,7 @@ admission.
 ** Current SDK and artifact lifecycle
 
 [[file:../../python/README.org][The Python qualification project]] owns the pinned source builder and native
-probe suites. [[file:../../python/src/mrr_data_testing/duckgql/receipts/macos-sdk.jsonl][The SDK receipt]] qualifies all eight independent probe stages on
+probe suites. The SDK receipt (historical local/CI artifact; not stored in Git) qualifies all eight independent probe stages on
 macOS ARM64 with DuckDB =1.5.6= and an unsigned locally built DuckGQL artifact.
 Source revisions, ANTLR archive digest and program/SDK versions live in the
 Rust adapter's Schema. This is distinct from signed Community distribution.
@@ -499,7 +499,7 @@ for cancellation and deadline, closes the connection and verifies subsequent
 work succeeds. This is driver interruption evidence, not a hard bound for every
 DuckGQL operator. Turso's safe driver still lacks native interrupt.
 
-[[file:../../python/src/mrr_data_testing/duckgql/receipts/macos-comparison.jsonl][The whole-request comparison receipt]] records three samples per engine on
+The whole-request comparison receipt (historical local/CI artifact; not stored in Git) records three samples per engine on
 one authenticated capture at each size. All rows match independent expected
 values and all outputs pass MRR admission. Median milliseconds on the loaded
 macOS ARM64 host were:

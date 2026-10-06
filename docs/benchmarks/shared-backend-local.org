@@ -20,7 +20,7 @@ rustc -Vv
 just bench-backend
 #+end_src
 
-[[file:../../crates/mrr-data-backend/tests/performance/receipts/2026-10-03-local.jsonl][Raw JSON receipt]] retains provenance, every per-round metric and the final
+Raw JSON receipt (historical local/CI artifact; not stored in Git) retains provenance, every per-round metric and the final
 qualification counts. [[file:../architecture/shared-backend.org][The shared Backend architecture]] defines workload and
 measurement boundaries. Physical block publication is a synthetic ACK; no blob
 transfer, authority guard or end-to-end Production workflow is timed.

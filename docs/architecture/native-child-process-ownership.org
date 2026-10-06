@@ -55,7 +55,7 @@ parent requires the native worker's genuine process status before testing the
 Host children. The two positive controls are mandatory Source CI invocations
 on Ubuntu and macOS. The negative diagnostic is not a required passing gate.
 
-[[file:../../evidence/native-child-ownership/receipt.json][The receipt]] binds the compiled binary, Cargo artifact stream, exact upstream
+The receipt (historical local/CI artifact; not stored in Git) binds the compiled binary, Cargo artifact stream, exact upstream
 source file and compressed raw logs. The full local Source-feature GraphAr
 suite passes 80 tests with 13 explicit process/experimental workers ignored;
 the positive controls are separately driven. No shared-process repair is claimed.

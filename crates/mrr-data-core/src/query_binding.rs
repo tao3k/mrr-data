@@ -380,7 +380,7 @@ fn required_features(query: &CatalogBoundQuery) -> BTreeSet<DataQueryFeature> {
     required
 }
 
-/// Original Scheme v2 result and the physical binding selected by a trusted
+/// Original Scheme v1 result and the physical binding selected by a trusted
 /// executor. This is a Rust handoff value, not a signed execution credential.
 #[cfg(feature = "content-identity")]
 #[derive(Clone, Debug)]

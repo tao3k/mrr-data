@@ -151,9 +151,9 @@ Ready without reset. Root/fuzz/Source pin MRR =4ccca987c97065499a366b9d1980419a5
 and its GSC owner =072acac90dd4a83849826c75b1b5633721ce2ef0=.
 
 The final compilation inputs match 362 tracked files at the committed clean
-source. The [[file:../../evidence/original-source/original-source-composed-build.json][composition build receipt]] records source hashes, binary/artifact
+source. The composition build receipt (historical local/CI artifact; not stored in Git) records source hashes, binary/artifact
 identity, exact gate scope and retained failed attempts. The
-[[file:../../evidence/original-source/original-source-composed-native-macos.jsonl][48-case original Source receipt]] was collected from binary
+48-case original Source receipt (historical local/CI artifact; not stored in Git) was collected from binary
 =90d566788a478e76066777414fc45a875ca92419cf4144537cb27ff1e44a5d79=.
 Subsequent documentation/evidence commits do not change those compilation inputs.
 Published-head platform acceptance is supplied by the exact commit's
@@ -315,7 +315,7 @@ and effective transfer ceilings accompany every Rust receipt.
 ** Namespace and expanded Source local receipt: 2026-10-05
 
 The clean matching source is =e9a47066759f1b3a6bdd18f80fe54f221c05c152=.
-The [[file:../../evidence/original-source/original-source-expanded-build.json][compiled-source provenance]] records 40 committed source hashes, successful
+The compiled-source provenance (historical local/CI artifact; not stored in Git) records 40 committed source hashes, successful
 Cargo artifact identity, native provider binaries, gate scope and retained
 failures. The final Source test binary SHA256 is
 =6c522d6bb84215084e4d98199694276d42258f1af2615e2c34ec6d39616792df=;
@@ -332,7 +332,7 @@ the subsequent corrections affect only GraphAr test callers. Local Python
 qualification passes =51 tests= with strict Ruff. The generic Backend normal
 dependency guard finds none of its eight forbidden provider/domain packages.
 
-The [[file:../../evidence/original-source/original-source-expanded-native-macos.jsonl][24-case Rust receipt]] and [[file:../../evidence/original-source/original-source-expanded-run.log.gz][raw successful matrix run]] retain two warmups and three samples per case,
+The 24-case Rust receipt (historical local/CI artifact; not stored in Git) and raw successful matrix run (historical local/CI artifact; not stored in Git) retain two warmups and three samples per case,
 one immutable snapshot per shape/scale, four MRR-admitted results and zero final
 reservations. The 10,000-edge-per-relation matrix completes in =51.73s= inside
 the unchanged 120-second gate. It has =20,008= relation rows and =30,008= entity
@@ -366,10 +366,10 @@ Failed gates were corrected and retained:
 
 | Source slice | Typed failure | Correction and evidence boundary |
 |--------------+---------------+----------------------------------|
-| =e18ae4f3= | [[file:../../evidence/original-source/expanded-failed-entity-count.log.gz][Rust parent rejects tiny entity row count]]: emitted 12, expected 11 | Fixture has 2 Scenario + 3 Case + 3 Profile, plus 4 tiny Scenario rows; correct expectations are 12 and 3n+8; wrong count remains refused |
-| =dd7aa0a5= | [[file:../../evidence/original-source/expanded-failed-physical-budget.log.gz][DataFusion output-cells resource refusal]] at 1,000 edges | Caller declares the physical pre-filter product bound separately; MRR final 100-row/300-cell limit stays fixed |
-| =7f8b6676= | [[file:../../evidence/original-source/expanded-failed-reservation.log.gz][Cold transfer Remote TooLarge]] at 10,000 edges | Restore API caps payload by reservation; large caller now admits its declared 128 MiB ceiling, identically across modes |
-| Mixed full GraphAr process | [[file:../../evidence/original-source/graphar-mixed-process-failed.log.gz][Parent try_wait returns ECHILD]] after child prints success | Parent success was not admitted; its fresh-process run retains the actual child wait status; all other nonignored tests pass separately |
+| =e18ae4f3= | Rust parent rejects tiny entity row count (historical local/CI artifact; not stored in Git): emitted 12, expected 11 | Fixture has 2 Scenario + 3 Case + 3 Profile, plus 4 tiny Scenario rows; correct expectations are 12 and 3n+8; wrong count remains refused |
+| =dd7aa0a5= | DataFusion output-cells resource refusal (historical local/CI artifact; not stored in Git) at 1,000 edges | Caller declares the physical pre-filter product bound separately; MRR final 100-row/300-cell limit stays fixed |
+| =7f8b6676= | Cold transfer Remote TooLarge (historical local/CI artifact; not stored in Git) at 10,000 edges | Restore API caps payload by reservation; large caller now admits its declared 128 MiB ceiling, identically across modes |
+| Mixed full GraphAr process | Parent try_wait returns ECHILD (historical local/CI artifact; not stored in Git) after child prints success | Parent success was not admitted; its fresh-process run retains the actual child wait status; all other nonignored tests pass separately |
 
 Two combined native diagnostic builds also reached =wall1200= without a
 successful Cargo artifact admission. Independent provider builds then pass in
@@ -439,7 +439,7 @@ of every child's exit status. The standalone eight-case matrix passed in
 =23.48s=, full all-target strict Source Clippy in =1m06s= and the facade in
 =30.91s=. Rust verifies one immutable snapshot per shape, independent
 original-query results and final zero reservations. The baseline raw envelope
-is [[file:../../evidence/original-source/original-source-isolated-native-macos.jsonl][the isolated-native Source receipt]]. Earlier receipts and negative wall/CPU
+is the isolated-native Source receipt (historical local/CI artifact; not stored in Git). Earlier receipts and negative wall/CPU
 results remain historical evidence; the latest uniform selective CPU result also
 regresses slightly and does not qualify a production speedup.
 
@@ -1585,7 +1585,7 @@ digests. Python glue tests cover discovery, malformed/missing protocol output,
 capture limits and descendant cleanup. Semantic and resource assertions remain
 in Rust. CI publishes the checked matrix for both native platforms.
 
-The current [[file:../../python/src/mrr_data_testing/duckgql/receipts/macos-resources.jsonl][macOS ARM64 phase receipt]] passes all nine cases in 14.86 seconds.
+The current macOS ARM64 phase receipt (historical local/CI artifact; not stored in Git) passes all nine cases in 14.86 seconds.
 The [[file:../../python/src/mrr_data_testing/duckgql/receipts/macos-build.json][source build receipt]] records the unsigned SDK artifact digest
 =0bbeaac46695077931b2c526d29a62673083373afe45db007e2ede15d5f268a3=,
 13 generated parser units and their digests, with upstream Release optimization.
@@ -2132,7 +2132,7 @@ each shape and zero final reservations. Python collected the successful Rust
 records. The clean collection checkout was
 =65dc8f8a0e18fc5a15c72360d9bba1b550f4081e=; its compiled Rust source is unchanged
 by the intervening documentation commit. The retained receipt is
-[[file:../../evidence/original-source/original-source-before-backend-integration-macos.jsonl][the macOS original-source resource envelope]].
+the macOS original-source resource envelope (historical local/CI artifact; not stored in Git).
 Its executable SHA-256 is
 =089c9d10920272686f27fc4f958b8de7a62dff21aa813a87258886f83db9034f=;
 successful Cargo artifact collection SHA-256 is
@@ -2187,7 +2187,7 @@ The matrix also passed in =38.65s= while incremental lint overlapped; this run
 is retained locally as correctness evidence only. A subsequent standalone
 matrix passed in =29.66s= with all eight modes and unchanged supervision.
 
-[[file:../../evidence/original-source/original-source-macos.jsonl][The standalone merged-source envelope]]
+The standalone merged-source envelope (historical local/CI artifact; not stored in Git)
 records that clean collection head, executable SHA-256
 =1256f8e893be4caa6bd405216f7c6393bfd1054fd61d36d466279e5f1d49d9e4= and Cargo
 artifact SHA-256 =130ee0cd44cb897e31f0872c31b1b896997006de7ae5a1284f730ba26273c55c=.
@@ -2230,7 +2230,7 @@ test idle5/wall120. The standalone eight-case resource matrix passed in =23.48s=
 with no concurrent build, followed by strict all-target Source Clippy (=1m06s=)
 and the combined GraphAr/DataFusion facade (=30.91s=).
 
-[[file:../../evidence/original-source/original-source-isolated-native-macos.jsonl][The raw nine-record envelope]] identifies the clean collection checkout
+The raw nine-record envelope (historical local/CI artifact; not stored in Git) identifies the clean collection checkout
 =e9c555ccc65aca76238ff104485e72b27cf2cc35=, test binary SHA256
 =d2a17048289be1ec6384c74230e4479a02bf72c6ea842109dcdadf4e84f169bd=
 and successful Cargo artifact envelope SHA256
@@ -2294,7 +2294,7 @@ admission, retirement and zero-reservation assertions.
 ** Four-scale resource receipt
 
 The successful Source artifact envelope and isolated Rust resource matrix
-produce [[file:../../evidence/original-source/original-source-p0p2-scaled-macos.jsonl][33 JSONL records]]: one metadata record and 32 cases. Each case contains
+produce 33 JSONL records (historical local/CI artifact; not stored in Git): one metadata record and 32 cases. Each case contains
 two warmups and three samples. The collection checkout is =b37aa9ab= with this
 integration dirty; executable SHA-256 is
 =c2c04eb98118c88ed0e920fad351df52ff8ac19898a40c658905e68015292c81=;
@@ -2394,7 +2394,7 @@ fixes MRR =719ce0d= and GSC =9acf975=. All 362 tracked compilation inputs
 match that commit; only Cargo.toml and Cargo.lock differ from the earlier
 =5afdc175= compilation inputs. The six-library no-run build completes in
 3m24s using the SDK-declared GCC 16 and actual allocation file growth.
-The [[file:../../evidence/original-source/original-source-allocation-build.json][allocation composition receipt]] records binary/profile/fresh identities,
+The allocation composition receipt (historical local/CI artifact; not stored in Git) records binary/profile/fresh identities,
 compiler versions, committed source hashes and the retained wall1200 failure.
 
 Profile 3, Core 38, Backend 10, Arrow 14 and DataFusion 27 tests pass.
@@ -2404,7 +2404,7 @@ actual publisher termination/recovery matrix passes with independent children
 and zero final reservations. This is a single-writer test file transaction
 fixture, not database concurrency or power-loss durability qualification.
 
-The [[file:../../evidence/original-source/original-source-allocation-native-macos.jsonl][new 48-case Source receipt]] binds binary SHA-256
+The new 48-case Source receipt (historical local/CI artifact; not stored in Git) binds binary SHA-256
 =27ea6140daf125972f731e75fab967ba025a06559f3bb151557d62912916b3dc=.
 The same six declared workload/extra-row scopes, two shapes and four modes
 retain independent Rust result admission, duplicate/null rows, matched roots

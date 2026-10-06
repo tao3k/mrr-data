@@ -49,7 +49,7 @@ pub async fn execute_restored_property_path_query(
 }
 
 /// Execute the restored immutable root and retain its complete original MRR
-/// result in a Scheme v2 handoff. No Temporal interpretation occurs here.
+/// result in a Scheme v1 handoff. No Temporal interpretation occurs here.
 /// # Errors
 /// Rejects physical binding drift, failed restoration/query checks, result
 /// admission failures and exceeded Scheme transport limits.

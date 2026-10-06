@@ -7,7 +7,7 @@ Clean measurement source: =e5351541999a009b7e8608379df47cecac8307c2=.
 2026-10-03 UTC, macOS 26.6.1, aarch64-apple-darwin, Rust 1.95.0,
 optimized test profile (opt-level 2, 16 codegen units, no debug info).
 Both optional providers run separately through the same Backend APIs.
-[[file:../../crates/mrr-data-backend/tests/performance/receipts/2026-10-03-dispatch.jsonl][The complete JSON receipt]] retains compiler details, harness hashes,
+The complete JSON receipt (historical local/CI artifact; not stored in Git) retains compiler details, harness hashes,
 configuration and all rounds. [[file:../architecture/shared-backend.org][The architecture document]] specifies ownership,
 quota semantics and Host requirements.
 

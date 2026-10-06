@@ -83,7 +83,7 @@ async fn original_source_handoff_distinct_research_catalog_refuses_cross_case_re
         .unwrap();
     assert_research_rows(output.get().candidate().rows());
     let handoff = DataQueryResultHandoff::export_execution(
-        output.get(),
+        output.get().execution(),
         super::result_limits(),
         std::num::NonZeroUsize::new(1 << 20).unwrap(),
     )

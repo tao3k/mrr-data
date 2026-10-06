@@ -6,7 +6,7 @@
 Clean measurement source: =22fe50a11d032c264f1b9886b446a05d701b7c3e=.
 2026-10-03 UTC, macOS 26.6.1, aarch64-apple-darwin, Rust 1.95.0.
 Optimized test profile: opt-level 2, 16 codegen units, debug info disabled.
-[[file:../../crates/mrr-data-backend/tests/performance/receipts/2026-10-03-sustained.jsonl][The raw JSON receipt]] preserves all six cases, both configurations, compiler
+The raw JSON receipt (historical local/CI artifact; not stored in Git) preserves all six cases, both configurations, compiler
 identity, the harness hash and qualification counts. Providers run separately.
 The definitive run starts after this task's builds finish. The development Host
 still carries unrelated work; its CPU, I/O and native cache/RSS are not isolated.
