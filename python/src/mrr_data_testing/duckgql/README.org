@@ -42,13 +42,13 @@ Catalog-normalized node/edge labels are explicit physical bindings. Returning
 the edge identity property permits deterministic Fact order while preserving
 duplicate endpoint pairs.
 
-[[file:receipts/macos-native.jsonl][The macOS receipt]] qualifies DuckDB 1.5.5 with signed DuckGQL 0.2.0.
+A previous local macOS probe qualified DuckDB 1.5.5 with signed DuckGQL 0.2.0.
 The Community registry reference inspected during this run was
 =44e77c6835f9e6758bb3e3bccb1a642981dbf1e7=. The repository uses Rust DuckDB
 1.10506.0; the Community artifact for its corresponding engine 1.5.6 was absent
 on macOS ARM64 at audit time. No SDK version change is made by this probe.
 
-[[file:receipts/macos-sdk.jsonl][The SDK receipt]] independently qualifies the same eight probe stages using
+A previous local SDK probe independently qualified the same eight probe stages using
 a local unsigned artifact built from the Schema-pinned source against DuckDB
 1.5.6. Its source and binary identity are distinct from the signed Community
 artifact. To reproduce the source build:
@@ -97,11 +97,12 @@ The Rust matrix runs DuckGQL, Turso and DataFusion in separate processes for
 each Schema-selected source size, using the same authenticated GraphAr source.
 Each case checks expected rows and admits every result through MRR. The Python
 tests check entry-point discovery, protocol collection and process cleanup.
-The current [[file:receipts/macos-resources.jsonl][macOS resource receipt]] records nine passing cases with phase samples
-and process RSS. Its [[file:receipts/macos-build.json][build receipt]] identifies the exact locally built SDK and
-all derived parser units. The resource receipt identifies the clean local source
-head and compiled binary; remote CI and the original-source frontend
-qualification remain separate gates.
+A previous local macOS resource probe recorded nine passing cases with phase
+samples and process RSS. Runtime receipts and build diagnostics are generated
+by each qualification run outside Git. They identify the source head, compiled
+binary, locally built SDK and derived parser units. Historical local results
+are not qualification of the current commit; remote CI and original-source
+frontend qualification remain separate gates.
 Concurrent host compilation affects these samples; they establish no speedup.
 
 OS peak RSS covers the entire isolated process, including source capture and
