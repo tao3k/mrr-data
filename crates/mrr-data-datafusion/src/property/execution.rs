@@ -258,6 +258,14 @@ struct PropertyPlan<'a> {
     projections: Vec<Expr>,
     filters: Vec<Expr>,
 }
+pub(super) fn validate_property_plan(
+    query: &CatalogBoundQuery,
+    entities: &[EntityPropertyTable],
+    relations: &[BinaryRelationTable],
+    limits: PropertyQueryLimits,
+) -> Result<()> {
+    admit_property_plan(query, entities, relations, limits).map(|_| ())
+}
 fn admit_property_plan<'a>(
     query: &'a CatalogBoundQuery,
     entities: &[EntityPropertyTable],

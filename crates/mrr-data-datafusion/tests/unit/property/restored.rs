@@ -23,6 +23,7 @@ use std::{
 
 #[cfg(feature = "source-handoff")]
 mod source_handoff;
+mod transformation;
 #[tokio::test]
 async fn mrr_dispatches_to_data_backend_and_admits_original_physical_candidate() {
     let f = fixture();
@@ -122,6 +123,12 @@ async fn mrr_dispatch_rejects_a_new_generation_bound_to_an_old_physical_root() {
     })
     .unwrap();
     let query = mrr::bind_query_to_catalog(&bundle, f.query.query().id(), &semantic).unwrap();
+    assert_ne!(query.digest(), f.query.digest());
+    assert_eq!(
+        crate::property_transformation_endpoint(&query),
+        crate::property_transformation_endpoint(&f.query),
+        "generation changes instance binding, not query semantics"
+    );
     println!("New-generation query admitted by MRR");
     let backend = crate::RestoredPropertyBackend {
         restored: &cold,

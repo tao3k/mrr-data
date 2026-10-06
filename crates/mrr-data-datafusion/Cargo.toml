@@ -9,7 +9,7 @@ repository.workspace = true
 
 [features]
 # Optional qualification of the MRR-owned native GQL frontend handoff.
-source-handoff = ["dep:mrr-property-source"]
+source-handoff = ["dep:mrr-property-source", "mrr-property-source/native-inference"]
 
 [dependencies]
 arrow-array.workspace = true
@@ -17,6 +17,7 @@ arrow-ipc.workspace = true
 arrow-schema.workspace = true
 datafusion.workspace = true
 futures.workspace = true
+sha2.workspace = true
 meta-relational-reasoning.workspace = true
 mrr-data-content = { workspace = true, features = ["snapshot"] }
 mrr-data-core.workspace = true

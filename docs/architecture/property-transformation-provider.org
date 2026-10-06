@@ -1,0 +1,52 @@
+#+title: Restored property-query transformation provider
+
+** Delivered execution boundary
+
+~PropertyTransformationRuntime~ implements MRR's async transformation runtime
+on the existing catalog-bound query / restored DataFusion path. Forward and
+extraction are identity transport; solve executes the verified immutable
+physical closure and retains the original backend evidence and result admission.
+The supported shapes remain the existing one/two outgoing anonymous single-hop
+paths, unordered RETURN ALL, property projections and property=string filters.
+String, integer and null result cells and duplicate rows are retained.
+
+The endpoint identity binds original IR and semantic catalogs. It excludes the
+selected generation. The execution input binds the catalog-bound query and
+physical root; step parameters bind that root. The definition's dependency cut
+binds the implementation closure and lockfile rather than a selected snapshot.
+Operation artifacts include the owned runtime, reference checker, restoration,
+execution, validation, backend, manifests and dependency lockfile. These hashes
+are source identity, not a binary or DataFusion refinement theorem.
+
+The answer checker admits the original typed result transport and evaluates an
+independent relational oracle over the same verified closure. Exact answer bags
+retain duplicates and distinguish null, string and integer. It shares shape and
+budget admission, not DataFusion plans or SQL evaluation. Revocation is monotone
+within the live runtime. MRR rechecks the caller's current verifier after each
+await before continuing, including before extraction and final release.
+
+** Evidence and remaining gates
+
+Local portable qualification: 27 property tests, including real restored
+execution, malformed-but-well-typed empty answer rejection, live revocation,
+generation-stable endpoints, duplicate multiplicity, null and integer extremes;
+strict lib/test Clippy passes. These tests use a visibly named TestOwner.
+That fixture is not a production certificate issuer.
+
+MRR is pinned to 0a2053cd964cd5a92d67bb9ae81079f36fd79fa6. Its current CI
+qualified async native dispatch, portable execution, and six production table
+access source-refinement theorems on both configured platforms. The table
+proofs do not prove this provider, DataFusion, codecs or arbitrary effects.
+
+The existing source-handoff CI lane explicitly runs the transformation tests
+with actual native ASCENT route discovery before physical execution. Its
+current-head result must be checked after submission; portable results cannot
+substitute for that native gate. No additional CI job is introduced.
+
+Still open: a production identity-transport admission owner binding an audited
+proof and authenticated source grant; persistent grant revocation/publication;
+source refinement for the async driver, result codecs, oracle and DataFusion;
+general decision/partial/optimization providers and arbitrary effect/resource
+claims. The production runtime requires an already admitted edge and current
+verifier and never manufactures those credentials. Deployment credentials and
+Lambda/Marlin integration are separate product gates.

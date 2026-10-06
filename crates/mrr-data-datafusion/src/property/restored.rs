@@ -45,7 +45,39 @@ pub async fn execute_restored_property_path_query(
     check_ipc_decode_budget(input.restored, manifest, input.limits)?;
     let entities = decode_entity_tables(input.restored, manifest)?;
     let relations = decode_relation_tables(input.restored, manifest, input.relation_catalog)?;
-    execute_property_path_query(input.query, &entities, &relations, input.limits).await
+    let output =
+        execute_property_path_query(input.query, &entities, &relations, input.limits).await?;
+    super::reference::verify_property_path_output(
+        input.query,
+        &entities,
+        &relations,
+        input.limits,
+        &output,
+    )?;
+    Ok(output)
+}
+
+/// Independently check a complete answer against the same verified immutable
+/// closure. The checker evaluates original IR and never executes `DataFusion`.
+/// # Errors
+/// Rejects binding or content drift, decode budgets and incorrect answer bags.
+pub fn verify_restored_property_path_output(
+    input: &RestoredPropertyQuery<'_>,
+    output: &PhysicalQueryOutput,
+) -> Result<()> {
+    let manifest = input.restored.snapshot().manifest();
+    validate_restored_binding(input, manifest)?;
+    check_declared_limits(manifest, input.limits)?;
+    check_ipc_decode_budget(input.restored, manifest, input.limits)?;
+    let entities = decode_entity_tables(input.restored, manifest)?;
+    let relations = decode_relation_tables(input.restored, manifest, input.relation_catalog)?;
+    super::reference::verify_property_path_output(
+        input.query,
+        &entities,
+        &relations,
+        input.limits,
+        output,
+    )
 }
 
 /// Execute the restored immutable root and retain its complete original MRR

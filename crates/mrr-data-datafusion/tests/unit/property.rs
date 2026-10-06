@@ -7,6 +7,8 @@ use arrow_array::{ArrayRef, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
 use meta_relational_reasoning as mrr;
 use std::{num::NonZeroUsize, sync::Arc};
+#[path = "property/reference.rs"]
+mod reference;
 
 struct Fixture {
     query: mrr::CatalogBoundQuery,
@@ -470,6 +472,8 @@ async fn integer_properties_preserve_extremes_and_null_without_coercion() {
     let mut f = integer_fixture();
     let output = execute_property_path_query(&f.query, &f.entities, &f.relations, limits())
         .await
+        .unwrap();
+    crate::verify_property_path_output(&f.query, &f.entities, &f.relations, limits(), &output)
         .unwrap();
     for value in [i64::MIN, i64::MAX] {
         assert!(output.rows().iter().any(|row| row[1]
