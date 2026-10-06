@@ -1,9 +1,9 @@
 //! Actual `DataFusion` dispatch under a test admission owner, not a certificate.
 use super::{EntityChildMode, fixture, limits, mrr, restored};
 use crate::{
-    PropertyTransformationRuntime, RestoredPropertyBackend, property_transformation_artifact,
-    property_transformation_endpoint, property_transformation_grant_catalog,
-    property_transformation_root,
+    PropertyIdentityTransformation, PropertyTransformationRuntime, RestoredPropertyBackend,
+    property_transformation_artifact, property_transformation_endpoint,
+    property_transformation_grant_catalog, property_transformation_root,
 };
 use std::{cell::Cell, num::NonZeroUsize};
 
@@ -125,6 +125,14 @@ fn grant(
     edge: &mrr::TransformationAdmission,
     publish: bool,
 ) -> (mrr::AuthenticatedTransformationGrant, tempfile::TempDir) {
+    grant_for_binding(query, cold, edge.binding(), publish)
+}
+fn grant_for_binding(
+    query: &mrr::CatalogBoundQuery,
+    cold: &mrr_data_content::RestoredSnapshot,
+    cut: &mrr::TransformationBinding,
+    publish: bool,
+) -> (mrr::AuthenticatedTransformationGrant, tempfile::TempDir) {
     use ed25519_dalek::{Signer, SigningKey};
     let key = SigningKey::from_bytes(&[173; 32]);
     let directory = tempfile::tempdir().unwrap();
@@ -138,8 +146,7 @@ fn grant(
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    let binding =
-        mrr::transformation_grant_binding_digest(edge.binding(), transform_limits()).unwrap();
+    let binding = mrr::transformation_grant_binding_digest(cut, transform_limits()).unwrap();
     let catalog = property_transformation_grant_catalog(query, cold);
     let grant = mrr::TransformationSourceGrant {
         version: 1,
@@ -384,7 +391,7 @@ async fn execute_native(
     plan: &mrr::TransformationPlanCandidate,
     admitted: &mrr::TransformationPlanAdmission,
     input: mrr::Value,
-    owner: &TestOwner,
+    owner: &impl mrr::TransformationVerifier,
     runtime: &PropertyTransformationRuntime<'_>,
 ) -> mrr::TransformationExecutionReceipt {
     let edges: Vec<_> = plan
@@ -419,4 +426,100 @@ async fn execute_native(
     );
     assert_eq!(native.execution().plan_digest(), admitted.digest());
     native.execution().clone()
+}
+
+#[tokio::test]
+async fn physical_archive_replays_then_tracks_local_and_durable_revocation() {
+    use mrr::AsyncTransformationPublisher;
+    let f = fixture();
+    let (cold, _, relations, entities) = restored(&f, EntityChildMode::Valid).await;
+    let binding =
+        mrr::TransformationBinding::new(&f.semantic, [80; 32], [81; 32], [82; 32], 100, 200)
+            .unwrap();
+    let (grant, _grant_directory) = grant_for_binding(&f.query, &cold, &binding, true);
+    let certified = PropertyIdentityTransformation::new(
+        &f.query,
+        RestoredPropertyBackend {
+            restored: &cold,
+            relation_catalog: &relations,
+            entity_catalog: &entities,
+            limits: limits(),
+        },
+        binding,
+        grant,
+        transform_limits(),
+        result_limits(),
+        transform_limits().max_bytes,
+    )
+    .unwrap();
+    let runtime = certified.runtime();
+    let owner = certified.verifier();
+    let input = runtime.input();
+    let plan = certified.plan();
+    let edge = &plan.steps[0].admission;
+    let mut forged = edge.evidence().clone();
+    forged.assumptions = [99; 32];
+    assert_eq!(
+        mrr::TransformationVerifier::check_definition(
+            owner,
+            edge.definition(),
+            &forged,
+            &plan.binding
+        ),
+        Err(mrr::TransformationError::EvidenceMismatch)
+    );
+    #[cfg(feature = "source-handoff")]
+    let _native = execute_native(
+        &plan,
+        &mrr::admit_transformation_plan(&plan, transform_limits(), owner).unwrap(),
+        input.clone(),
+        owner,
+        runtime,
+    )
+    .await;
+    let mut bad = plan.clone();
+    bad.steps[0].parameters = [99; 32];
+    assert_eq!(
+        mrr::admit_transformation_plan(&bad, transform_limits(), owner),
+        Err(mrr::TransformationError::InstanceMismatch)
+    );
+    bad = plan.clone();
+    bad.solver = [0; 32];
+    assert!(mrr::admit_transformation_plan(&bad, transform_limits(), owner).is_err());
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("physical.cbor");
+    let mut store = mrr::TransformationResultStore::open(&path, transform_limits()).unwrap();
+    let execution = store
+        .execute_and_publish_async(&plan, input.clone(), owner, runtime)
+        .await
+        .unwrap();
+    assert_eq!(store.freshness(), mrr::TruthStatus::True);
+    let support = runtime.publication_supports()[0];
+    assert_eq!(store.affected_plans(&support), &[*execution.plan_digest()]);
+    drop(store);
+    let mut store = mrr::TransformationResultStore::open(&path, transform_limits()).unwrap();
+    assert_eq!(store.freshness(), mrr::TruthStatus::Stale);
+    assert_eq!(
+        store
+            .replay_async(&plan, input.clone(), owner, runtime)
+            .await
+            .unwrap(),
+        execution
+    );
+    assert_eq!(store.freshness(), mrr::TruthStatus::True);
+    let lease = runtime.publication_lease();
+    runtime.revoke_source_grant().unwrap();
+    assert!(!lease.is_current());
+    assert_eq!(store.freshness(), mrr::TruthStatus::Stale);
+    assert!(store.invalidate(&support).unwrap());
+    drop(store);
+    let mut store = mrr::TransformationResultStore::open(&path, transform_limits()).unwrap();
+    assert_eq!(
+        store.replay_async(&plan, input, owner, runtime).await,
+        Err(mrr::TransformationError::Revoked)
+    );
+    assert_eq!(store.historical_answer(), Some(execution.answer()));
+    println!(
+        "PROPERTY-DURABLE-TRANSFORMATION-OK: physical replay, support index, persistent invalidation"
+    );
 }

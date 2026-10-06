@@ -3,10 +3,11 @@
 //! This runtime does not manufacture a certificate or authenticate that owner.
 use super::{RestoredPropertyBackend, RestoredPropertyQuery, verify_restored_property_path_output};
 use meta_relational_reasoning::{
-    AdmittedPropertyExecution, AsyncTransformationRuntime, AuthenticatedTransformationGrant,
-    CatalogBoundQuery, QueryResultLimits, TransformationAdmission, TransformationBinding,
-    TransformationEndpoint, TransformationError, TransformationGrantOperation as GrantOp,
-    TransformationLimits, TransformationStep, Value, ValueSchema, export_query_result_transport,
+    AdmittedPropertyExecution, AsyncTransformationPublisher, AsyncTransformationRuntime,
+    AuthenticatedTransformationGrant, CatalogBoundQuery, QueryResultLimits,
+    TransformationAdmission, TransformationBinding, TransformationEndpoint, TransformationError,
+    TransformationGrantOperation as GrantOp, TransformationLimits, TransformationPublicationLease,
+    TransformationStep, Value, ValueSchema, export_query_result_transport,
     transformation_grant_binding_digest, transport_transformation_bytes,
     verify_query_result_transport,
 };
@@ -15,7 +16,7 @@ use sha2::{Digest, Sha256};
 use std::{
     num::NonZeroUsize,
     sync::{
-        Mutex,
+        Arc, Mutex,
         atomic::{AtomicBool, AtomicU64, Ordering},
     },
 };
@@ -31,6 +32,7 @@ pub fn property_transformation_artifact(operation: &str) -> [u8; 32] {
     for source in [
         include_bytes!("transformation.rs").as_slice(),
         include_bytes!("reference.rs"),
+        include_bytes!("transformation_admission.rs"),
         include_bytes!("restored.rs"),
         include_bytes!("execution.rs"),
         include_bytes!("validation.rs"),
@@ -99,7 +101,7 @@ pub struct PropertyTransformationRuntime<'a> {
     identity: [u8; 32],
     result_limits: QueryResultLimits,
     max_bytes: NonZeroUsize,
-    revoked: AtomicBool,
+    revoked: Arc<AtomicBool>,
     physical: Mutex<Option<AdmittedPropertyExecution<BoundDataQuery>>>,
 }
 impl<'a> PropertyTransformationRuntime<'a> {
@@ -182,7 +184,7 @@ impl<'a> PropertyTransformationRuntime<'a> {
             identity,
             result_limits,
             max_bytes,
-            revoked: AtomicBool::new(false),
+            revoked: Arc::new(AtomicBool::new(false)),
             physical: Mutex::new(None),
         })
     }
@@ -255,6 +257,10 @@ impl<'a> PropertyTransformationRuntime<'a> {
             other => other,
         }
     }
+    #[allow(
+        deprecated,
+        reason = "fetch_update supports Rust 1.95; try_update requires a newer compiler."
+    )]
     fn next_operation(&self) -> Result<u64, TransformationError> {
         self.operations
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| n.checked_add(1))
@@ -300,20 +306,22 @@ impl AsyncTransformationRuntime for PropertyTransformationRuntime<'_> {
             self.identity
         }
     }
-    async fn forward(
+    fn forward(
         &self,
         step: &TransformationStep,
         input: &Value,
         binding: &TransformationBinding,
-    ) -> Result<Value, TransformationError> {
-        self.current(binding)?;
-        self.step(step)?;
-        self.instance(input)?;
-        self.authorize(GrantOp::Forward, input)?;
-        let Value::ByteString(bytes) = input else {
-            return Err(TransformationError::InvalidSchema);
-        };
-        Ok(Value::ByteString(transport_transformation_bytes(bytes)))
+    ) -> impl std::future::Future<Output = Result<Value, TransformationError>> {
+        std::future::ready((|| {
+            self.current(binding)?;
+            self.step(step)?;
+            self.instance(input)?;
+            self.authorize(GrantOp::Forward, input)?;
+            let Value::ByteString(bytes) = input else {
+                return Err(TransformationError::InvalidSchema);
+            };
+            Ok(Value::ByteString(transport_transformation_bytes(bytes)))
+        })())
     }
     async fn solve(
         &self,
@@ -354,61 +362,100 @@ impl AsyncTransformationRuntime for PropertyTransformationRuntime<'_> {
             .map_err(|_| TransformationError::Unknown)? = Some(physical);
         Ok(Value::ByteString(bytes))
     }
-    async fn extract(
+    fn extract(
         &self,
         step: &TransformationStep,
         source: &Value,
         answer: &Value,
         binding: &TransformationBinding,
-    ) -> Result<Value, TransformationError> {
-        self.current(binding)?;
-        self.step(step)?;
-        self.instance(source)?;
-        match answer {
-            Value::ByteString(bytes) if bytes.len() <= self.max_bytes.get() => (),
-            Value::ByteString(_) => return Err(TransformationError::Budget),
-            _ => return Err(TransformationError::InvalidSchema),
-        }
-        self.authorize(GrantOp::Extract, answer)?;
-        let Value::ByteString(bytes) = answer else {
-            return Err(TransformationError::InvalidSchema);
-        };
-        Ok(Value::ByteString(transport_transformation_bytes(bytes)))
+    ) -> impl std::future::Future<Output = Result<Value, TransformationError>> {
+        std::future::ready((|| {
+            self.current(binding)?;
+            self.step(step)?;
+            self.instance(source)?;
+            match answer {
+                Value::ByteString(bytes) if bytes.len() <= self.max_bytes.get() => (),
+                Value::ByteString(_) => return Err(TransformationError::Budget),
+                _ => return Err(TransformationError::InvalidSchema),
+            }
+            self.authorize(GrantOp::Extract, answer)?;
+            let Value::ByteString(bytes) = answer else {
+                return Err(TransformationError::InvalidSchema);
+            };
+            Ok(Value::ByteString(transport_transformation_bytes(bytes)))
+        })())
     }
-    async fn check_answer(
+    fn check_answer(
         &self,
         endpoint: &TransformationEndpoint,
         input: &Value,
         answer: &Value,
         binding: &TransformationBinding,
-    ) -> Result<[u8; 32], TransformationError> {
+    ) -> impl std::future::Future<Output = Result<[u8; 32], TransformationError>> {
+        std::future::ready((|| {
+            self.current(binding)?;
+            self.instance(input)?;
+            if endpoint != &self.edge.definition().target {
+                return Err(TransformationError::EndpointMismatch);
+            }
+            self.authorize(GrantOp::Solve, answer)?;
+            let Value::ByteString(bytes) = answer else {
+                return Err(TransformationError::InvalidSchema);
+            };
+            let verified = verify_query_result_transport(
+                self.query,
+                bytes,
+                self.result_limits,
+                self.max_bytes,
+            )
+            .map_err(|_| TransformationError::Rejected)?;
+            let candidate = verified.candidate();
+            let output =
+                PhysicalQueryOutput::new(candidate.columns().to_vec(), candidate.rows().to_vec());
+            verify_restored_property_path_output(
+                &RestoredPropertyQuery {
+                    query: self.query,
+                    restored: self.backend.restored,
+                    relation_catalog: self.backend.relation_catalog,
+                    entity_catalog: self.backend.entity_catalog,
+                    limits: self.backend.limits,
+                },
+                &output,
+            )
+            .map_err(|_| TransformationError::Rejected)?;
+            self.current(binding)?;
+            Ok(*verified.receipt().digest())
+        })())
+    }
+}
+
+#[derive(Debug)]
+struct PropertyPublicationLease {
+    grant: AuthenticatedTransformationGrant,
+    revoked: Arc<AtomicBool>,
+}
+impl TransformationPublicationLease for PropertyPublicationLease {
+    fn is_current(&self) -> bool {
+        !self.revoked.load(Ordering::Acquire) && self.grant.check_current().is_ok()
+    }
+}
+impl AsyncTransformationPublisher for PropertyTransformationRuntime<'_> {
+    fn publication_supports(&self) -> Vec<[u8; 32]> {
+        vec![*self.authority.support_digest(), *self.authority.identity()]
+    }
+    fn publication_lease(&self) -> Arc<dyn TransformationPublicationLease> {
+        Arc::new(PropertyPublicationLease {
+            grant: self.authority.clone(),
+            revoked: self.revoked.clone(),
+        })
+    }
+    fn publish<T>(
+        &self,
+        binding: &TransformationBinding,
+        bytes: u64,
+        action: impl FnOnce() -> Result<T, TransformationError>,
+    ) -> Result<T, TransformationError> {
         self.current(binding)?;
-        self.instance(input)?;
-        if endpoint != &self.edge.definition().target {
-            return Err(TransformationError::EndpointMismatch);
-        }
-        self.authorize(GrantOp::Solve, answer)?;
-        let Value::ByteString(bytes) = answer else {
-            return Err(TransformationError::InvalidSchema);
-        };
-        let verified =
-            verify_query_result_transport(self.query, bytes, self.result_limits, self.max_bytes)
-                .map_err(|_| TransformationError::Rejected)?;
-        let candidate = verified.candidate();
-        let output =
-            PhysicalQueryOutput::new(candidate.columns().to_vec(), candidate.rows().to_vec());
-        verify_restored_property_path_output(
-            &RestoredPropertyQuery {
-                query: self.query,
-                restored: self.backend.restored,
-                relation_catalog: self.backend.relation_catalog,
-                entity_catalog: self.backend.entity_catalog,
-                limits: self.backend.limits,
-            },
-            &output,
-        )
-        .map_err(|_| TransformationError::Rejected)?;
-        self.current(binding)?;
-        Ok(*verified.receipt().digest())
+        PropertyTransformationRuntime::publish(self, bytes, action)
     }
 }

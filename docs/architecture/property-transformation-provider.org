@@ -27,11 +27,11 @@ await before continuing, including before extraction and final release.
 
 ** Evidence and remaining gates
 
-Local portable qualification: 28 property tests, including real restored
+Local portable qualification: 29 property tests, including real restored
 execution, malformed-but-well-typed empty answer rejection, live revocation,
 generation-stable endpoints, duplicate multiplicity, null and integer extremes;
-strict lib/test Clippy passes. These tests use a visibly named TestOwner.
-That fixture is not a production certificate issuer.
+strict lib/test Clippy passes. Generic negative fixtures retain a visibly named
+TestOwner. The durable physical regression uses the production identity owner.
 Signed authorization uses an explicit test issuer and the real persistent grant
 ledger; runtime admission requires both the previously admitted edge and an
 authenticated grant. The runtime checks the exact physical cut and current
@@ -80,5 +80,47 @@ Forward and extraction now call MRR's actual =transport_transformation_bytes=
 primitive. Its source freshness gate and seventh Lean axiom-audited theorem
 prove exact byte preservation for arbitrary model slices. This is a source
 refinement of the primitive; provider guards, codecs and solver/oracle remain
-outside that theorem, and the production certificate admission owner remains
-open. No test verifier is promoted to that owner.
+outside that theorem. The selected production identity owner below composes
+the checked primitive with explicit audited guard premises; full provider source
+refinement is not claimed. No test verifier is promoted to that owner.
+
+** Physical durable result publication
+
+=PropertyTransformationRuntime= now implements the MRR asynchronous publication
+port. The retained live lease owns the actual authenticated grant and shared
+monotone local revocation flag. Both local and persisted nonce revocation make
+an already published result stale. No runtime borrow survives in the store.
+
+The production =TransformationResultStore= persists actual provider execution,
+independent answer checks, the complete support cut and original typed result.
+The restored-query regression executes DataFusion, publishes, drops/reopens the
+store, replays the same physical query, verifies exact receipt equality, revokes
+the signed grant and persists reverse-support invalidation. Another reopen
+retains historical bytes and rejects replay of the invalidated record.
+
+This closes the concrete publication/restart path for this bounded profile.
+The generic test admission owner remains a test fixture; this lifecycle test
+uses the selected production identity policy. Native source-handoff and current-head CI must be
+qualified independently from these portable tests.
+
+** Production identity admission owner
+
+=PropertyIdentityTransformation::new= selects exactly one original catalog-bound
+query endpoint, restored root, authenticated source grant and library byte
+identity proof. It builds its definition/evidence internally, admits its edge,
+constructs the actual runtime and binds the final verifier to that exact runtime
+solver and input. Public construction accepts no arbitrary certificate,
+statement, foreign transformation, codec or solver hash.
+
+The verifier compares the complete expected evidence, current source cut,
+selected root parameter, exact instance, one ordered edge and selected solver.
+Its live lease observes local and persisted grant revocation. The durable test
+uses this production owner and rejects a changed root parameter and solver.
+
+The checked law is byte equality preserving an arbitrary endpoint witness
+relation. The endpoint relation stays owned by the original query owner, with
+actual results independently checked over the restored closure. The guard
+composition and physical checker remain audited trusted code; this is neither
+an automatic Lean proof checker for arbitrary imported certificates nor a
+machine proof of DataFusion, codecs or the entire provider wrapper. Current-head
+source proof and native CI are required before qualifying this implementation.

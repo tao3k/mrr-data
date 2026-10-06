@@ -3,11 +3,13 @@ mod backend;
 mod execution;
 mod reference;
 mod transformation;
+mod transformation_admission;
 pub use transformation::{
     PropertyTransformationRuntime, property_transformation_artifact,
     property_transformation_endpoint, property_transformation_grant_catalog,
     property_transformation_root,
 };
+pub use transformation_admission::{PropertyIdentityTransformation, PropertyIdentityVerifier};
 mod restored;
 mod validation;
 pub use backend::RestoredPropertyBackend;
