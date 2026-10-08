@@ -228,6 +228,25 @@ async fn missing_delivery_refuses_historical_repair() {
     let port = reopened.profile("publication.v1", "tenant").unwrap();
     assert!(port.recover(w).await.is_err());
     assert!(port.commit(w, None, |_| Ok::<_, ()>(())).await.is_err());
+    let replacement = write(
+        "replacement",
+        Some(ContentRevision {
+            revision: 1,
+            root: w.replacement,
+        }),
+        b"next",
+    );
+    assert!(
+        port.commit(replacement, Some(&ack(replacement)), |_| Ok::<_, ()>(()))
+            .await
+            .is_err()
+    );
+    assert!(
+        port.publication_delivery(w.scope, 2)
+            .await
+            .unwrap()
+            .is_none()
+    );
     reopened.shutdown().await.unwrap();
 }
 

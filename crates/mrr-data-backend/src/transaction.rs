@@ -115,6 +115,7 @@ fn commit(
     if current.is_some() != (head_created == Some(true)) {
         return Err(before(BackendError::Corrupt));
     }
+    validate_selected(tx, write, current)?;
     let ConditionalCommitDisposition::Apply(next) = write
         .content_write()
         .decide_commit(current.map(Into::into), physical, None)
@@ -383,4 +384,23 @@ fn require_delivery(
         return Err(before(BackendError::Corrupt));
     }
     Ok(row)
+}
+
+fn validate_selected(
+    tx: &mut dyn MetadataTransaction,
+    write: &StoredWrite,
+    current: Option<StoredRevision>,
+) -> ProviderResult<()> {
+    if let Some(selected) = current {
+        let delivery: PublicationDelivery = get(tx, &delivery_key(write, selected.revision)?)?
+            .ok_or_else(|| before(BackendError::Corrupt))?;
+        if home(&delivery.write) != home(write) || delivery.committed != selected {
+            return Err(before(BackendError::Corrupt));
+        }
+        let operation = tx.get(&operation_key(&delivery.write)?).map_err(before)?;
+        if recover(&delivery.write, operation.as_deref())? != Some(selected) {
+            return Err(before(BackendError::Corrupt));
+        }
+    }
+    Ok(())
 }
