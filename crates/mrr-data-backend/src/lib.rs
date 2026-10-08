@@ -31,7 +31,7 @@ pub use config::{
 };
 pub use engine::{Backend, ProfilePort};
 pub use providers::MetadataProvider;
-pub use record::{StoredOutcome, StoredRevision, StoredWrite};
+pub use record::{PublicationDelivery, StoredOutcome, StoredRevision, StoredWrite};
 #[cfg(test)]
 #[path = "../tests/unit/asp_rust_gate.rs"]
 mod asp_rust_gate;

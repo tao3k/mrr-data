@@ -53,3 +53,11 @@ pub struct StoredOutcome {
     pub committed: StoredRevision,
     pub replayed: bool,
 }
+
+/// Durable exact publication intent. Acknowledgement never grants fresh use.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PublicationDelivery {
+    pub write: StoredWrite,
+    pub committed: StoredRevision,
+    pub acknowledged: bool,
+}

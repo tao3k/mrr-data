@@ -1,7 +1,7 @@
 //! Bounded inert Scheme records with separately admitted Schema identities.
 use crate::{
     AuthorityChange, AuthorityExpectation, AuthorityKey, AuthorityProposal, AuthorityState,
-    AuthorityStatus, BackendError, StoredRevision, StoredWrite,
+    AuthorityStatus, BackendError, PublicationDelivery, StoredRevision, StoredWrite,
 };
 use cid::Cid;
 use mrr_data_profile as schema;
@@ -400,3 +400,5 @@ record!(AuthorityCompletion,schema::BACKEND_AUTHORITY_COMPLETION_SCHEMA,{change:
 #[cfg(test)]
 #[path = "../tests/unit/scheme_record.rs"]
 mod tests;
+
+record!(PublicationDelivery,schema::BACKEND_DELIVERY_SCHEMA,{write:StoredWrite,committed:StoredRevision,acknowledged:bool});

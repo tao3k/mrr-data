@@ -508,9 +508,10 @@ impl ProfilePort {
             authority_id: authority_id.into(),
         })
     }
-    async fn authority_work<T: Send + 'static>(
+    async fn metadata_work<T: Send + 'static>(
         &self,
         recovery: bool,
+        reserved_bytes: usize,
         run: impl FnOnce(&dyn MetadataProvider) -> crate::providers::ProviderResult<T> + Send + 'static,
     ) -> crate::providers::ProviderResult<T> {
         if self
@@ -529,7 +530,7 @@ impl ProfilePort {
             .backend
             .inner
             .scheduler
-            .admit(recovery, 16384)
+            .admit(recovery, reserved_bytes)
             .map_err(PortError::BeforeCommit)?;
         let provider = self.backend.inner.provider.clone();
         let rx = self
@@ -558,7 +559,8 @@ impl ProfilePort {
         let key = self
             .authority_key(scope, authority_id)
             .map_err(PortError::BeforeCommit)?;
-        self.authority_work(true, move |p| p.authority(&key)).await
+        self.metadata_work(true, 16384, move |p| p.authority(&key))
+            .await
     }
     /// Host administrative CAS. Enrolling the first record makes its ID mandatory
     /// for every fresh content write in this stable home. No deletion/reset exists.
@@ -575,7 +577,56 @@ impl ProfilePort {
             .map_err(PortError::BeforeCommit)?;
         let change = crate::AuthorityChange { key, proposal };
         change.next().map_err(PortError::BeforeCommit)?;
-        self.authority_work(false, move |p| p.advance_authority(&change))
+        self.metadata_work(false, 16384, move |p| p.advance_authority(&change))
+            .await
+    }
+}
+
+impl ProfilePort {
+    /// Observe an exact durable delivery, without fresh use permission.
+    /// # Errors
+    /// Rejects invalid homes, failed lookup and corrupt history.
+    pub async fn publication_delivery(
+        &self,
+        scope: &str,
+        revision: u64,
+    ) -> crate::providers::ProviderResult<Option<crate::PublicationDelivery>> {
+        self.backend
+            .check_ids(&[scope])
+            .map_err(PortError::BeforeCommit)?;
+        if revision == 0 {
+            return Err(PortError::BeforeCommit(BackendError::Limit));
+        }
+        let home = [self.profile.clone(), self.namespace.clone(), scope.into()];
+        self.metadata_work(true, 65536, move |p| {
+            p.publication_delivery(&home, revision)
+        })
+        .await
+    }
+    /// Acknowledge delivery; revalidate use authority at each external effect.
+    /// # Errors
+    /// Substitution, saturated scheduler, corrupt state or Unknown COMMIT.
+    pub async fn acknowledge_publication(
+        &self,
+        row: &crate::PublicationDelivery,
+    ) -> crate::providers::ProviderResult<()> {
+        if row.write.profile != self.profile || row.write.namespace != self.namespace {
+            return Err(PortError::BeforeCommit(BackendError::AuthorityConflict));
+        }
+        self.backend
+            .check_ids(&[&row.write.scope, &row.write.operation_id])
+            .map_err(PortError::BeforeCommit)?;
+        if row.committed.revision == 0 || row.write.authorities.len() > 16 {
+            return Err(PortError::BeforeCommit(BackendError::Limit));
+        }
+        for a in &row.write.authorities {
+            self.backend
+                .check_ids(&[&a.authority_id])
+                .map_err(PortError::BeforeCommit)?;
+        }
+        crate::scheme_record::encode(row).map_err(PortError::BeforeCommit)?;
+        let owned = row.clone();
+        self.metadata_work(false, 65536, move |p| p.acknowledge_publication(&owned))
             .await
     }
 }

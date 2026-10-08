@@ -2,7 +2,7 @@
 use crate::scheme_record::{AuthorityCompletion, Completion, Record, decode, encode};
 use crate::{
     AuthorityChange, AuthorityKey, AuthorityState, AuthorityStatus, BackendError, MetadataProvider,
-    ProviderCapabilities, StoredOutcome, StoredRevision, StoredWrite,
+    ProviderCapabilities, PublicationDelivery, StoredOutcome, StoredRevision, StoredWrite,
     providers::{MetadataTransaction, ProviderResult, TransactionProvider},
 };
 use mrr_data_content::{
@@ -103,6 +103,7 @@ fn commit(
         ],
     )?;
     if let Some(committed) = recover(write, tx.get(&op_key).map_err(before)?.as_deref())? {
+        require_delivery(tx, write, committed)?;
         return Ok(StoredOutcome {
             committed,
             replayed: true,
@@ -133,6 +134,15 @@ fn commit(
         &Completion {
             write: write.clone(),
             committed,
+        },
+    )?;
+    put(
+        tx,
+        &delivery_key(write, committed.revision)?,
+        &PublicationDelivery {
+            write: write.clone(),
+            committed,
+            acknowledged: false,
         },
     )?;
     put(tx, &head_key, &committed)?;
@@ -248,7 +258,67 @@ impl<P: TransactionProvider> MetadataProvider for P {
                 ],
             )?)
             .map_err(before)?;
-        recover(write, bytes.as_deref())
+        let committed = recover(write, bytes.as_deref())?;
+        if let Some(revision) = committed {
+            let row = self
+                .publication_delivery(
+                    &[
+                        write.profile.clone(),
+                        write.namespace.clone(),
+                        write.scope.clone(),
+                    ],
+                    revision.revision,
+                )?
+                .ok_or_else(|| before(BackendError::Corrupt))?;
+            if row.write != *write || row.committed != revision {
+                return Err(before(BackendError::Corrupt));
+            }
+        }
+        Ok(committed)
+    }
+    fn publication_delivery(
+        &self,
+        home: &[String; 3],
+        revision: u64,
+    ) -> ProviderResult<Option<PublicationDelivery>> {
+        let parts = [&*home[0], &*home[1], &*home[2], &revision.to_string()];
+        let Some(bytes) = self
+            .read(&key("publication-delivery", &parts)?)
+            .map_err(before)?
+        else {
+            return Ok(None);
+        };
+        let row: PublicationDelivery = decode(&bytes).map_err(before)?;
+        if [&row.write.profile, &row.write.namespace, &row.write.scope]
+            != [&home[0], &home[1], &home[2]]
+            || row.committed.revision != revision
+        {
+            return Err(before(BackendError::Corrupt));
+        }
+        let op = self.read(&operation_key(&row.write)?).map_err(before)?;
+        if recover(&row.write, op.as_deref())? != Some(row.committed) {
+            return Err(before(BackendError::Corrupt));
+        }
+        Ok(Some(row))
+    }
+    fn acknowledge_publication(&self, row: &PublicationDelivery) -> ProviderResult<()> {
+        self.transaction(&mut |tx| {
+            let mut stored = require_delivery(tx, &row.write, row.committed)?;
+            let op = tx.get(&operation_key(&row.write)?).map_err(before)?;
+            if recover(&row.write, op.as_deref())? != Some(row.committed) {
+                return Err(before(BackendError::Corrupt));
+            }
+            if !stored.acknowledged {
+                seal_home(tx, &home(&row.write))?;
+                stored.acknowledged = true;
+                put(
+                    tx,
+                    &delivery_key(&row.write, row.committed.revision)?,
+                    &stored,
+                )?;
+            }
+            Ok(())
+        })
     }
     fn authority(&self, a: &AuthorityKey) -> ProviderResult<Option<AuthorityState>> {
         self.read(&key(
@@ -288,4 +358,29 @@ fn seal_home(tx: &mut dyn MetadataTransaction, parts: &[&str]) -> ProviderResult
 
 fn key(kind: &str, parts: &[&str]) -> ProviderResult<String> {
     crate::scheme_record::key(kind, parts).map_err(before)
+}
+
+fn operation_key(w: &StoredWrite) -> ProviderResult<String> {
+    key(
+        "operation",
+        &[&w.profile, &w.namespace, &w.scope, &w.operation_id],
+    )
+}
+fn delivery_key(w: &StoredWrite, revision: u64) -> ProviderResult<String> {
+    key(
+        "publication-delivery",
+        &[&w.profile, &w.namespace, &w.scope, &revision.to_string()],
+    )
+}
+fn require_delivery(
+    tx: &mut dyn MetadataTransaction,
+    write: &StoredWrite,
+    committed: StoredRevision,
+) -> ProviderResult<PublicationDelivery> {
+    let row: PublicationDelivery = get(tx, &delivery_key(write, committed.revision)?)?
+        .ok_or_else(|| before(BackendError::Corrupt))?;
+    if row.write != *write || row.committed != committed {
+        return Err(before(BackendError::Corrupt));
+    }
+    Ok(row)
 }

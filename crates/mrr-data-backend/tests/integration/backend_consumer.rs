@@ -697,3 +697,6 @@ async fn canonical_aliases_share_native_state_and_hardlinks_refuse() {
         Err(BackendError::InvalidConfiguration)
     ));
 }
+
+#[path = "outbox.rs"]
+mod outbox;

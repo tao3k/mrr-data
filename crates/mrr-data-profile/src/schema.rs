@@ -100,3 +100,9 @@ pub const ARROW_VALUE_SCHEMA: SchemaIdentity = SchemaIdentity {
     namespace: "mrr.value-schema",
     version: 1,
 };
+
+/// Durable publication delivery tuple; fixed inert Scheme version.
+pub const BACKEND_DELIVERY_SCHEMA: SchemaIdentity = SchemaIdentity {
+    namespace: "mrr-data.backend-publication-delivery",
+    version: 1,
+};

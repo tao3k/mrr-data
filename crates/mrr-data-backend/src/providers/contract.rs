@@ -1,7 +1,7 @@
 //! Blocking metadata capabilities; the engine isolates them from executor threads.
 use crate::{
     AuthorityChange, AuthorityKey, AuthorityState, BackendError, ProviderCapabilities,
-    StoredOutcome, StoredRevision, StoredWrite,
+    PublicationDelivery, StoredOutcome, StoredRevision, StoredWrite,
 };
 use mrr_data_content::{ConditionalCommitPortError, ContentRevision, PublishReceipt};
 /// Separate known refusal, validation failure and ambiguous commit.
@@ -14,6 +14,26 @@ pub type ProviderResult<T> = Result<T, ConditionalCommitPortError<BackendError, 
 /// metadata before success. Failures during COMMIT are Unknown. Historical replay
 /// never calls the validator and never emits a fresh-effect permission.
 pub trait MetadataProvider: Send + Sync + 'static {
+    /// Read one historical delivery; absence is distinct from failed observation.
+    /// # Errors
+    /// Unsupported providers and corrupt histories are refused.
+    fn publication_delivery(
+        &self,
+        _home: &[String; 3],
+        _revision: u64,
+    ) -> ProviderResult<Option<PublicationDelivery>> {
+        Err(ConditionalCommitPortError::BeforeCommit(
+            BackendError::UnsupportedCapabilities,
+        ))
+    }
+    /// Idempotently acknowledge an exact historical delivery.
+    /// # Errors
+    /// Substituted payloads and uncertain commits are refused or Unknown.
+    fn acknowledge_publication(&self, _row: &PublicationDelivery) -> ProviderResult<()> {
+        Err(ConditionalCommitPortError::BeforeCommit(
+            BackendError::UnsupportedCapabilities,
+        ))
+    }
     fn capabilities(&self) -> ProviderCapabilities;
     /// # Errors
     /// Refuses inaccessible, corrupt or incompatible provider state.
