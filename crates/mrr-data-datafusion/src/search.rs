@@ -58,3 +58,75 @@ pub async fn execute_restored_property_search_stage(
         .project_execution(&execution, logical_position, result_limits, max_bytes)
         .map_err(DataSearchExecutionError::Binding)
 }
+
+/// Original physical request plus conservative reservation supplied by the consumer.
+pub struct DataSearchDispatchRequest<'a> {
+    pub binding: &'a DataSearchStageBinding,
+    pub logical_position: u64,
+    pub result_limits: QueryResultLimits,
+    pub reservation: meta_relational_reasoning::SearchDispatchResources,
+}
+#[derive(Debug)]
+pub enum DataSearchDispatchError {
+    Dispatch(meta_relational_reasoning::SearchDispatchError),
+    Execution(DataSearchExecutionError),
+}
+impl fmt::Display for DataSearchDispatchError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+impl std::error::Error for DataSearchDispatchError {}
+/// Retains the original Data source receipt and separate dispatch admission metadata.
+#[derive(Debug)]
+pub struct DataSearchDispatchReceipt {
+    pub stage: DataSearchStageReceipt,
+    pub dispatch: meta_relational_reasoning::SearchDispatchReceipt,
+}
+/// Execute an original POO acquisition root through MRR's bounded Rust lease.
+/// Dropping this future releases reserved capacity. Retiring the shared dispatch
+/// stops new work and rejects late results; it does not kill a backend thread.
+/// # Errors
+/// Rejects foreign plans, insufficient reservations, retirement and Data source drift.
+pub async fn dispatch_restored_property_search_stage(
+    dispatch: &meta_relational_reasoning::SearchDispatch,
+    request: DataSearchDispatchRequest<'_>,
+    backend: &RestoredPropertyBackend<'_>,
+) -> Result<DataSearchDispatchReceipt, DataSearchDispatchError> {
+    use meta_relational_reasoning::SearchDispatchError;
+    let cap = NonZeroUsize::new(request.reservation.output_bytes).ok_or(
+        DataSearchDispatchError::Dispatch(SearchDispatchError::ReservationExceeded),
+    )?;
+    if request.result_limits.max_rows().get() > request.reservation.results {
+        return Err(DataSearchDispatchError::Dispatch(
+            SearchDispatchError::ReservationExceeded,
+        ));
+    }
+    let lease = dispatch
+        .reserve(
+            dispatch.generation(),
+            request.binding.factor(),
+            request.reservation,
+        )
+        .map_err(DataSearchDispatchError::Dispatch)?;
+    let stage = execute_restored_property_search_stage(
+        request.binding,
+        dispatch.generation(),
+        backend,
+        request.logical_position,
+        request.result_limits,
+        cap,
+    )
+    .await
+    .map_err(DataSearchDispatchError::Execution)?;
+    let admitted = lease
+        .admit(
+            stage.handoff().result_bytes().len(),
+            stage.observations().len(),
+        )
+        .map_err(DataSearchDispatchError::Dispatch)?;
+    Ok(DataSearchDispatchReceipt {
+        stage,
+        dispatch: admitted,
+    })
+}

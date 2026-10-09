@@ -25,3 +25,8 @@ pub use adapter::{
 #[cfg(test)]
 #[path = "../tests/unit/mod.rs"]
 mod tests;
+
+pub use search::{
+    DataSearchDispatchError, DataSearchDispatchReceipt, DataSearchDispatchRequest,
+    dispatch_restored_property_search_stage,
+};

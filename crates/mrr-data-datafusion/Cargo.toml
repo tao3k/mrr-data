@@ -8,6 +8,7 @@ license.workspace = true
 repository.workspace = true
 
 [features]
+search-dispatch = ["mrr-data-core/native-search"]
 # Optional qualification of the MRR-owned native GQL frontend handoff.
 source-handoff = ["dep:mrr-property-source", "mrr-property-source/native-inference"]
 

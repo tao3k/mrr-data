@@ -104,3 +104,98 @@ async fn actual_restored_property_rows_become_source_bound_search_acquisition() 
         ))
     ));
 }
+
+#[cfg(feature = "search-dispatch")]
+#[tokio::test]
+async fn original_poo_root_dispatches_real_query_and_rejects_retired_results() {
+    let f = fixture();
+    let (cold, _, relations, entities) = restored(&f, EntityChildMode::Valid).await;
+    let backend = RestoredPropertyBackend {
+        restored: &cold,
+        relation_catalog: &relations,
+        entity_catalog: &entities,
+        limits: limits(),
+    };
+    let plan = mrr::PooSearchPlan::Stage {
+        name: "property".into(),
+        role: mrr::PooSearchRole::Acquisition,
+        input_domain: "workspace".into(),
+        output_domain: "rows".into(),
+    };
+    let projection =
+        mrr::compile_poo_search_plan("data-dispatch", f.query.generation(), &plan).unwrap();
+    let factor = projection.factor_by_name("property").unwrap();
+    let binding = DataSearchStageBinding::new(
+        bind_data_query(
+            &f.query,
+            cold.snapshot(),
+            &crate::datafusion_engine_profile().unwrap(),
+        )
+        .unwrap(),
+        factor,
+    )
+    .unwrap();
+    let budget = mrr::SearchDispatchResources {
+        memory_bytes: 4096,
+        input_bytes: 1024,
+        output_bytes: 1_048_576,
+        results: 3,
+    };
+    let dispatch =
+        mrr::SearchDispatch::new(projection.clone(), NonZeroUsize::new(1).unwrap(), budget);
+    let rows = mrr::QueryResultLimits::new(
+        NonZeroUsize::new(3).unwrap(),
+        NonZeroUsize::new(300).unwrap(),
+    );
+    let request = || crate::DataSearchDispatchRequest {
+        binding: &binding,
+        logical_position: 0,
+        result_limits: rows,
+        reservation: budget,
+    };
+    let result = crate::dispatch_restored_property_search_stage(&dispatch, request(), &backend)
+        .await
+        .unwrap();
+    assert_eq!(result.stage.observations().len(), 3);
+    assert_eq!(result.dispatch.factor, factor);
+    assert_eq!(result.dispatch.generation, f.query.generation());
+    assert_eq!(
+        result.dispatch.output_bytes,
+        result.stage.handoff().result_bytes().len()
+    );
+    assert_eq!(dispatch.snapshot().unwrap().in_flight, 0);
+    // Retirement is checked before backend execution; admitted output does not change.
+    dispatch.retire().unwrap();
+    let before = dispatch.snapshot().unwrap();
+    assert!(matches!(
+        crate::dispatch_restored_property_search_stage(&dispatch, request(), &backend).await,
+        Err(crate::DataSearchDispatchError::Dispatch(
+            mrr::SearchDispatchError::Retired
+        ))
+    ));
+    assert_eq!(dispatch.snapshot().unwrap(), before);
+    // The actual Data execution can finish after retirement, but loses admission.
+    let late = mrr::SearchDispatch::new(projection, NonZeroUsize::new(1).unwrap(), budget);
+    let lease = late.reserve(f.query.generation(), factor, budget).unwrap();
+    let actual = execute_restored_property_search_stage(
+        &binding,
+        f.query.generation(),
+        &backend,
+        1,
+        rows,
+        NonZeroUsize::new(budget.output_bytes).unwrap(),
+    )
+    .await
+    .unwrap();
+    late.retire().unwrap();
+    assert_eq!(
+        lease.admit(
+            actual.handoff().result_bytes().len(),
+            actual.observations().len()
+        ),
+        Err(mrr::SearchDispatchError::Retired)
+    );
+    assert_eq!(late.snapshot().unwrap().consumed.results, 0);
+    assert_eq!(late.snapshot().unwrap().in_flight, 0);
+    println!("DATA-DISPATCH-OK original-rows=3 late-result=rejected retired-before-query=rejected");
+}

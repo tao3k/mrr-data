@@ -37,7 +37,7 @@ immutable root, canonical result digest and ordinal; they are not entity IDs.
 * Immutable upstream source
 
 Root and fuzz manifests/lockfiles consume published MRR revision
-=2dcabbe5729732b108cbdea049f43e233ea98a6f=. Consumers use that exact MRR
+=1fdcb06068afa258a7cc87e97c5edcb565697e68=. Consumers use that exact MRR
 dependency's types without relabeling identities from another revision.
 Local source overrides used by consumer integration tests must be
 reported separately from published dependency qualification.
@@ -69,7 +69,10 @@ MRR Rust connects Scheme/POO semantic plans with reusable Data execution
 capabilities. Data owns physical adapters, their dependencies and receipts; ASP
 selects concrete scenario profiles and retains source/resident authority.
 The existing restored property stage uses MRR's Query =execute_with= port.
-A generic dispatch lifecycle is planned, not implemented by candidate merging.
+The first =dispatch_restored_property_search_stage= port now uses MRR dispatch
+leases for original acquisition roots, with actual byte/result admission and
+retirement rejection. Candidate merging itself does not schedule a plan.
+Dependent Scheme continuation and general capability selection remain separate.
 
 Candidate spaces and exact-versus-ranked guarantees must be admitted before
 cross-modal composition. Opaque Unicode strings are not a multimodal backend.
