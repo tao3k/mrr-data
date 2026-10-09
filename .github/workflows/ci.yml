@@ -339,6 +339,8 @@ jobs:
     name: Property snapshot and physical query (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
+    env:
+      GERBIL_BUILD_VERBOSE: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -373,20 +375,24 @@ jobs:
         run: |
           cargo metadata --locked --format-version 1 --features mrr-data-datafusion/source-handoff,mrr-data-graphar/source-handoff > "$RUNNER_TEMP/mrr-source-metadata.json"
           python3 - <<'PY'
-          import json, os
+          import json, os, tomllib
           from pathlib import Path
           metadata = json.loads((Path(os.environ["RUNNER_TEMP"]) / "mrr-source-metadata.json").read_text())
           owners = [package for package in metadata["packages"] if package["name"] == "mrr-property-source"]
           assert len(owners) == 1 and owners[0]["source"].startswith("git+https://github.com/tao3k/meta-relational-reasoning.git?")
           root = Path(owners[0]["manifest_path"]).parents[2]
+          sdk_revision = "f61643b3a787d005612dc5021b4941612f3e1f68"
+          dependencies = tomllib.loads((root / "Cargo.toml").read_text())["workspace"]["dependencies"]
+          for name in ("gerbil-scheme-sys", "gerbil-scheme-native-build"):
+              assert dependencies[name]["git"] == "https://github.com/tao3k/gerbil-scheme-rust.git"
+              assert dependencies[name]["rev"] == sdk_revision, "source owner SDK differs from setup action"
           with open(os.environ["GITHUB_ENV"], "a") as output:
               output.write(f"MRR_FRONTEND_OWNER={root}\n")
           PY
       - name: Install the source owner's immutable native Gerbil release
-        shell: bash
-        run: |
-          "$MRR_FRONTEND_OWNER/.github/scripts/install-gerbil-release.sh" "$RUNNER_TEMP/mrr-gerbil"
-          echo "GERBIL_BUILD_VERBOSE=1" >> "$GITHUB_ENV"
+        uses: tao3k/gerbil-scheme-rust/.github/actions/setup-gerbil@f61643b3a787d005612dc5021b4941612f3e1f68
+        with:
+          release-root: ${{ runner.temp }}/mrr-gerbil
       - name: Build the MRR-owned source frontend package
         shell: bash
         run: |
