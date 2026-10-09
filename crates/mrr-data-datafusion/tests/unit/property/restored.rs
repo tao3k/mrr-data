@@ -21,6 +21,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+mod search;
 #[cfg(feature = "source-handoff")]
 mod source_handoff;
 mod transformation;

@@ -12,6 +12,8 @@ default = []
 arrow-query = ["dep:arrow-array", "dep:arrow-schema"]
 graph-publish = ["mrr-data-content/graph-snapshot"]
 turso = ["dep:turso"]
+turso-fts = ["turso", "turso/fts"]
+turso-sync = ["turso", "turso/sync"]
 duckdb = ["dep:duckdb", "arrow-query"]
 
 [dependencies]

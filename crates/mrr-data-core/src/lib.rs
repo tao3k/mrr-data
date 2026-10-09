@@ -19,6 +19,9 @@ mod operation_binding;
 mod profile;
 mod query_binding;
 #[cfg(feature = "content-identity")]
+mod search_binding;
+mod search_candidates;
+#[cfg(feature = "content-identity")]
 mod snapshot_descriptors;
 
 #[cfg(feature = "content-identity")]
@@ -60,6 +63,15 @@ pub use query_binding::{
 };
 pub use query_binding::{
     DataEngineProfile, DataQueryBindingError, DataQueryFeature, PhysicalQueryOutput,
+};
+#[cfg(feature = "content-identity")]
+pub use search_binding::{DataSearchBindingError, DataSearchStageBinding, DataSearchStageReceipt};
+#[cfg(feature = "native-search")]
+pub use search_candidates::evaluate_data_search_candidates;
+pub use search_candidates::{
+    DataPooSearchCandidateBranch, DataSearchCandidateBranch, DataSearchCandidateComposition,
+    DataSearchCandidateError, DataSearchCandidateReceipt, DataSearchSourceBinding,
+    compose_data_search_candidates, compose_poo_data_search_candidates,
 };
 #[cfg(feature = "content-identity")]
 pub use snapshot_descriptors::{

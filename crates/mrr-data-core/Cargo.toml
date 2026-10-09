@@ -9,6 +9,7 @@ repository.workspace = true
 
 [features]
 default = []
+native-search = ["meta-relational-reasoning/native-inference"]
 content-identity = ["dep:cid", "dep:multihash-codetable", "dep:serde", "dep:serde_bytes", "dep:serde_ipld_dagcbor", "dep:sha2"]
 
 [dependencies]

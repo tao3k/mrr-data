@@ -3,6 +3,7 @@
 
 mod adapter;
 mod property;
+mod search;
 pub use property::{
     BinaryRelationTable, EntityPropertyTable, PropertyExecutionMetrics,
     PropertyIdentityTransformation, PropertyIdentityVerifier, PropertyQueryLimits,
@@ -14,6 +15,7 @@ pub use property::{
     reference_property_path_query, verify_property_path_output,
     verify_restored_property_path_output,
 };
+pub use search::{DataSearchExecutionError, execute_restored_property_search_stage};
 
 pub use adapter::{
     DataFusionExecutionTimings, DataFusionQueryError, datafusion_engine_profile,

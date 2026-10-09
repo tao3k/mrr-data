@@ -3,6 +3,13 @@
 
 * Ownership and dependency direction
 
+ASP consumes the physical driver through =mrr_data_backend::turso_driver=.
+MRR Data owns the exact Turso dependency revision. The optional =turso-fts= and
+=turso-sync= features forward capabilities to that same driver. ASP retains its
+workspace schema, pooled connections, generation admission and Runtime Server
+lifecycle; importing the driver does not enroll ASP in the generic Backend's
+opaque-record storage schema or create a second runtime.
+
 The MRR source Library now returns =AdmittedPropertySourceExecution<E>=,
 retaining the original parser receipt, bound semantic query, admitted rows and
 backend-owned root/engine evidence together. Source callers keep that value

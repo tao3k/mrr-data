@@ -8,6 +8,10 @@ pub use control::{ResourceControl, ResourceStop};
 mod dispatch;
 mod engine;
 pub mod providers;
+/// Data-owned physical driver for hosts with their own database schema.
+/// The host retains connection lifetime, admission, and transaction policy.
+#[cfg(feature = "turso")]
+pub use turso as turso_driver;
 #[cfg(feature = "arrow-query")]
 mod query;
 mod record;
