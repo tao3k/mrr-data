@@ -397,7 +397,7 @@ jobs:
         shell: bash
         run: |
           cd "$MRR_FRONTEND_OWNER"
-          uv run --project proofs/MRRProof mrr-prepare-gerbil-dependencies
+          uv run --project proofs/MRRProof python -m mrr_proof_validation.prepare_gerbil_dependencies
           gerbil deps --install
           gerbil build
       - name: Test generic property snapshot and physical query
