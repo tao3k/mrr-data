@@ -14,3 +14,8 @@ Crash and timeout artifacts are regression inputs. Pull-request CI compiles and
 lints the target on the stable toolchain, then runs a bounded 10,000-case ASan
 campaign on nightly Rust. The main crate also retains deterministic malformed
 corpus tests; none of these replaces longer continuous fuzzing.
+
+The isolated fuzz workspace must use the same immutable MRR Git revision as
+its path dependency's main workspace. =mrr-data-test check-features= validates
+both its manifest and lockfile before compiling feature slices, preventing
+incompatible =Fact= / =RelationSchema= identities after a workspace pin update.

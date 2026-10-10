@@ -1,0 +1,19 @@
+#+TITLE: Cloud Data Protection Profile
+#+OPTIONS: toc:nil
+
+[[file:profile.rs][The provider-neutral profile]] binds a selected dataset to
+an immutable snapshot and to the release receipt fields used by Cedar POO's
+Cloud Pipeline evidence: artifact digest, source commit, policy root, and
+state epoch. It requires separate pipeline-release and transformation decisions.
+Both decisions must name the same policy root, target dataset, artifact digest,
+and state epoch as the selected release. The epoch is a state version, not a
+wall-clock timestamp. A decision pair from another root or artifact cannot be
+reused by this profile.
+
+The public Cedar POO Cloud DataProtection example supplies the reference
+composition of pipeline owners and a Sensitive Data Protection recipe:
+[[https://github.com/tao3k/cedar-poo-spec/tree/main/Examples/Cloud/DataProtection][Cloud DataProtection]].
+
+The Host authenticates receipts and decisions, atomically redeems the release
+receipt for the intended effect, and checks current state at commit. The
+profile only checks the declared identity and decisions.

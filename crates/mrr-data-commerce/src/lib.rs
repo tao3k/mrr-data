@@ -1,0 +1,17 @@
+//! MRR conditional-commit adapter for admitted commerce claims.
+pub mod budget_commit;
+#[cfg(feature = "consumption")]
+pub mod consumption;
+#[cfg(feature = "credential")]
+pub mod credential;
+#[cfg(feature = "consumption")]
+pub mod provider;
+#[cfg(feature = "consumption")]
+pub mod recovery;
+
+#[cfg(test)]
+#[path = "../tests/unit/asp_rust_gate.rs"]
+mod asp_rust_gate;
+
+#[cfg(feature = "presentation")]
+pub mod presentation;

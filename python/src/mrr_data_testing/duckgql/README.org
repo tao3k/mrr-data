@@ -1,0 +1,123 @@
+#+title: DuckGQL native typed-interface qualification
+
+* Purpose
+
+Probe the registered =gql_match_relational= typed program independently of GQL
+read parsing. This is an engineering fixture, not an MRR query adapter or a
+GraphAr performance comparison. The caller supplies an exact DuckDB CLI and a
+Host-installed signed/pinned extension. The runner never downloads or installs
+an extension.
+
+* Run
+
+#+begin_src sh
+uv run --locked --project python mrr-data-test duckgql-qualify \
+  --duckdb /absolute/path/to/duckdb \
+  --extension-directory /absolute/path/to/extensions
+#+end_src
+
+The runner exits nonzero on missing artifacts, unexpected native rows, failed
+program-version refusal, labelled-query parity or prepared-parameter refusal. Each subprocess has
+a 20-second timeout. JSON lines identify the exact binary/fixture/Schema hashes
+and separate native-program, version-refusal and labelled-parity receipts.
+Elapsed time includes process startup and fixture setup; it is not comparative
+query latency. The fixed text read is an audit control, not an execution fallback.
+
+[[file:parameter-transport.sql][The prepared-parameter fixture]] carries program version, catalog labels,
+projection expression structs, output aliases and result ordering through five
+scalar parameters. JSON casts recover native List/Struct arguments before the
+plugin binds its typed program. It produces the same three rows, preserves
+quoted/Unicode/injection-shaped aliases as data and refuses unknown program
+version, malformed JSON and wrong element types without output rows. This
+qualifies CLI PREPARE/EXECUTE on the audited artifact. The Rust adapter binds scalar values through Statement; CLI EXECUTE text is
+only this independent transport fixture.
+
+* Contract and limits
+
+[[file:../../../../crates/mrr-data-duckgql-query/schema.json][The Schema]] owns the native program version and argument count.
+File names, graph names and runner stages carry no version suffix. The
+[[file:typed-match.sql][fixture]] registers fixed read-only tables, maps original source keys to
+ordinary string identity properties and calls the plugin's typed program.
+Catalog-normalized node/edge labels are explicit physical bindings. Returning
+the edge identity property permits deterministic Fact order while preserving
+duplicate endpoint pairs.
+
+A previous local macOS probe qualified DuckDB 1.5.5 with signed DuckGQL 0.2.0.
+The Community registry reference inspected during this run was
+=44e77c6835f9e6758bb3e3bccb1a642981dbf1e7=. The repository uses Rust DuckDB
+1.10506.0; the Community artifact for its corresponding engine 1.5.6 was absent
+on macOS ARM64 at audit time. No SDK version change is made by this probe.
+
+A previous local SDK probe independently qualified the same eight probe stages using
+a local unsigned artifact built from the Schema-pinned source against DuckDB
+1.5.6. Its source and binary identity are distinct from the signed Community
+artifact. To reproduce the source build:
+
+#+begin_src sh
+uv run --locked --project python mrr-data-test duckgql-build --work-dir /absolute/build-directory
+#+end_src
+
+Build phases use the package progress supervisor. A failed build removes the
+previous artifact receipt before work starts. The Host must explicitly allow
+unsigned loading when qualifying the local artifact.
+The static ANTLR dependency uses position-independent code for shared extension
+linking. DuckDB and DuckGQL both use C++17 so their constexpr symbol linkage
+agrees; the DuckDB core default is C++11. Linux/macOS CI qualifies the complete
+builder, rather than inferring portability from a macOS artifact.
+DuckDB core translation units use CMake unity batches of four files; DuckGQL
+and third-party libraries retain independent translation units. This bounds compilation work without
+changing the progress supervisor's wall or idle limits.
+The extension emits native compiler pass-execution diagnostics during optimization
+of large units, including the 48k-line generated GQL parser. These logs report
+actual optimizer and machine-code passes. The generated parser is compiled in
+bounded translation units at complete ANTLR rule-block boundaries. The original
+rule definitions reconstruct the pinned source byte-for-byte; private initializer
+state stays in one unit. All units retain upstream Release optimization flags.
+The artifact records source and derived-unit digests. Translation-unit boundaries
+can affect text-parser optimization; no text-parser throughput gain is claimed. The wall and no-output
+limits still apply to compilation and linking.
+The logger groups 256 actual compiler pass/analysis events and retains the
+latest event in each group. Other output and diagnostics remain visible;
+the supervisor observes raw subprocess output and never emits timer-based
+progress messages. Receipt capture, when requested, retains raw bytes.
+
+* Rust tests and Python glue
+
+Semantic assertions, immutable source identity, cross-engine result parity and
+MRR admission live in the Rust integration tests. Python launches those tests,
+enforces subprocess progress limits and collects their protocol receipts.
+
+#+begin_src sh
+uv run --locked --project python mrr-data-test query-resources --cargo-artifacts /absolute/cargo-tests.jsonl --output /absolute/query-resources.jsonl
+#+end_src
+
+Generate the Cargo artifact stream with =cargo test --no-run
+--message-format=json= for the adapter's =backend-worker,query-parity= features.
+The Rust matrix runs DuckGQL, Turso and DataFusion in separate processes for
+each Schema-selected source size, using the same authenticated GraphAr source.
+Each case checks expected rows and admits every result through MRR. The Python
+tests check entry-point discovery, protocol collection and process cleanup.
+A previous local macOS resource probe recorded nine passing cases with phase
+samples and process RSS. Runtime receipts and build diagnostics are generated
+by each qualification run outside Git. They identify the source head, compiled
+binary, locally built SDK and derived parser units. Historical local results
+are not qualification of the current commit; remote CI and original-source
+frontend qualification remain separate gates.
+Concurrent host compilation affects these samples; they establish no speedup.
+
+OS peak RSS covers the entire isolated process, including source capture and
+Rust; it is not a native operator memory limit. The Rust adapters additionally
+record disjoint preparation, load, execution, fetch/decode and cleanup phases.
+DuckGQL and Turso measure the first safe SDK cursor row from statement prepare;
+DataFusion measures the first nonempty Arrow batch from physical execution start.
+Native execution can buffer results before either observation. These phases do
+not measure operator-only first-result latency, spill peaks or cache effects.
+
+[[file:../../../../crates/mrr-data-duckgql-query/README.org][The optional Rust adapter]] separately implements an authenticated GraphAr
+source, canonical MRR identities, checked =BoundDataQuery= mapping, scalar-bound
+transport, final result admission and Backend lifecycle for one outgoing hop.
+These native macOS receipts do not qualify broader property/path shapes or
+the complete Linux/macOS artifact matrix.
+Ordinary DuckDB tables require LIVE registration here; the extension's PINNED
+policy requires an attached DuckLake snapshot. The MRR source binding must
+therefore be enforced by the immutable derived image and its resource owner.

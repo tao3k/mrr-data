@@ -7,7 +7,7 @@ use meta_relational_reasoning::EntitySchema;
 
 use crate::manifest::BatchDescriptor;
 use crate::profile::validate_cid;
-use crate::{DataError, RAW_CODEC};
+use crate::{DAG_CBOR_CODEC, DataError, RAW_CODEC};
 
 /// One typed entity-property table and its immutable Arrow IPC batches.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -108,9 +108,18 @@ impl CoverageDescriptor {
     }
 }
 
+/// Storage profile of one explicitly declared native artifact.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GraphProjectionKind {
+    BinaryEntity,
+    EntityProperties,
+    Dataset,
+}
+
 /// Optional `GraphAr` projection attached to the same semantic snapshot.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GraphProjectionDescriptor {
+    pub(crate) kind: GraphProjectionKind,
     pub(crate) graphar_version: String,
     pub(crate) manifest_cid: Cid,
 }
@@ -127,9 +136,44 @@ impl GraphProjectionDescriptor {
         }
         validate_cid(&manifest_cid, RAW_CODEC)?;
         Ok(Self {
+            kind: GraphProjectionKind::BinaryEntity,
             graphar_version,
             manifest_cid,
         })
+    }
+
+    /// Register a canonical DAG-CBOR property descriptor, never binary topology YAML.
+    /// # Errors
+    /// Rejects invalid native versions and non-DAG-CBOR/SHA-256 descriptor CIDs.
+    pub fn entity_properties(
+        graphar_version: impl Into<String>,
+        manifest_cid: Cid,
+    ) -> Result<Self, DataError> {
+        let graphar_version = graphar_version.into();
+        if graphar_version.is_empty() || graphar_version.trim() != graphar_version {
+            return Err(DataError::InvalidGraphArVersion);
+        }
+        validate_cid(&manifest_cid, DAG_CBOR_CODEC)?;
+        Ok(Self {
+            kind: GraphProjectionKind::EntityProperties,
+            graphar_version,
+            manifest_cid,
+        })
+    }
+    /// Register an acyclic combined native dataset descriptor.
+    /// # Errors
+    /// Refuses invalid native format versions and non-DAG-CBOR descriptor CIDs.
+    pub fn dataset(
+        graphar_version: impl Into<String>,
+        manifest_cid: Cid,
+    ) -> Result<Self, DataError> {
+        let mut value = Self::entity_properties(graphar_version, manifest_cid)?;
+        value.kind = GraphProjectionKind::Dataset;
+        Ok(value)
+    }
+    #[must_use]
+    pub const fn kind(&self) -> GraphProjectionKind {
+        self.kind
     }
 
     #[must_use]

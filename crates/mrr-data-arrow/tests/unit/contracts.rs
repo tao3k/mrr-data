@@ -692,3 +692,42 @@ fn scenario_native_arrow_round_trips_ten_thousand_nested_null_heavy_facts() {
         (encode_elapsed + decode_elapsed).as_micros()
     );
 }
+
+#[test]
+fn numeric_value_schema_versions_cannot_be_replaced_by_versioned_names() {
+    let relation = scalar_relation();
+    let batch = facts_to_record_batch(&relation, &[]).unwrap();
+    let fields = batch.schema().fields().to_vec();
+    let index = fields
+        .iter()
+        .position(|f| {
+            f.metadata()
+                .get("mrr.value-schema")
+                .is_some_and(|v| v == "entity:typed-text")
+        })
+        .unwrap();
+    assert_eq!(fields[index].metadata()["mrr.value-schema-version"], "1");
+    for (identity, version) in [
+        ("entity:typed-text-v1", Some("1")),
+        ("entity:typed-text", Some("2")),
+        ("entity:typed-text", Some("v1")),
+        ("entity:typed-text", None),
+    ] {
+        let mut changed = fields.clone();
+        let mut metadata = changed[index].metadata().clone();
+        metadata.insert("mrr.value-schema".into(), identity.into());
+        if let Some(version) = version {
+            metadata.insert("mrr.value-schema-version".into(), version.into());
+        } else {
+            metadata.remove("mrr.value-schema-version");
+        }
+        changed[index] = Arc::new(changed[index].as_ref().clone().with_metadata(metadata));
+        let schema =
+            arrow_schema::Schema::new_with_metadata(changed, batch.schema().metadata().clone());
+        let forged = RecordBatch::try_new(Arc::new(schema), batch.columns().to_vec()).unwrap();
+        assert!(matches!(
+            record_batch_to_facts(&relation, &forged),
+            Err(ArrowRelationError::SchemaMismatch(_))
+        ));
+    }
+}

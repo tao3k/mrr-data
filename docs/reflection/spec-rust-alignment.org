@@ -1,0 +1,184 @@
+#+TITLE: Reflection: SPEC and Rust Library Alignment
+#+OPTIONS: toc:nil
+
+* LeanPoo assessment for this iteration
+
+The existing SPEC protection profile uses LeanPoo typed slots and inheritance
+to compose an intent from the storage effect and key configuration. This
+iteration did not add another independently owned profile. The fixture pin
+check compares immutable Git-tree bytes, the Google Table request repeats one
+already selected recipe over ordered rows, and protected recovery observes
+physical outbox failures. None has inherited methods, competing owner order,
+or a proof dependency graph that LeanPoo could compose or cache usefully.
+Current claims and ledger rows must still be refreshed by the Host; a cached
+LeanPoo Allow would not authorize a later read or provider release.
+
+* Executable evidence and limit
+
+[[file:../../python/src/mrr_data_testing/checks/spec_fixtures.py][The pin gate]] compares five Rust
+fixtures with the exact Cargo-pinned SPEC Git tree. SPEC's
+[[https://github.com/tao3k/cedar-poo-spec/pull/5][Table Batch Wire V1]]
+adds checked ordered response cases replayed by its Rust bridge. MRR Data
+retains MRR row identities while forming one Table request and rejects an
+incomplete or mismatched response without returning checked outputs. The
+protected recovery test denies a missing outbox, corrupt manifest, or child-map
+drift in a recovered record before the encrypted outer root can be published.
+These checks do not authenticate
+the Host record, provider response or Cedar decision, perform a durable ledger
+transaction, or reverse provider side effects.
+
+* Reconsideration trigger
+
+If separate owners begin contributing inherited table recipes or protection
+profiles, compose those declared rules with LeanPoo and test owner order and
+deny preservation. Keep byte provenance, physical I/O and current authority
+checks at their existing boundaries.
+
+* Reflection: equal-context row association
+
+The existing LeanPoo protection profile still composes independently owned
+storage and key choices. This iteration adds a generated marker to one Google
+Table request because two rows can share the same context while carrying
+different MRR identities. Marker equality and serialized wire size are direct
+value checks; they do not use inherited methods or proof dependencies. The
+SPEC fixture and Rust bridge reject reordered or duplicate markers, and MRR
+retains its selected Arrow row identity only after the whole response passes.
+The Host must still authenticate transport and authorize each selected row.
+
+* Reflection: independently prepared batch plans
+
+SPEC TableBatch V1 is a pure ordered selection contract and deliberately does
+not aggregate authorization. MRR's public batch constructor can also receive
+single-row plans made at different times, so this iteration retains subject,
+purpose, complete token profile lineage, observation time and claim expiry in
+the plan identity. Cross-scope plans are rejected, and current policy, epoch
+and every expiry are rechecked before request formation and checked output.
+These are dynamic Host projections rather than inherited object behavior;
+LeanPoo's typed-slot composition remains useful for the existing protection
+profile, but a cached object result would not establish fresh authority.
+
+* Reflection: single-row and re-identification current state
+
+The batch path exposed a mismatch: its request and checked output rechecked
+current governance, while the public single-row and re-identification plans
+only checked it when prepared. All three now use the retained policy digest,
+epoch, observation time and claim expiry at both effect boundaries. Tests
+reject an expired claim, a changed policy or epoch, and clock rollback before
+request formation or checked output. LeanPoo remains in use for the SPEC
+protection profile's typed slots and inheritance; these time-dependent
+MRR checks are direct Rust value checks because no object composition can
+authenticate a fresh Host state. SPEC's pure TableBatch contract is unchanged.
+
+* Reflection: Cloud release at both effect boundaries
+
+The prior request and checked-output rules refreshed token policy, epoch and
+expiry but accepted the Cloud release and two Cedar decisions only at plan
+creation. The library now requires one new Host projection for each Cloud row
+at both boundaries and compares its source, release receipt, decisions,
+profile, context and key grant with the retained plan. Missing or revoked
+projections yield no provider request or checked output. LeanPoo still
+composes the existing SPEC protection profile through typed slots and
+inheritance. This Cloud current-state rule depends on fresh Host evidence,
+so Rust performs exact comparisons; LeanPoo object inheritance cannot
+authenticate a current decision or make an effect atomic. SPEC's pure batch
+wire fixture remains pinned without a new object rule.
+
+* Reflection: protected closure byte total
+
+The existing SPEC LeanPoo profile composition selects the storage destination
+and key version through inherited typed slots. This iteration checks a
+different value: the actual cumulative ciphertext bytes against an
+authenticated Host record during publication and a committed receipt during
+restore. The publisher checks before each PUT, and restore checks immediately
+after each GET and before decrypting that block. An undersized receipt is
+rejected at the first overrun; the test records zero publication PUTs and one
+restore GET for its one-byte receipt. This is a dynamic property of physical
+bytes, so it remains a direct bounded check in Rust rather than a LeanPoo
+method or cached proof. The Host still authenticates the record and receipt.
+
+* Reflection: branch consolidation and data property audit
+
+The current SPEC protection profile already uses LeanPoo typed-slot
+inheritance to compose destination and key choices. This iteration changes
+Git ancestry, CI runtime allowance, and the documented Host acceptance gate;
+it introduces no new policy owner, inherited value, or proof dependency.
+Adding a LeanPoo object for branch identity or CI timing would not strengthen
+the protection decision. For long-lived customer data, the next legitimate
+composition opportunity is an independently owned protection profile at the
+SPEC boundary, with executable deny-preservation cases. Host authentication,
+atomic approval use, physical bytes and provider effects still require their
+own checks.
+
+* Reflection: one restricted source across raw and protected routes
+
+The SPEC LeanPoo protection profile still composes static destination and key
+choices for the protected route. This iteration reuses the existing raw and
+protected projections for one restricted source: raw publication is denied
+before remote I/O, then the protected flow proceeds through its separate
+claim and physical receipt. No new independently owned profile or inherited
+slot is introduced, so there is no additional LeanPoo object to define.
+This composition test cannot authenticate Host-supplied labels or stop a
+caller from invoking generic content transports directly; those remain the
+next Host acceptance obligations.
+
+* Reflection: semantic identifiers and schema identity
+
+The SPEC and Rust storage, protection, read, and Table batch types now carry
+semantic names without release suffixes. The JSON fixtures keep their top
+=schema= identity while their nested values omit duplicate =version= fields;
+both repositories replay the regenerated bytes. LeanPoo remains in use for
+the SPEC protection profile's typed-slot inheritance and intent recomputation.
+This naming and projection change adds no independently owned profile rule or
+incremental dependency, so additional LeanPoo composition would have no
+semantic work to perform. Fresh Host authority and physical effects still
+require their existing explicit checks.
+
+* Reflection: root publication retry and current authority
+
+The SPEC LeanPoo profile continues to compose static destination and key
+choices through typed slots and inheritance. This iteration changes transport
+attempt policy at one physical effect boundary: after the Host refreshes
+authority, the protected root PUT makes one =TransferSession= call. An ambiguous failure requires a
+new publisher call and another refresh, even if child PUTs use automatic
+retries. A revoked retry returns no physical acknowledgement. There is no new
+independently owned profile rule or reusable proof dependency for LeanPoo to
+compose; the session budget and Host's current-state projection remain direct
+Rust checks. The test demonstrates the library boundary, while the Host still
+authenticates refresh results and commits the ledger atomically.
+
+* Reflection: raw root publication after revocation
+
+The existing LeanPoo protection profile still composes protected destination
+and key choices. This iteration adds a required current-state callback to the
+raw publisher between verified child publication and its root PUT. A revoked
+claim prevents the root PUT; the root uses one transport attempt, so a retry
+must revisit the callback. The checked SPEC raw admission rule is reused
+unchanged. No new independently owned policy rule or profile override exists
+to compose with LeanPoo here. Raw child bytes sent before revocation can
+remain remotely accessible, and Host authentication and atomic ledger commit
+remain separate acceptance obligations.
+
+* Reflection: asynchronous current authority at physical boundaries
+
+The existing LeanPoo profile still composes static protection configuration
+through typed slots and inheritance. Current policy and ledger observations
+may require asynchronous Host I/O, so the raw and protected root gates and
+the final protected read release now await callbacks. The raw gate runs inside
+the transfer session's operation deadline; protected refreshes run under that
+session's deadline and cancellation control. Suspended callbacks in local
+tests still deny a revoked root or read before the corresponding release.
+This is an effect-timing contract, not a new independently owned policy rule
+for LeanPoo. The Host must authenticate each returned observation and perform
+its own atomic approval and audit transaction.
+
+* Reflection: complete ciphertext closure before provider I/O
+
+The existing SPEC LeanPoo profile composes static destination and key choices;
+it does not own the state of an outbox. Protected publication now captures
+every ciphertext child, root block and authenticated manifest under a caller
+byte ceiling before the first remote PUT. A corrupt or missing staged block,
+or a mismatched private record, produces no provider write. This is a
+physical snapshot invariant and a resource bound, so it remains a direct Rust
+preflight rather than a new LeanPoo inheritance rule. The Host still
+authenticates the record, selects the ceiling and handles orphan ciphertext
+after transport failures or later revocation.

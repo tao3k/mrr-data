@@ -1,7 +1,13 @@
-//! Bounded catalog-backed path joins and string-property projections.
-use std::collections::BTreeMap;
+//! Bounded catalog-backed path joins and typed property projections.
+use datafusion::physical_plan::{ExecutionPlan, execute_stream};
+use futures::TryStreamExt;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
-use arrow_array::{Array, RecordBatch, StringArray};
+use arrow_array::{Array, Int64Array, RecordBatch, StringArray};
 use datafusion::{
     common::Column,
     execution::runtime_env::RuntimeEnvBuilder,
@@ -20,7 +26,7 @@ use crate::DataFusionQueryError;
 pub(super) type Result<T> = std::result::Result<T, DataFusionQueryError>;
 
 /// An entity table: canonical entity ID first, then catalog properties in order.
-/// All columns in this bounded slice are Utf8; nullable properties retain nulls.
+/// IDs are Utf8; properties are native Utf8 or Int64 and retain nulls.
 pub struct EntityPropertyTable {
     pub schema: EntitySchema,
     pub batch: RecordBatch,
@@ -44,6 +50,22 @@ pub struct PropertyQueryLimits {
     pub execution_memory_bytes: usize,
 }
 
+/// Measurements at the physical engine boundary, before MRR result admission.
+/// UTF-8 bytes count only Arrow-to-owned-value decoding. Spill bytes sum counters
+/// published by physical operators; absence means unobserved, not zero.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PropertyExecutionMetrics {
+    pub planning: Duration,
+    /// Time from stream startup, excluding planning; rows may be buffered.
+    pub first_nonempty_batch: Option<Duration>,
+    pub fetch_batches: Duration,
+    pub decode_output: Duration,
+    pub decoded_utf8_bytes: usize,
+    pub observed_spill_bytes: Option<usize>,
+    pub spill_reporting_operators: usize,
+    pub output_batches: usize,
+}
+
 /// Execute one outgoing path of one or two binary edges with string property
 /// equality filters and string property projections. Catalogs must exactly match
 /// the bound MRR query. This function neither parses GQL nor admits results.
@@ -57,6 +79,22 @@ pub async fn execute_property_path_query(
     relations: &[BinaryRelationTable],
     limits: PropertyQueryLimits,
 ) -> Result<PhysicalQueryOutput> {
+    execute_property_path_query_observed(query, entities, relations, limits)
+        .await
+        .map(|(output, _)| output)
+}
+
+/// Execute the same catalog-bound query and return engine observations.
+/// # Errors
+/// Returns the same catalog, shape, resource and physical execution refusals.
+pub async fn execute_property_path_query_observed(
+    query: &CatalogBoundQuery,
+    entities: &[EntityPropertyTable],
+    relations: &[BinaryRelationTable],
+    limits: PropertyQueryLimits,
+) -> Result<(PhysicalQueryOutput, PropertyExecutionMetrics)> {
+    let started = Instant::now();
+    let mut metrics = PropertyExecutionMetrics::default();
     validate_tables(query, entities, relations, limits)?;
     let plan = admit_property_plan(query, entities, relations, limits)?;
     let path = plan.path;
@@ -104,40 +142,102 @@ pub async fn execute_property_path_query(
         .iter()
         .map(|projection| named(projection.alias().as_str()).sort(true, true))
         .collect();
-    let batches = frame
-        .select(plan.projections)?
-        .sort(ordering)?
-        .collect()
-        .await?;
-    decode_properties(query, batches)
+    let frame = frame.select(plan.projections)?.sort(ordering)?;
+    let task = Arc::new(frame.task_ctx());
+    let plan = frame.create_physical_plan().await?;
+    let execute = Instant::now();
+    let mut stream = execute_stream(Arc::clone(&plan), task)?;
+    metrics.planning = started.elapsed();
+    let fetch = Instant::now();
+    let mut batches = Vec::new();
+    while let Some(batch) = stream.try_next().await? {
+        if batch.num_rows() > 0 && metrics.first_nonempty_batch.is_none() {
+            metrics.first_nonempty_batch = Some(execute.elapsed());
+        }
+        batches.push(batch);
+    }
+    metrics.fetch_batches = fetch.elapsed();
+    metrics.output_batches = batches.len();
+    // Inspect each physical operator once. These are operator-local counters,
+    // not a claim that all engines or operators publish spill observations.
+    spill_metrics(plan.as_ref(), &mut metrics, &mut BTreeSet::new());
+    drop(stream);
+    let decode = Instant::now();
+    let output = decode_properties(query, batches, &mut metrics.decoded_utf8_bytes)?;
+    metrics.decode_output = decode.elapsed();
+    Ok((output, metrics))
+}
+fn spill_metrics(
+    plan: &dyn ExecutionPlan,
+    metrics: &mut PropertyExecutionMetrics,
+    seen: &mut BTreeSet<usize>,
+) {
+    let mut reported = false;
+    if let Some(set) = plan.metrics() {
+        for metric in set.iter() {
+            if let datafusion::physical_plan::metrics::MetricValue::SpilledBytes(bytes) =
+                metric.value()
+            {
+                // Wrappers can forward another operator's MetricsSet. Do not
+                // count the same shared metric object twice along the tree.
+                if seen.insert(Arc::as_ptr(metric) as usize) {
+                    reported = true;
+                    metrics.observed_spill_bytes =
+                        Some(metrics.observed_spill_bytes.unwrap_or(0) + bytes.value());
+                }
+            }
+        }
+    }
+    if reported {
+        metrics.spill_reporting_operators += 1;
+    }
+    for child in plan.children() {
+        spill_metrics(child.as_ref(), metrics, seen);
+    }
 }
 
 fn decode_properties(
     query: &CatalogBoundQuery,
     batches: Vec<RecordBatch>,
+    copied: &mut usize,
 ) -> Result<PhysicalQueryOutput> {
     let mut rows = Vec::new();
     for batch in batches {
-        let columns = batch
-            .columns()
-            .iter()
-            .map(|a| strings(a.as_ref()))
-            .collect::<Result<Vec<_>>>()?;
         for row in 0..batch.num_rows() {
             rows.push(
-                columns
+                batch
+                    .columns()
                     .iter()
-                    .map(|c| {
-                        if c.is_null(row) {
-                            QueryResultValue::Null
-                        } else {
-                            QueryResultValue::Scalar {
-                                schema: ValueSchema::String,
-                                value: Value::String(c.value(row).to_owned()),
-                            }
+                    .map(|array| {
+                        if array.is_null(row) {
+                            return Ok(QueryResultValue::Null);
                         }
+                        let (schema, value) = match array.data_type() {
+                            arrow_schema::DataType::Utf8 => (
+                                ValueSchema::String,
+                                Value::String({
+                                    let value = strings(array.as_ref())?.value(row);
+                                    *copied += value.len();
+                                    value.to_owned()
+                                }),
+                            ),
+                            arrow_schema::DataType::Int64 => (
+                                ValueSchema::Integer,
+                                Value::Integer(
+                                    array
+                                        .as_any()
+                                        .downcast_ref::<Int64Array>()
+                                        .ok_or(DataFusionQueryError::InvalidArrowBatch(
+                                            "Int64 column required",
+                                        ))?
+                                        .value(row),
+                                ),
+                            ),
+                            _ => return unsupported("unsupported property output type"),
+                        };
+                        Ok(QueryResultValue::Scalar { schema, value })
                     })
-                    .collect(),
+                    .collect::<Result<Vec<_>>>()?,
             );
         }
     }
@@ -157,6 +257,14 @@ struct PropertyPlan<'a> {
     nodes: Vec<&'a NodePattern>,
     projections: Vec<Expr>,
     filters: Vec<Expr>,
+}
+pub(super) fn validate_property_plan(
+    query: &CatalogBoundQuery,
+    entities: &[EntityPropertyTable],
+    relations: &[BinaryRelationTable],
+    limits: PropertyQueryLimits,
+) -> Result<()> {
+    admit_property_plan(query, entities, relations, limits).map(|_| ())
 }
 fn admit_property_plan<'a>(
     query: &'a CatalogBoundQuery,
@@ -348,4 +456,13 @@ fn property_column(
         .position(|f| f.name() == key.as_str())
         .ok_or(DataFusionQueryError::UnsupportedShape("unknown property"))?;
     Ok(format!("n{index}_p{property}"))
+}
+
+/// Exact catalog-to-Arrow mapping; no text or floating-point coercion.
+pub(super) fn property_arrow_type(schema: &ValueSchema) -> Result<arrow_schema::DataType> {
+    match schema {
+        ValueSchema::String => Ok(arrow_schema::DataType::Utf8),
+        ValueSchema::Integer => Ok(arrow_schema::DataType::Int64),
+        _ => unsupported("only string and integer properties supported"),
+    }
 }

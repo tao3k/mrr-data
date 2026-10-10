@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mrr-data-testing"
+version = "0.1.0"
+description = "MRR Data conformance, native qualification and repository checks"
+requires-python = ">=3.13"
+dependencies = []
+
+[project.scripts]
+mrr-data-test = "mrr_data_testing.cli:main"
+mrr-data-rustc-progress = "mrr_data_testing.rustc_progress:main"
+
+[dependency-groups]
+dev = ["pytest>=8.3,<10", "ruff>=0.11,<1"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

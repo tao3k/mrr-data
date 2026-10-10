@@ -1,3 +1,4 @@
+//! Controlled native graph publication with bounded layout and inventory.
 use std::{
     collections::BTreeSet,
     env,
@@ -6,12 +7,17 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use crate::inventory::{
+    GraphArInventoryError, inventory_graphar_directory, validate_inventory_limits,
+};
 use graphar_rs::{
     builder::{Edge, EdgesBuilder, Vertex, VerticesBuilder},
     info::{AdjListType, AdjacentList, EdgeInfo, GraphInfo, InfoVersion, VertexInfo},
     property::{Property, PropertyGroup, PropertyVec},
     types::{Cardinality, DataType, FileType},
 };
+use mrr_data_core::{GraphDatasetInventory, GraphInventoryLimits};
+
 use meta_relational_reasoning::{
     EvidenceCompleteness, FactId, FactProvenance, FactValidity, RelationAuthority, RelationId,
 };
@@ -31,13 +37,75 @@ pub(crate) const EDGE_CHUNK_SIZE: i64 = 1 << 22;
 const VERTEX_INFO_FILE: &str = "entity.vertex.yaml";
 const EDGE_INFO_FILE: &str = "entity_mrr_relation_entity.edge.yaml";
 
+/// Bounded chunk sizes for controlled publication and selective access.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct GraphArChunkLayout {
+    vertex: usize,
+    edge: usize,
+}
+impl GraphArChunkLayout {
+    /// # Errors
+    /// Refuses zero sizes or sizes above the native profile's bounded defaults.
+    pub fn new(vertex: usize, edge: usize) -> Result<Self, GraphArWriteError> {
+        if vertex == 0 || edge == 0 || vertex > (1 << 18) || edge > (1 << 22) {
+            return Err(GraphArWriteError::InvalidChunkLayout);
+        }
+        Ok(Self { vertex, edge })
+    }
+    #[must_use]
+    pub const fn vertex_chunk_size(self) -> usize {
+        self.vertex
+    }
+    #[must_use]
+    pub const fn edge_chunk_size(self) -> usize {
+        self.edge
+    }
+}
+impl Default for GraphArChunkLayout {
+    fn default() -> Self {
+        Self {
+            vertex: usize::try_from(VERTEX_CHUNK_SIZE).expect("positive fixed vertex chunk"),
+            edge: usize::try_from(EDGE_CHUNK_SIZE).expect("positive fixed edge chunk"),
+        }
+    }
+}
+
+/// Controlled physical representations supported by this binary-Entity adapter.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum GraphArAdjacency {
+    #[default]
+    UnorderedBySource,
+    OrderedBySource,
+}
+impl GraphArAdjacency {
+    pub(crate) const fn native(self) -> AdjListType {
+        match self {
+            Self::UnorderedBySource => AdjListType::UnorderedBySource,
+            Self::OrderedBySource => AdjListType::OrderedBySource,
+        }
+    }
+    const fn prefix(self) -> &'static str {
+        match self {
+            Self::UnorderedBySource => "unordered_by_source/",
+            Self::OrderedBySource => "ordered_by_source/",
+        }
+    }
+}
+
 /// Receipt for one dataset written by the project-maintained `GraphAr` runtime.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GraphArDatasetReceipt {
     query_source: GraphArQuerySource,
+    inventory: GraphDatasetInventory,
 }
 
 impl GraphArDatasetReceipt {
+    /// Exact physical file identities observed before the staging directory rename.
+    #[must_use]
+    pub const fn inventory(&self) -> &GraphDatasetInventory {
+        &self.inventory
+    }
+
     #[must_use]
     pub fn root(&self) -> &Path {
         self.query_source.root()
@@ -71,6 +139,7 @@ pub enum GraphArWriteError {
     OutputExists(PathBuf),
     NonUtf8Path(PathBuf),
     VertexCountOverflow,
+    InvalidChunkLayout,
     RelationMismatch {
         fact: FactId,
         expected: RelationId,
@@ -83,6 +152,7 @@ pub enum GraphArWriteError {
     },
     Projection(GraphProjectionError),
     Native(graphar_rs::Error),
+    Inventory(GraphArInventoryError),
 }
 
 impl GraphArWriteError {
@@ -108,6 +178,7 @@ impl Error for GraphArWriteError {
         match self {
             Self::Projection(error) => Some(error),
             Self::Native(error) => Some(error),
+            Self::Inventory(error) => Some(error),
             _ => None,
         }
     }
@@ -133,6 +204,52 @@ pub fn write_graphar_dataset(
     projection: &BinaryEntityProjection,
     edges: &[GraphEdgeRecord],
 ) -> Result<GraphArDatasetReceipt, GraphArWriteError> {
+    write_graphar_dataset_with_limits(output, projection, edges, GraphInventoryLimits::default())
+}
+
+/// Write a dataset with explicit physical inventory budgets checked before rename.
+/// # Errors
+/// Refuses invalid input, native/filesystem failures or physical inventory limits.
+pub fn write_graphar_dataset_with_limits(
+    output: impl AsRef<Path>,
+    projection: &BinaryEntityProjection,
+    edges: &[GraphEdgeRecord],
+    inventory_limits: GraphInventoryLimits,
+) -> Result<GraphArDatasetReceipt, GraphArWriteError> {
+    write_graphar_dataset_with_options(
+        output,
+        projection,
+        edges,
+        GraphArWriteOptions {
+            inventory_limits,
+            ..GraphArWriteOptions::default()
+        },
+    )
+}
+
+/// Host-selected publication limits and controlled physical representation.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct GraphArWriteOptions {
+    pub inventory_limits: GraphInventoryLimits,
+    pub adjacency: GraphArAdjacency,
+    pub layout: GraphArChunkLayout,
+}
+
+/// Publish native topology/properties and ordered offsets when selected.
+/// # Errors
+/// Refuses invalid input, existing outputs and native/inventory failures.
+pub fn write_graphar_dataset_with_options(
+    output: impl AsRef<Path>,
+    projection: &BinaryEntityProjection,
+    edges: &[GraphEdgeRecord],
+    options: GraphArWriteOptions,
+) -> Result<GraphArDatasetReceipt, GraphArWriteError> {
+    let GraphArWriteOptions {
+        inventory_limits,
+        adjacency,
+        layout,
+    } = options;
+    validate_inventory_limits(inventory_limits).map_err(GraphArWriteError::Inventory)?;
     let output = output.as_ref();
     validate_batch(projection, edges)?;
     match fs::symlink_metadata(output) {
@@ -158,14 +275,23 @@ pub fn write_graphar_dataset(
         .ok_or_else(|| GraphArWriteError::NonUtf8Path(committed_root.clone()))?;
     let committed_prefix = format!("{committed_root}/");
 
-    let (vertex_count, edge_count) =
-        write_staged(staging.path(), &committed_prefix, projection, edges)?;
+    let (vertex_count, edge_count) = write_staged(
+        staging.path(),
+        &committed_prefix,
+        projection,
+        edges,
+        adjacency,
+        layout,
+    )?;
+    let inventory = inventory_graphar_directory(staging.path(), inventory_limits)
+        .map_err(GraphArWriteError::Inventory)?;
     let staged_path = staging.keep();
     if let Err(error) = fs::rename(&staged_path, output) {
         let _ = fs::remove_dir_all(&staged_path);
         return Err(GraphArWriteError::io("commit dataset", &error));
     }
     Ok(GraphArDatasetReceipt {
+        inventory,
         query_source: GraphArQuerySource::new(
             output.to_path_buf(),
             projection,
@@ -200,6 +326,8 @@ fn write_staged(
     committed_prefix: &str,
     projection: &BinaryEntityProjection,
     edges: &[GraphEdgeRecord],
+    adjacency: GraphArAdjacency,
+    layout: GraphArChunkLayout,
 ) -> Result<(usize, usize), GraphArWriteError> {
     let index = PhysicalVertexIndex::from_edges(edges);
     let vertex_count =
@@ -209,8 +337,8 @@ fn write_staged(
         .ok_or_else(|| GraphArWriteError::NonUtf8Path(root.to_path_buf()))?;
     let prefix = format!("{root_string}/");
     let version = InfoVersion::new(1).map_err(upstream)?;
-    let vertex_info = vertex_info(version.clone())?;
-    let edge_info = edge_info(version.clone())?;
+    let vertex_info = vertex_info_for(version.clone(), layout)?;
+    let edge_info = edge_info_with_layout(version.clone(), adjacency, layout)?;
 
     let mut vertices = VerticesBuilder::try_new(&vertex_info, &prefix, 0).map_err(upstream)?;
     for entity in index.entities() {
@@ -220,13 +348,9 @@ fn write_staged(
     }
     vertices.dump().map_err(upstream)?;
 
-    let mut edge_builder = EdgesBuilder::try_new(
-        &edge_info,
-        &prefix,
-        AdjListType::UnorderedBySource,
-        vertex_count,
-    )
-    .map_err(upstream)?;
+    let mut edge_builder =
+        EdgesBuilder::try_new(&edge_info, &prefix, adjacency.native(), vertex_count)
+            .map_err(upstream)?;
     for edge in edges {
         let indexed = index.index_edge(*edge)?;
         let mut physical =
@@ -255,7 +379,13 @@ fn write_staged(
     Ok((index.len(), edges.len()))
 }
 
-fn vertex_info(version: InfoVersion) -> Result<VertexInfo, GraphArWriteError> {
+pub(crate) fn vertex_info(version: InfoVersion) -> Result<VertexInfo, GraphArWriteError> {
+    vertex_info_for(version, GraphArChunkLayout::default())
+}
+pub(crate) fn vertex_info_for(
+    version: InfoVersion,
+    layout: GraphArChunkLayout,
+) -> Result<VertexInfo, GraphArWriteError> {
     let group = property_group(
         [Property::new(
             ENTITY_ID_PROPERTY,
@@ -266,15 +396,32 @@ fn vertex_info(version: InfoVersion) -> Result<VertexInfo, GraphArWriteError> {
         )],
         "properties/",
     );
-    VertexInfo::builder(ENTITY_TYPE, VERTEX_CHUNK_SIZE)
-        .push_property_group(group)
-        .prefix("vertex/entity/")
-        .version(version)
-        .try_build()
-        .map_err(upstream)
+    VertexInfo::builder(
+        ENTITY_TYPE,
+        i64::try_from(layout.vertex).map_err(|_| GraphArWriteError::InvalidChunkLayout)?,
+    )
+    .push_property_group(group)
+    .prefix("vertex/entity/")
+    .version(version)
+    .try_build()
+    .map_err(upstream)
 }
 
-fn edge_info(version: InfoVersion) -> Result<EdgeInfo, GraphArWriteError> {
+pub(crate) fn edge_info(version: InfoVersion) -> Result<EdgeInfo, GraphArWriteError> {
+    edge_info_for(version, GraphArAdjacency::UnorderedBySource)
+}
+
+pub(crate) fn edge_info_for(
+    version: InfoVersion,
+    adjacency: GraphArAdjacency,
+) -> Result<EdgeInfo, GraphArWriteError> {
+    edge_info_with_layout(version, adjacency, GraphArChunkLayout::default())
+}
+pub(crate) fn edge_info_with_layout(
+    version: InfoVersion,
+    adjacency: GraphArAdjacency,
+    layout: GraphArChunkLayout,
+) -> Result<EdgeInfo, GraphArWriteError> {
     let names = [
         (FACT_ID_PROPERTY, true, false),
         ("relation_id", false, false),
@@ -304,15 +451,15 @@ fn edge_info(version: InfoVersion) -> Result<EdgeInfo, GraphArWriteError> {
         ENTITY_TYPE,
         EDGE_TYPE,
         ENTITY_TYPE,
-        EDGE_CHUNK_SIZE,
-        VERTEX_CHUNK_SIZE,
-        VERTEX_CHUNK_SIZE,
+        i64::try_from(layout.edge).map_err(|_| GraphArWriteError::InvalidChunkLayout)?,
+        i64::try_from(layout.vertex).map_err(|_| GraphArWriteError::InvalidChunkLayout)?,
+        i64::try_from(layout.vertex).map_err(|_| GraphArWriteError::InvalidChunkLayout)?,
     )
     .directed(true)
     .push_adjacent_list(AdjacentList::new(
-        AdjListType::UnorderedBySource,
+        adjacency.native(),
         FileType::Parquet,
-        Some("unordered_by_source/"),
+        Some(adjacency.prefix()),
     ))
     .push_property_group(group)
     .prefix("edge/entity_mrr_relation_entity/")

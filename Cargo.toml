@@ -2,14 +2,19 @@
 members = [
   "build-support/mrr-data-asp-rust-project-policy",
   "crates/mrr-data",
-  "crates/mrr-data-poo-flow",
   "crates/mrr-data-arrow",
   "crates/mrr-data-content",
+  "crates/mrr-data-backend",
   "crates/mrr-data-cache",
   "crates/mrr-data-core",
+  "crates/mrr-data-security",
+  "crates/mrr-data-pseudonymization",
+  "crates/mrr-data-commerce",
   "crates/mrr-data-datafusion",
   "crates/mrr-data-graphar",
   "crates/mrr-data-profile",
+  "crates/mrr-data-turso-query",
+  "crates/mrr-data-duckgql-query",
   "crates/mrr-data-kache-probe",
 ]
 resolver = "2"
@@ -22,7 +27,11 @@ license = "LGPL-2.1-or-later"
 repository = "https://github.com/tao3k/mrr-data"
 
 [workspace.dependencies]
+mrr-data-backend = { path = "crates/mrr-data-backend", version = "0.1.0", default-features = false }
+turso = { version = "=0.8.1", default-features = false }
+duckdb = { version = "=1.10506.0", default-features = false, features = ["bundled", "appender-arrow"] }
 serde_json = "1"
+nix = { version = "=0.29.0", default-features = false, features = ["resource"] }
 sha2 = "0.10"
 mrr-data-cache = { path = "crates/mrr-data-cache", version = "0.1.0", default-features = false }
 opendal = { package = "opendal-core", version = "=0.58.2", default-features = false, features = ["executors-tokio"] }
@@ -38,20 +47,26 @@ kache-store = { git = "https://github.com/kunobi-ninja/kache", rev = "7461ca7635
 asp-rust = { git = "https://github.com/tao3k/asp-rust", rev = "2419414ee5379bad89506496e3eaab928df68daf", default-features = false }
 asp-rust-build-support = { git = "https://github.com/tao3k/asp-rust", rev = "2419414ee5379bad89506496e3eaab928df68daf" }
 arrow-array = "58.4.0"
+arrow-select = "58.4.0"
+bytes = "1"
+parquet = { version = "=58.4.0", default-features = false, features = ["arrow", "snap", "zstd"] }
 arrow-buffer = "58.4.0"
 arrow-ipc = "58.4.0"
 arrow-schema = "58.4.0"
 datafusion = { version = "=53.1.0", default-features = false }
 flatbuffers = "25.2.10"
-meta-relational-reasoning = { git = "https://github.com/tao3k/meta-relational-reasoning.git", rev = "c4328064ab0bf5eca39dc2f79fbf890b6b99f7c9", version = "0.1.0" }
-mrr-frontends = { git = "https://github.com/tao3k/meta-relational-reasoning.git", rev = "c4328064ab0bf5eca39dc2f79fbf890b6b99f7c9", version = "0.1.0" }
+meta-relational-reasoning = { git = "https://github.com/tao3k/meta-relational-reasoning.git", rev = "c202aa2753678c02dc7daafdec853f66f3368a70", version = "0.1.0", default-features = false }
+mrr-property-source = { git = "https://github.com/tao3k/meta-relational-reasoning.git", rev = "c202aa2753678c02dc7daafdec853f66f3368a70", version = "0.1.0" }
 mrr-data-asp-rust-build-support = { path = "build-support/mrr-data-asp-rust-project-policy", version = "0.1.0" }
 mrr-data-arrow = { path = "crates/mrr-data-arrow", version = "0.1.0" }
 mrr-data-content = { path = "crates/mrr-data-content", version = "0.1.0", default-features = false }
 mrr-data-core = { path = "crates/mrr-data-core", version = "0.1.0", default-features = false }
+mrr-data-security = { path = "crates/mrr-data-security", version = "0.1.0" }
 mrr-data-datafusion = { path = "crates/mrr-data-datafusion", version = "0.1.0" }
 mrr-data-graphar = { path = "crates/mrr-data-graphar", version = "0.1.0" }
 mrr-data-profile = { path = "crates/mrr-data-profile", version = "0.1.0" }
+mrr-data-turso-query = { path = "crates/mrr-data-turso-query", version = "0.1.0", default-features = false }
+mrr-data-duckgql-query = { path = "crates/mrr-data-duckgql-query", version = "0.1.0", default-features = false }
 cid = { version = "=0.11.3", features = ["serde"] }
 fvm_ipld_car = "=0.9.1"
 multihash-codetable = { version = "=0.2.2", default-features = false, features = ["sha2", "std"] }

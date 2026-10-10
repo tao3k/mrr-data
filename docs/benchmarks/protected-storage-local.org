@@ -1,0 +1,56 @@
+#+TITLE: Protected Storage Local Baseline
+#+OPTIONS: toc:nil
+
+* Scope and command
+
+At the exact source revision containing this document, run:
+
+#+begin_src sh
+cargo bench -p mrr-data-security --features protected-publish --bench protected_storage --locked --offline
+#+end_src
+
+[[file:../../crates/mrr-data-security/benches/protected_storage.rs][The stable Rust bench]]
+constructs one admitted snapshot for each case. It times 10,000 current
+intent checks and 200 complete =stage_protected_snapshot= calls per case.
+Staging includes local closure verification, randomized AES-256-GCM envelope
+construction, CID calculation and writes to an in-memory ciphertext outbox.
+Each stage call uses a fresh outbox. The source and key are prepared outside
+the timed loop. Source labels and child counts are both varied to expose
+the two distinct scaling dimensions. The contract caps source labels at 64;
+128 source labels are rejected, so the largest admitted case uses 64 labels
+and 128 closure children.
+
+* Baseline receipt
+
+macOS 26.6.1 arm64, Rust 1.95.0, release profile, one local run on
+2026-09-30. Times are per operation. =outer bytes= is the staged ciphertext
+closure size, including the protected root and private manifest.
+
+| Source labels | Children | Gate p50 ns | Gate p95 ns | Stage p50 us | Stage p95 us | Outer bytes |
+|---------------+----------+-------------+-------------+--------------+--------------+-------------|
+|             1 |        1 |          83 |         125 |           36 |           41 |        1725 |
+|            16 |       16 |         500 |         542 |          155 |          179 |        8865 |
+|            64 |      128 |        1834 |        1917 |         1510 |         2197 |       62179 |
+
+Independent single-case runs measured approximate process peak resident
+bytes of 3.5, 3.7 and 4.3 MiB respectively using Python
+=resource.getrusage(RUSAGE_CHILDREN).ru_maxrss=. The p95 staging time varied
+across repeat runs; the table is a baseline, not a service-level guarantee.
+The benchmark reports raw timings to let later changes rerun the same cases
+at the same source revision and machine profile.
+
+The S3 SigV4/TLS acceptance uses a local s3s simulator and is a separate
+functional gate. This benchmark does not include filesystem fsync, TLS,
+S3 requests, provider cost, policy evaluation, KMS, or Host audit commit.
+No optimization decision follows from these three local points alone.
+
+* LeanPoo reflection
+
+The measured admission path evaluates one materialized protection intent.
+Its profile can be assembled with the SPEC's LeanPoo typed slots and
+inheritance; the benchmark intentionally measures the resulting immutable
+intent rather than object construction. Closure encryption and transport are
+physical Rust work, so adding LeanPoo dispatch or proof caching to those
+loops would not eliminate the measured per-block cryptography or I/O.
+Keep composition in the profile owner and current authority checks at each
+operation boundary.

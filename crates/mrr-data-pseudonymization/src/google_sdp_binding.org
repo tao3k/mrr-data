@@ -1,0 +1,141 @@
+#+TITLE: Google Sensitive Data Protection Selection Binding
+#+OPTIONS: toc:nil
+
+[[file:google_sdp_binding.rs][google_sdp_binding.rs]] checks one selected
+tabular AES-SIV input against its MRR Data snapshot binding before constructing
+the public =cedar-poo-pseudonymization= Google SDP request. It first compares the
+Host-authenticated authorization claim and current governance state; then the
+selected dataset, field, actual context, complete token profile, and SHA-256
+of the exact UTF-8 selected value must agree. The bridge then checks the
+wrapped-key lineage and Google request configuration. The returned plan retains
+the snapshot root, dataset, input digest, policy digest, and governance epoch.
+The single-row request body and checked output each require a new
+Host-authenticated current projection with the same policy digest and epoch,
+no clock rollback, and an unexpired claim. After the bridge checks a
+Host-supplied response, the output retains the same
+identity plus request, response, and token digests. This is a structural
+selection and response check, not encryption or authenticated provider I/O.
+
+The separate =prepare_google_aes_siv_reidentify= path takes a checked
+de-identification output, the original selected value, and a *current*
+=Reidentify= claim. It compares snapshot root, dataset, and plaintext digest,
+then reconstructs the de-identification request and requires its SHA-256 to
+match the checked token's request. This also fixes the field names, context,
+wrapped key, and Google transformation recipe. The bridge checks that the
+re-identification response equals the selected original value. The returned
+plaintext carries the new governance identity and the source token and
+provider response digests. An old =Deidentify= claim cannot authorize this
+effect; a policy or epoch change needs a separately current claim. The
+re-identification request body and checked plaintext also require a fresh
+matching current projection before their respective boundaries. The Host
+must authenticate the stored token's origin, current approval and audit state,
+provider transport, and any plaintext release. This entry point accepts the
+projection binding only; Cloud row outputs require a future Cloud-specific
+re-identification gate and are rejected here.
+
+The [[file:../../mrr-data-security/src/data_protection/profile.org][Cloud profile]]
+additionally requires the exact pipeline release receipt and independent
+transformation decision before Google request construction. Both decisions
+must be bound to the same root, dataset, artifact digest, and state epoch as
+the selected release; the token claim and release must share the current epoch.
+The Cloud path requires a checked =SnapshotRowBinding= and retains its
+relation, child CID, and row ordinal with the output. The
+public =GoogleCurrentAuthority= requires a new Cloud selection for every
+Cloud row at request formation and again before checked output. It compares
+the current profile's source root and dataset, complete release receipt,
+both allow decisions, target token lineage, admitted row context and key
+grant with the retained plan. An absent row projection or a changed release
+is rejected. The Host authenticates the refreshed facts and controls atomic
+effect admission; the library only compares supplied values. The
+[[file:google_arrow.rs][Arrow-backed preparation API]] verifies the complete
+MRR catalog digest, child byte length and CID, relation-specific Arrow IPC
+schema, batch row count, and selected row's named UTF-8 value and context.
+It uses the existing bounded MRR Arrow decoder and rejects missing or
+ambiguous fields, null or empty cells, and differences from the proposed
+selection. The Host must pass explicit decode limits and authenticate the
+manifest root and catalog source before invoking it. The older projection
+API accepts Host-authenticated selection directly; callers handling Arrow
+child bytes should use the Arrow-backed API. The [[file:google_sdp_binding.rs][CloudPseudonymizationGate]] mirrors the
+public Cedar POO Cloud gate's mode, recipe, tenant, key grant, row context, and
+artifact-digest relation against the selected MRR Data input. These checks
+compare Host-authenticated projections; they do not execute Cedar or prove
+key possession. The [[https://github.com/tao3k/cedar-poo-spec/blob/main/Examples/Cloud/DataProtection/GoogleSdpRelease.lean][Cloud example]] supplies the scenario names. The Rust checks map those
+projected facts as follows:
+
+| Lean choice | Rust boundary |
+|-------------+---------------|
+| =combined-ready= | Both scoped decisions and the Cloud gate admit the selected snapshot input |
+| =pipeline-only=, =poisoned-runner=, =incident-suspends-release= | Pipeline decision denies the effect |
+| =other-recipe-key=, =other-tenant-profile= | Target recipe or tenant differs |
+| =other-row-context=, =other-released-digest= | Context or artifact digest differs |
+| =key-not-authorized= | Key grant is absent |
+| =recovery-restores-release= | A new Host-authenticated decision pair can admit the recovered root |
+
+The test fixtures are synthetic; Rust does not re-evaluate these Cedar policies.
+The Arrow-backed fixture contains actual MRR IPC child bytes and checks the
+second row, altered value or context, missing fields, tampered content,
+truncated content, and decode limits.
+
+For batch operations, =VerifiedGoogleArrowChild::admit= performs the catalog,
+CID, and bounded IPC checks once. =verify_row= then checks the exact row and
+named cells for each request. The cached object owns decoded plaintext Facts
+and belongs in Host-controlled memory; it is not an authorization cache.
+=AesSivTableRecipeBinding= mirrors the Lean table recipe's dataset, value
+column, context column, profile, and optional admitted context. It also fixes
+Google's optional surrogate annotation, because that value changes the
+provider request body. Two physical columns with the same context value are
+still different recipe selections; a request cannot switch columns while
+reusing the same bound operation. The Host authenticates the recipe source.
+=CloudGoogleArrowPreparation.from_verified_child= reruns the current claim,
+Cloud release, and Cedar gate relations on every call. The stable Rust
+benchmark separates full child verification from cached row verification for
+two-row and 128-row synthetic children. These local measurements exclude
+storage fetch, Cedar evaluation, KMS, provider I/O, and Host persistence.
+
+The [[file:google_arrow.rs][Google table batch V1]] mirrors the checked SPEC
+fixture for ordered row selection, positive budgets capped at 256 rows and
+1 MiB of selected UTF-8 cells, and all-or-none errors. After a Host has
+authenticated one physical Arrow child, =prepare_cloud_google_arrow_batch=
+requires one common recipe, release, current governance scope, subject,
+purpose and provider parent. It applies the existing per-row claim, Cloud
+gate, recipe and physical cell checks to every row before returning the
+vector of plans. A failure returns no plans. The SPEC Rust bridge's
+=TabularAesSivBatch= combines matching provider recipes into one Table request;
+=BoundGoogleDeidentifyBatchPlan= retains each MRR row identity in order and
+rejects an altered row count, context, marker, token or aggregate success report
+without returning any checked row output. The bridge adds an untransformed
+=__mrr_row_v1= column with a unique request-position marker and rejects
+reordered or duplicated markers, including when two contexts are identical.
+It also bounds the exact serialized request body to 400 KB, below Google's
+currently documented 0.5 MB limit. A malformed
+response cannot undo provider work. The Host still bounds response bytes and
+controls request dispatch, provider authentication, quota and audit. The
+public batch constructor also compares retained subject, purpose, token
+profile lineage and authorization observation time, so callers cannot combine
+separately prepared plans with a different effect scope. Request formation
+and checked output each require a fresh Host projection matching the policy
+digest and epoch, without clock rollback or any expired row claim. This
+projection check cannot authenticate the Host facts or discover revocation
+within an unchanged epoch; the Host remains responsible for both. The
+single-row and re-identification plans now apply the same current-state rule
+at request formation and checked output. No plan caches authority across
+provider I/O. Cloud de-identification additionally checks every fresh
+release/decision/gate projection; generic token plans require none. The
+[[file:../../../docs/reflection/spec-rust-alignment.org][iteration Reflection]]
+records why this request/response check remains a pure value rule.
+
+The common token profile is independent of provider. Google is selected with
+the optional =google-sdp= feature; a local provider can consume the same
+=TokenInputBinding=. Only AES-SIV is accepted by this Google operation because
+the current bridge implements that tabular transformation. AES-GCM and HMAC
+remain distinct catalog modes and are not silently mapped to Google AES-SIV.
+
+Google documents that an AES-SIV context tweak changes equality scope and is
+required for re-identification. Google also documents separate de-identify
+and re-identify API calls. The Host must authenticate the returned response,
+check the bridge's response contract, and bind any output or plaintext release
+to the same authorization and audit state.
+
+- [[https://docs.cloud.google.com/sensitive-data-protection/docs/pseudonymization][Google Sensitive Data Protection pseudonymization]]
+- [[https://docs.cloud.google.com/sensitive-data-protection/docs/deidentify-sensitive-data][Google de-identification API overview]]
+- [[https://docs.cloud.google.com/sensitive-data-protection/docs/reference/rest/v2/projects.locations.content/reidentify][Google re-identification method]]

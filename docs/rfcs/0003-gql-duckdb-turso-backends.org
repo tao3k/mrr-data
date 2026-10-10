@@ -1,0 +1,581 @@
+#+title: RFC 0003: GraphAr graph foundation and optional execution adapters
+#+options: toc:2
+
+* Current delivery ledger
+
+The [[file:../architecture/backend-rfc-delivery-audit.org][consolidated audit and milestone plan]] records the current published
+baseline, supported-scope boundaries and M0-M3 exit criteria. Initial interface
+tables and dated implementation receipts below retain their original version
+boundaries; later code must not be judged only from an earlier capability table.
+
+Current platform baseline =14ee37e3= passed required Linux/macOS checks with
+MRR =294cb95= and GSC =3635dfa=. Historical interface tables below describe
+their original checkpoints. Current supported scope includes combined original
+Healthcare source, shared admission/lifecycle, full/ordered-outgoing selective
+reads and retained consumers. The current local composition additionally passes actual process-crash recovery,
+a distinct Research catalog case and 32 matched resource cases at scales
+1/8/64/256. GSC =072acac= and MRR =4ccca98= are published; Data integration
+and current-head platform CI remain acceptance gates. Selective scale 8 reads
+more bytes than full mode and skewed scale 8 is slower; retained timings exclude
+setup. Global copies/spill and consumer streaming first-result remain unknown.
+Release-scale performance remains outside the qualified fixture scope.
+
+* Status
+
+Partially implemented on [[https://github.com/tao3k/mrr-data/pull/12][MRR Data PR #12]]. The shared
+=mrr-data-backend= has optional Turso =0.8.1= and DuckDB =1.10506.0=
+metadata providers. The provider-neutral =backend-arrow-query= protocol and
+DuckDB Host-prepared statement adapter support materialized and fallible native
+streaming output. Native streaming does not imply bounded engine RSS. The
+Host-prepared DuckDB adapter does not load DuckGQL. The separate optional
+=mrr-data-duckgql-query= port loads a Host-prepared artifact and invokes the
+registered typed program for the admitted binary-Entity single-hop slice.
+
+The optional =mrr-data-turso-query= crate and =backend-turso-query= facade
+feature compile one already bound, outgoing binary-Entity query with distinct
+endpoint bindings and no edge binding to a parameterized Turso statement, load
+captured GraphAr facts into a temporary relation, and return bounded
+=PhysicalQueryOutput=. Final MRR admission belongs
+to the caller. The native fixture covers duplicate-edge preservation,
+snapshot-drift refusal and MRR admission. The follow-on
+=execute_turso_graphar_on_backend= entrypoint uses
+=Backend::run_resource= on its shared bounded blocking worker and the
+Host-supplied runtime. Queued cancellation skips work; running cancellation
+retains the lease until execution and rollback finish. Turso native interrupt,
+hard native-call deadlines, additional shapes and other SQL dialects remain open.
+The separate DuckGQL typed bridge is implemented for the declared single-hop
+slice, including retained output and DuckDB interrupt signaling. Its native
+qualification remains separate from Turso and from arbitrary GQL coverage.
+The retained-output entrypoint
+=execute_turso_graphar_retained_on_backend= uses shared
+=prepare_resource_fallible= admission and returns a =ResourceHandle= rather
+than releasing its reservation when execution ends. Typed driver refusals
+release the lease and remain distinct from Backend admission/worker errors.
+This status records implemented interfaces, not a claim that all acceptance
+gates or current-head CI have passed.
+The dedicated Turso connection has a 250 ms busy timeout; this only bounds
+lock contention and is not a query execution deadline.
+
+* GraphAr strategic role
+
+GraphAr is the provider-independent graph physical-data foundation for
+Production graph workloads: vertices, edges, adjacency/offset chunks, property
+groups and metadata. Native Turso and DuckDB provide optional transactions and
+relational/columnar execution. Their SQL tables are derived execution images;
+this design assigns neither provider a built-in graph model or graph authority.
+DuckGQL is a separately qualified extension capability. GraphAr's position is
+independent of that extension and of database-query benchmark results.
+
+[[file:../architecture/0001-mrr-data-plane.org][The canonical data-plane ownership table]] fixes MRR semantics/admission,
+GraphAr graph representation, Arrow interchange and shared Backend lifecycle.
+Native GraphAr packaging remains opt-in. The current delivery ledger covers
+binary-Entity topology, declared entity-property tables, combined original-source
+capture and narrow ordered-outgoing selective access. Broad layouts and measured
+end-to-end selective-query performance remain explicit qualification gates.
+
+* Decision and ownership
+
+MRR remains the sole GQL/Cypher parser, semantic catalog and result-admission
+authority. MRR Data consumes an admitted =CatalogBoundQuery= / =BoundDataQuery=,
+binds it to an exact physical snapshot and runs optional native adapters.
+MRR's existing =mrr-frontends= owns both GQL and openCypher source compilation
+and source receipts. No language frontend, compatibility fallback or language
+feature is added to MRR Data. Both frontends construct MRR's typed
+=MetaQueryIr= only for query shapes whose meaning is specified there; an
+unsupported shape is refused, never rewritten as a weaker "compatible" query.
+MRR's catalog binder then admits the IR. The physical adapters consume that
+admitted contract without inspecting source-language spelling.
+
+- The optional *DuckGQL extension path on DuckDB* supplies graph operators.
+  Native DuckDB supplies relational/columnar execution, not this extension capability. MRR Data
+  does not generate DuckDB SQL for graph patterns or duplicate DuckGQL's
+  lowering/CSR algorithms. It provides authenticated graph registration,
+  a typed bridge from MRR's admitted query, bounded execution and result
+  conversion.
+- The *SQL path* is owned by MRR Data for Turso first and other SQL-capable
+  engines through explicit dialect adapters later. A bounded Rust
+  graph-to-relational plan produces one parameterized, read-only SQL artifact
+  per supported dialect. It does not import DuckGQL C++ lowering.
+- Both paths share the MRR query binding, verified GraphAr/Arrow source,
+  physical identity mapping, Backend lifecycle and final MRR result admission.
+  They do not need to share an implementation of graph lowering.
+
+GraphAr is the common graph foundation independent of either execution path.
+The optional DuckGQL bridge and Turso SQL emitter consume derived, verified
+images of that foundation. There is no MRR Data-owned general DuckDB graph
+compiler in the baseline. A new engine-specific planner requires independent
+semantic/resource evidence; GraphAr storage and selective access do not require
+DuckGQL adoption or comparative authorization.
+
+The [[file:../architecture/0001-mrr-data-plane.org][data-plane RFC]] keeps SQL out of the core physical descriptor.
+Optional query adapters in this repository consume that descriptor through
+explicit feature boundaries. =mrr-data-core=, =mrr-data-graphar=, the generic
+=mrr-data-backend= transaction engine and default facade features remain
+provider-neutral. The architecture document records the delivered optional Turso slice.
+The shared Backend still exposes no generic SQL entrypoint.
+
+* Two execution paths
+
+#+begin_src text
+GQL/Cypher --MRR parser/catalog--> CatalogBoundQuery
+           --mrr-data-core snapshot/profile binding--> BoundDataQuery
+           --verified GraphAr/Arrow source--> checked physical mapping
+              |                                |
+              v                                v
+     DuckGQL plugin bridge             MRR Data Rust SQL plan
+     (optional graph extension on DuckDB)             -> Turso SQL emitter
+              |                         -> later SQL dialects
+              +--------------+-----------------+
+                             v
+                bounded physical output
+                 -> CandidateQueryResult
+                 -> MRR admission/receipt
+#+end_src
+
+PR #12's =TransactionProvider/MetadataTransaction= continues to own bounded
+opaque metadata records. Graph-query execution belongs in optional physical
+query adapters. =Backend::query_arrow= can carry a Host-prepared, authenticated
+physical producer through the existing worker, resource, cancellation and
+leased-output lifecycle. The current DuckDB prepared-statement/Arrow adapter
+is a possible result carrier, not a DuckGQL integration. Turso needs its own
+bounded row-to-typed-output bridge.
+
+* DuckGQL plugin integration boundary
+
+DuckGQL is an experimental C++ DuckDB extension with graph queries and CSR
+algorithms. Its documented execution path accepts GQL text, binds a selected
+graph and lowers its own logical plan to DuckDB structures and table functions.
+Its current source does not document an entry point for MRR's
+=CatalogBoundQuery= or =BoundDataQuery=. Sending the original source text to
+DuckGQL would invoke a second parser and binder; it would not preserve MRR as
+the sole query-admission authority. The bounded =mrr-data-duckgql-query= bridge now translates the checked
+binary-Entity single-hop slice directly into the registered typed table
+function. General typed-query shapes remain an implementation gate.
+
+At upstream commit =2e2a5f28db204a8efdcf9e763053986fb0cd2461=,
+=GqlParserExtension= registers =GqlParse= and =GqlPlan= with DuckDB's parser
+extension callback manager; =GqlPlan= binds the parsed statement before
+calling =GqlLower=. The exported extension entrypoint only loads the extension.
+These C++ internals are a useful upstream change seam, not a versioned external
+typed-plan API. The documented build targets DuckDB =v1.5.5=; PR #12 pins a
+different Rust DuckDB SDK version. The separate source build below qualifies
+the repository SDK rather than changing its pin.
+
+The 2026-10-04 native audit qualified the registered
+=gql_match_relational= table-function boundary on a signed Community Extensions
+binary: DuckDB =1.5.5=, DuckGQL =0.2.0=, macOS ARM64. Its 27 typed arguments
+carry a logical program whose version is a Schema field. This interface bypasses
+GQL parsing for the read. The checked-in
+[[file:../../python/src/mrr_data_testing/duckgql/qualify.py][qualification runner]],
+[[file:../../crates/mrr-data-duckgql-query/schema.json][Schema]] and
+artifact-hashed receipt (historical local/CI artifact; not stored in Git) qualify three ordered rows, duplicate edges,
+canonical physical labels and refusal of an unknown program version. A fixed
+GQL text query is an independent registration control, not an MRR execution
+fallback. The Community registry source reference inspected for this package
+was =44e77c6835f9e6758bb3e3bccb1a642981dbf1e7=.
+
+This corrects the assumption that a new C ABI is necessarily required. The
+registered typed boundary is a candidate for a pinned adapter; it is internal
+and not documented as a stable external MRR API. The probe uses fixture string
+identities and ordinary DuckDB source tables, not an authenticated GraphAr
+=BoundDataQuery=. A follow-on PREPARE/EXECUTE fixture carries five scalar
+parameters (version, labels, projection structs, output aliases and result
+ordering) through JSON-to-native List/Struct casts. It preserves the same three
+rows and refuses unsupported version, malformed JSON and wrong element types
+without partial output. Quoted/Unicode/injection-shaped aliases remain data.
+This CLI transport receipt is independent of the Rust adapter. The Rust
+implementation binds five scalars through =Statement=, reconstructs native
+List/Struct inputs with fixed casts and decodes canonical MRR identities; it
+does not generate CLI EXECUTE text. Installing the plugin for DuckDB =1.5.6= on macOS ARM64 returned HTTP 404
+from the Community repository during this audit. =PINNED= graph registration
+also refused an ordinary DuckDB source because that policy requires a DuckLake
+=SNAPSHOT_VERSION=. The implemented private GraphAr-derived image therefore retains its
+authenticated immutable binding independently of the plugin's =LIVE=
+registration policy.
+
+The bridge should translate only a declared MRR typed-query slice into a
+versioned DuckGQL external-plan interface that bypasses DuckGQL parsing and
+conflicting semantic binding while retaining its graph optimizer and native
+execution. Its contract needs typed patterns, property references, direction,
+filters, projections, parameter slots, feature refusal and an ordered output
+schema. The implementation may require a pinned extension change and a
+versioned C ABI or equivalent native boundary. MRR Data owns the Rust adapter;
+DuckGQL owns its graph operators. If such an interface is unavailable, report
+that the DuckDB graph path is gated. Do not silently substitute a second
+DuckDB SQL compiler or claim that reparsing GQL meets this design.
+
+DuckGQL's documented read-only graph projections over existing DuckDB tables
+suggest a registration seam. MRR Data must register only tables derived from
+a Host-authenticated =BoundDataQuery= source, map canonical Entity/Fact IDs to
+source-key properties, and verify graph schema and snapshot policy. DuckGQL's
+dense element IDs, adjacency offsets and CSR state are snapshot-local physical
+identities, not MRR identities. The Schema-pinned source build targets the
+repository's DuckDB =1.5.6= and explicitly selects unsigned loading for its
+isolated artifact. Signed Community availability, other platforms and
+production loading policy remain separate release gates. A
+compatible =LOAD duckgql= alone does not prove the typed bridge or result
+admission.
+
+
+** Current SDK and artifact lifecycle
+
+[[file:../../python/README.org][The Python qualification project]] owns the pinned source builder and native
+probe suites. The SDK receipt (historical local/CI artifact; not stored in Git) qualifies all eight independent probe stages on
+macOS ARM64 with DuckDB =1.5.6= and an unsigned locally built DuckGQL artifact.
+Source revisions, ANTLR archive digest and program/SDK versions live in the
+Rust adapter's Schema. This is distinct from signed Community distribution.
+
+The Host captures and hashes the artifact once on an accounted setup worker;
+clones reuse one private immutable load path. DuckDB's pinned loader retains
+=dlopen= library mappings for the process lifetime and does not expose unload
+through connection close. Reusing the prepared artifact prevents creating a new
+mapped module image for every request. Query cursors, derived tables and private
+connections close before result publication. Resident code and artifact setup
+have a separate Host lifetime/budget; neither connection teardown nor shared
+request accounting is a measured process-RSS ceiling.
+
+* SQL path for Turso and later engines
+
+The generalized mapping/plan/=PreparedSql= contract below is proposed.
+Implemented today is =TursoSingleHopSql= with fixed checked identifiers and
+the bounded binary-Entity single-hop slice. General properties, filters,
+parameter mappings and additional dialect renderers are not delivered.
+
+An optional Rust =mrr-data-turso-query= adapter accepts
+only an exact =BoundDataQuery=, a checked physical table/column mapping, typed
+runtime parameters and explicit limits. Its bounded graph-to-relational plan
+records admitted relation/property accesses, joins, filters, projections and
+parameter slots. It contains no GQL tokens, DuckDB C++ objects, source-authority
+decision or result receipt. Turso is the first renderer; each later SQL engine
+gets a separately qualified dialect and output adapter. DuckDB is not a
+renderer of this plan.
+
+The emitter returns =PreparedSql=: one read-only statement, dialect and mapping
+profile versions, ordered typed binding slots and ordered output schema. Table
+and column identifiers come only from the validated mapping and are quoted for
+the selected dialect. GQL literals, runtime parameters and supported paging
+values use native placeholders and bind APIs; values are not interpolated into
+SQL. Missing, extra or wrong-typed parameters fail before execution. The same
+admitted query and mapping must produce a stable SQL shape and binding order.
+
+Unsupported patterns, unknown mappings, nonrepresentable values or unavailable
+engine features fail before prepare. No filter may be dropped and no absent
+property silently converted to SQL =NULL=. Each admitted slice specifies
+missing versus null, duplicate edges, direction, multiplicity, conversions and
+output nullability. The output adapter checks column count, order, types and
+canonical identities before making =PhysicalQueryOutput=. New SQL engines are
+admitted through their own syntax/placeholder/type/error tests, not by assuming
+Turso SQL is universally portable.
+
+MRR's result digest hashes an ordered row vector. Neither a Turso scan nor a
+DuckGQL/DuckDB plan gives receipt parity merely by returning the same set. The
+first Turso slice orders by canonical =FactId= text; a DuckGQL bridge must
+implement the same deterministic row-sequence rule before comparing receipts.
+Future =ORDER BY=, ties, null ordering and paging need separate typed contracts.
+
+* GraphAr as the common physical source
+
+GraphAr provides durable vertex/property groups and chunked edge adjacency. An
+=ordered_by_source= layout with offsets can support selective outgoing-edge
+reads; the destination layout can support incoming-edge reads. These positions
+are physical. Both execution paths must preserve the admitted =EntityId=,
+=FactId= and =RelationId= and required context fields. The query adapters in this RFC qualify a fixed binary-Entity projection.
+GraphAr also has a separate combined entity-property/relation capture path for
+DataFusion. Arbitrary layouts and broader query shapes require additional
+lossless profiles with versions managed in their Schema.
+
+PR #12 already has =GraphDatasetInventory= for the declared file closure and
+=GraphDatasetBinding= for the snapshot root, generation, relation and catalog
+digests. Child/root ACK, protected head selection and cold restore provide a
+single published physical source. The Host must authenticate the binding root.
+=capture_graphar_snapshot= verifies declared children, imports native Arrow C
+Stream data and returns immutable facts under a Backend resource lease.
+=facts(query)= rechecks the exact query scope before reuse. Both query paths
+must use this source identity rather than treating native table names or row
+counts as authority.
+
+The captured object currently holds =Arc<[Fact]>= and deletes its private
+GraphAr files before return. It does not expose a retained Arrow stream,
+adjacency cursor or SQL table. The implemented bounded adapters derive typed vertex/edge relation images
+from one captured fact set, retaining canonical identities and the exact
+binding key. DuckGQL registers the derived DuckDB tables as a graph projection;
+Turso loads its relation image into bounded provider-owned tables with
+transactional rollback and cleanup. Native parity tests compare both engine
+representations of the same authenticated source and pass their candidates
+through MRR admission. The separate DuckDB Arrow carrier qualifies only
+Int64/Utf8/Binary input and copies into native chunks; it does not establish
+streaming graph access or broader property-query support.
+
+A later selective path may retain verified GraphAr chunks under a lease and
+scan topology/property groups into bounded Arrow batches. It must prove that
+native readers use the inventory-verified bytes, adjacency and property rows
+align, and each edge resolves to the exact semantic Fact. DuckGQL could consume
+that path through a suitable graph-table registration; Turso could load only
+needed relations. Neither outcome follows from the current capture API. No
+zero-copy, pushdown or bounded native-RSS claim follows from Arrow import alone.
+
+** Decision gate for additional execution optimizations
+
+GraphAr remains the graph source in every comparison. Once a qualified DuckGQL
+bridge is available, compare its derived-table execution with selective
+GraphAr-backed operators on the *same* published binding,
+generation, catalog, fact set, query corpus and result order. Include plugin
+graph registration and CSR build/invalidation, GraphAr capture/verification,
+Arrow conversion, warm and cold execution, native peak RSS, retained bytes,
+spill, first result and total time. Test selective neighborhoods, high-degree
+vertices, large graphs that exceed comfortable in-memory CSR size and repeated
+queries; measure simple scans too, where extra GraphAr conversion may lose.
+
+The existing 10k prepared-GraphAr scenario measures reuse of already decoded
+facts. It is not a DuckGQL comparison and cannot authorize a second executor.
+Adopt an additional engine-specific planner only when a fixed workload shows
+a meaningful, repeatable advantage
+after all setup and copy costs, exact typed results and MRR receipts match, and
+the required native resource/error contract is qualified. The comparison governs optional execution complexity. It does not gate GraphAr
+persistence, the portable graph contract or provider-independent selective
+access. If the advantage is confined to loading or selective I/O, expose that
+source capability to qualified engines without introducing another planner.
+
+| Reuse layer | Available in PR #12 | New graph-query gate |
+|-------------+---------------------+----------------------|
+| Identity/publication | Inventory, binding, child/root ACK and cold restore | Bind every graph/table cache to exact root, generation, catalogs and projection version |
+| Semantic capture | Verified binary-Entity facts and Backend lease | Lossless fact-to-vertex/edge mapping and lifetime rules |
+| DuckDB | Checked Arrow carriers plus optional typed DuckGQL binary-Entity bridge, private graph registration and MRR result conversion | Signed SDK/platform distribution, additional query shapes and measured resources |
+| Turso | Protected metadata transactions and bounded single-hop query on shared Backend workers | Native interrupt/deadline, source reuse and additional typed query shapes |
+| Selective access | Native GraphAr read and Arrow C Stream import during preparation | Snapshot-pinned adjacency/property scan with measured pushdown and resources |
+
+* Shared execution lifecycle contract
+
+Shared worker admission is implemented by =execute_turso_graphar_on_backend=
+and =Backend::run_resource=. Retained output uses
+=execute_turso_graphar_retained_on_backend= and
+=Backend::prepare_resource_fallible=. Cooperative stop checkpoints use
+=ResourceControl= and =Backend::prepare_resource_controlled=. DuckGQL uses the
+same dispatcher and retained-result contract; its Host monitor sends DuckDB
+native interrupt. The native SQL-driver fixture qualifies cancellation and
+deadline with teardown before admission release. Hard in-flight-call bounds
+for arbitrary plugin operators and process-crash cleanup remain open. The standalone
+=execute_turso_graphar_single_hop= entrypoint does not enforce Backend admission.
+
+** One scheduler and one Host runtime
+
+Optional query adapters depend on the shared Backend execution capability;
+the Backend does not depend on Turso query plans, DuckGQL or MRR query types.
+The existing resource admission and =max_shared_workers= pool remain the
+common admission boundary for writes, source preparation and physical queries.
+Recovery keeps its existing reserved lane. No adapter creates a runtime,
+provider-specific scheduler or separate lifecycle state machine.
+
+The current =run_resource= adapter accepts a synchronous closure and drives
+Turso with the Host runtime handle on a bounded blocking worker. This is
+accounted execution, but occupies that worker for the complete driver future.
+A future native-async dispatch path must preserve the same shared admission
+and drain invariants. A Turso async query must not be launched in an
+unaccounted =tokio::spawn= task and called
+integrated merely because its source has a resource handle. Any shared
+execution API must retain the admitted lease while waiting for the common
+worker permit, executing the async driver, cleaning up and retaining output.
+The Host-supplied runtime drives that future. Native synchronous work still
+uses the bounded blocking executor. Moving Turso onto native async dispatch is
+a separate measured optimization; the current blocking bridge is not evidence
+of that optimization.
+
+** Request and retained-result ownership
+
+The adapter preflights the exact bound query, captured-source binding, supported
+shape and checked limits before opening a connection or creating a table.
+Its owned request retains the authenticated source handle throughout execution.
+The resource reservation includes captured input, temporary conversion buffers,
+Host-estimated native state and bounded output. Existing row/cell/string-byte
+limits are application bounds; they do not measure native allocator RSS.
+
+Both queued permit waits now observe sticky explicit stops and Host-clock
+deadlines and release their request input/reservation before typed refusal.
+The admitted request has queued, running and cleanup phases. Cancellation before
+execution releases the reservation without opening a connection. The controlled path signals a sticky stop when its waiter is dropped, or
+accepts an explicit Host cancellation/monotonic deadline. The adapter checks
+that control during row conversion and between native load/fetch calls.
+In-flight native calls still finish; rollback and connection teardown complete
+before worker admission is returned. A future native interrupt path must
+preserve these same cleanup and accounting rules. A cooperative deadline refuses at the next checkpoint; it cannot
+release admission while a native operation still owns physical resources.
+Driver failure, source drift, malformed output and cleanup failure are terminal
+refusals. No partial output becomes a successful physical result.
+
+Turso owns one invocation connection and its temporary transaction. Successful
+completion requires rollback before returning output. Cancellation and errors
+must close the cursor/transaction/connection in driver order; dropping the
+future alone is not evidence of completed native cleanup. A cleanup failure produces =SqlQueryError::Cleanup= and overrides successful
+output or an earlier cancellation/deadline refusal. The native transaction
+fixture proves rollback removes temporary input and verifies cleanup failure
+using an actual ROLLBACK with no active transaction.
+The safe Rust =Connection= API in pinned Turso =0.8.1= does not expose native
+interrupt (published source revision
+=8549c16595d2faf1bdd6ee24aee0be8bfabb3d4a=, =bindings/rust/src/connection.rs=).
+These checkpoints therefore qualify cooperative stopping, not a hard execution
+time bound. The 250 ms busy timeout only limits lock contention.
+
+The current =run_resource= path releases its lease before returning the owned
+physical output. It therefore budgets execution but does not account for output
+retained by the caller. The implemented retained-result entrypoint instead
+returns a Backend resource handle while the caller borrows physical output for
+MRR projection/admission. =ResourceHandle::try_transform= consumes uniquely
+owned physical output into a candidate while transferring the same lease;
+shared handles are refused and conversion failure releases admission. The native
+fixture qualifies this handoff without a physical-output clone. Host conversion
+scratch remains explicitly budgeted. Worker permits are released after
+cleanup, but the byte/count reservation remains until the final output handle
+is dropped. Retained results therefore participate in Backend drain. The
+adapter must not export an unaccounted owned clone of large output buffers.
+Result admission does not itself release those physical buffers. The current
+MRR projection API consumes an owned =PhysicalQueryOutput=. A caller therefore
+transfers the physical-output lease to the candidate through consuming
+conversion and budgets conversion scratch/candidate memory explicitly; a clone handed to another task requires
+separate Host accounting. The handle contract does not prevent arbitrary
+Rust callers from cloning values or enforce a native RSS ceiling.
+
+** Implemented retained-result receipts
+
+The portable resource suite exercises the same generic dispatcher used by the
+Turso retained path: final-clone drain, failure and worker panic release, queued
+and running caller cancellation. A typed driver refusal is preserved rather
+than converted to a generic Backend error.
+
+The native Turso fixture extends the captured-fact query/MRR admission case:
+worker accounting finishes while retained byte/count admission remains active;
+a second resource is refused at saturation; shutdown waits for the final clone.
+The fixture qualifies a bounded two-edge result, not native interruption,
+process-crash cleanup, general query shapes or measured RSS.
+
+The controlled integration fixture refuses pre-cancelled and expired-deadline
+requests with no output handle and no remaining resource charge. The portable
+worker fixture aborts a running waiter and proves cancellation is signalled
+while admission stays charged until cleanup completes. Interruption inside a
+long-running native call and deterministic cancellation during a large native
+load/fetch remain separate qualification gates.
+
+The follow-on native transaction fixture checks stops after the first INSERT
+and after the first decoded result row. Cancellation and deadline refusals both
+roll back before return, remove the temporary image and allow a subsequent query
+on that connection. These deterministic checkpoints qualify partial-load and
+partial-fetch cleanup, not asynchronous interruption of an in-flight native call.
+The native error fixture covers duplicate primary-key failure, malformed Entity
+identity, output row/cell refusal and cleanup-failure precedence.
+
+The integrated held-write fixture exercises a real Turso metadata transaction
+with one common worker permit. A queued Turso graph request has zero blocking
+resource workers while reserved recovery completes. Aborting that waiter releases
+its owned database/source references and resource charge before the held write is
+released; a subsequent query succeeds. The source/result fixture uses different
+endpoint values to prove canonical Fact ordering, checks all input/output budgets,
+and still passes final MRR admission. Filters, DISTINCT, paging, incoming paths
+and edge bindings are explicitly refused; variable-length paths are refused at
+the engine-profile binding boundary.
+
+** Remaining integration receipts
+
+- Exercise asynchronous cancellation during large load/fetch with measured
+  stop latency and native state; deterministic checkpoint tests establish
+  cleanup ordering but do not establish responsiveness inside a native call.
+- Qualify native interrupt and hard execution deadlines through an explicit
+  supported driver interface; the pinned safe Turso API does not expose one.
+- Repeat on Linux/macOS with exact Turso =0.8.1=. Keep admission/result identity
+  parity with the existing captured-fact fixture and record current-head CI.
+
+These receipts qualify lifecycle integration. Process-crash durability,
+deployed authorization and native RSS/performance measurements remain separate
+RFC 0002 gates.
+
+** Qualified native slice and comparison
+
+The SDK-compatible Rust fixture qualifies distinct endpoint ordering,
+duplicate-edge multiplicity, four application input/output limits, source and
+artifact refusal, unsupported-shape refusal and final MRR result admission.
+The retained-result fixture proves a free worker can run while output bytes
+remain reserved, consuming candidate conversion preserves the lease, shared
+conversion is refused and shutdown waits for the final candidate clone.
+The native SQL-driver fixture interrupts an actual long-running DuckDB call
+for cancellation and deadline, closes the connection and verifies subsequent
+work succeeds. This is driver interruption evidence, not a hard bound for every
+DuckGQL operator. Turso's safe driver still lacks native interrupt.
+
+The whole-request comparison receipt (historical local/CI artifact; not stored in Git) records three samples per engine on
+one authenticated capture at each size. All rows match independent expected
+values and all outputs pass MRR admission. Median milliseconds on the loaded
+macOS ARM64 host were:
+
+| Edges | DuckGQL | Turso | DataFusion |
+|-------+---------+-------+------------|
+| 2 | 670.773 | 1.799 | 0.537 |
+| 128 | 694.077 | 6.766 | 0.919 |
+| 1024 | 1455.527 | 252.853 | 3.356 |
+
+Shared artifact preparation (802.820 ms) and GraphAr fixture creation/capture
+are recorded separately. These are whole-request costs with private image
+setup and teardown, not operator timings, native RSS or representative query
+mixes. The DataFusion 1024-edge samples include a 96.514 ms outlier. This fixture
+provides no performance reason to promote the DuckGQL path to a default.
+Property predicates, one/two-edge Healthcare paths, phase breakdown, selective
+queries and large-graph/RSS qualification remain subsequent slices.
+
+* First slices and evidence
+
+1. Pin exact MRR, DuckDB, DuckGQL and Turso revisions. Define optional DuckGQL
+   and SQL adapter features independently, without changing default features
+   or the generic metadata engine. Qualify extension binary compatibility on
+   supported Linux/macOS configurations.
+2. From one Host-authenticated captured binary-Entity source, derive checked
+   relation images. For Turso, implement one directed outgoing hop, two non-null
+   Entity endpoints, =RETURN ALL= and direct endpoint projection through one
+   parameterized SQL emitter. No filters, aggregation, ordering, paging,
+   variable-length/undirected paths, mutation, procedure or algorithm yet.
+3. For DuckDB, prove a typed MRR-to-DuckGQL external-plan bridge for that same
+   admitted slice, register the same captured source as a read-only graph and
+   execute through the plugin. Keep this gate distinct from Turso SQL delivery;
+   never replace it with generated DuckDB SQL. Decode both paths to
+   =PhysicalQueryOutput=, project with =project_data_query_output= and submit
+   to MRR result admission.
+4. Compare independent expected rows, DuckGQL, Turso and the overlapping
+   DataFusion slice. Define common row order before requiring receipt parity.
+   Exercise stale root/generation/catalog, source-table drift, typed parameter
+   errors, quoted values, injection attempts, duplicate edges, wrong output
+   types/order, cancellation, resource limits and every unsupported feature.
+   Rejected cases yield no admitted candidate.
+5. Add the one/two-edge property-path slice, including the original Healthcare
+   query, only after each path supports admitted property equality, nullable
+   outputs, exact catalog mapping and =RETURN ALL= multiplicity. DuckGQL-only
+   CSR algorithms are a separate DuckDB capability. Local simulated Lambda/Marlin
+   callers suffice for this framework gate; real deployment acceptance is future
+   product work and does not block the RFC implementation.
+6. Compare capture, fact-to-row conversion, plugin registration or Turso load,
+   planning, query, result conversion and MRR admission separately. Vary graph
+   size, degree skew, selectivity, property width and warm/cold reuse; record
+   native RSS, retained Arrow bytes, Turso table/index bytes and first-result
+   latency. Qualify snapshot-pinned GraphAr selective access against the full
+   captured-source path with exact fact/row parity and verification/copy costs.
+   Add DuckGQL comparisons only after its typed bridge is qualified. Additional
+   engine-specific planning follows the optimization gate above; GraphAr's
+   physical graph contract and selective source delivery are independent.
+
+The RFC does not claim general ISO GQL conformance. The Turso SQL path is
+independently deliverable. The pinned DuckGQL typed bridge now implements the
+same bounded slice; a stable upstream external API and broader query shapes
+remain separate gates. Neither path replaces MRR's semantic admission.
+
+* References
+
+- [[file:../architecture/0001-mrr-data-plane.org][MRR Data Plane RFC]]
+- [[file:../architecture/shared-backend.org][Shared Production Backend]]
+- [[file:../architecture/current-implementation.org][Current implementation]]
+- [[file:../architecture/healthcare-query-audit.org][Healthcare query audit]]
+- [[file:0002-graphar-arrow-backend.org][GraphAr, Arrow and the shared Backend]]
+- [[file:../architecture/arrow-execution-practices.org][Arrow execution practices and transfer limits]]
+- [[https://graphar.apache.org/docs/specification/format/][Apache GraphAr format specification]]
+- [[https://github.com/rahul-iyer/duckdb-gql][DuckGQL overview and graph projections]]
+- [[https://github.com/rahul-iyer/duckdb-gql/blob/main/src/gql_lowerer.cpp][DuckGQL lowering source]]
+
+* Consolidated delivery audit
+
+[[file:../architecture/backend-rfc-delivery-audit.org][The 2026-10-04 delivery audit]] records exact-head evidence, the queued explicit
+stop gap, retained-output handoff, GraphAr selective integrity and delivery order.
+Its acceptance gates govern subsequent implementation slices.

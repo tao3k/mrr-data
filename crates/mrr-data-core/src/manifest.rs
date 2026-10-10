@@ -12,9 +12,10 @@ use serde::{Deserialize, Serialize};
 use crate::profile::{cid_for, validate_cid};
 use crate::snapshot_descriptors::{
     CoverageDescriptor, CoverageKind, EntityDescriptor, GraphProjectionDescriptor,
+    GraphProjectionKind,
 };
 use crate::{
-    ARROW_FACT_SCHEMA_NAMESPACE, ARROW_FACT_SCHEMA_VERSION, ARROW_IPC_FILE_FORMAT, CID_VERSION_V1,
+    ARROW_FACT_SCHEMA_NAMESPACE, ARROW_FACT_SCHEMA_VERSION, ARROW_IPC_FILE_FORMAT, CID_VERSION,
     DAG_CBOR_CODEC, DAG_CBOR_CODEC_NAME, DataError, GRAPHAR_BINARY_ENTITY_NAMESPACE,
     GRAPHAR_BINARY_ENTITY_VERSION, PROPERTY_SNAPSHOT_SCHEMA_VERSION, RAW_CODEC, RAW_CODEC_NAME,
     SHA2_256_NAME, SNAPSHOT_SCHEMA_NAMESPACE, SNAPSHOT_SCHEMA_VERSION,
@@ -553,7 +554,7 @@ impl ManifestWire {
                 batch_cids: manifest.lineage_batch_cids.clone(),
             },
             coverage: CoverageWire::from(&manifest.coverage),
-            integrity: IntegrityWire::v1(),
+            integrity: IntegrityWire::canonical(),
         }
     }
 
@@ -656,7 +657,7 @@ impl SchemaWire {
         Ok(self.version)
     }
 
-    fn arrow_fact_v1() -> Self {
+    fn arrow_fact() -> Self {
         Self {
             namespace: ARROW_FACT_SCHEMA_NAMESPACE.to_owned(),
             version: ARROW_FACT_SCHEMA_VERSION,
@@ -673,7 +674,7 @@ impl SchemaWire {
         Ok(())
     }
 
-    fn graphar_binary_entity_v1() -> Self {
+    fn graphar_binary_entity() -> Self {
         Self {
             namespace: GRAPHAR_BINARY_ENTITY_NAMESPACE.to_owned(),
             version: GRAPHAR_BINARY_ENTITY_VERSION,
@@ -773,7 +774,7 @@ impl From<&RelationDescriptor> for RelationWire {
     fn from(descriptor: &RelationDescriptor) -> Self {
         Self {
             relation_id: descriptor.relation_id,
-            arrow_schema: SchemaWire::arrow_fact_v1(),
+            arrow_schema: SchemaWire::arrow_fact(),
             row_count: descriptor.row_count,
             batches: descriptor.batches.iter().map(BatchWire::from).collect(),
         }
@@ -870,7 +871,17 @@ struct GraphProjectionWire {
 impl From<&GraphProjectionDescriptor> for GraphProjectionWire {
     fn from(descriptor: &GraphProjectionDescriptor) -> Self {
         Self {
-            schema: SchemaWire::graphar_binary_entity_v1(),
+            schema: match descriptor.kind {
+                GraphProjectionKind::BinaryEntity => SchemaWire::graphar_binary_entity(),
+                GraphProjectionKind::Dataset => SchemaWire {
+                    namespace: mrr_data_profile::GRAPHAR_DATASET_SCHEMA.namespace.into(),
+                    version: mrr_data_profile::GRAPHAR_DATASET_SCHEMA.version,
+                },
+                GraphProjectionKind::EntityProperties => SchemaWire {
+                    namespace: crate::GRAPHAR_ENTITY_PROPERTIES_NAMESPACE.into(),
+                    version: crate::GRAPHAR_ENTITY_PROPERTIES_VERSION,
+                },
+            },
             graphar_version: descriptor.graphar_version.clone(),
             manifest_cid: descriptor.manifest_cid,
         }
@@ -879,8 +890,24 @@ impl From<&GraphProjectionDescriptor> for GraphProjectionWire {
 
 impl GraphProjectionWire {
     fn into_descriptor(self) -> Result<GraphProjectionDescriptor, DataError> {
-        self.schema.validate_graphar_binary_entity()?;
-        GraphProjectionDescriptor::new(self.graphar_version, self.manifest_cid)
+        if self.schema.namespace == crate::GRAPHAR_DATASET_NAMESPACE {
+            if self.schema.version != mrr_data_profile::GRAPHAR_DATASET_SCHEMA.version {
+                return Err(DataError::UnknownGraphProjectionVersion(
+                    self.schema.version,
+                ));
+            }
+            GraphProjectionDescriptor::dataset(self.graphar_version, self.manifest_cid)
+        } else if self.schema.namespace == crate::GRAPHAR_ENTITY_PROPERTIES_NAMESPACE {
+            if self.schema.version != crate::GRAPHAR_ENTITY_PROPERTIES_VERSION {
+                return Err(DataError::UnknownGraphProjectionVersion(
+                    self.schema.version,
+                ));
+            }
+            GraphProjectionDescriptor::entity_properties(self.graphar_version, self.manifest_cid)
+        } else {
+            self.schema.validate_graphar_binary_entity()?;
+            GraphProjectionDescriptor::new(self.graphar_version, self.manifest_cid)
+        }
     }
 }
 
@@ -938,16 +965,16 @@ struct IntegrityWire {
 }
 
 impl IntegrityWire {
-    fn v1() -> Self {
+    fn canonical() -> Self {
         Self {
-            cid_version: CID_VERSION_V1,
+            cid_version: CID_VERSION,
             manifest_codec: DAG_CBOR_CODEC_NAME.to_owned(),
             multihash: SHA2_256_NAME.to_owned(),
         }
     }
 
     fn validate(self) -> Result<(), DataError> {
-        if self.cid_version != CID_VERSION_V1 {
+        if self.cid_version != CID_VERSION {
             return Err(DataError::UnknownCidVersion(self.cid_version));
         }
         if self.manifest_codec != DAG_CBOR_CODEC_NAME {

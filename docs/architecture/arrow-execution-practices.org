@@ -1,0 +1,135 @@
+#+TITLE: Arrow Execution Practices: Sources, Code Decisions and Qualification
+#+OPTIONS: toc:2
+
+* Evidence basis and version boundary
+
+The initial audit used Apache Arrow and DuckDB documentation plus duckdb-rs
+=1.10502.0= source =8aa176add468ce2f7ada2d9bfd46f4c13509f198=; the Arrow
+virtual-table file was compared byte-for-byte against that Cargo package.
+Those initial input-conversion observations remain explicitly historical.
+
+The current workspace pins =duckdb= and =libduckdb-sys= to =1.10506.0=.
+The downloaded published SDK records source
+[[https://github.com/duckdb/duckdb-rs/tree/0fec186cdd4ada2f7703a2df5ee18f9f78d95f8e][0fec186cdd4ada2f7703a2df5ee18f9f78d95f8e]], Rust 1.85.1 and Arrow 58.
+Rust Arrow remains =58.4.0= and our MSRV remains 1.95. Current native fixtures
+must qualify the new SDK's input conversion and both output drivers; previous
+version receipts do not certify the new pin. Latest documentation supplies
+architectural guidance, not executable qualification.
+
+* Practices applied to the actual interfaces
+
+| Practice and primary source | Concrete decision | Evidence boundary |
+|-----------------------------+-------------------+-------------------|
+| [[https://arrow.apache.org/docs/format/CStreamInterface.html][C Stream ownership and blocking pull]] | Stream and returned arrays have separate owners; serialize pulls, retain source leases, release independently | SDK result ownership after connection close is tested; full public job/stream lifetime remains a release gate |
+| [[https://github.com/duckdb/duckdb-rs/blob/8aa176add468ce2f7ada2d9bfd46f4c13509f198/crates/duckdb/src/vtab/arrow.rs][Pinned Rust Arrow virtual-table conversion]] | Guard actual native vector capacity before registration; use bounded slices | Initial 1.10502.0 unsplit input aborted; carrier retains its conservative bounded-slice contract |
+| [[https://docs.rs/arrow-array/58.4.0/arrow_array/struct.RecordBatch.html][Rust RecordBatch slicing and physical memory accounting]] | Validate the source once and lazily yield shared-buffer slices; no collected input-batch vector | Schema Arc and Int64 buffer pointer identity are tested; logical one-row slices still obey retained-allocation budget |
+| [[https://duckdb.org/2021/12/03/duck-arrow][DuckDB Arrow streaming and projection/filter pushdown]] | Keep future scan/query boundaries columnar; push only admitted predicates/projections to the physical scanner | Python/R dataset integration does not establish pushdown or zero-copy for the Rust VTab; both require engine-plan/scan counters |
+| [[https://arrow.apache.org/docs/cpp/ipc.html][Arrow IPC source-dependent zero-copy]] | Treat in-process C Stream and durable IPC as different boundaries; account for decompression, alignment and source lifetime | No end-to-end zero-copy claim for compressed IPC or remote transport; verified immutable mmap/BufferReader strategies need platform tests |
+| [[https://duckdb.org/docs/current/guides/performance/how_to_tune_workloads][DuckDB workload tuning]] | Coordinate native threads with Host admission; profile blocking joins/sorts and budget spill/native memory | Request quotas and batch limits do not bound engine RSS; result streaming alone cannot remove blocking operators |
+| [[https://github.com/duckdb/duckdb-rs/blob/8aa176add468ce2f7ada2d9bfd46f4c13509f198/crates/duckdb/src/raw_statement.rs][Pinned native result execution/fetch]] | Distinguish materialized =query_arrow= from =stream_arrow= and verify errors separately from normal EOF | Public fallible stream/error-channel qualification is required before claiming complete candidate results |
+
+* Code change from the research
+
+[[file:../../crates/mrr-data-backend/src/providers/duckdb_arrow.rs][DuckDbArrowInput]] validates explicit row/retained-buffer budgets, the actual
+native capacity, unique field names and the qualified scalar subset.
+=batches= validates one retained source once, then returns an ExactSizeIterator
+of Arrow slices sharing the source's schema and buffers. It performs neither
+per-row reconstruction nor IPC serialization, and avoids repeated schema/set
+validation for every vector-sized input. Each native registration still has a
+bounded batch. Slice array wrappers and Vecs of column references can allocate;
+shared payload buffers do not imply allocation-free execution.
+
+The pointer test proves Rust-side slicing shares Int64 buffers. The SDK
+ArrowVTab subsequently converts Arrow columns into DuckDB data chunks and copies
+primitive values. Appending is a conversion/write path as well. This design
+therefore makes no claim that native Rust VTab ingestion is the zero-copy
+Python/R dataset path discussed in the official DuckDB article.
+
+The initial scalar subset is Int64/Utf8/Binary, with null/empty/Unicode/raw-binary
+qualification. The complete MRR Fact profile includes other typed structures;
+its native type mapping is a separate acceptance gate. Never flatten nested
+semantic values into strings/JSON or erase schema metadata to pass a converter.
+Point metadata CAS keeps its existing protected transaction path; enabling Arrow
+is not a reason to replace point lookups with an analytical scan.
+
+* Streaming result and failure contract
+
+The current SDK materialized =query_arrow= and native =stream_arrow= both
+capture executed result metadata. =Statement::step= returns
+=Result<Option<StructArray>>=; its result owner checks native execution errors
+before accepting null/empty chunks as EOF and propagates Arrow conversion errors.
+The generic SDK Arrow iterator still yields bare =RecordBatch= and panics on
+fetch errors. Our drivers bypass that iterator and sanitize fallible-step errors.
+
+[[file:../../crates/mrr-data-backend/src/providers/duckdb_query.rs][The streaming adapter]] executes the safe native streaming path, validates the
+executed schema, and reserves retained output bytes before each fetch through
+=emit_next=. Exact-limit EOF succeeds, while excess batches and late errors
+remain sticky failures. A test returns a native prefix before a later expression
+fails; a successful fixed-row fixture alone cannot prove failure propagation.
+Native statement/connection teardown and retained batch drain are tested
+separately. The Host must register its native interrupt before execution.
+
+The API provides incremental result fetching; some operations still materialize
+internally. Joins/sorts/aggregations can retain native state. Engine-memory/spill
+configuration and observed RSS are separate gates; output-byte backpressure is
+not a bound on native engine memory.
+
+The current SDK VTab query-parameter helper stores every registered batch in a
+process-lifetime global registry. Native VTab conversion fixtures cannot qualify
+bounded source lifetime. =DuckDbArrowInput::append_to= instead consumes admitted
+slices through a Host-owned appender without using that registry; a fixture
+checks release of its input array wrapper and preserved native table values.
+Transaction/flush, native memory and publication still belong to the Host/profile.
+The stream-result driver also avoids VTab registration. A releasable safe VTab
+source registration remains open.
+
+* GraphAr transfer limits
+
+Existing GraphAr preparation reads native Arrow batches, then materializes MRR
+facts. The future performance path separates content/schema/generation checking
+from materialization and measures both costs. Projection pushdown must keep all
+identity, authority/provenance and coverage information needed for candidate
+admission, or retain an exact snapshot-pinned lookup for those fields. Native row
+IDs and adjacency offsets cannot replace those identities.
+
+GraphAr's empirical durable chunk sizes are independent of DuckDB's native
+vector capacity and Arrow batch buffer budgets. Never assign one magic row count
+to all three. A large durable chunk needs a bounded scan strategy; verifying a
+manifest after native full-chunk allocation does not qualify its memory budget.
+The full dataset inventory, immutable native snapshot and shared lifecycle
+integration are specified in [[file:../rfcs/0002-graphar-arrow-backend.org][RFC 0002]].
+
+* Falsifiable performance qualification before port release
+
+1. Use exact matched input rows, schema, nullability, generation and expected
+   candidate identities. Vary fixed/variable-width columns, null fraction,
+   string widths, chunk sizes, schema width and scan selectivity.
+2. Compare per-row conversion, current native VTab conversion, lazy bounded
+   slices and a separately qualified C Stream/scan driver. Reuse prepared
+   statements within each scenario. Check the whole result before comparing
+   rates; known refusal and unknown outcomes have separate counters.
+3. Measure admission/queue, Arrow construction/validation, native input copying,
+   scan, execution, export and final semantic admission separately. Track first
+   batch latency, total elapsed time, allocation/copy bytes and peak retained
+   buffers. Warmup, sample counts, compiler/profile, SDK pin and host load are
+   recorded. No speedup claim follows from pointer identity alone.
+4. Compare materialized and streaming results under bounded producer/consumer
+   channels. Include slow/canceled consumers, executor competition and busy
+   drain. Hold result leases explicitly and test their release on every exit.
+5. Test empty/oversized batches, short final vectors, native-vector boundary,
+   type/schema refusal, late fetch failures, missing graph chunks, generation
+   drift and authority retirement. No truncated stream yields a complete result.
+6. Qualify both native operating systems and separate fresh/warm cache behavior.
+   Record native thread settings, peak RSS and spill limits. A finite local
+   SDK fixture does not set a production latency SLO or choose an optimal batch
+   size for every workload.
+
+* Current executable receipt
+
+[[file:../../crates/mrr-data-backend/tests/integration/duckdb_arrow.rs][Native Arrow tests]] cover append/commit/reopen of 4,097 rows, explicit rollback,
+complete virtual-table input in lazy slices, scalar/configuration/buffer/schema
+refusal, and shared-buffer/retained-source accounting. Optional-feature
+composition is checked through the facade, with provider-free and Turso normal
+dependency trees retaining isolation. The shared result port is described in
+[[file:shared-backend.org][the Backend lifecycle]]; native streaming/pushdown, broader semantic types and
+the performance/RSS benchmark matrix remain gated by the criteria above.

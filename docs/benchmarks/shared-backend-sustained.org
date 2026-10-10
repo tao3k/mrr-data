@@ -1,0 +1,99 @@
+#+TITLE: Shared Backend Continuous Producers and Saturation Receipt
+#+OPTIONS: toc:nil
+
+* Source and reproducibility
+
+Clean measurement source: =22fe50a11d032c264f1b9886b446a05d701b7c3e=.
+2026-10-03 UTC, macOS 26.6.1, aarch64-apple-darwin, Rust 1.95.0.
+Optimized test profile: opt-level 2, 16 codegen units, debug info disabled.
+The raw JSON receipt (historical local/CI artifact; not stored in Git) preserves all six cases, both configurations, compiler
+identity, the harness hash and qualification counts. Providers run separately.
+The definitive run starts after this task's builds finish. The development Host
+still carries unrelated work; its CPU, I/O and native cache/RSS are not isolated.
+An earlier overlapping pilot is excluded from the published receipt.
+
+#+begin_src sh
+git checkout 22fe50a11d032c264f1b9886b446a05d701b7c3e
+git status --short
+rustc -Vv
+just bench-backend-sustained
+#+end_src
+
+* Implemented observability and deterministic regression
+
+The shared Backend exposes =saturated_writes= and =saturated_recoveries= in
+=BackendStatus=. Each counter records lifetime count/byte admission refusal,
+saturates at u64::MAX, and starts at zero for each opened Backend instance.
+Administrative updates use the write lane. Lifecycle, identity and validation
+refusals are excluded. Rejected admission retains no lease or request bytes and
+does not increase =completed=. Counters add neither high-cardinality labels nor
+clock reads to production requests; both optional providers use this same logic.
+
+Unit checks cover independent lane refusal, byte-budget refusal, unchanged
+accepted/retained accounting, successful reuse and lifecycle refusal exclusion.
+The native dispatch regression now actually exhausts eight write slots with one
+held transaction and seven queued writes. The ninth returns
+=BeforeCommit(Saturated)= without calling validation. Historical recovery still
+finishes within 500 ms using a Host capped at two blocking threads. The existing
+cancellation/owned-drain and 64 single-slot reuse regressions also pass.
+
+* Continuous producer workload
+
+Eight write producers each attempt 64 fresh operations at independent homes;
+four readers repeatedly recover an exact historical seed. Write/read admission
+is four each, with one submitted worker each. The Host has two async workers and
+two blocking threads. Producers synchronize their start, issue sequential calls
+per lane, and yield between calls. Saturated writes are recorded without retry.
+Readers continue until producers finish, with at least 64 and at most 8,192 reads
+per lane. Producer collection has a 30-second failure deadline.
+
+This finite closed-loop workload starts with overload, which can decay as refused
+producers finish. It does not hold a constant offered arrival rate, qualify
+per-producer fairness or establish an hours-long steady state. The read overlap
+counter records calls started while producers remain active, without asserting
+simultaneous execution inside both native connections. Records are small and
+unguarded; physical block ACKs are synthetic. There is no operation warmup.
+
+Operation timing begins at the port call. Wall throughput excludes seed setup,
+reopen and close, and includes producer start/collection. Successful write
+throughput counts committed writes only. Saturation has its own latency samples;
+its fast failures cannot inflate successful throughput. Reader counts vary with
+producer lifetime, so rates are observations of this workload rather than a
+paired performance comparison. Table cells are medians of three round-level
+statistics; each round's p95 uses nearest-rank individual-operation samples.
+
+| Provider | Committed writes/s | Historical reads/s | Commit p95 ms | Recovery p95 ms | Refused writes/round |
+|----------+--------------------+--------------------+---------------+-----------------+----------------------|
+| turso | 350 | 1782 | 44.538 | 9.993 | 256 |
+| duckdb | 38 | 644 | 309.526 | 27.929 | 256 |
+
+All six cases passed: 3,072 write attempts,
+1,536 commits, 1,536 saturation refusals,
+17,761 exact historical reads, and
+17,761 reads started while producers remained active.
+After reopen, 1,542 exact records (including six seeds) and
+1,536 absent refused operations were verified.
+No unexpected error, unknown outcome or replay was observed. All twelve
+original/reopened instances closed with zero active/submitted work and retained
+bytes and exact completed counts. Rejection counters equal the recorded refusals;
+the recovery saturation counter remains zero.
+
+Close timing is quiescent. [[file:shared-backend-dispatch.org][The held-writer receipt]] separately measures busy drain;
+its cancellation and ownership boundary remains covered by regular native tests.
+
+* Local gates and remaining qualification
+
+Default backend: four library checks. Turso: four library checks, twelve consumer
+cases and three dispatch cases. DuckDB: four library checks, fourteen consumer
+cases and three dispatch cases. The one focused Commerce signed-budget
+persist/reopen/replay regression passes. Strict all-feature/all-target Clippy,
+formatting, diff checks and Org documentation validation pass. Measurements are
+opt-in tests and ordinary native CI does not run them. Remote checks must be
+reported for the exact published head independently of these local receipts.
+
+These observations do not qualify native cache/RSS budgets, larger guarded
+records, long-lived database growth, competing Host executor traffic, actual
+block durability, power loss or anti-rollback. Next experiments vary guard count
+and bounded record size, then attribute queue/connection/validator/transaction
+stages before selecting optimizations. [[file:../architecture/shared-backend.org][The architecture document]] retains the
+single Backend, provider and Host ownership boundaries.

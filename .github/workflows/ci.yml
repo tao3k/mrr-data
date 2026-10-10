@@ -17,23 +17,46 @@ env:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   msrv:
     name: Rust 1.95 MSRV (ubuntu-24.04)
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.95.0
       - name: Test workspace at the declared MSRV
-        run: cargo test --workspace --features mrr-data/transfer,mrr-data/car,mrr-data/filesystem,mrr-data/cache,mrr-data/s3 --locked
+        run: cargo test --workspace --features mrr-data/transfer,mrr-data/car,mrr-data/filesystem,mrr-data/cache,mrr-data/s3,mrr-data/backend-turso,mrr-data/backend-graph-publish --locked
+      - name: Test native DuckDB at the declared MSRV
+        run: cargo test -p mrr-data-backend --no-default-features --features duckdb,graph-publish --locked -- --nocapture
+
+  python:
+    name: Python qualification framework
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.95.0
+      - name: Verify native compiler for Python process supervision
+        run: rustc --version --verbose
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install Python project manager
+        run: python3 -m pip install 'uv==0.11.3'
+      - name: Check Python package and framework contracts
+        run: |
+          uv run --locked --project python ruff check python
+          uv run --locked --project python ruff format --check python
+          uv run --locked --project python pytest python/tests -q
+          uv run --locked --project python mrr-data-test check-docs
 
   test:
     name: Rust (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
@@ -45,14 +68,37 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy,rustfmt
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install Python project manager
+        run: python3 -m pip install 'uv==0.11.3'
       - name: Check Org documentation and links
-        run: python3 tools/check-docs.py
+        run: uv run --locked --project python mrr-data-test check-docs
       - name: Check formatting
         run: cargo fmt --all -- --check
+      - name: Check fixtures against exact SPEC pin
+        if: runner.os == 'Linux'
+        run: uv run --locked --project python mrr-data-test check-spec-fixtures
       - name: Test workspace
-        run: cargo test --workspace --features mrr-data/transfer,mrr-data/car,mrr-data/filesystem,mrr-data/cache,mrr-data/s3 --locked
+        run: cargo test --workspace --features mrr-data/transfer,mrr-data/car,mrr-data/filesystem,mrr-data/cache,mrr-data/s3,mrr-data/backend-turso,mrr-data/backend-graph-publish --locked
+      - name: Test optional database providers independently
+        run: |
+          cargo test -p mrr-data-backend --no-default-features --features turso,arrow-query,graph-publish --locked -- --nocapture
+          cargo test -p mrr-data-backend --no-default-features --features duckdb,graph-publish --locked -- --nocapture
+      - name: Test shared backend without a provider feature
+        run: |
+          cargo test -p mrr-data-backend --no-default-features --locked
+          cargo test -p mrr-data-backend --no-default-features --features arrow-query --locked
+      - name: Test Commerce integration profiles
+        run: |
+          cargo test -p mrr-data-commerce --locked
+          cargo test -p mrr-data-commerce --features credential --locked
+          cargo test -p mrr-data-commerce --features consumption --locked
+          cargo clippy -p mrr-data-commerce --all-features --all-targets --locked -- -D warnings
+          cargo clippy -p mrr-data-backend --all-features --all-targets --profile test --locked -- -D warnings
       - name: Check optional feature dependency isolation
-        run: python3 tools/check-features.py
+        run: uv run --locked --project python mrr-data-test check-features
       - name: Check facade feature contract
         run: |
           cargo check -p mrr-data --locked
@@ -91,18 +137,16 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
-      - name: Install POO Flow runtime dependencies
-        run: python3 -m pip install 'anyio==4.14.1' 'cffi==2.0.0' 'pyturso==0.6.1'
-      - name: Test and lint the optional POO Flow resource
+      - name: Install conformance test dependencies
         run: |
-          cargo test -p mrr-data-poo-flow --features runtime --locked
-          cargo clippy -p mrr-data-poo-flow --features runtime --all-targets --locked -- -D warnings
+          python3 -m pip install 'uv==0.11.3'
+          uv sync --locked --project python
       - name: Check conformance receipt freshness contracts
-        run: python3 tools/s3-conformance/test_runner.py
+        run: uv run --locked --project python pytest python/tests/test_s3_receipts.py -q
       - name: Run local S3 authentication, TLS and snapshot conformance
         env:
           RUSTUP_TOOLCHAIN: 1.95.0
-        run: python3 tools/s3-conformance/run.py --poo-flow --receipt "$RUNNER_TEMP/s3-conformance-receipt.json"
+        run: uv run --locked --project python mrr-data-test s3-conformance --receipt "$RUNNER_TEMP/s3-conformance-receipt.json"
       - name: Summarize tested source and service
         env:
           RECEIPT_PATH: ${{ runner.temp }}/s3-conformance-receipt.json
@@ -161,7 +205,7 @@ jobs:
   graphar:
     name: Maintained GraphAr (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
@@ -185,72 +229,207 @@ jobs:
             brew install apache-arrow
             arrow_prefix="$(brew --prefix apache-arrow)"
             echo "PKG_CONFIG_PATH=$arrow_prefix/lib/pkgconfig" >> "$GITHUB_ENV"
-            echo "CMAKE_PREFIX_PATH=$arrow_prefix" >> "$GITHUB_ENV"
+            echo "CMAKE_PREFIX_PATH=$arrow_prefix:$(brew --prefix)" >> "$GITHUB_ENV"
             echo "DYLD_FALLBACK_LIBRARY_PATH=$arrow_prefix/lib" >> "$GITHUB_ENV"
             echo "CXXFLAGS=-I$arrow_prefix/include -Wno-error=deprecated-declarations -Wno-error=macro-redefined" >> "$GITHUB_ENV"
           fi
       - name: Test maintained GraphAr round-trip
-        run: cargo test -p mrr-data-graphar --features native-graphar --locked
+        run: cargo test -p mrr-data-graphar --features native-graphar,selective-graphar,backend,combined-graph --locked
       - name: Verify GraphAr Arrow performance parity
         run: >-
-          cargo test -p mrr-data-graphar --features native-graphar --locked
+          cargo test -p mrr-data-graphar --features native-graphar,selective-graphar,backend,combined-graph --locked
           scenario_semantically_reads_ten_thousand_graphar_edges --
           --ignored --nocapture
+      - name: Qualify matched GraphAr range-read work
+        run: >-
+          cargo test -p mrr-data-graphar --features selective-graphar,backend --locked
+          selective_matched_workload_experiment -- --ignored --nocapture
+      - name: Measure GraphAr process RSS and retained-source reuse
+        run: >-
+          cargo bench -p mrr-data-graphar --bench graphar_range_workload
+          --features selective-graphar,backend --profile test --locked -- --measure
       - name: Check facade GraphAr native feature
         run: |
           cargo check -p mrr-data --no-default-features --features graphar-native --locked
           cargo check -p mrr-data --no-default-features --features content-identity,graphar-native --locked
+          cargo check -p mrr-data --no-default-features --features backend-graphar --locked
+          cargo check -p mrr-data --no-default-features --features backend-graphar-selective --locked
+          cargo check -p mrr-data --no-default-features --features backend-graphar-combined --locked
+      - name: Qualify Turso query over captured GraphAr
+        run: |
+          cargo test -p mrr-data-turso-query --features backend-worker --locked
+          cargo check -p mrr-data --no-default-features --features backend-turso-query --locked
+          cargo clippy -p mrr-data-turso-query --all-targets --features backend-worker --locked -- -D warnings
+      - name: Qualify native graph publication, cold restore and final MRR admission
+        run: |
+          cargo test -p mrr-data --no-default-features --features backend-graphar,backend-graph-publish,backend-turso,backend-arrow-query,datafusion --lib --locked native_graph_publication_restoration_and_admission
+          cargo test -p mrr-data --no-default-features --features backend-graphar,backend-graph-publish,backend-duckdb,backend-arrow-query,datafusion --lib --locked native_graph_publication_restoration_and_admission
       - name: Lint maintained GraphAr adapter
-        run: cargo clippy -p mrr-data-graphar --all-targets --features native-graphar --locked -- -D warnings
+        run: cargo clippy -p mrr-data-graphar --all-targets --features native-graphar,selective-graphar,backend,combined-graph --profile test --locked -- -D warnings
 
-  property-source:
-    name: Original GQL property worker (${{ matrix.os }})
+  duckgql:
+    name: Typed DuckGQL (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 120
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, macos-latest]
-    env:
-      GERBIL_PREFIX: ${{ github.workspace }}/.ci/gerbil
-      GERBIL_PATH: ${{ github.workspace }}/.ci/mrr-source/.gerbil
-      GERBIL_LOADPATH: ${{ github.workspace }}/.ci/mrr-source
-      GERBIL_BUILD_VERBOSE: "1"
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          repository: tao3k/meta-relational-reasoning
-          ref: c4328064ab0bf5eca39dc2f79fbf890b6b99f7c9
-          path: .ci/mrr-source
+          components: clippy,rustfmt
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install Python project manager
+        run: python3 -m pip install 'uv==0.11.3'
+      - name: Install Arrow C++
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            wget -c "https://apache.jfrog.io/artifactory/arrow/$(lsb_release --id --short | tr 'A-Z' 'a-z')/apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb" -P /tmp/
+            sudo apt-get install -y "/tmp/apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb"
+            sudo apt-get update -y
+            sudo apt-get install -y libarrow-dev libarrow-dataset-dev libarrow-acero-dev libarrow-compute-dev libparquet-dev
+          else
+            brew install apache-arrow
+            arrow_prefix="$(brew --prefix apache-arrow)"
+            echo "PKG_CONFIG_PATH=$arrow_prefix/lib/pkgconfig" >> "$GITHUB_ENV"
+            echo "CMAKE_PREFIX_PATH=$arrow_prefix" >> "$GITHUB_ENV"
+            echo "DYLD_FALLBACK_LIBRARY_PATH=$arrow_prefix/lib" >> "$GITHUB_ENV"
+            echo "CXXFLAGS=-I$arrow_prefix/include -Wno-error=deprecated-declarations -Wno-error=macro-redefined" >> "$GITHUB_ENV"
+          fi
+      - name: Build pinned DuckGQL for the current SDK
+        shell: bash
+        run: |
+          jobs=2
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            jobs=4
+          fi
+          uv run --locked --project python mrr-data-test duckgql-build --work-dir "$RUNNER_TEMP/duckgql-build" --jobs "$jobs"
+      - name: Select Host-built DuckGQL artifact
+        shell: python
+        run: |
+          import json, os
+          from pathlib import Path
+          artifact = json.loads((Path(os.environ["RUNNER_TEMP"]) / "duckgql-build/artifact.json").read_text())
+          with open(os.environ["GITHUB_ENV"], "a") as output:
+              output.write(f"MRR_DUCKGQL_EXTENSION={artifact['artifact']}\n")
+              output.write(f"MRR_DUCKGQL_SHA256={artifact['sha256']}\n")
+              output.write("MRR_DUCKGQL_ALLOW_UNSIGNED=1\n")
+      - name: Qualify typed DuckGQL, retained output and native interrupt
+        run: |
+          cargo test -p mrr-data-duckgql-query --features backend-worker,query-parity --locked --no-run --message-format=json | tee "$RUNNER_TEMP/duckgql-tests.jsonl"
+          uv run --locked --project python mrr-data-test run-process --phase test --cargo-artifacts "$RUNNER_TEMP/duckgql-tests.jsonl" --test-target mrr_data_duckgql_query --test-target duckgql_graphar -- --nocapture
+          cargo check -p mrr-data --no-default-features --features backend-duckgql-query --profile test --locked
+          cargo clippy -p mrr-data-duckgql-query --all-targets --features backend-worker,query-parity --profile test --locked -- -D warnings
+      - name: Record bounded whole-request query comparison
+        run: uv run --locked --project python mrr-data-test run-process --phase test --cargo-artifacts "$RUNNER_TEMP/duckgql-tests.jsonl" --test-target duckgql_graphar -- same_source_scale_receipts --ignored --nocapture
+      - name: Record isolated engine resource matrix
+        run: uv run --locked --project python mrr-data-test query-resources --cargo-artifacts "$RUNNER_TEMP/duckgql-tests.jsonl" --output "$RUNNER_TEMP/query-resources.jsonl"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: query-resources-${{ matrix.os }}
+          path: ${{ runner.temp }}/query-resources.jsonl
+          if-no-files-found: error
+
+  property-physical:
+    name: Property snapshot and physical query (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    env:
+      GERBIL_BUILD_VERBOSE: "1"
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - name: Install native Linux dependencies
-        if: runner.os == 'Linux'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install Python project manager and native dependencies
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential libsqlite3-dev libssl-dev pkg-config zlib1g-dev jq
-      - name: Install native macOS dependencies
-        if: runner.os == 'macOS'
-        env:
-          HOMEBREW_NO_AUTO_UPDATE: 1
-          HOMEBREW_NO_INSTALL_CLEANUP: 1
+          python3 -m pip install 'uv==0.11.3'
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            wget -c "https://apache.jfrog.io/artifactory/arrow/$(lsb_release --id --short | tr 'A-Z' 'a-z')/apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb" -P /tmp/
+            sudo apt-get install -y "/tmp/apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb"
+            sudo apt-get update -y
+            sudo apt-get install -y build-essential jq libsqlite3-dev libssl-dev pkg-config zlib1g-dev libarrow-dev libarrow-dataset-dev libarrow-acero-dev libarrow-compute-dev libparquet-dev
+          else
+            brew install apache-arrow gcc jq openssl pkg-config sqlite zlib
+            arrow_prefix="$(brew --prefix apache-arrow)"
+            echo "PKG_CONFIG_PATH=$arrow_prefix/lib/pkgconfig:$(brew --prefix openssl)/lib/pkgconfig" >> "$GITHUB_ENV"
+            echo "CMAKE_PREFIX_PATH=$arrow_prefix:$(brew --prefix)" >> "$GITHUB_ENV"
+            echo "DYLD_FALLBACK_LIBRARY_PATH=$arrow_prefix/lib" >> "$GITHUB_ENV"
+            echo "CXXFLAGS=-I$arrow_prefix/include -Wno-error=deprecated-declarations -Wno-error=macro-redefined" >> "$GITHUB_ENV"
+          fi
+      - name: Locate the exact Cargo-pinned MRR source frontend owner
+        shell: bash
         run: |
-          brew install gcc jq openssl pkg-config sqlite zlib
-          openssl_prefix="$(brew --prefix openssl@3 2>/dev/null || brew --prefix openssl)"
-          echo "PKG_CONFIG_PATH=$openssl_prefix/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" >> "$GITHUB_ENV"
-          echo "MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion | cut -d. -f1).0" >> "$GITHUB_ENV"
-      - name: Install MRR-pinned immutable Gerbil release
-        run: bash .ci/mrr-source/tools/ci/install-gerbil-release.sh "$GERBIL_PREFIX"
-      - name: Build MRR's declared Gerbil dependency closure
-        working-directory: .ci/mrr-source
+          cargo metadata --locked --format-version 1 --features mrr-data-datafusion/source-handoff,mrr-data-datafusion/search-dispatch,mrr-data-graphar/source-handoff > "$RUNNER_TEMP/mrr-source-metadata.json"
+          python3 - <<'PY'
+          import json, os, tomllib
+          from pathlib import Path
+          metadata = json.loads((Path(os.environ["RUNNER_TEMP"]) / "mrr-source-metadata.json").read_text())
+          owners = [package for package in metadata["packages"] if package["name"] == "mrr-property-source"]
+          assert len(owners) == 1 and owners[0]["source"].startswith("git+https://github.com/tao3k/meta-relational-reasoning.git?")
+          root = Path(owners[0]["manifest_path"]).parents[2]
+          sdk_revision = "f61643b3a787d005612dc5021b4941612f3e1f68"
+          dependencies = tomllib.loads((root / "Cargo.toml").read_text())["workspace"]["dependencies"]
+          for name in ("gerbil-scheme-sys", "gerbil-scheme-native-build"):
+              assert dependencies[name]["git"] == "https://github.com/tao3k/gerbil-scheme-rust.git"
+              assert dependencies[name]["rev"] == sdk_revision, "source owner SDK differs from setup action"
+          with open(os.environ["GITHUB_ENV"], "a") as output:
+              output.write(f"MRR_FRONTEND_OWNER={root}\n")
+          PY
+      - name: Install the source owner's immutable native Gerbil release
+        uses: tao3k/gerbil-scheme-rust/.github/actions/setup-gerbil@f61643b3a787d005612dc5021b4941612f3e1f68
+        with:
+          release-root: ${{ runner.temp }}/mrr-gerbil
+      - name: Build the MRR-owned source frontend package
+        shell: bash
         run: |
-          echo "GERBIL_GSC=$GERBIL_PREFIX/bin/gsc" >> "$GITHUB_ENV"
-          echo "GERBIL_GXPKG=$GERBIL_PREFIX/bin/gxpkg" >> "$GITHUB_ENV"
+          cd "$MRR_FRONTEND_OWNER"
+          uv run --project proofs/MRRProof python -m mrr_proof_validation.prepare_gerbil_dependencies
           gerbil deps --install
           gerbil build
-      - name: Test exact-source property worker
-        run: cargo test -p mrr-data-poo-flow --features property-query --locked
-      - name: Lint exact-source property worker
-        run: cargo clippy -p mrr-data-poo-flow --features property-query --all-targets --locked -- -D warnings
+      - name: Test generic property snapshot and physical query
+        run: |
+          cargo test -p mrr-data-content --features property-snapshot --locked
+          cargo test -p mrr-data-datafusion --locked
+      - name: Lint generic property snapshot and physical query
+        run: |
+          cargo clippy -p mrr-data-content --features property-snapshot --all-targets --locked -- -D warnings
+          cargo clippy -p mrr-data-datafusion --all-targets --locked -- -D warnings
+      - name: Qualify original Healthcare source through native GraphAr and cold/warm snapshots
+        env:
+          MRR_NATIVE_PROGRESS: '1'
+          GERBIL_PARSER_LR_TRACE: '1'
+          GERBIL_BUILD_VERBOSE: '1'
+          MRR_DATA_RUSTC_PHASE_TRACE_CRATES: 'asp_rust,rust_lang_project_harness'
+          RUSTC_WRAPPER: '${{ github.workspace }}/python/.venv/bin/mrr-data-rustc-progress'
+          RUSTC_WORKSPACE_WRAPPER: '${{ github.workspace }}/python/.venv/bin/mrr-data-rustc-progress'
+        run: |
+          uv run --locked --project python mrr-data-test run-process --phase build --cargo-artifacts "$RUNNER_TEMP/mrr-source-artifacts.jsonl" -- cargo test -vv -p mrr-data-datafusion -p mrr-data-graphar --features mrr-data-datafusion/source-handoff,mrr-data-datafusion/search-dispatch,mrr-data-graphar/source-handoff,mrr-data-graphar/backend,mrr-data-graphar/selective-graphar --locked --no-run --message-format=json
+          uv run --locked --project python mrr-data-test run-process --phase test --cargo-artifacts "$RUNNER_TEMP/mrr-source-artifacts.jsonl" --test-target mrr_data_datafusion --test-target mrr_data_graphar -- source_handoff --nocapture --test-threads=1
+          uv run --locked --project python mrr-data-test run-process --phase test --cargo-artifacts "$RUNNER_TEMP/mrr-source-artifacts.jsonl" --test-target mrr_data_datafusion -- tests::property::restored::transformation --nocapture --test-threads=1
+          uv run --locked --project python mrr-data-test run-process --phase test --cargo-artifacts "$RUNNER_TEMP/mrr-source-artifacts.jsonl" --test-target mrr_data_datafusion -- tests::property::restored::search --nocapture --test-threads=1
+          uv run --locked --project python mrr-data-test run-process --phase test --cargo-artifacts "$RUNNER_TEMP/mrr-source-artifacts.jsonl" --test-target mrr_data_graphar -- tests::entity_properties::descriptor::property_descriptor_reopens_in_new_process --exact --ignored --nocapture --test-threads=1
+          uv run --locked --project python mrr-data-test run-process --phase test --cargo-artifacts "$RUNNER_TEMP/mrr-source-artifacts.jsonl" --test-target mrr_data_graphar -- tests::entity_properties::combined::source_handoff::child_ownership::host_wait_baseline --exact --ignored --nocapture --test-threads=1
+          uv run --locked --project python mrr-data-test run-process --phase test --cargo-artifacts "$RUNNER_TEMP/mrr-source-artifacts.jsonl" --test-target mrr_data_graphar -- tests::entity_properties::combined::source_handoff::child_ownership::isolated_native_preserves_host_wait --exact --ignored --nocapture --test-threads=1
+          uv run --locked --project python mrr-data-test run-process --phase build --cargo-artifacts "$RUNNER_TEMP/mrr-source-facade.jsonl" -- cargo check -vv -p mrr-data --no-default-features --features backend-graphar-combined,datafusion --profile test --locked --message-format=json
+          uv run --locked --project python mrr-data-test run-process --phase build --cargo-artifacts "$RUNNER_TEMP/mrr-source-clippy.jsonl" -- cargo clippy -vv -p mrr-data-datafusion -p mrr-data-graphar --all-targets --features mrr-data-datafusion/source-handoff,mrr-data-datafusion/search-dispatch,mrr-data-graphar/source-handoff,mrr-data-graphar/backend,mrr-data-graphar/selective-graphar --profile test --locked --message-format=json -- -D warnings
+          uv run --locked --project python mrr-data-test run-process --phase test --cargo-artifacts "$RUNNER_TEMP/mrr-source-artifacts.jsonl" --test-target mrr_data_graphar -- tests::entity_properties::combined::source_handoff::backend::process_recovery::original_source_process_recovery_matrix --exact --ignored --nocapture --test-threads=1
+          uv run --locked --project python mrr-data-test source-resources --scales 1 8 64 256 --cargo-artifacts "$RUNNER_TEMP/mrr-source-artifacts.jsonl" --output "$RUNNER_TEMP/original-source-resources.jsonl"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: original-source-resources-${{ matrix.os }}
+          path: ${{ runner.temp }}/original-source-resources.jsonl
+          if-no-files-found: error

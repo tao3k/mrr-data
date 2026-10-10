@@ -1,0 +1,50 @@
+#+TITLE: GraphAr process-separated physical workload
+
+* Run and evidence scope
+
+#+begin_src sh
+cargo bench -p mrr-data-graphar --bench graphar_range_workload --features selective-graphar,backend --profile test --locked -- --measure
+#+end_src
+
+This is a synthetic physical outgoing workload, not original Healthcare GQL or
+final MRR query admission. The parent publishes one controlled native ordered
+layout per distribution and checks full native parity against independent facts.
+Eight fresh exec processes then compare full scan plus outgoing filtering with
+selected ranges on those same authenticated inventories. The workers do not
+construct or retain the parent's fact vectors or decoded reference.
+
+Inputs: 65,536 facts, 128 entities, 128-vertex / 512-edge chunks; uniform degree
+and a 50% source-zero hot spot. Each child performs complete CID verification,
+vertex/offset preparation, first query, two warmups and 21 measured reuses.
+Every result matches the independent ordered Fact digest/count; every reuse has
+identical read-byte and materialized-row counts. The supervisor checks paired
+results and reduced read work; it imposes no speed or RSS reduction threshold.
+The source is retained directly; no second Backend or provider runtime is added.
+
+=into_facts= transfers the result Vec without cloning. The shared Backend fixture
+uses =ResourceHandle::try_transform= to preserve the same lease through that
+transfer and last-clone drain. The benchmark isolates physical work and does not
+measure Backend queueing or assert a reservation-to-RSS relationship.
+
+* Measurements and limits
+
+Each child reports process baseline, after preparation, after first query and
+after reuse using safe =nix 0.29.0= =getrusage(RUSAGE_SELF)=. =max_rss_bytes= is a
+cumulative whole-process high-water mark, not current retained memory or a phase
+allocation delta. Linux KiB values are multiplied by 1024; Darwin values are
+already bytes. Sources: [[https://man7.org/linux/man-pages/man2/getrusage.2.html][Linux getrusage]] and
+[[https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_resource.c][Darwin kernel resource accounting]].
+
+CPU time, page faults, block I/O and involuntary context switches are diagnostics.
+The reader-byte counters count positional file returns; they are not disk traffic.
+The parent has already written/read the files and verification touches all files:
+OS caches are uncontrolled. A fresh process is not OS-cold storage. Snapshot/index
+reuse excludes repeated complete verification but still reads selected Parquet
+ranges. No authenticated remote chunk cache, engine spill accounting, current
+RSS sampling, hard native deadline or tail-latency guarantee is claimed.
+
+Workers emit and flush progress at phase/iteration boundaries. Missing progress
+for five seconds or total execution above 90 seconds kills and waits for the
+worker. Failed/missing receipts fail the experiment. A process guard also kills
+and waits on parsing/error exits. No environment variables or Cargo job caps are
+introduced. Linux/macOS are the measured platforms.
