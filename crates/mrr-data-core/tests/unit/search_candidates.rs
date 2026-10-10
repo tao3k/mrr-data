@@ -110,7 +110,7 @@ fn actual_poo_plan_is_preserved_and_wrong_graphs_are_refused() {
         .unwrap_err(),
         Error::PooPlanMismatch
     );
-    let stale = compile_poo_search_plan(
+    let foreign_projection = compile_poo_search_plan(
         "data-poo",
         GenerationId::from_canonical_bytes("stale").unwrap(),
         &plan,
@@ -120,7 +120,7 @@ fn actual_poo_plan_is_preserved_and_wrong_graphs_are_refused() {
         compose_poo_data_search_candidates(
             &binding,
             Mode::Intersect,
-            &stale,
+            &foreign_projection,
             "merge",
             &branches,
             limit()
@@ -128,7 +128,7 @@ fn actual_poo_plan_is_preserved_and_wrong_graphs_are_refused() {
         .unwrap_err(),
         Error::BindingMismatch
     );
-    assert_execution_admission(&binding, &projection, &stale, &branches, &data);
+    assert_execution_admission(&binding, &projection, &foreign_projection, &branches, &data);
     let missing_merge =
         compile_poo_search_plan("data-poo", binding.generation(), &parallel).unwrap();
     assert_eq!(
@@ -149,7 +149,7 @@ fn actual_poo_plan_is_preserved_and_wrong_graphs_are_refused() {
 fn assert_execution_admission(
     binding: &DataSearchSourceBinding,
     projection: &meta_relational_reasoning::PooSearchProjection,
-    stale: &meta_relational_reasoning::PooSearchProjection,
+    foreign_projection: &meta_relational_reasoning::PooSearchProjection,
     branches: &[crate::DataPooSearchCandidateBranch],
     data: &crate::DataSearchCandidateReceipt,
 ) {
@@ -188,7 +188,7 @@ fn assert_execution_admission(
         binding.source_digest().to_owned(),
         binding.resident_view_digest().to_owned(),
         binding.composition_abi().to_owned(),
-        stale.generation(),
+        foreign_projection.generation(),
     )
     .unwrap();
     let foreign_branches = branches
@@ -204,7 +204,7 @@ fn assert_execution_admission(
     let foreign_execution = crate::execute_poo_data_search_candidates(
         &foreign_binding,
         Mode::Intersect,
-        stale,
+        foreign_projection,
         "merge",
         &foreign_branches,
         limit(),
@@ -601,7 +601,7 @@ fn receipt_candidate_admission_rejects_forgery_unknown_owner_and_revocation() {
         receipt.verify_candidate(&source("revoked"), "src/b.rs", candidate),
         Err(Error::BindingMismatch)
     );
-    let stale = DataSearchSourceBinding::new(
+    let foreign_projection = DataSearchSourceBinding::new(
         expected.scope().into(),
         expected.source_digest().into(),
         expected.resident_view_digest().into(),
@@ -610,7 +610,7 @@ fn receipt_candidate_admission_rejects_forgery_unknown_owner_and_revocation() {
     )
     .unwrap();
     assert_eq!(
-        receipt.verify_candidate(&stale, "src/b.rs", candidate),
+        receipt.verify_candidate(&foreign_projection, "src/b.rs", candidate),
         Err(Error::BindingMismatch)
     );
     println!("DATA-CANDIDATE-ADMISSION-OK union=3 merged=1 negative-controls=5");
