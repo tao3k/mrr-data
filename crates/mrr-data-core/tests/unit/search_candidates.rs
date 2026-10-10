@@ -128,6 +128,7 @@ fn actual_poo_plan_is_preserved_and_wrong_graphs_are_refused() {
         .unwrap_err(),
         Error::BindingMismatch
     );
+    assert_execution_admission(&binding, &projection, &stale, &branches, &data);
     let missing_merge =
         compile_poo_search_plan("data-poo", binding.generation(), &parallel).unwrap();
     assert_eq!(
@@ -142,6 +143,86 @@ fn actual_poo_plan_is_preserved_and_wrong_graphs_are_refused() {
         .unwrap_err(),
         Error::PooPlanMismatch
     );
+}
+
+#[cfg(feature = "native-search")]
+fn assert_execution_admission(
+    binding: &DataSearchSourceBinding,
+    projection: &meta_relational_reasoning::PooSearchProjection,
+    stale: &meta_relational_reasoning::PooSearchProjection,
+    branches: &[crate::DataPooSearchCandidateBranch],
+    data: &crate::DataSearchCandidateReceipt,
+) {
+    use crate::DataPooSearchCandidateBranch;
+    let executed = crate::execute_poo_data_search_candidates(
+        binding,
+        Mode::Intersect,
+        projection,
+        "merge",
+        branches,
+        limit(),
+        meta_relational_reasoning::evaluate_poo_search_factors,
+    )
+    .unwrap();
+    assert_eq!(
+        executed.candidates.merged_candidates(),
+        data.merged_candidates()
+    );
+    assert_eq!(executed.reasoning.generation(), binding.generation());
+    assert!(matches!(
+        crate::execute_poo_data_search_candidates(
+            &source("revoked"),
+            Mode::Intersect,
+            projection,
+            "merge",
+            branches,
+            limit(),
+            |_, _, _| panic!("revoked physical sources must fail before inference"),
+        ),
+        Err(crate::DataSearchExecutionError::Candidates(
+            Error::BindingMismatch
+        ))
+    ));
+    let foreign_binding = DataSearchSourceBinding::new(
+        binding.scope().to_owned(),
+        binding.source_digest().to_owned(),
+        binding.resident_view_digest().to_owned(),
+        binding.composition_abi().to_owned(),
+        stale.generation(),
+    )
+    .unwrap();
+    let foreign_branches = branches
+        .iter()
+        .map(|branch| DataPooSearchCandidateBranch {
+            stage_name: branch.stage_name.clone(),
+            binding: foreign_binding.clone(),
+            candidates: branch.candidates.clone(),
+            complete: branch.complete,
+            truncated: branch.truncated,
+        })
+        .collect::<Vec<_>>();
+    let foreign_execution = crate::execute_poo_data_search_candidates(
+        &foreign_binding,
+        Mode::Intersect,
+        stale,
+        "merge",
+        &foreign_branches,
+        limit(),
+        meta_relational_reasoning::evaluate_poo_search_factors,
+    )
+    .unwrap();
+    assert!(matches!(
+        crate::execute_poo_data_search_candidates(
+            binding,
+            Mode::Intersect,
+            projection,
+            "merge",
+            branches,
+            limit(),
+            |_, _, _| Ok(foreign_execution.reasoning),
+        ),
+        Err(crate::DataSearchExecutionError::IncompleteInference)
+    ));
 }
 
 #[test]

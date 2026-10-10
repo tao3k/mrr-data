@@ -21,6 +21,7 @@ mod query_binding;
 #[cfg(feature = "content-identity")]
 mod search_binding;
 mod search_candidates;
+mod search_execution;
 #[cfg(feature = "content-identity")]
 mod snapshot_descriptors;
 
@@ -72,6 +73,9 @@ pub use search_candidates::{
     DataPooSearchCandidateBranch, DataSearchCandidateBranch, DataSearchCandidateComposition,
     DataSearchCandidateError, DataSearchCandidateReceipt, DataSearchSourceBinding,
     compose_data_search_candidates, compose_poo_data_search_candidates,
+};
+pub use search_execution::{
+    DataSearchExecution, DataSearchExecutionError, execute_poo_data_search_candidates,
 };
 #[cfg(feature = "content-identity")]
 pub use snapshot_descriptors::{

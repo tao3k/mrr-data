@@ -37,7 +37,7 @@ immutable root, canonical result digest and ordinal; they are not entity IDs.
 * Immutable upstream source
 
 Root and fuzz manifests/lockfiles consume published MRR revision
-=1fdcb06068afa258a7cc87e97c5edcb565697e68=. Consumers use that exact MRR
+=c202aa2753678c02dc7daafdec853f66f3368a70=. Consumers use that exact MRR
 dependency's types without relabeling identities from another revision.
 Local source overrides used by consumer integration tests must be
 reported separately from published dependency qualification.
@@ -81,3 +81,14 @@ ANN/top-k completion cannot certify corpus absence. See MRR
 =docs/architecture/0037-configurable-search-execution.org= for the contract and
 acceptance sequence. POO producer proofs, MRR FFI admission and Data physical
 qualification remain separate owners and gates.
+
+* Reusable candidate execution
+
+=execute_poo_data_search_candidates= owns the common execution sequence:
+original POO graph admission, physical set composition, candidate identity
+admission, bounded MRR inference and generation/completion admission. Consumers
+supply the existing MRR inference port; Data does not select a Scheme runtime.
+ASP keeps its scenario binding, query interpretation and public receipt
+projection. This consolidates the generic execution previously repeated in the
+ASP bridge without moving code-language policy into Data. Existing Version 1
+identities and receipts are unchanged.
