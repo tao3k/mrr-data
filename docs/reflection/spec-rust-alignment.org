@@ -17,7 +17,7 @@ LeanPoo Allow would not authorize a later read or provider release.
 
 [[file:../../python/src/mrr_data_testing/checks/spec_fixtures.py][The pin gate]] compares five Rust
 fixtures with the exact Cargo-pinned SPEC Git tree. SPEC's
-[[https://github.com/tao3k/cedar-poo-spec/pull/5][Table Batch Wire V1]]
+[[https://github.com/hardenedlinux/cedar-poo-spec/pull/5][Table Batch Wire V1]]
 adds checked ordered response cases replayed by its Rust bridge. MRR Data
 retains MRR row identities while forming one Table request and rejects an
 incomplete or mismatched response without returning checked outputs. The

@@ -59,7 +59,7 @@ child bytes should use the Arrow-backed API. The [[file:google_sdp_binding.rs][C
 public Cedar POO Cloud gate's mode, recipe, tenant, key grant, row context, and
 artifact-digest relation against the selected MRR Data input. These checks
 compare Host-authenticated projections; they do not execute Cedar or prove
-key possession. The [[https://github.com/tao3k/cedar-poo-spec/blob/main/Examples/Cloud/DataProtection/GoogleSdpRelease.lean][Cloud example]] supplies the scenario names. The Rust checks map those
+key possession. The [[https://github.com/hardenedlinux/cedar-poo-spec/blob/main/Examples/Cloud/DataProtection/GoogleSdpRelease.lean][Cloud example]] supplies the scenario names. The Rust checks map those
 projected facts as follows:
 
 | Lean choice | Rust boundary |

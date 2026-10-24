@@ -2,7 +2,7 @@
 #+OPTIONS: toc:nil
 
 [[file:protected.rs][The intent and publication checks]] replay
-[[https://github.com/tao3k/cedar-poo-spec/pull/5][SPEC Protected Storage]] at the
+[[https://github.com/hardenedlinux/cedar-poo-spec/pull/5][SPEC Protected Storage]] at the
 Rust boundary. The versioned fixture in =fixtures/protected-storage-v1.json=
 contains fourteen intent, nine pre-root, and fourteen post-root commit cases. The separate
 =storage-profiles-v1.json= crosses sensitivity, destination acceptance,

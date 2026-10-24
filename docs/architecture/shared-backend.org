@@ -59,7 +59,7 @@ The opt-in =backend-turso-query= facade feature adds a physical GraphAr/Turso
 query adapter; it does not add language parsing to the Backend.
 
 The architecture follows the immutable Cedar
-[[https://github.com/tao3k/cedar-poo-spec/blob/bcacabbdd188a821799dc6be92ebbed4a7c46214/Productions/Backend.org][Production Backend design]]. Commerce and pseudonymization share that exact
+[[https://github.com/hardenedlinux/cedar-poo-spec/blob/bcacabbdd188a821799dc6be92ebbed4a7c46214/Productions/Backend.org][Production Backend design]]. Commerce and pseudonymization share that exact
 Cedar pin. Production does not depend on an Example. MRR owns semantic admission;
 MRR Data owns physical execution; the Host/POO Flow owns the runtime and semantic
 enrollment. Profile/schema changes must preserve canonical coordination homes.

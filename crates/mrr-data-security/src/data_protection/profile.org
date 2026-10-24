@@ -12,7 +12,7 @@ reused by this profile.
 
 The public Cedar POO Cloud DataProtection example supplies the reference
 composition of pipeline owners and a Sensitive Data Protection recipe:
-[[https://github.com/tao3k/cedar-poo-spec/tree/main/Examples/Cloud/DataProtection][Cloud DataProtection]].
+[[https://github.com/hardenedlinux/cedar-poo-spec/tree/main/Examples/Cloud/DataProtection][Cloud DataProtection]].
 
 The Host authenticates receipts and decisions, atomically redeems the release
 receipt for the intended effect, and checks current state at commit. The

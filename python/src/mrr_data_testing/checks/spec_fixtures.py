@@ -43,7 +43,7 @@ def pinned_spec() -> tuple[str, str]:
     manifest = tomllib.loads(MANIFEST.read_text())
     dependency = manifest["dependencies"]["cedar-poo-pseudonymization"]
     url, revision = dependency["git"], dependency["rev"]
-    if url != "https://github.com/tao3k/cedar-poo-spec" or not re.fullmatch(
+    if url != "https://github.com/hardenedlinux/cedar-poo-spec" or not re.fullmatch(
         r"[0-9a-f]{40}", revision
     ):
         raise ValueError("cedar-poo-pseudonymization must pin a full SPEC Git commit")
