@@ -35,6 +35,10 @@ jobs:
         env:
           MRR_BACKEND_TEST_MVCC: "1"
         run: cargo test -p mrr-data-backend --no-default-features --features turso --locked
+      - name: Test reusable Turso writers at the declared MSRV
+        env:
+          MRR_BACKEND_TEST_MVCC: "reuse"
+        run: cargo test -p mrr-data-backend --no-default-features --features turso --locked
 
   python:
     name: Python qualification framework
@@ -93,6 +97,10 @@ jobs:
       - name: Test Turso concurrent admission and recovery
         env:
           MRR_BACKEND_TEST_MVCC: "1"
+        run: cargo test -p mrr-data-backend --no-default-features --features turso --locked
+      - name: Test bounded reusable Turso writers
+        env:
+          MRR_BACKEND_TEST_MVCC: "reuse"
         run: cargo test -p mrr-data-backend --no-default-features --features turso --locked
       - name: Test shared backend without a provider feature
         run: |

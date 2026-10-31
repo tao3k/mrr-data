@@ -70,9 +70,10 @@ fn write<'a>(operation: &'a str, bytes: &[u8]) -> ConditionalContentWrite<'a> {
 }
 async fn open(path: &std::path::Path) -> Backend {
     let provider = TursoProvider::new(path.to_path_buf(), tokio::runtime::Handle::current());
-    let provider = match std::env::var_os("MRR_BACKEND_TEST_MVCC") {
-        Some(_) => provider.with_concurrent_writes(),
-        None => provider,
+    let provider = match std::env::var("MRR_BACKEND_TEST_MVCC").as_deref() {
+        Ok("reuse") => provider.with_reusable_concurrent_writes(2).unwrap(),
+        Ok(_) => provider.with_concurrent_writes(),
+        Err(_) => provider,
     };
     Backend::open(
         BackendConfig::default(),

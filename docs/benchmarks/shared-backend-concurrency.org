@@ -140,4 +140,4 @@ committed. The original semantic dependency pins and deny gates remain intact.
 - [[https://turso.tech/blog/turso-0.8.0][Turso concurrent-write design and published workload methodology]].
 - [[https://docs.rs/crate/turso/0.8.3/source/examples/concurrent_writes.rs][Release-specific Rust concurrent-write example]].
 - [[file:../../crates/mrr-data-backend/src/transaction.rs][Existing shared engine and home conflict witness]].
-- [[file:../../crates/mrr-data-backend/src/providers/turso.rs][Existing provider with explicit MVCC scheduling]].
+- [[file:../../crates/mrr-data-backend/src/providers/turso/provider.rs][Existing provider with explicit MVCC scheduling]].

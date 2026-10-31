@@ -1,7 +1,9 @@
 //! Optional Turso native engine. This module owns its physical database dialect;
 //! the shared backend consumes only bounded opaque transaction records.
-use super::{MetadataTransaction, ProviderResult, TransactionProvider};
+use super::connection::{failure, full_writer};
+use super::writers::Writers;
 use crate::BackendError;
+use crate::providers::{MetadataTransaction, ProviderResult, TransactionProvider};
 use mrr_data_content::ConditionalCommitPortError as PortError;
 use mrr_data_profile::BACKEND_TURSO_SCHEMA;
 use std::{path::PathBuf, sync::Mutex, time::Duration};
@@ -13,13 +15,14 @@ pub struct TursoProvider {
     runtime: Handle,
     writer: Mutex<Option<turso::Connection>>,
     reader: Mutex<Option<turso::Connection>>,
-    database: Mutex<Option<turso::Database>>,
+    pub(super) writers: Writers,
     mode: WriteMode,
 }
 #[derive(Clone, Copy)]
 enum WriteMode {
     Serialized,
     Concurrent,
+    Reusable(usize),
 }
 impl TursoProvider {
     #[must_use]
@@ -29,7 +32,7 @@ impl TursoProvider {
             runtime,
             writer: Mutex::new(None),
             reader: Mutex::new(None),
-            database: Mutex::new(None),
+            writers: Writers::default(),
             mode: WriteMode::Serialized,
         }
     }
@@ -42,32 +45,30 @@ impl TursoProvider {
         self.mode = WriteMode::Concurrent;
         self
     }
-}
-fn failure(_: turso::Error) -> BackendError {
-    BackendError::Unavailable
+    /// Bound and reuse private, FULL-verified MVCC writers. Capacity must match
+    /// the Host's admitted worker budget. Errors/Unknown/panic discard sessions.
+    /// # Errors
+    /// Zero or unsupported capacity is refused before storage is opened.
+    pub fn with_reusable_concurrent_writes(
+        mut self,
+        capacity: usize,
+    ) -> Result<Self, BackendError> {
+        if capacity == 0
+            || capacity > tokio::sync::Semaphore::MAX_PERMITS
+            || self
+                .writer
+                .lock()
+                .map_err(|_| BackendError::Unavailable)?
+                .is_some()
+        {
+            return Err(BackendError::InvalidConfiguration);
+        }
+        self.mode = WriteMode::Reusable(capacity);
+        Ok(self)
+    }
 }
 fn before(e: BackendError) -> PortError<BackendError, ()> {
     PortError::BeforeCommit(e)
-}
-fn full_writer(conn: &turso::Connection, runtime: &Handle) -> Result<(), BackendError> {
-    runtime.block_on(async {
-        conn.execute("PRAGMA synchronous=FULL", ())
-            .await
-            .map_err(failure)?;
-        let mut rows = conn
-            .query("PRAGMA synchronous", ())
-            .await
-            .map_err(failure)?;
-        let row = rows
-            .next()
-            .await
-            .map_err(failure)?
-            .ok_or(BackendError::Corrupt)?;
-        match row.get::<i64>(0).map_err(failure)? {
-            2 => Ok(()),
-            _ => Err(BackendError::UnsupportedCapabilities),
-        }
-    })
 }
 fn select_mode(
     conn: &turso::Connection,
@@ -76,7 +77,7 @@ fn select_mode(
     existed: bool,
 ) -> Result<(), BackendError> {
     runtime.block_on(async {
-        if matches!(mode, WriteMode::Concurrent) && !existed {
+        if !matches!(mode, WriteMode::Serialized) && !existed {
             conn.pragma_update("journal_mode", "'mvcc'")
                 .await
                 .map_err(failure)?;
@@ -92,7 +93,7 @@ fn select_mode(
             .ok_or(BackendError::Corrupt)?;
         let expected = match mode {
             WriteMode::Serialized => "wal",
-            WriteMode::Concurrent => "mvcc",
+            WriteMode::Concurrent | WriteMode::Reusable(_) => "mvcc",
         };
         row.get::<String>(0)
             .map_err(failure)?
@@ -179,10 +180,11 @@ impl TransactionProvider for TursoProvider {
             .busy_timeout(Duration::from_millis(250))
             .map_err(failure)?;
         *self.reader.lock().map_err(|_| BackendError::Unavailable)? = Some(reader);
-        *self
-            .database
-            .lock()
-            .map_err(|_| BackendError::Unavailable)? = Some(db);
+        let capacity = match self.mode {
+            WriteMode::Reusable(capacity) => Some(capacity),
+            _ => None,
+        };
+        self.writers.open(db, capacity)?;
         *writer = Some(conn);
         Ok(())
     }
@@ -209,24 +211,23 @@ impl TransactionProvider for TursoProvider {
                     .ok_or_else(|| before(BackendError::NotReady))?;
                 transact(conn, &self.runtime, "BEGIN IMMEDIATE", run)
             }
-            WriteMode::Concurrent => {
-                let db = self
-                    .database
-                    .lock()
-                    .map_err(|_| before(BackendError::Unavailable))?
-                    .as_ref()
-                    .cloned()
-                    .ok_or_else(|| before(BackendError::NotReady))?;
-                let conn = db.connect().map_err(failure).map_err(before)?;
-                conn.busy_timeout(Duration::from_millis(250))
-                    .map_err(failure)
-                    .map_err(before)?;
-                full_writer(&conn, &self.runtime).map_err(before)?;
-                transact(&conn, &self.runtime, "BEGIN CONCURRENT", run)
+            WriteMode::Concurrent | WriteMode::Reusable(_) => {
+                let mut writer = self.writers.checkout(&self.runtime).map_err(before)?;
+                let result = transact(
+                    writer.connection().map_err(before)?,
+                    &self.runtime,
+                    "BEGIN CONCURRENT",
+                    run,
+                );
+                if result.is_ok() {
+                    writer.committed();
+                }
+                result
             }
         }
     }
     fn close_storage(&self) -> Result<(), BackendError> {
+        self.writers.close()?;
         self.reader
             .lock()
             .map_err(|_| BackendError::Unavailable)?
@@ -235,14 +236,10 @@ impl TransactionProvider for TursoProvider {
             .lock()
             .map_err(|_| BackendError::Unavailable)?
             .take();
-        self.database
-            .lock()
-            .map_err(|_| BackendError::Unavailable)?
-            .take();
         Ok(())
     }
 }
-fn transact(
+pub(super) fn transact(
     conn: &turso::Connection,
     runtime: &Handle,
     begin: &str,

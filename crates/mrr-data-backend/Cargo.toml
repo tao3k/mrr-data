@@ -82,6 +82,11 @@ path = "tests/performance/concurrency_paired.rs"
 required-features = ["turso"]
 
 [[test]]
+name = "backend_writer_setup"
+path = "tests/performance/writer_setup.rs"
+required-features = ["turso"]
+
+[[test]]
 name = "backend_graph_publication"
 path = "tests/integration/graph_publication.rs"
 

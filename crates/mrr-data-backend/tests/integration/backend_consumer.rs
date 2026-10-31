@@ -25,9 +25,10 @@ fn native(path: std::path::PathBuf) -> NativeProvider {
     #[cfg(feature = "turso")]
     {
         let provider = NativeProvider::new(path, tokio::runtime::Handle::current());
-        match std::env::var_os("MRR_BACKEND_TEST_MVCC") {
-            Some(_) => provider.with_concurrent_writes(),
-            None => provider,
+        match std::env::var("MRR_BACKEND_TEST_MVCC").as_deref() {
+            Ok("reuse") => provider.with_reusable_concurrent_writes(2).unwrap(),
+            Ok(_) => provider.with_concurrent_writes(),
+            Err(_) => provider,
         }
     }
     #[cfg(all(not(feature = "turso"), feature = "duckdb"))]

@@ -41,7 +41,12 @@ fn commit(
     )
 }
 fn provider(path: &std::path::Path, handle: &tokio::runtime::Handle) -> Arc<TursoProvider> {
-    let p = Arc::new(TursoProvider::new(path.into(), handle.clone()).with_concurrent_writes());
+    let provider = TursoProvider::new(path.into(), handle.clone());
+    let provider = match std::env::var("MRR_BACKEND_TEST_MVCC").as_deref() {
+        Ok("reuse") => provider.with_reusable_concurrent_writes(2).unwrap(),
+        _ => provider.with_concurrent_writes(),
+    };
+    let p = Arc::new(provider);
     p.open().unwrap();
     p
 }

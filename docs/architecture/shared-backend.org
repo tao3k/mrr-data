@@ -5,6 +5,13 @@
 
 ** Explicit concurrent Turso scheduling
 
+The explicit =with_reusable_concurrent_writes(capacity)= option additionally
+owns a bounded set of private FULL-verified sessions. Only successful COMMIT and
+confirmed autocommit permit reuse; errors/Unknown/panic discard the session.
+The [[file:../benchmarks/shared-backend-writer-reuse.org][hot-domain diagnosis and real-validation paired record]]
+separates cheap configuration from costly first-transaction/teardown behavior,
+documents strict capacity/close recovery and retains WAL as a workload choice.
+
 =TursoProvider::with_concurrent_writes()= opts into MVCC on a new store or reopens
 an existing MVCC store. The default WAL path remains available. The shared
 =home-sequence= already orders content, authority and acknowledgment mutations;
@@ -284,7 +291,7 @@ binding and malicious storage rollback remain separate open gates.
 
 * Optional Turso provider
 
-[[file:../../crates/mrr-data-backend/src/providers/turso.rs][TursoProvider]] pins the native Rust Turso crate =0.8.1= with default features
+[[file:../../crates/mrr-data-backend/src/providers/turso/provider.rs][TursoProvider]] pins the native Rust Turso crate =0.8.3= with default features
 disabled. It uses the Host executor from bounded blocking workers and separate
 writer/read connections. Physical transactions use the SDK's local engine;
 FULL durability mode is explicitly selected and checked, busy waits are bounded,
