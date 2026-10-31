@@ -4,6 +4,10 @@
 
 * Outcome and reviewed contract
 
+The subsequent [[file:shared-backend-host-envelope.org][Host-envelope and direct-retest record]] fixes evidence grades and
+predeclared gates, verifies source-currentness and separates admission O/A from
+validator A/AV effects. It retains every historical sample below.
+
 No production optimization is admitted in this round. The implementation retains
 the pinned Tokio oneshot request/answer channels and original asynchronous
 admission task. Both custom Condvar rendezvous and ready-permit dispatch were

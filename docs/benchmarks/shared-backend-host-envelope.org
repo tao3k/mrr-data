@@ -1,0 +1,298 @@
+#+TITLE: Host Envelope, Acceptance Criteria and Direct Diagnostic Retest
+#+LANGUAGE: en
+#+OPTIONS: toc:2
+
+* Reviewed scope and evidence grade
+
+Weaver SysML GovernancePolicyProjection owns runtime responsibility and this
+predeclared measurement contract. MRR Data owns the existing standard Cargo
+tests and benchmark targets. No new qualification package, dependency pin,
+production runtime path or authorization model is added.
+
+The task explicitly requests direct retesting on the shared Host without waiting
+for an exclusive runner, quiet load or battery/power prerequisite. Therefore
+Host quality is reported rather than used to block this diagnostic run. Safety,
+source identity, resource bounds and exact recovery remain hard requirements.
+A favorable diagnostic number does not become controlled acceptance.
+
+* Controlled profile and fixed acceptance
+
+| Obligation | Controlled acceptance criterion | Diagnostic treatment |
+|------------+---------------------------------+----------------------|
+| Ownership | Attested exclusive measurement window; reference and owner recorded | Missing attestation disclosed; no blocking |
+| CPUs | Physical/logical/available counts recorded and stable; runtime/write/shared workers and reuse capacity = max(4, available CPUs) | Same allocation; no shrink-to-pass |
+| Power/thermal | AC, low-power mode off, stable disclosed profile and no thermal throttling; missing observations are not green | Record available state and missing fields |
+| Quiet prefix | 30-second preflight, idle >=90%, load1 <=0.5 times logical CPUs; repeat envelope checks before/after each leg | No quiet-prefix requirement for execution |
+| Memory/I/O context | Normal pressure, no cumulative swap-out growth; record device/filesystem and native sentinels | Used swap size is not cumulative swap-out evidence |
+| Build identity | Same compiler/SDK/profile, immutable base+candidate source and lockfile; actual compile witness and frozen executable hashes | Mandatory in both grades |
+| Safety | No unexpected refusal/failure/Unknown, exact original recovery, once-only validation and original borrowed/cancel/restart/exposure constraints | Mandatory in both grades |
+| Replication | Three fixed ABBA blocks per declared contrast, with all samples | One fixed block per contrast in this retest |
+| Primary benefit | Hot/reuse and independent/reuse median paired TPS >=1.10 overall and >=1.05 per block | Descriptive ratios only |
+| Nonregression | Every paired TPS >=0.95 and paired P95/P99 <=1.05 in all six mode/domain strata | Report every violation; do not suppress poor samples |
+| Native sentinel stability | Within variant/mode, max/min of per-round mean gets and FULL post-body <=1.10 | Report drift; no causal quality upgrade |
+
+These are fixed engineering gates chosen before this retest, not a statistical
+confidence theorem. Requests within one timed leg are not independent experimental
+replications. Power/load measurements and lower-layer controls do not prove pure
+native CPU or device/fsync cost; that additionally requires scheduler/thread-CPU
+and process-scoped kernel I/O evidence. A Linux result is a separate profile and
+cannot qualify a Darwin-specific claim.
+
+* Experimental contrasts and unchanged workload
+
+Use O = original, A = ready-permit admission only, AV = Condvar rendezvous plus
+ready permits. Admission is O/A/A/O. Validator replacement is A/AV/AV/A: its
+effect is conditional on ready admission. AV/O alone would confound two changes.
+Match treatment leg 2 against reference leg 1, and treatment leg 3 against
+reference leg 4, for the same mode/domain/round. A future combined promotion
+needs direct AV/O confirmation; medians from separate contrasts cannot be multiplied.
+
+All legs use the existing backend_concurrency_paired target and real bounded
+filesystem reads, CID checks, strict typed-body decoding/equality and enrolled
+authority checks. This is not Cedar evaluation, an LLM request or a final external
+send. Each full-path leg retains all three rotated WAL/fresh/reuse rounds for
+independent original homes and one original hot home. There are 64 operations
+per lane, FULL, zero retries and the unchanged 30-second per-case collection
+bound. Preparation and compilation finish before measurement. Accepted workers
+drain and fresh owners recover every original operation/authority vector.
+
+The 2026-10-31 retest uses 12 physical/logical/available CPUs, 12 runtime/write/
+shared workers and reusable capacity, and 16 blocking threads. No task-owned
+compilation/test overlaps a timed leg. Reporting and before/after Host observations
+are outside timing but can affect subsequent cache/I/O state; observer effects
+remain disclosed. Each binary is hashed before and after every leg.
+
+* Candidate source and cache provenance
+
+All source variants are reconstructed at 895a06c3 in temporary worktrees.
+Cargo.lock SHA-256 is identical across them:
+=13cd897e5e0d3f71f504213ad0b2ed33c64d8583f83005b0d47fd83e8206dcd6=.
+
+An initial shared-target attempt returned an old backend leaf: the Condvar
+unit-test list lacked its candidate-specific close-order witness. Those receipts
+are provenance-invalid and were caught before any timed leg; they do not count
+as Condvar safety acceptance. Before each source switch, only mrr-data-backend
+artifacts are cleaned, actual compile paths are checked, and identical dependency
+artifacts remain reusable. Backend freshness is never inferred solely from
+Cargo exit status or a familiar executable filename.
+
+Forced candidate rebuilding passes 82 expanded native tests for A, and 83 for
+AV, including the new concurrent close-order witness and real caller-guard/
+rejection/panic/cancellation/restart controls. Both pass strict all-target Clippy.
+The original runtime is separately rechecked using the same standard suite.
+Frozen digests match the previously archived binaries, independently confirming
+the source reconstruction; old contaminated build receipts are not reclassified.
+
+| Variant | Executable SHA-256 |
+|---------+-------------------|
+| O | cd5744fa1a52c3faeff6355ddf3e2f8788aab3801c4fb38ff6f93e03474d11ca |
+| A | 70515a49c49355129783089b6927e194b470d9bf8bc7c8dc5c31dc34ed6da3a8 |
+| AV | b7f5c2929416599a1a10e749e8cb344fe944545cc471920945371a31ce8801c3 |
+
+* Every full-path triplet
+
+TPS is rounded for display; ratios use unrounded observations. Reuse P95 is
+milliseconds; raw JSON retains every mode's P95/P99, phase totals and every
+bounded request sample. Each row represents three complete matching cases.
+
+| Contrast | Leg | Variant | Domain | Round | WAL TPS | Fresh TPS | Reuse TPS | Reuse P95 ms |
+|----------+-----+---------+--------+-------+---------+-----------+-----------+--------------|
+| admission | 1 | O | Independent | 0 | 1221 | 1387 | 3223 | 9.08 |
+| admission | 1 | O | Independent | 1 | 529 | 912 | 1891 | 19.53 |
+| admission | 1 | O | Independent | 2 | 314 | 911 | 4795 | 7.43 |
+| admission | 1 | O | Hot | 0 | 570 | 242 | 550 | 43.18 |
+| admission | 1 | O | Hot | 1 | 516 | 254 | 711 | 43.83 |
+| admission | 1 | O | Hot | 2 | 684 | 295 | 763 | 27.49 |
+| admission | 2 | A | Independent | 0 | 984 | 1082 | 4967 | 8.38 |
+| admission | 2 | A | Independent | 1 | 683 | 1270 | 2314 | 15.69 |
+| admission | 2 | A | Independent | 2 | 847 | 1452 | 2942 | 14.24 |
+| admission | 2 | A | Hot | 0 | 760 | 261 | 774 | 26.76 |
+| admission | 2 | A | Hot | 1 | 870 | 231 | 749 | 35.74 |
+| admission | 2 | A | Hot | 2 | 500 | 260 | 643 | 32.00 |
+| admission | 3 | A | Independent | 0 | 869 | 1670 | 4592 | 7.79 |
+| admission | 3 | A | Independent | 1 | 1285 | 1770 | 6517 | 3.96 |
+| admission | 3 | A | Independent | 2 | 1203 | 2288 | 5837 | 3.32 |
+| admission | 3 | A | Hot | 0 | 1806 | 720 | 2473 | 6.66 |
+| admission | 3 | A | Hot | 1 | 2333 | 790 | 2224 | 9.55 |
+| admission | 3 | A | Hot | 2 | 1881 | 744 | 2512 | 7.40 |
+| admission | 4 | O | Independent | 0 | 2118 | 2179 | 8636 | 2.18 |
+| admission | 4 | O | Independent | 1 | 2068 | 2317 | 7206 | 2.93 |
+| admission | 4 | O | Independent | 2 | 2133 | 2451 | 8345 | 2.78 |
+| admission | 4 | O | Hot | 0 | 2214 | 733 | 2232 | 8.81 |
+| admission | 4 | O | Hot | 1 | 2330 | 763 | 2693 | 5.89 |
+| admission | 4 | O | Hot | 2 | 2330 | 795 | 2388 | 7.36 |
+| validator | 1 | A | Independent | 0 | 2561 | 1997 | 8096 | 2.22 |
+| validator | 1 | A | Independent | 1 | 2292 | 2044 | 5369 | 4.80 |
+| validator | 1 | A | Independent | 2 | 2489 | 2443 | 6963 | 3.10 |
+| validator | 1 | A | Hot | 0 | 2279 | 879 | 2589 | 5.44 |
+| validator | 1 | A | Hot | 1 | 2003 | 849 | 2295 | 7.32 |
+| validator | 1 | A | Hot | 2 | 2674 | 669 | 2629 | 5.22 |
+| validator | 2 | AV | Independent | 0 | 2786 | 2692 | 9042 | 1.93 |
+| validator | 2 | AV | Independent | 1 | 2558 | 2259 | 8023 | 2.43 |
+| validator | 2 | AV | Independent | 2 | 2674 | 2587 | 10092 | 1.71 |
+| validator | 2 | AV | Hot | 0 | 2577 | 913 | 2538 | 5.42 |
+| validator | 2 | AV | Hot | 1 | 2399 | 812 | 2717 | 4.87 |
+| validator | 2 | AV | Hot | 2 | 2445 | 930 | 2765 | 4.69 |
+| validator | 3 | AV | Independent | 0 | 748 | 2121 | 5067 | 6.53 |
+| validator | 3 | AV | Independent | 1 | 1749 | 1970 | 4315 | 9.57 |
+| validator | 3 | AV | Independent | 2 | 2430 | 1883 | 4300 | 8.78 |
+| validator | 3 | AV | Hot | 0 | 2347 | 749 | 2180 | 11.22 |
+| validator | 3 | AV | Hot | 1 | 1941 | 722 | 2641 | 5.02 |
+| validator | 3 | AV | Hot | 2 | 2365 | 814 | 2606 | 5.13 |
+| validator | 4 | A | Independent | 0 | 843 | 1077 | 2427 | 16.69 |
+| validator | 4 | A | Independent | 1 | 631 | 2462 | 4613 | 7.77 |
+| validator | 4 | A | Independent | 2 | 599 | 1297 | 9045 | 2.61 |
+| validator | 4 | A | Hot | 0 | 707 | 245 | 559 | 44.99 |
+| validator | 4 | A | Hot | 1 | 613 | 286 | 917 | 30.40 |
+| validator | 4 | A | Hot | 2 | 401 | 292 | 676 | 40.12 |
+
+The eight full-path legs complete 144 cases, 110,592 commits and 110,592 exact
+recoveries with zero unexpected failure, refusal or Unknown. All clocks and
+once-only body/bridge assertions remain active.
+
+* All paired comparisons
+
+| Contrast | Domain | Mode | All six treatment/reference TPS ratios | Median | Worst P95 ratio | Worst P99 ratio |
+|----------+--------+------+----------------------------------------+--------+-----------------+-----------------|
+| admission | Independent | wal | 0.805, 1.291, 2.701, 0.41, 0.621, 0.564 | 0.713 | 2.559 | 3.561 |
+| admission | Independent | fresh-mvcc | 0.78, 1.392, 1.595, 0.766, 0.764, 0.934 | 0.857 | 2.002 | 2.832 |
+| admission | Independent | reused-mvcc | 1.541, 1.224, 0.614, 0.532, 0.904, 0.699 | 0.802 | 3.571 | 3.898 |
+| admission | Hot | wal | 1.335, 1.688, 0.731, 0.815, 1.001, 0.807 | 0.908 | 2.239 | 2.884 |
+| admission | Hot | fresh-mvcc | 1.077, 0.91, 0.879, 0.982, 1.035, 0.936 | 0.959 | 1.105 | 1.569 |
+| admission | Hot | reused-mvcc | 1.407, 1.053, 0.843, 1.108, 0.826, 1.052 | 1.052 | 1.621 | 2.123 |
+| validator | Independent | wal | 1.088, 1.116, 1.074, 0.888, 2.772, 4.058 | 1.102 | 0.895 | 0.836 |
+| validator | Independent | fresh-mvcc | 1.348, 1.105, 1.059, 1.969, 0.8, 1.452 | 1.227 | 1.221 | 1.048 |
+| validator | Independent | reused-mvcc | 1.117, 1.494, 1.449, 2.088, 0.936, 0.475 | 1.283 | 3.371 | 3.027 |
+| validator | Hot | wal | 1.131, 1.198, 0.915, 3.317, 3.167, 5.901 | 2.183 | 1.2 | 1.899 |
+| validator | Hot | fresh-mvcc | 1.038, 0.956, 1.391, 3.057, 2.524, 2.791 | 1.958 | 1.262 | 1.489 |
+| validator | Hot | reused-mvcc | 0.98, 1.184, 1.052, 3.9, 2.881, 3.854 | 2.033 | 0.995 | 0.697 |
+
+Admission hot/reuse median is 1.052, independent/reuse 0.802. Validator replacement
+conditional on A has hot/reuse median 2.033 and independent/reuse 1.283, but the
+independent stratum includes a 0.475 TPS pair, worst P95 3.371 and P99 3.027.
+The primary hot number therefore cannot establish general nonregression.
+
+The validator contrast's first three hot/reuse ratios are 0.980, 1.184, 1.052;
+the later three are 3.900, 2.881, 3.854. The large pooled median is strongly
+influenced by the late reference leg. The same A executable has hot get means
+136.55--149.04 microseconds and bridge residual 10.18--12.46 in reference leg 1,
+but 309.86--419.88 and 131.43--311.90 respectively in reference leg 4. No source
+change occurred between those reference legs. Host/runtime/cache context can
+thus produce much of the apparent contrast; no exact attribution to CPU contention
+alone, native MVCC code, or Condvar is justified.
+
+In the earlier lower-latency reference/treatment pair, median bridge residual
+changes from 10.66 to 8.50 microseconds, a descriptive saving of about 2.16.
+Native read/post-body costs also change, so even that observation is not isolated
+proof of a protocol optimization. Under that envelope, the bridge is a small
+part of the roughly hundreds-of-microseconds API path. Removing a source-level
+task or allocation cannot explain all the millisecond-scale regressions.
+
+* Unchanged native controls
+
+O, A and AV each run the existing nine-case sequential public-MetadataProvider
+control, retaining one active transaction and a CPU-sized driver runtime.
+Dispatcher and ProfilePort rendezvous do not execute inside its timed loop.
+Actual immutable body/authority checks, original home sequence, FULL, closed-owner
+refusal and exact fresh-owner recovery remain enabled.
+
+| Variant | Round | Mode | Mean operation us | Gets us | FULL post-body us |
+|---------+-------+------+-------------------+---------+-------------------|
+| O | 0 | wal | 964.73 | 280.39 | 334.07 |
+| O | 0 | fresh-mvcc | 3378.04 | 496.36 | 929.96 |
+| O | 0 | reused-mvcc | 539.56 | 185.82 | 126.04 |
+| O | 1 | fresh-mvcc | 3144.17 | 408.62 | 1092.56 |
+| O | 1 | reused-mvcc | 1360.81 | 323.92 | 315.45 |
+| O | 1 | wal | 1407.27 | 285.38 | 530.05 |
+| O | 2 | reused-mvcc | 1518.10 | 413.05 | 535.89 |
+| O | 2 | wal | 1376.68 | 355.57 | 576.59 |
+| O | 2 | fresh-mvcc | 1604.54 | 201.70 | 419.37 |
+| A | 0 | wal | 450.89 | 135.39 | 131.07 |
+| A | 0 | fresh-mvcc | 1562.03 | 217.40 | 414.52 |
+| A | 0 | reused-mvcc | 361.60 | 139.45 | 65.62 |
+| A | 1 | fresh-mvcc | 1349.61 | 170.37 | 371.45 |
+| A | 1 | reused-mvcc | 383.87 | 147.01 | 72.23 |
+| A | 1 | wal | 390.80 | 116.85 | 112.99 |
+| A | 2 | reused-mvcc | 362.72 | 138.64 | 67.13 |
+| A | 2 | wal | 974.86 | 287.19 | 329.15 |
+| A | 2 | fresh-mvcc | 1182.96 | 153.90 | 295.30 |
+| AV | 0 | wal | 369.35 | 114.27 | 101.82 |
+| AV | 0 | fresh-mvcc | 1223.15 | 159.60 | 307.01 |
+| AV | 0 | reused-mvcc | 335.79 | 132.19 | 56.36 |
+| AV | 1 | fresh-mvcc | 1065.90 | 137.79 | 257.36 |
+| AV | 1 | reused-mvcc | 381.06 | 146.46 | 69.15 |
+| AV | 1 | wal | 453.64 | 137.78 | 127.18 |
+| AV | 2 | reused-mvcc | 358.13 | 136.44 | 66.27 |
+| AV | 2 | wal | 360.49 | 112.99 | 95.41 |
+| AV | 2 | fresh-mvcc | 1063.85 | 137.63 | 257.29 |
+
+The 27 controls add 20,736 commits/exact recoveries: total 171 cases and 131,328
+operations for this retest. All executables remain unchanged and every process
+exits naturally. Native get/FULL-post-body max/min ratios are:
+
+| Variant | Mode | Gets max/min | FULL post-body max/min |
+|---------+------+--------------+------------------------|
+| O | WAL | 1.268 | 1.726 |
+| O | Fresh | 2.461 | 2.605 |
+| O | Reuse | 2.223 | 4.252 |
+| A | WAL | 2.458 | 2.913 |
+| A | Fresh | 1.413 | 1.404 |
+| A | Reuse | 1.060 | 1.101 |
+| AV | WAL | 1.219 | 1.333 |
+| AV | Fresh | 1.160 | 1.193 |
+| AV | Reuse | 1.108 | 1.227 |
+
+The predeclared 10-percent sentinel bound is exceeded. AV's lower-latency control
+still has reuse/WAL get ratios about 1.157, 1.063, 1.207. A modest lower-layer
+read-path tradeoff remains observable; its wall time includes native query/
+materialization and driver scheduling, not just CPU or disk. Do not dismiss it
+as noise or assign it to a specific routine without a native trace. Next useful
+attribution separates native query preparation, stepping/materialization and
+driver wait before adding another cache or changing borrowed validation.
+
+* Host observations and conclusion
+
+All 22 leg-boundary snapshots report AC power, 12 physical/logical CPUs and normal
+memory pressure. Load1 ranges 16.60--45.68, above the controlled bound of 6.
+The earlier discovery sample was battery-powered; it is not the power state of
+these timed legs. Per-leg idle/thermal trajectories, exclusive ownership and
+cumulative swap-out are not established. Swap-used size cannot substitute for
+a cumulative swap-out counter. This remains the explicitly requested shared-Host
+diagnostic grade, not controlled acceptance.
+
+No candidate is promoted: Host grade, replication, sentinel stability and several
+nonregression requirements fail or remain unestablished. Safety passed in this
+run; it does not waive borrowed-guard lifetime, cancellation semantics, original
+unknown exposure or independent Host/SPEC premises. Existing typed held=4,
+claim/reservation/history, exact nonce/operation and authority-vector recovery
+remain required. Same-process reconstruction, process death and whole-machine
+rollback are distinct evidence classes. No actual provider send or refund
+arithmetic is exercised here.
+
+Both source candidates remain temporary research worktrees; production runtime,
+manifests and pins are unchanged. SPEC owns semantics, existing Lean/Quint owners
+are reused, and benchmark quality never becomes a live permission.
+
+* Standard reproduction and receipts
+
+Use existing Cargo targets, cleaning the backend leaf before a shared-target
+source switch and recording the actual compilation path before freezing a binary:
+
+#+begin_src text
+cargo clean -p mrr-data-backend --locked --offline
+MRR_BACKEND_TEST_MVCC=reuse cargo test -p mrr-data-backend --features turso,arrow-query,graph-publish --locked --offline
+cargo clippy -p mrr-data-backend --features turso,arrow-query,graph-publish --all-targets --locked --offline -- -D warnings
+cargo test -p mrr-data-backend --features turso --locked --offline --test backend_concurrency_paired --no-run
+<frozen-executable> turso_paired_writer_reuse --ignored --exact --nocapture --test-threads=1
+<frozen-executable> worker_control::turso_worker_local_validator_control --ignored --exact --nocapture --test-threads=1
+#+end_src
+
+=mrr-host-retest-manifest-20261031.json= and =mrr-host-retest-{admission,validator,native}-*=
+receipts remain under temporary local storage. The manifest binds grade, base/
+lockfile/binary digests, timestamps, every leg, all raw result/Host paths, natural
+exit status and exact-recovery counts. Frozen executables use
+=mrr-host-envelope-{original,ready,condvar}-bin-20261031=. Build, stale-attempt,
+forced-compile and safety/Clippy receipts retain their separate identities.
+Do not Git-track raw logs or introduce a qualification package, production
+reference to development evidence, or alternate benchmark workload.
+
