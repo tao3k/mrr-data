@@ -1,0 +1,203 @@
+#+TITLE: Hot-Domain Attribution: Queues, Borrowed Validation and FULL Commit
+#+LANGUAGE: en
+#+OPTIONS: toc:2
+
+* Reviewed scope and accounting boundaries
+
+Weaver's existing SysML GovernancePolicyProjection was reviewed before these
+test-only changes. Preserve [[file:shared-backend-cpu-matched-reuse.org][the original 0.74 reuse/WAL sample]] rather than
+claiming to retroactively trace it. No production provider, dependency pin or
+qualification package changes. All measurements use the existing provider and
+shared logical metadata engine, not another persistence implementation.
+
+Source inspection establishes a crucial distinction: ProfilePort sends a
+request from the transaction worker to the async caller, runs the borrowed
+validator there and sends its answer back. The original transaction remains
+held. The old body residual therefore includes validator work and rendezvous
+scheduling; it is not pure SQL CPU time. Keep the borrowed authority guard
+alive through commit. Cancellation still does not establish rollback or refund.
+
+The existing public TransactionProvider seam now measures pre-body, body and
+post-body with shared timestamps. Their sum must equal the provider total.
+A test-only MetadataProvider delegate times the unchanged validation bridge
+and forwards every authority/publication method to the existing engine. It adds
+no retry, lock, queue or decision. Within the caller's validator, measure actual
+bounded file read/CID integrity and decode/equality separately. Every original
+request retains lane, attempt, home wait, API duration and validator clocks.
+
+| Quantity | Meaning and limit |
+|----------+-------------------|
+| Home wait | Existing per-original-home application mutex; hot-domain ordering is unchanged |
+| API minus provider total | Admission/dispatch/delivery outside the provider, aggregated over the same successful requests; not semaphore-only wait |
+| Pre-body | WAL writer-lock wait or MVCC checkout/configuration, plus BEGIN; not pool mutex alone |
+| Physical gets/puts | Native API wall time including query/execute and driver scheduling; not pure CPU or disk I/O |
+| Inclusive bridge | Worker request/answer wait including the caller's validator |
+| Bridge minus validator | Channel and cross-executor scheduling overhead, including measurement overhead |
+| Body minus gets/puts/bridge | Remaining shared-engine logic and encoding; not measured CPU cycles |
+| Post-body | FULL COMMIT, autocommit confirmation and physical return/drop; not isolated fsync |
+
+All successful cases assert one body and one validation bridge per original
+operation, exact phase decomposition, nested caller clock bounds and exact
+operation/authority recovery. Clock aggregation is per transaction; parallel
+sums are not wall-clock fractions. No negative residual is silently clamped.
+
+* Frozen workloads and all matching results
+
+2026-10-31, Darwin arm64, 12 available Host CPUs, 12 runtime/write/shared workers,
+reusable capacity 12, blocking capacity 16. Allocation uses max(4, available CPUs).
+Each mode/round has 12 lanes and 64 operations per lane, FULL and zero retries.
+Real local content integrity, typed original claim/reservation/history/exposure
+binding and enrolled authority checks are unchanged. Preparation finishes before
+timing; every accepted worker drains before close. The 30-second per-case bound
+is unchanged. No task-owned build/test overlaps a timed campaign. The Host is
+shared, with uncontrolled frequency/load/cache state.
+
+A is the complete preliminary decomposition run, before inclusive bridge clocks
+were added. B and C are the two fixed full-bridge campaigns using the same
+instrumentation; they do not replace A or the historical regression. In each,
+mode orders rotate WAL/fresh/reuse, fresh/reuse/WAL and reuse/WAL/fresh. Display
+TPS is rounded; ratios use unrounded values. P95 is milliseconds in W/F/R order.
+
+| Run | Domain | Round | WAL TPS | Fresh TPS | Reuse TPS | Reuse/WAL | P95 W/F/R |
+|-----+--------+-------+---------+-----------+-----------+-----------+-----------|
+| A | Independent | 0 | 634 | 699 | 951 | 1.50 | 39.41 / 52.76 / 41.41 |
+| A | Independent | 1 | 462 | 587 | 3397 | 7.36 | 72.47 / 60.17 / 6.92 |
+| A | Independent | 2 | 397 | 789 | 5787 | 14.59 | 75.44 / 54.62 / 5.96 |
+| A | Hot | 0 | 252 | 176 | 423 | 1.68 | 111.20 / 179.59 / 85.32 |
+| A | Hot | 1 | 619 | 193 | 653 | 1.06 | 42.91 / 122.90 / 44.13 |
+| A | Hot | 2 | 538 | 220 | 567 | 1.05 | 43.65 / 92.72 / 56.16 |
+| B | Independent | 0 | 823 | 1048 | 7267 | 8.83 | 36.44 / 36.61 / 3.93 |
+| B | Independent | 1 | 511 | 1941 | 5090 | 9.97 | 75.97 / 15.34 / 4.61 |
+| B | Independent | 2 | 735 | 1414 | 5725 | 7.78 | 39.87 / 20.10 / 4.50 |
+| B | Hot | 0 | 405 | 220 | 598 | 1.48 | 79.94 / 107.33 / 40.06 |
+| B | Hot | 1 | 632 | 230 | 563 | 0.89 | 48.35 / 99.88 / 40.32 |
+| B | Hot | 2 | 911 | 295 | 855 | 0.94 | 31.28 / 73.89 / 26.35 |
+| C | Independent | 0 | 2111 | 1824 | 4145 | 1.96 | 10.69 / 15.97 / 8.28 |
+| C | Independent | 1 | 1994 | 1600 | 7375 | 3.70 | 13.37 / 19.23 / 4.20 |
+| C | Independent | 2 | 2109 | 2339 | 6395 | 3.03 | 10.45 / 10.44 / 4.08 |
+| C | Hot | 0 | 1701 | 674 | 2163 | 1.27 | 13.84 / 28.02 / 10.91 |
+| C | Hot | 1 | 2347 | 675 | 1607 | 0.68 | 7.18 / 31.84 / 26.56 |
+| C | Hot | 2 | 2466 | 792 | 2091 | 0.85 | 5.95 / 19.38 / 12.70 |
+
+A/B/C each complete 18 cases and 13,824 commits/exact recoveries with zero
+refusals, Unknowns or unexpected failures. Together: 54 cases and 41,472 exact
+commits/recoveries. Test-body/process wall times: A 41.18/43.31 seconds,
+B 30.25/32.26, C 12.50/13.23. An overall suite time above 30 seconds does not
+relax the separate 30-second collection bound per case. Raw logs retain every
+request sample, not only percentiles or successful-case summaries. Reporting
+serialization happens outside the timed interval and can still perturb subsequent
+shared-Host state; mode rotation mitigates, but does not eliminate observer effects.
+
+* Reproduced regression: additive attribution
+
+C/1 reproduces the same class of regression more strongly: reuse/WAL=0.685.
+Mean per-operation costs below are microseconds; home wait is separate from API.
+
+| Quantity | WAL | Reuse | Reuse minus WAL |
+|----------+-----+-------+-----------------|
+| Original-home wait | 4656.54 | 6810.99 | 2154.44 |
+| API duration | 425.13 | 620.73 | 195.60 |
+| Admission/dispatch/delivery outside provider | 10.93 | 80.40 | 69.47 |
+| Pre-body checkout/BEGIN | 5.67 | 8.72 | 3.05 |
+| Physical gets | 121.71 | 180.17 | 58.47 |
+| Physical puts | 82.56 | 93.52 | 10.96 |
+| Validator total | 35.54 | 45.69 | 10.15 |
+| Bridge minus validator | 10.04 | 75.32 | 65.29 |
+| Remaining engine body | 39.96 | 48.03 | 8.07 |
+| FULL COMMIT/autocommit/release | 118.74 | 88.87 | -29.86 |
+
+The positive outside-provider and bridge differences explain about 135 of the
+196 microseconds API gap in this pair. Gets explain another 58 microseconds;
+the cheaper reuse post-body offsets part of the remaining cost. Validator read/
+integrity is 32.60/42.09 microseconds and decode/equality 2.72/3.31 for WAL/reuse.
+The validator's computation is not the main gap. A single ordered service point
+amplifies service-time changes into waiting for the other eleven lanes. Do not
+sum independently sampled P95 values as if they formed an additive percentile.
+
+This evidence rules out checkout/BEGIN or COMMIT/release as the dominant measured
+cause in C/1. It does not prove that pure pool locking, fsync, or any one scheduler
+component can never cause a different regression. The historical 0.74 sample has
+no such fine-grained trace and cannot be assigned these exact percentages.
+
+* Sequential public-engine causal control
+
+A separate fixed diagnostic removes ProfilePort admission and request/answer
+rendezvous, using the same public MetadataProvider engine, actual file-backed
+validator, original mandatory authority vector, home sequence and FULL store.
+It runs one transaction at a time while the same CPU-sized runtime services
+driver I/O: this is a lower-layer control, not 12-lane end-to-end throughput.
+Three rotated rounds retain all 768 operations per variant and every request
+duration, then reconstruct a fresh provider and recover each original operation.
+It rejects reopening the closed owner. No external send or account refund occurs.
+
+| Round | Mode | Mean operation us | Physical gets us | Validator us | FULL post-body us |
+|-------+------+-------------------+------------------+--------------+-------------------|
+| 0 | WAL | 616.44 | 172.75 | 68.21 | 183.40 |
+| 0 | Fresh | 2581.27 | 343.76 | 95.63 | 623.62 |
+| 0 | Reuse | 503.78 | 179.61 | 58.10 | 112.69 |
+| 1 | WAL | 413.49 | 126.30 | 37.16 | 114.25 |
+| 1 | Fresh | 1625.64 | 213.66 | 74.84 | 403.79 |
+| 1 | Reuse | 426.36 | 154.46 | 41.39 | 91.26 |
+| 2 | WAL | 395.02 | 122.31 | 35.01 | 104.24 |
+| 2 | Fresh | 1373.55 | 167.03 | 54.78 | 386.71 |
+| 2 | Reuse | 379.52 | 146.21 | 37.11 | 68.31 |
+
+The nine controls add 6,912 commits and exact recoveries. Reuse/WAL total
+throughput ratios are 1.22, 0.97 and 1.04; read costs remain about 1.04--1.22x
+WAL while cheaper post-body often offsets them. The inline bridge overhead above
+validator execution is only about 0.05--0.31 microseconds. Thus the full-path
+regression cannot be described solely as intrinsic connection-reuse overhead:
+its cross-executor/admission costs matter, and a lower-layer read-path difference
+remains. These public native calls include driver scheduling; attributing that
+difference specifically to MVCC version traversal needs another native trace.
+The sequential control does not justify moving arbitrary borrowed Governance
+closures or guards to a worker or bypassing Backend admission in production.
+
+* What is closed and what is not
+
+Closed: the old body accounting conflated borrowed validation and rendezvous;
+new real traces reproduce regression, identify its cost distribution and expose
+ordered-queue amplification. The trace rejects a connection-setup/FULL-write-only
+explanation for the reproduced C/1 pair. A separate control retains the engine's
+identity/authority checks while demonstrating a smaller read-path tradeoff.
+
+Open: B/C show broad absolute-cost drift across all modes, consistent with Host
+sensitivity, but they do not isolate frequency, background contention, cache state
+or scheduler behavior. This is not proof that regressions are merely Host jitter.
+The fs_usage probe reports that root is required, so no kernel/device fsync latency
+claim is made. FULL COMMIT/release is an inclusive completion measurement and
+remains required. Do not relax durability, shard original obligations, retry on
+Unknown or default-enable reuse to hide the regression. Keep WAL available for
+hot ordered domains; a production scheduler/validator change needs a separate
+SysML review preserving borrowed-guard lifetime and cancellation semantics.
+
+* Standard tests, recovery and receipts
+
+The existing benchmark target gains one ordinary nonignored test: execute a real
+CPU-sized hot-home workload, assert clock nesting/decomposition and once-only
+validation, then reconstruct and exactly recover all original operations. No
+synthetic timer-only test or parallel qualification runner is introduced.
+The reusable Arrow/query + graph/publication standard suite passes 79 tests;
+the WAL-control and fresh-MVCC configurations pass 64 each. The unchanged ASP
+deny gate and expanded all-target Clippy pass. Eight opt-in measurements remain
+outside those standard correctness counts.
+Existing cancellation/retirement/late-return and process-recovery tests remain
+unchanged. Their typed original held=4 exposure must persist; free resources do
+not authorize a refund. Provider reconstruction and process-death evidence remain
+distinct; external final-send, anti-rollback and effective Host revocation retain
+their existing SPEC/Host premises.
+
+#+begin_src text
+cargo test -p mrr-data-backend --features turso --locked --offline --test backend_concurrency_paired
+cargo test -p mrr-data-backend --features turso --locked --offline --test backend_concurrency_paired turso_paired_writer_reuse -- --ignored --exact --nocapture --test-threads=1
+cargo test -p mrr-data-backend --features turso --locked --offline --test backend_concurrency_paired worker_control::turso_worker_local_validator_control -- --ignored --exact --nocapture --test-threads=1
+MRR_BACKEND_TEST_MVCC=reuse cargo test -p mrr-data-backend --features turso,arrow-query,graph-publish --locked --offline
+cargo clippy -p mrr-data-backend --features turso,arrow-query,graph-publish --all-targets --locked --offline -- -D warnings
+#+end_src
+
+Raw =mrr-hot-attribution-{A,B,C}.log=, =mrr-hot-attribution-worker-control.log=,
+kernel-availability, standard-test and Clippy receipts remain in temporary local
+storage. Initial E0505/E0599 test-harness compile failures are retained separately;
+they were corrected without changing timeout, semantic checks or native failure
+classification. Parse the first libtest-prefixed JSON object too. Do not Git-track
+raw logs or treat the preliminary A schema as if it had a bridge clock.

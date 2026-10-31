@@ -4,6 +4,9 @@
 
 * Design review and frozen execution profile
 
+The later [[file:shared-backend-hot-path-attribution.org][hot-path attribution review]] preserves this run's 0.74 regression,
+adds per-request clocks and distinguishes borrowed validation from rendezvous.
+
 Weaver's existing SysML GovernancePolicyProjection was reviewed before changing
 the native acceptance target. Preserve [[file:../architecture/shared-backend-writer-lifecycle.org][terminal resource ownership]], original
 authority/claim/reservation/history identity, FULL and the existing final-use

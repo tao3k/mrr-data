@@ -3,7 +3,13 @@ use mrr_data_backend::{AuthorityExpectation, AuthorityProposal, AuthorityStatus,
 use mrr_data_content::{
     ContentBlock, ContentCodec, ContentRevision, ContentStore, FilesystemContentStore,
 };
-use std::{path::Path, sync::Arc};
+use std::{path::Path, sync::Arc, time::Instant};
+
+#[derive(Default, serde::Serialize)]
+pub struct ValidationCost {
+    pub read_integrity_ns: u128,
+    pub decode_compare_ns: u128,
+}
 
 #[derive(serde::Serialize, serde::Deserialize, Eq, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -80,10 +86,23 @@ impl BoundObligation {
         current: Option<ContentRevision>,
         expected: Option<ContentRevision>,
     ) -> Result<(), ()> {
+        self.validate_timed(current, expected).map(|_| ())
+    }
+    pub fn validate_timed(
+        &self,
+        current: Option<ContentRevision>,
+        expected: Option<ContentRevision>,
+    ) -> Result<ValidationCost, ()> {
+        let start = Instant::now();
         let bytes = self.store.get_bounded(&self.root, 16384).map_err(|_| ())?;
+        let read_integrity_ns = start.elapsed().as_nanos();
+        let start = Instant::now();
         let body: Body = serde_json::from_slice(&bytes).map_err(|_| ())?;
         (body == self.body && current == expected)
-            .then_some(())
+            .then(|| ValidationCost {
+                read_integrity_ns,
+                decode_compare_ns: start.elapsed().as_nanos(),
+            })
             .ok_or(())
     }
 }

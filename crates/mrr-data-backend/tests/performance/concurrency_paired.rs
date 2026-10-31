@@ -13,10 +13,18 @@ use tokio::sync::{Barrier, Mutex};
 const ATTEMPTS: usize = 64;
 #[path = "../support/bound_obligation.rs"]
 mod bound_obligation;
+#[path = "../support/decision_timing.rs"]
+mod decision_timing;
+#[path = "../support/request_timing.rs"]
+mod request_timing;
+use decision_timing::TimedDecisions;
 #[path = "../support/storage_timing.rs"]
 mod storage_timing;
 use bound_obligation::BoundObligation;
+use request_timing::RequestCost;
 use storage_timing::{PhaseSample, TimedStorage, Timings};
+#[path = "../support/worker_control.rs"]
+mod worker_control;
 #[derive(Clone, Copy, PartialEq)]
 enum WriterMode {
     Wal,
@@ -55,6 +63,7 @@ impl Record {
     }
 }
 struct Samples {
+    costs: Vec<RequestCost>,
     latency: Vec<u128>,
     records: Vec<Record>,
     failures: usize,
@@ -70,6 +79,7 @@ async fn lane(
     validation: Validation,
 ) -> Samples {
     let mut samples = Samples {
+        costs: Vec::with_capacity(ATTEMPTS),
         latency: vec![],
         records: vec![],
         failures: 0,
@@ -94,6 +104,13 @@ async fn lane(
         let operation = format!("lane-{lane}-op-{n}");
         let begin = Instant::now();
         let mut current = head.lock().await;
+        let mut cost = RequestCost {
+            lane,
+            attempt: n,
+            home_wait_ns: begin.elapsed().as_nanos(),
+            ..RequestCost::default()
+        };
+        let api = Instant::now();
         let expected = *current;
         let w = ConditionalContentWrite {
             scope: &scope,
@@ -102,15 +119,24 @@ async fn lane(
             replacement: root,
         };
         let result = port
-            .commit(w, Some(&physical), |current| match &validation {
-                Validation::Hold(hold) => {
-                    std::thread::sleep(*hold);
-                    Ok(())
-                }
-                Validation::Bound(bound) => bound.validate(current, expected),
+            .commit(w, Some(&physical), |current| {
+                cost.to_validator_ns = api.elapsed().as_nanos();
+                let start = Instant::now();
+                let result = match &validation {
+                    Validation::Hold(hold) => {
+                        std::thread::sleep(*hold);
+                        Ok(())
+                    }
+                    Validation::Bound(bound) => bound.validate_timed(current, expected).map(|v| {
+                        cost.validation = v;
+                    }),
+                };
+                cost.validator_ns = start.elapsed().as_nanos();
+                result
             })
             .await;
-        match result {
+        cost.api_ns = api.elapsed().as_nanos();
+        let stop = match result {
             Ok(Outcome::Committed(r)) => {
                 let committed = r.committed;
                 *current = Some(committed);
@@ -125,21 +151,26 @@ async fn lane(
                         Validation::Hold(_) => vec![],
                     },
                 });
+                false
             }
             Err(PortError::Unknown(_)) => {
                 samples.unknowns += 1;
                 samples.failures += 1;
-                break;
+                true
             }
             Err(_) => {
                 samples.refusals += 1;
                 samples.failures += 1;
-                break;
+                true
             }
             Ok(Outcome::Replayed(_)) => {
                 samples.failures += 1;
-                break;
+                true
             }
+        };
+        samples.costs.push(cost);
+        if stop {
+            break;
         }
     }
     samples
@@ -167,9 +198,13 @@ async fn open(path: &std::path::Path, cpus: usize, mode: WriterMode) -> (Backend
         provider,
         timings: timings.clone(),
     };
-    let backend = Backend::open(config(cpus), provider, tokio::runtime::Handle::current())
-        .await
-        .unwrap();
+    let backend = Backend::open(
+        config(cpus),
+        TimedDecisions(provider),
+        tokio::runtime::Handle::current(),
+    )
+    .await
+    .unwrap();
     (backend, timings)
 }
 #[derive(Clone, Copy)]
@@ -316,6 +351,7 @@ fn report(
         "p50_ns": percentile(50), "p95_ns": percentile(95), "p99_ns": percentile(99),
         "exact_recoveries": records.len(), "close_ns": close_ns, "retries": 0,
         "storage_phases": phases,
+        "request_samples": results.iter().flat_map(|s| &s.costs).collect::<Vec<_>>(),
         "content_ack": if hold.is_some() { "synthetic-metadata-only" } else { "durable-local-body-before-measurement" }, "synchronous": "FULL"})
     );
     assert_eq!(
@@ -323,6 +359,32 @@ fn report(
         "paired workload cannot hide failed/unknown attempts"
     );
     assert_eq!(records.len(), cpus * ATTEMPTS);
+    phases.assert_balanced(records.len());
+    for cost in results.iter().flat_map(|s| &s.costs) {
+        assert!(cost.to_validator_ns + cost.validator_ns <= cost.api_ns);
+        assert!(
+            cost.validation.read_integrity_ns + cost.validation.decode_compare_ns
+                <= cost.validator_ns
+        );
+    }
+}
+#[test]
+fn turso_attribution_preserves_original_recovery_and_clock_boundaries() {
+    let cpus = std::thread::available_parallelism().unwrap().get().max(4);
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(cpus)
+        .max_blocking_threads(cpus + 4)
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(case(Case {
+            cpus,
+            mode: WriterMode::Reuse,
+            hot: true,
+            hold: None,
+            pair: 0,
+            order: 0,
+        }));
 }
 #[test]
 #[ignore = "run alone; real paired native metadata benchmark, not an LLM throughput claim"]
