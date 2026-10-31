@@ -24,7 +24,11 @@ type NativeProvider = mrr_data_backend::providers::DuckDbProvider;
 fn native(path: std::path::PathBuf) -> NativeProvider {
     #[cfg(feature = "turso")]
     {
-        NativeProvider::new(path, tokio::runtime::Handle::current())
+        let provider = NativeProvider::new(path, tokio::runtime::Handle::current());
+        match std::env::var_os("MRR_BACKEND_TEST_MVCC") {
+            Some(_) => provider.with_concurrent_writes(),
+            None => provider,
+        }
     }
     #[cfg(all(not(feature = "turso"), feature = "duckdb"))]
     {

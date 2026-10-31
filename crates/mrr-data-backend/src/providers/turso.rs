@@ -14,6 +14,12 @@ pub struct TursoProvider {
     writer: Mutex<Option<turso::Connection>>,
     reader: Mutex<Option<turso::Connection>>,
     database: Mutex<Option<turso::Database>>,
+    mode: WriteMode,
+}
+#[derive(Clone, Copy)]
+enum WriteMode {
+    Serialized,
+    Concurrent,
 }
 impl TursoProvider {
     #[must_use]
@@ -24,7 +30,17 @@ impl TursoProvider {
             writer: Mutex::new(None),
             reader: Mutex::new(None),
             database: Mutex::new(None),
+            mode: WriteMode::Serialized,
         }
+    }
+    /// Opt into MVCC for a new store or reopen an existing MVCC store.
+    /// Existing WAL stores are refused rather than silently converted. The Host
+    /// bounds connections through Backend write/shared worker admission. The
+    /// shared engine's home sequence remains the authority conflict witness.
+    #[must_use]
+    pub fn with_concurrent_writes(mut self) -> Self {
+        self.mode = WriteMode::Concurrent;
+        self
     }
 }
 fn failure(_: turso::Error) -> BackendError {
@@ -32,6 +48,58 @@ fn failure(_: turso::Error) -> BackendError {
 }
 fn before(e: BackendError) -> PortError<BackendError, ()> {
     PortError::BeforeCommit(e)
+}
+fn full_writer(conn: &turso::Connection, runtime: &Handle) -> Result<(), BackendError> {
+    runtime.block_on(async {
+        conn.execute("PRAGMA synchronous=FULL", ())
+            .await
+            .map_err(failure)?;
+        let mut rows = conn
+            .query("PRAGMA synchronous", ())
+            .await
+            .map_err(failure)?;
+        let row = rows
+            .next()
+            .await
+            .map_err(failure)?
+            .ok_or(BackendError::Corrupt)?;
+        match row.get::<i64>(0).map_err(failure)? {
+            2 => Ok(()),
+            _ => Err(BackendError::UnsupportedCapabilities),
+        }
+    })
+}
+fn select_mode(
+    conn: &turso::Connection,
+    runtime: &Handle,
+    mode: WriteMode,
+    existed: bool,
+) -> Result<(), BackendError> {
+    runtime.block_on(async {
+        if matches!(mode, WriteMode::Concurrent) && !existed {
+            conn.pragma_update("journal_mode", "'mvcc'")
+                .await
+                .map_err(failure)?;
+        }
+        let mut rows = conn
+            .query("PRAGMA journal_mode", ())
+            .await
+            .map_err(failure)?;
+        let row = rows
+            .next()
+            .await
+            .map_err(failure)?
+            .ok_or(BackendError::Corrupt)?;
+        let expected = match mode {
+            WriteMode::Serialized => "wal",
+            WriteMode::Concurrent => "mvcc",
+        };
+        row.get::<String>(0)
+            .map_err(failure)?
+            .eq_ignore_ascii_case(expected)
+            .then_some(())
+            .ok_or(BackendError::UnsupportedCapabilities)
+    })
 }
 fn read(
     conn: &turso::Connection,
@@ -103,24 +171,8 @@ impl TransactionProvider for TursoProvider {
         let conn = db.connect().map_err(failure)?;
         conn.busy_timeout(Duration::from_millis(250))
             .map_err(failure)?;
-        self.runtime
-            .block_on(conn.execute("PRAGMA synchronous=FULL", ()))
-            .map_err(failure)?;
-        self.runtime.block_on(async {
-            let mut rows = conn
-                .query("PRAGMA synchronous", ())
-                .await
-                .map_err(failure)?;
-            let row = rows
-                .next()
-                .await
-                .map_err(failure)?
-                .ok_or(BackendError::Corrupt)?;
-            if row.get::<i64>(0).map_err(failure)? != 2 {
-                return Err(BackendError::UnsupportedCapabilities);
-            }
-            Ok(())
-        })?;
+        select_mode(&conn, &self.runtime, self.mode, existed)?;
+        full_writer(&conn, &self.runtime)?;
         initialize(&conn, &self.runtime, existed)?;
         let reader = db.connect().map_err(failure)?;
         reader
@@ -146,29 +198,33 @@ impl TransactionProvider for TursoProvider {
         &self,
         run: &mut dyn FnMut(&mut dyn MetadataTransaction) -> ProviderResult<()>,
     ) -> ProviderResult<()> {
-        let guard = self
-            .writer
-            .lock()
-            .map_err(|_| before(BackendError::Unavailable))?;
-        let conn = guard
-            .as_ref()
-            .ok_or_else(|| before(BackendError::NotReady))?;
-        self.runtime
-            .block_on(conn.execute("BEGIN IMMEDIATE", ()))
-            .map_err(failure)
-            .map_err(before)?;
-        let mut tx = Transaction {
-            conn,
-            runtime: &self.runtime,
-            finished: false,
-        };
-        run(&mut tx)?;
-        self.runtime
-            .block_on(conn.execute("COMMIT", ()))
-            .map_err(failure)
-            .map_err(PortError::Unknown)?;
-        tx.finished = true;
-        Ok(())
+        match self.mode {
+            WriteMode::Serialized => {
+                let guard = self
+                    .writer
+                    .lock()
+                    .map_err(|_| before(BackendError::Unavailable))?;
+                let conn = guard
+                    .as_ref()
+                    .ok_or_else(|| before(BackendError::NotReady))?;
+                transact(conn, &self.runtime, "BEGIN IMMEDIATE", run)
+            }
+            WriteMode::Concurrent => {
+                let db = self
+                    .database
+                    .lock()
+                    .map_err(|_| before(BackendError::Unavailable))?
+                    .as_ref()
+                    .cloned()
+                    .ok_or_else(|| before(BackendError::NotReady))?;
+                let conn = db.connect().map_err(failure).map_err(before)?;
+                conn.busy_timeout(Duration::from_millis(250))
+                    .map_err(failure)
+                    .map_err(before)?;
+                full_writer(&conn, &self.runtime).map_err(before)?;
+                transact(&conn, &self.runtime, "BEGIN CONCURRENT", run)
+            }
+        }
     }
     fn close_storage(&self) -> Result<(), BackendError> {
         self.reader
@@ -186,6 +242,31 @@ impl TransactionProvider for TursoProvider {
         Ok(())
     }
 }
+fn transact(
+    conn: &turso::Connection,
+    runtime: &Handle,
+    begin: &str,
+    run: &mut dyn FnMut(&mut dyn MetadataTransaction) -> ProviderResult<()>,
+) -> ProviderResult<()> {
+    runtime
+        .block_on(conn.execute(begin, ()))
+        .map_err(failure)
+        .map_err(before)?;
+    let mut tx = Transaction {
+        conn,
+        runtime,
+        finished: false,
+    };
+    run(&mut tx)?;
+    // No retry, even for BusySnapshot. An unsuccessful COMMIT remains Unknown;
+    // exact operation recovery is the only route back to the deciding outcome.
+    runtime
+        .block_on(conn.execute("COMMIT", ()))
+        .map_err(failure)
+        .map_err(PortError::Unknown)?;
+    tx.finished = true;
+    Ok(())
+}
 fn initialize(
     conn: &turso::Connection,
     runtime: &Handle,
@@ -202,7 +283,7 @@ fn initialize(
     let tables = runtime.block_on(async {
         let mut rows = conn
             .query(
-                "SELECT count(*) FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'",
+                "SELECT count(*) FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' AND name != '__turso_internal_mvcc_meta'",
                 (),
             )
             .await

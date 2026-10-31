@@ -31,6 +31,10 @@ jobs:
         run: cargo test --workspace --features mrr-data/transfer,mrr-data/car,mrr-data/filesystem,mrr-data/cache,mrr-data/s3,mrr-data/backend-turso,mrr-data/backend-graph-publish --locked
       - name: Test native DuckDB at the declared MSRV
         run: cargo test -p mrr-data-backend --no-default-features --features duckdb,graph-publish --locked -- --nocapture
+      - name: Test Turso concurrent recovery at the declared MSRV
+        env:
+          MRR_BACKEND_TEST_MVCC: "1"
+        run: cargo test -p mrr-data-backend --no-default-features --features turso --locked
 
   python:
     name: Python qualification framework
@@ -86,6 +90,10 @@ jobs:
         run: |
           cargo test -p mrr-data-backend --no-default-features --features turso,arrow-query,graph-publish --locked -- --nocapture
           cargo test -p mrr-data-backend --no-default-features --features duckdb,graph-publish --locked -- --nocapture
+      - name: Test Turso concurrent admission and recovery
+        env:
+          MRR_BACKEND_TEST_MVCC: "1"
+        run: cargo test -p mrr-data-backend --no-default-features --features turso --locked
       - name: Test shared backend without a provider feature
         run: |
           cargo test -p mrr-data-backend --no-default-features --locked

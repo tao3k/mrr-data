@@ -1,0 +1,143 @@
+#+TITLE: Turso Concurrent Admission: Paired Native Measurements
+#+LANGUAGE: en
+#+OPTIONS: toc:2
+
+* Decision and owner
+
+The implementation, integration tests and benchmark belong to =mrr-data-backend=.
+Use its workspace manifest and normal Cargo targets. No qualification package,
+external test manifest, Weaver dependency or second database backend is required.
+The candidate extends =TursoProvider= with explicit =with_concurrent_writes()=.
+Default construction retains the serialized WAL provider. Dependency versions
+remain unchanged from the Turso 0.8.3 upgrade.
+
+The old path has two independent serial limits: Backend's default single
+write/shared worker, and the provider's writer mutex covering =BEGIN IMMEDIATE=,
+validation and COMMIT. Merely increasing Host workers cannot remove the latter.
+The concurrent mode obtains a connection per admitted transaction from the same
+database and uses =BEGIN CONCURRENT=. Connection-handle access is short; the Host
+still bounds live work through the existing write/shared worker leases. Every
+writer verifies FULL durability. The historical reader remains separately owned.
+
+* Isolation and recovery contract
+
+The shared engine already increments =home-sequence= for fresh content,
+authority changes and delivery acknowledgments. That common write prevents
+snapshot-isolation write skew inside one canonical profile/namespace/scope.
+The provider does not introduce another guard scheme. Distinct canonical homes
+can overlap, but the Host cannot invent homes to split one original claim,
+reservation, history or shared budget. External authorities must still synchronize
+with their enrolled generation before acknowledging effectiveness.
+
+Validation is inert and called once per attempt. There is no automatic retry.
+Every COMMIT error remains Unknown, including a commit-time conflict; the caller
+queries the exact original operation. Recovery and outbox replay confer no send
+ticket. Missing content bodies do not establish free budget or no-execution.
+This library preserves opaque obligations; their authorization/accounting meaning
+belongs to the semantic owner and final executor.
+
+Opening refuses an existing store in the other journal mode. There is no silent
+WAL/MVCC conversion or downgrade. A fresh MVCC database contains the engine-owned
+=__turso_internal_mvcc_meta= table; schema initialization excludes exactly that
+internal table from its business-table count, retains the MRR schema marker and
+continues to reject incomplete or foreign stores. The mode-setting PRAGMA returns
+rows and must be consumed through the driver's query API. Initial failures at
+these two boundaries are retained in temporary logs, not hidden as engine faults.
+
+* Standard entrypoints
+
+#+begin_src text
+cargo test -p mrr-data-backend --features turso --locked --offline
+MRR_BACKEND_TEST_MVCC=1 cargo test -p mrr-data-backend --features turso --locked --offline
+cargo clippy -p mrr-data-backend --features turso --all-targets --locked --offline -- -D warnings
+cargo test -p mrr-data-backend --features turso --locked --offline --test backend_concurrency_paired turso_paired_concurrency -- --ignored --nocapture
+#+end_src
+
+=MRR_BACKEND_TEST_MVCC= selects the mode only in test factories. It is not a
+production environment flag or a request-controlled storage option. The new
+=backend_concurrent= and =backend_exposure= integration targets run through the
+same workspace, with =backend_exposure= exercising both explicit modes through
+that factory. Native storage tests have no dependency on Weaver.
+
+* Paired measurement profile
+
+2026-10-31, Darwin arm64, Rust 1.95.0, Turso 0.8.3. The runtime uses the machine's
+12 available CPUs, 12 write/shared workers, 12 admitted write lanes, four recovery
+workers and 16 Host blocking threads. Retained request bytes are bounded at
+1,048,576. Both modes use identical limits, 64 operations per lane, FULL
+durability and zero retries. Each case has 768 exact commits and reopen checks.
+Each of four workload cells has three pairs; order alternates WAL/MVCC,
+MVCC/WAL, WAL/MVCC. All database paths are fresh and removed by the test owner.
+
+Independent-home cases use one original head per lane. The hot-home case uses
+the same application-level sequencer in both modes to supply valid predecessor
+CAS values for one shared head. Its latency includes that queue; it measures a
+sequential hot domain, not native hot-row conflict/retry throughput. Separate
+integration tests exercise simultaneous conflicting snapshots.
+
+Validation holds are either zero or an explicitly simulated one millisecond of
+inert Host work, equal in both modes. Content acknowledgments are synthetic:
+these are real database/Backend metadata transactions, not object-store, LLM,
+network or final-send benchmarks. Actual body durability/missing-body recovery
+belongs to =backend_exposure=. No claim of a cold dependency build or isolated
+OS cache is made. No other build was launched by this task during measurement;
+the shared Host itself was not dedicated.
+
+* Results and negative evidence
+
+The post-lint paired run completes 24 cases, 18,432 successful commits and
+18,432 exact recoveries, with zero refusals, unknown outcomes or unexpected
+failures. Runtime is 23.90 seconds. Ratios below are candidate/control TPS for
+each matching pair, not ratios of independently selected best samples.
+
+| Canonical homes | Validation hold | Pair ratios | Median pair ratio |
+|-----------------+-----------------+-------------+-------------------|
+| Independent | Zero | 0.87, 0.94, 2.22 | 0.94 |
+| Independent | One millisecond | 3.81, 1.87, 5.28 | 3.81 |
+| One hot home | Zero | 0.67, 0.56, 0.57 | 0.57 |
+| One hot home | One millisecond | 0.61, 0.68, 0.67 | 0.67 |
+
+An earlier source-equivalent pilot before lint-only expression changes also
+passes 24 cases/18,432 commits, taking 36.32 seconds. Its corresponding median
+pair ratios are 1.22, 4.46, 0.69 and 0.50. Preserve both runs: zero-work
+independent-home improvement is unstable, and hot-home regression is consistent.
+Do not promote the pilot's faster ratio as the final result.
+
+The one-millisecond independent-home workload benefits from overlapping the
+validation interval and concurrent native commits. Per-transaction connection
+setup, configuration and MVCC overhead hurt the sequential hot workload. Keep
+the mode opt-in; use it only after measuring the actual independent-domain
+workload. This evidence does not justify changing the default or splitting a
+shared budget to manufacture independence.
+
+* Executable acceptance
+
+Both standard Cargo suite invocations pass 50 tests each, with four opt-in
+measurement cases ignored by those correctness runs. Clippy passes with warnings
+denied. CI runs the explicit MVCC suite at the declared MSRV and in the existing
+Ubuntu/Darwin Rust jobs. Those remote jobs are not counted as local evidence;
+performance remains a separately invoked ignored test, never a CI speed gate.
+
+- =backend_concurrent=: five native controls for independent overlap/recovery,
+  same-home single winner, authority retirement during validation, explicit
+  journal-mode matching, and the unsafe raw snapshot write-skew counterexample.
+- =backend_consumer=: all eighteen existing consumers pass in MVCC mode,
+  including original process-death/partial-tuple/outbox recovery scenarios.
+- =backend_exposure=: four native filesystem/body cases pass in each mode:
+  lost response and reopen preserve original claim/reservation/history and
+  unknown exposure; missing body refuses recovery; callback side effects and
+  caller-selected new homes remain explicit unsafe Host counterexamples.
+
+The body fixture is private typed test data, not a token-budget implementation
+or a new Gateway protocol. A successful content lookup proves byte/identity
+preservation in this experiment, not independent anti-rollback retention.
+Runtime send authority and whole-store rollback resistance remain Host premises.
+Raw failed and successful logs stay in temporary storage; no generated logs are
+committed. The original semantic dependency pins and deny gates remain intact.
+
+* Primary sources
+
+- [[https://turso.tech/blog/turso-0.8.0][Turso concurrent-write design and published workload methodology]].
+- [[https://docs.rs/crate/turso/0.8.3/source/examples/concurrent_writes.rs][Release-specific Rust concurrent-write example]].
+- [[file:../../crates/mrr-data-backend/src/transaction.rs][Existing shared engine and home conflict witness]].
+- [[file:../../crates/mrr-data-backend/src/providers/turso.rs][Existing provider with explicit MVCC scheduling]].

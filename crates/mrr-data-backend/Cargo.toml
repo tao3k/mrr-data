@@ -27,6 +27,8 @@ arrow-array = { workspace = true, optional = true }
 arrow-schema = { workspace = true, optional = true }
 
 [dev-dependencies]
+serde.workspace = true
+mrr-data-content = { workspace = true, features = ["filesystem"] }
 serde_json.workspace = true
 meta-relational-reasoning.workspace = true
 mrr-data-core = { workspace = true, features = ["content-identity"] }
@@ -63,6 +65,21 @@ path = "tests/integration/duckdb_arrow.rs"
 [[test]]
 name = "backend_resources"
 path = "tests/integration/resources.rs"
+
+[[test]]
+name = "backend_concurrent"
+path = "tests/integration/concurrent.rs"
+required-features = ["turso"]
+
+[[test]]
+name = "backend_exposure"
+path = "tests/integration/exposure.rs"
+required-features = ["turso"]
+
+[[test]]
+name = "backend_concurrency_paired"
+path = "tests/performance/concurrency_paired.rs"
+required-features = ["turso"]
 
 [[test]]
 name = "backend_graph_publication"

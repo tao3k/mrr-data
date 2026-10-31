@@ -3988,6 +3988,7 @@ dependencies = [
  "mrr-data-content",
  "mrr-data-core",
  "mrr-data-profile",
+ "serde",
  "serde_json",
  "tempfile",
  "tokio",

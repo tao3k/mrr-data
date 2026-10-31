@@ -3,6 +3,22 @@
 
 * Ownership and dependency direction
 
+** Explicit concurrent Turso scheduling
+
+=TursoProvider::with_concurrent_writes()= opts into MVCC on a new store or reopens
+an existing MVCC store. The default WAL path remains available. The shared
+=home-sequence= already orders content, authority and acknowledgment mutations;
+it is retained as the common write-conflict witness. The Host must keep shared
+obligations in their original canonical home and use bounded Backend workers.
+No transaction callback is retried and COMMIT ambiguity remains Unknown.
+Existing stores in the other journal mode are refused rather than converted.
+
+[[file:../benchmarks/shared-backend-concurrency.org][The paired native measurement and recovery record]]
+owns the workload limits, standard Cargo entrypoints, actual gains and hot-home
+regressions. Benchmark and storage recovery tests live in this package, with no
+separate qualification crate or dependency on Weaver. This opt-in is not a
+default activation or a claim of exactly-once external sending.
+
 ** Turso workspace release qualification
 
 The workspace selects exact Turso =0.8.3=; optional backend, query and public
