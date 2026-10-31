@@ -40,6 +40,18 @@ fn error(operation: &'static str, error: impl Into<anyhow::Error>) -> ContentErr
             .map_or(ErrorKind::Other, std::io::Error::kind),
     }
 }
+// Upstream checks presence before opening metadata. Concurrent removal can
+// therefore surface an I/O NotFound after the presence check; this remains a
+// cache miss. Preserve every other I/O error so read-through cannot hide it.
+fn entry_error(cid: &Cid, failure: anyhow::Error) -> ContentError {
+    match error("get Kache entry", failure) {
+        ContentError::Io {
+            kind: ErrorKind::NotFound,
+            ..
+        } => ContentError::NotFound(Box::new(*cid)),
+        failure => failure,
+    }
+}
 fn key(cid: &Cid) -> String {
     blake3::hash(&cid.to_bytes()).to_hex().to_string()
 }
@@ -115,11 +127,7 @@ impl ContentStore for KacheContentStore {
 
     fn get_bounded(&self, cid: &Cid, max_bytes: usize) -> Result<Vec<u8>, ContentError> {
         let codec = mrr_data_content::ContentCodec::from_cid(cid)?;
-        let Some(meta) = self
-            .store
-            .get(&key(cid))
-            .map_err(|e| error("get Kache entry", e))?
-        else {
+        let Some(meta) = self.store.get(&key(cid)).map_err(|e| entry_error(cid, e))? else {
             return Err(ContentError::NotFound(Box::new(*cid)));
         };
         if meta.cache_key != key(cid) || meta.files.len() != 1 || meta.files[0].name != "block" {

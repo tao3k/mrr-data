@@ -1,0 +1,200 @@
+#+TITLE: Bounded Turso Writer Reuse and Hot-Domain Diagnosis
+#+LANGUAGE: en
+#+OPTIONS: toc:2
+
+* Reviewed scope
+
+The [[file:shared-backend-cpu-matched-reuse.org][CPU-matched requalification]] retains all current paired samples, including a
+hot-domain reuse/WAL regression, and records actual-CPU cancellation acceptance.
+Its newer results do not replace or reclassify the historical measurements below.
+
+Extend the existing Turso provider with explicit
+=with_reusable_concurrent_writes(capacity)=. The trusted Host chooses a positive
+capacity alongside its existing Backend write/shared worker budget. Configuration
+after opening is refused. Serialized WAL and fresh-connection MVCC remain
+controls; no default changes, schema migration or dependency pin changes occur.
+Storage tests and benchmarks use this workspace's ordinary Cargo targets.
+
+The design was reviewed in Weaver's existing SysML execution-resource contract
+before implementation. SPEC owns authorization/accounting semantics, the existing
+home sequence orders conflicting content/authority decisions, and the final
+executor still mediates each actual effect. Reusable physical sessions store no
+authority, obligation decision or live send ticket.
+
+* Ownership and cleanup
+
+=providers/turso/mod.rs= is the interface. =provider.rs= owns storage orchestration,
+=connection.rs= owns physical FULL setup/verification, and =writers.rs= owns
+exclusive leases and bounded idle sessions. Dependencies are acyclic; the ASP
+gate is unchanged. Active plus idle execution writers never exceed the chosen
+capacity. The existing bootstrap writer and historical reader are two additional
+connections. The Host must include those in its overall resource budget.
+
+A newly allocated private writer sets busy timeout and sets/reads FULL. Public
+metadata transactions cannot issue arbitrary SQL or alter session PRAGMAs. A
+lease starts non-reusable; only successful COMMIT followed by confirmed
+autocommit permits recycling. Any refusal, driver error/Unknown result or panic
+discards the connection. Drop finishes physical cleanup before releasing capacity.
+Lost delivery after a known successful commit can retain a healthy session;
+the caller must still reconcile the exact original operation as Unknown delivery.
+There is no callback retry, wait queue inside the writer owner or detached cleanup.
+
+Close stops new leases and clears idle writers. An outstanding lease makes close
+fail and retains the database owner; a returning lease cannot rejoin a closed
+idle set. Closing is terminal for the object; recovery constructs a fresh provider
+over the original database. Normal Backend shutdown still drains
+accepted work first. A failed close is not evidence of no execution or free
+budget. Pool state is process-local resource ownership, not a durable fence.
+A close request does not cancel an already running transaction. Only drained
+successful close certifies resource closure; domain revocation still needs its
+original authority ordering. A free writer slot is not a refunded reservation.
+
+Each reuse executes a new =BEGIN CONCURRENT= and the original engine checks.
+The existing original profile/namespace/scope and =home-sequence= are unchanged.
+The original reservation and unknown exposure cannot be replaced with a new key
+to avoid a conflict. Historical exact recovery remains observation, not authority
+to send or refund. A lost response does not become an abort because a connection
+was recycled or discarded.
+
+The later [[file:../architecture/shared-backend-writer-lifecycle.org][writer lifecycle review]] supersedes the initial same-object reopen
+contract and adds cancellation, retirement and concurrent-close recovery evidence.
+Current multithreaded test runtimes use at least four workers. CPU-derived paired
+measurement drivers retain actual Host parallelism with that minimum. Historical
+receipts below retain their recorded configurations and are not new measurements.
+
+* Component diagnosis
+
+2026-10-31, Darwin arm64, Rust 1.95.0, Turso 0.8.3, 12 available Host CPUs.
+Sequential component tests use 512 samples per round and three rounds. They
+diagnose individual native operations, not maximum aggregate throughput.
+
+On an otherwise empty MVCC database, connection allocation is about 5.0--5.1
+microseconds median; FULL set/readback about 3.5--3.6 microseconds; the entire
+create/configure/autocommit-check/drop cycle about 10.2--10.3 microseconds. An
+autocommit check is about 0.04 microseconds. That alone cannot explain the prior
+millisecond-scale hot-domain regression.
+
+The second component test executes real FULL write transactions on a hot row.
+The table gives the median of three round medians, in microseconds:
+
+| Physical phase | Fresh connection | Reused connection |
+|----------------+------------------+-------------------|
+| Setup | 11.625 | Below timer resolution after the first sample |
+| BEGIN CONCURRENT | 452.041 | 2.625 |
+| Read | 11.625 | 9.917 |
+| Write | 15.083 | 13.416 |
+| FULL COMMIT | 67.667 | 31.167 |
+| Release/discard | 134.250 | Below timer resolution for returning the handle |
+
+The dominant measured lifecycle difference is first-transaction initialization
+and disposal after a write, not the FULL configuration statements. FULL remains
+enabled on every COMMIT. These phase tests do not isolate a particular pager,
+allocator or fsync implementation, nor do empty-transaction timings substitute
+for write-transaction evidence. Do not attribute the gain to a statement cache:
+the provider uses the ordinary query/execute API, not prepare_cached.
+The phase test retains its reused connection locally to isolate native calls;
+the actual paired target also includes the production bounded-owner locks.
+
+* Representative validation workload
+
+The existing paired target now also runs WAL, fresh MVCC and bounded reusable
+MVCC with actual local body validation. Each attempt reads a durable filesystem
+body under a 16 KiB bound, uses the production content-store CID verification,
+strictly decodes a typed 8 KiB-payload obligation and compares its frozen scope,
+claim, reservation, burn, held amount, unknown-exposure and history fields.
+Independent homes have distinct original claim/reservation/history identities;
+the hot home retains one original identity. These homes are declared by the test
+Host before execution, not obtained by sharding an existing shared obligation.
+The shared engine checks the enrolled profile authority in the same metadata
+transaction. No sleep or fabricated validation delay is used in this workload.
+This validates real content/authority work, not Cedar policy evaluation or LLM I/O.
+
+Body publication and authority enrollment finish before timing. Each recorded
+operation retains its exact authority expectation for reopen/recovery. An initial
+attempt omitted that vector from the recovery call and was correctly rejected
+with =OperationConflict=. The test was corrected to retain the original binding;
+the library recovery comparison was not relaxed. The failed log remains temporary.
+
+All variants use 12 runtime/write/shared workers, 16 blocking threads, 12 write
+lanes and the same admission/byte budgets. There are 64 operations per lane,
+zero retries, FULL durability and an unchanged 30-second collection bound.
+The hot case shares one application head sequencer in all variants to provide
+valid predecessor CAS values. It measures a hot ordered domain, not retry TPS.
+Three rounds rotate all three mode orders. Fresh database paths are removed by
+their test owner. The Host is shared, not dedicated; no other build from this
+task overlaps measurement. This is not a cold-build/cache or network benchmark.
+
+The run passes all 18 cases, 13,824 commits and exact recoveries with zero
+refusals, unknowns or unexpected failures. Wall time is 10.08 seconds. Ratios
+are matching-pair successful TPS, not independently selected best samples:
+
+| Workload | Reuse / fresh MVCC pairs | Median | Reuse / WAL pairs | Median |
+|----------+-------------------------+--------+-------------------+--------|
+| Independent original homes | 3.29, 4.56, 4.43 | 4.43 | 3.75, 4.60, 3.88 | 3.88 |
+| One original hot home | 2.84, 3.18, 3.34 | 3.18 | 1.06, 1.06, 0.94 | 1.06 |
+
+An earlier successful run used identical textual obligation labels inside its
+separately scoped fixture bodies. It completed 13,824 commits in 12.03 seconds;
+its median reuse/fresh ratios were 2.62 and 2.27, and reuse/WAL ratios 3.70 and
+1.05. The final fixture makes the independent original identities explicit.
+Preserve both runs and the failed recovery run. Writer implementation is unchanged
+between successful runs, so their ratio differences do not establish another
+runtime speedup; Host variation and fixture differences remain relevant.
+
+Reuse removes much of the hot-domain regression against fresh MVCC. It does not
+consistently beat WAL in that domain. Keep both options and measure the actual
+domain mix before enabling reuse; never manufacture independent namespaces from
+one shared reservation to reproduce the independent-home numbers.
+
+* Transaction-phase cross-check
+
+Test-only timing wraps the existing physical transaction seam, delegating every
+operation to the unchanged provider and shared engine. All variants receive the
+same timing overhead. Counters reset after preparation and are sampled after
+all measured jobs drain, before recovery. They sum per-transaction durations
+across workers; they are not additive fractions of parallel wall-clock time.
+
+For the hot domain, median round means per transaction (microseconds) are:
+
+| Phase group | WAL | Fresh MVCC | Reused MVCC |
+|-------------+-----+------------+-------------|
+| Physical gets | 112.3 | 146.1 | 131.0 |
+| Physical puts | 75.5 | 80.6 | 71.7 |
+| Other transaction body, including validation/rendezvous/encoding | 75.2 | 99.2 | 75.0 |
+| Envelope outside the shared transaction body | 109.5 | 815.0 | 87.3 |
+
+The envelope includes checkout/configuration, BEGIN, COMMIT and release. It
+cannot alone distinguish those stages; the native hot-row component test above
+provides that additional discrimination. Medians from different rows need not
+sum to the median total. This cross-check does not assert a universal engine
+speedup or prove physical power-loss durability beyond the driver/Host premises.
+
+* Standard validation and retained limits
+
+#+begin_src text
+cargo test -p mrr-data-backend --features turso --locked --offline
+MRR_BACKEND_TEST_MVCC=1 cargo test -p mrr-data-backend --features turso --locked --offline
+MRR_BACKEND_TEST_MVCC=reuse cargo test -p mrr-data-backend --features turso --locked --offline
+cargo clippy -p mrr-data-backend --features turso --all-targets --locked --offline -- -D warnings
+cargo test -p mrr-data-backend --features turso --locked --offline --test backend_concurrency_paired turso_paired_writer_reuse -- --ignored --nocapture
+cargo test -p mrr-data-backend --features turso --locked --offline --test backend_writer_setup turso_writer_setup_costs -- --ignored --nocapture
+cargo test -p mrr-data-backend --features turso --locked --offline --test backend_writer_setup turso_writer_transaction_warmup -- --ignored --nocapture
+#+end_src
+
+Invoke each measurement separately. Both diagnostic runtimes retain all 12
+available CPUs. Standard correctness runs cover exclusive capacity, retained FULL,
+successful reuse, refusal, Unknown COMMIT, panic, active-close refusal and fresh-owner recovery.
+The existing same-home/revocation races, original operation/outbox partial-write
+process recovery and typed unknown-exposure/body controls run through reuse.
+CI adds the same explicit factory at MSRV and in Ubuntu/Darwin Rust jobs;
+ignored measurements remain outside CI performance gates. Logs stay temporary.
+
+At the original implementation revision, WAL, fresh MVCC and reusable MVCC each passed all 54 standard tests, including
+the unchanged ASP Rust deny gate. Seven opt-in measurements are excluded from
+those correctness counts. Clippy passes with warnings denied. Initial structural
+gate failures were resolved by an interface-only mod.rs and acyclic configuration,
+provider and writer-owner leaves, without exemptions or threshold changes.
+
+No independent retained root, external authority synchronization or final
+transport permission is inferred from connection reuse. Those remain the
+existing Host/SPEC/executor obligations.

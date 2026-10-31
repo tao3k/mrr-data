@@ -1,0 +1,81 @@
+#+TITLE: Native Scheme and Host child-process ownership
+
+* Current qualification
+
+The shared Backend retains one lifecycle and provider composition. This issue
+concerns the process hosting the native Scheme frontend, not GraphAr storage or
+the number of Backend providers. GraphAr remains the common physical graph
+foundation; Turso, DuckDB and DataFusion do not acquire native graph capability
+through this qualification.
+
+The Data delivery at =f21b2707= passed all 14 required CI checks, including Source
+and GraphAr on Ubuntu and macOS. Its descriptor/recovery parents deliberately
+initialize neither Scheme nor Tokio before supervising workers. That acceptance
+does not qualify arbitrary Host subprocesses after in-process Scheme setup.
+
+* Source identity and bounded root cause
+
+The installed Gerbil build receipt names revision
+=2591dcd9b7c6d2c4e9dd8611a17c5b1a5d82bbdb= and patchset
+=f5cedd8168cb365ba41289327601d9305738c9a0=. Fetching that exact commit from
+=https://git.cons.io/mighty-gerbils/gerbil.git= identifies =src/gambit= as gitlink
+=dcd677cd3e40860bdd27dfbdbf5e3ce46ab03813=.
+
+Its [[https://github.com/gambit/gambit/blob/dcd677cd3e40860bdd27dfbdbf5e3ce46ab03813/lib/os_io.c#L8503][child interrupt handler]] calls =waitpid(-1, ..., WNOHANG)= before
+looking for the PID in Scheme's process-device group. A child absent from that
+group has already been reaped. =io_module_setup= installs the handler
+unconditionally on the POSIX path. The installed Darwin spawn patch changes
+Scheme child creation, not this reaper. The setup parameter structure has no
+Host child-ownership switch. Thread-local signal masking does not establish
+process-wide child ownership in a concurrent Host.
+
+This source mechanism explains the observed =ECHILD= without involving
+descriptor decoding, Parquet or GraphAr admission. The direct Rust probe below
+reproduces it after compiling the original Source, without any descriptor I/O.
+This is source-plus-behavior evidence, not an instrumented handler stack trace.
+
+* Executable controls
+
+The Unix Rust module =child_ownership= owns assertions and real wait statuses.
+Python only launches the captured Cargo executable under idle5/wall120.
+Every probe must run in a fresh process with =--exact --ignored --nocapture
+--test-threads=1=. Do not run the probe module as one combined native process.
+
+| Probe suffix | Scope | Local macOS result |
+|-------------+-------+--------------------|
+| =host_wait_baseline= | Rust Host children before native setup | Actual exits 0, 7, 23; pass |
+| =isolated_native_preserves_host_wait= | Parent waits for a native Source worker; parent never initializes Scheme | Native worker exits 0, then actual Host exits 0, 7, 23; pass |
+| =initialized_native_preserves_host_wait= | Host exits before and after native Source compilation in the same process | Before: 0, 7, 23; after: ECHILD; Rust exit 101, supervisor exit 1 |
+
+The diagnostic asserts correct ownership and remains explicitly unqualified;
+it does not accept =ECHILD= as a successful result. The 100 ms delay lets child
+exit notifications occur before =wait=, exposing the race an immediate wait can
+win. It is not a benchmark, progress heartbeat or timeout change. The isolated
+parent requires the native worker's genuine process status before testing the
+Host children. The two positive controls are mandatory Source CI invocations
+on Ubuntu and macOS. The negative diagnostic is not a required passing gate.
+
+The receipt (historical local/CI artifact; not stored in Git) binds the compiled binary, Cargo artifact stream, exact upstream
+source file and compressed raw logs. The full local Source-feature GraphAr
+suite passes 80 tests with 13 explicit process/experimental workers ignored;
+the positive controls are separately driven. No shared-process repair is claimed.
+
+* Ordered closure gates
+
+| Priority | Deliverable | Acceptance boundary |
+|----------+-------------+---------------------|
+| P0 | Preserve Source/descriptor/recovery parent isolation and genuine exit propagation; add ownership controls | Existing f21 CI accepted; new controls require their own exact-head CI |
+| P1 | Qualify a native runtime that waits only for registered Scheme child PIDs, or provide a separate native frontend worker API | Shared probe must pass unchanged; Scheme-owned process status and cleanup must also pass |
+| P2 | Stress concurrent Host and Scheme children, failure/cancellation and runtime teardown on both OSes | No stolen statuses, zombies, orphan workers, signal disposition damage or changed admission authority |
+
+A registered-PID reaper is an upstream runtime change, requiring an audit of
+process-device registration, removal, signal safety and teardown. This document
+does not prescribe iteration over a concurrently mutable device list. A worker
+API must bind Source identity and generation, transport typed errors, and keep
+final admission in MRR; it must not silently replace the existing in-process API.
+
+Do not restore SIGCHLD globally around =___setup=, install an application-wide
+reaper, accept a file marker as an exit status, or relax watchdogs. Those actions
+would bypass ownership or introduce another race. No release of a patched
+Gerbil toolchain, power-loss durability, hard RSS limit or shared-process child
+ownership is established by the current controls.

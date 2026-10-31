@@ -1,0 +1,389 @@
+use meta_relational_reasoning::{
+    EntityCatalog, ExternalRevisionIdentity, GenerationId, RelationCatalog, RelationField,
+    RelationId, RelationSchema, RevisionBinding, SemanticSnapshot, ValueSchema,
+};
+use mrr_data_core::{
+    BatchDescriptor, CoverageDescriptor, CoverageKind, RelationDescriptor, SnapshotBlock,
+    SnapshotManifest, SnapshotManifestRequest, SnapshotRowBinding, raw_cid,
+};
+
+pub(super) fn snapshot() -> SnapshotBlock {
+    let generation = GenerationId::from_canonical_bytes("generation:token-fixture").unwrap();
+    let revision = RevisionBinding::admit(
+        ExternalRevisionIdentity::new("test", "source", "revision").unwrap(),
+        generation,
+    )
+    .unwrap();
+    let semantic = SemanticSnapshot::admit(generation, vec![revision]).unwrap();
+    let relation_id = RelationId::from_canonical_bytes("relation:token-fixture").unwrap();
+    let schema = RelationSchema::new(
+        relation_id,
+        "TokenFixture",
+        vec![RelationField::new("value", ValueSchema::String, false).unwrap()],
+        vec![],
+    )
+    .unwrap();
+    let relations = RelationCatalog::admit(vec![schema]).unwrap();
+    let entities = EntityCatalog::admit(vec![]).unwrap();
+    let batch = BatchDescriptor::new(raw_cid(b"synthetic-arrow"), 1, 15).unwrap();
+    let descriptor = RelationDescriptor::new(relation_id, 1, vec![batch]).unwrap();
+    let coverage = CoverageDescriptor::new(CoverageKind::Unknown, raw_cid(b"coverage")).unwrap();
+    let request =
+        SnapshotManifestRequest::new(semantic, &relations, &entities, vec![descriptor], coverage);
+    SnapshotBlock::encode(SnapshotManifest::admit(request).unwrap()).unwrap()
+}
+
+use crate::data_protection::{
+    DataProtectionDecisions, DataProtectionMismatch, DataProtectionProfile,
+    PseudonymizationInputBinding, ReleaseReceiptClaim,
+};
+
+#[test]
+fn selected_input_stays_on_immutable_snapshot() {
+    let source = snapshot();
+    let digest = [9; 32];
+    let input = PseudonymizationInputBinding::new(
+        &source,
+        "customer_id",
+        &digest,
+        "campaign-a",
+        "aes-siv-profile",
+    );
+    assert_eq!(input.source().root(), source.cid());
+    assert_eq!(input.field(), "customer_id");
+    assert_eq!(input.value_digest(), &digest);
+    assert_eq!(input.context(), "campaign-a");
+    assert_eq!(input.profile(), &"aes-siv-profile");
+    assert!(input.row().is_none());
+    let relation = &source.manifest().relations()[0];
+    let row = SnapshotRowBinding::new(
+        &source,
+        relation.relation_id(),
+        relation.batches()[0].cid(),
+        0,
+    )
+    .unwrap();
+    let located = PseudonymizationInputBinding::at_row(
+        row,
+        "customer_id",
+        &digest,
+        "campaign-a",
+        "aes-siv-profile",
+    );
+    assert_eq!(located.source().root(), source.cid());
+    assert_eq!(
+        located.row().unwrap().child_cid(),
+        relation.batches()[0].cid()
+    );
+}
+
+#[test]
+fn cloud_profile_requires_exact_release_and_two_decisions() {
+    let source = snapshot();
+    let receipt = ReleaseReceiptClaim {
+        artifact_digest: "sha256:candidate",
+        source_commit: "commit-a",
+        policy_root: "CustomerDataRelease",
+        epoch: 7,
+    };
+    let profile = DataProtectionProfile::new(&source, "customer-campaign", receipt);
+    let both = DataProtectionDecisions {
+        policy_root: receipt.policy_root,
+        dataset: "customer-campaign",
+        artifact_digest: receipt.artifact_digest,
+        epoch: 7,
+        pipeline_release_allowed: true,
+        transformation_allowed: true,
+    };
+    assert_eq!(profile.source().root(), source.cid());
+    assert_eq!(profile.check(receipt, 7, both), Ok(()));
+    assert_eq!(
+        profile.check(receipt, 8, both),
+        Err(DataProtectionMismatch::ReleaseReceipt)
+    );
+    assert_eq!(
+        profile.check(
+            ReleaseReceiptClaim {
+                artifact_digest: "sha256:other",
+                ..receipt
+            },
+            7,
+            both
+        ),
+        Err(DataProtectionMismatch::ReleaseReceipt)
+    );
+    for wrong in [
+        DataProtectionDecisions {
+            policy_root: "ReleaseReady",
+            ..both
+        },
+        DataProtectionDecisions {
+            dataset: "other-dataset",
+            ..both
+        },
+        DataProtectionDecisions {
+            artifact_digest: "sha256:other",
+            ..both
+        },
+        DataProtectionDecisions { epoch: 8, ..both },
+    ] {
+        assert_eq!(
+            profile.check(receipt, 7, wrong),
+            Err(DataProtectionMismatch::DecisionScope)
+        );
+    }
+    assert_eq!(
+        profile.check(
+            receipt,
+            7,
+            DataProtectionDecisions {
+                pipeline_release_allowed: false,
+                ..both
+            }
+        ),
+        Err(DataProtectionMismatch::PipelineDenied)
+    );
+    assert_eq!(
+        profile.check(
+            receipt,
+            7,
+            DataProtectionDecisions {
+                transformation_allowed: false,
+                ..both
+            }
+        ),
+        Err(DataProtectionMismatch::TransformationDenied)
+    );
+}
+
+#[cfg(feature = "raw-publish")]
+use crate::data_protection::{
+    CurrentStorageState, EntityRef, RawStorageDestination, RawStorageTier, SourceLabel,
+    StorageClaim, StorageEffect,
+};
+
+#[cfg(feature = "raw-publish")]
+#[tokio::test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "deny-before-I/O and allowed snapshot transfer fixture"
+)]
+async fn raw_snapshot_gate_precedes_remote_io_and_allows_unrestricted() {
+    use crate::data_protection::{
+        RawSnapshotPublish, RawSnapshotPublishError, RawStorageMismatch, publish_raw_snapshot,
+    };
+    use mrr_data_content::{
+        ContentBlock, ContentCodec, ContentStore, MemoryContentStore, RemoteContentStore,
+        RemoteFuture, RemoteTransferLimits, SnapshotTransferLimits, TransferSession,
+    };
+    use std::{
+        sync::atomic::{AtomicUsize, Ordering},
+        time::Duration,
+    };
+
+    struct Remote(AtomicUsize);
+    impl RemoteContentStore for Remote {
+        fn get<'a>(&'a self, _: &'a cid::Cid, _: usize) -> RemoteFuture<'a, Option<Vec<u8>>> {
+            Box::pin(async { Ok(None) })
+        }
+        fn put<'a>(&'a self, _: ContentBlock<'a>) -> RemoteFuture<'a, ()> {
+            self.0.fetch_add(1, Ordering::Relaxed);
+            Box::pin(async { Ok(()) })
+        }
+    }
+
+    let snapshot = snapshot();
+    let owner = EntityRef {
+        type_name: "Team",
+        id: "analytics",
+    };
+    let labels = [SourceLabel {
+        resource: EntityRef {
+            type_name: "Dataset",
+            id: "orders",
+        },
+        owner,
+        tenant: "tenant-a",
+        restricted: true,
+    }];
+    let owners = [owner];
+    let destination = RawStorageDestination {
+        resource: EntityRef {
+            type_name: "Bucket",
+            id: "archive",
+        },
+        tenant: "tenant-a",
+        accepted_owners: &owners,
+        accepts_restricted: false,
+        tier: RawStorageTier::Remote,
+    };
+    let effect = StorageEffect {
+        operation_id: "op-001",
+        subject: EntityRef {
+            type_name: "Service",
+            id: "publisher",
+        },
+        purpose: "archive",
+        snapshot_root: snapshot.cid(),
+        sources: &labels,
+        destination,
+        policy_root: "policy-root-1",
+        lineage_revision: "lineage-1",
+    };
+    let claim = StorageClaim {
+        effect,
+        epoch: 4,
+        expires_at: 100,
+        allowed: true,
+    };
+    let current = CurrentStorageState {
+        policy_root: "policy-root-1",
+        lineage_revision: "lineage-1",
+        epoch: 4,
+        now: 99,
+    };
+    let local = MemoryContentStore::default();
+    let remote = Remote(AtomicUsize::new(0));
+    let session = TransferSession::new(
+        Duration::from_secs(5),
+        RemoteTransferLimits {
+            operations: 6,
+            bytes: 4096,
+            attempts_per_operation: 1,
+            retry_delay: Duration::ZERO,
+        },
+    )
+    .unwrap();
+    let relation = RelationSchema::new(
+        snapshot.manifest().relations()[0].relation_id(),
+        "TokenFixture",
+        vec![RelationField::new("value", ValueSchema::String, false).unwrap()],
+        vec![],
+    )
+    .unwrap();
+    let relations = RelationCatalog::admit(vec![relation]).unwrap();
+    let entities = EntityCatalog::admit(vec![]).unwrap();
+    let transfer = RawSnapshotPublish {
+        local: &local,
+        remote: &remote,
+        session: &session,
+        snapshot: &snapshot,
+        relations: &relations,
+        entities: &entities,
+        limits: SnapshotTransferLimits::new(4096, 4, 4096, 8192),
+    };
+    assert_eq!(
+        publish_raw_snapshot(effect, &claim, current, transfer, || async {
+            panic!("early refresh")
+        })
+        .await,
+        Err(RawSnapshotPublishError::Selection(
+            RawStorageMismatch::RestrictedRequiresProtection
+        ))
+    );
+    assert_eq!(remote.0.load(Ordering::Relaxed), 0);
+    assert_eq!(session.stats().operations, 0);
+
+    let other_root = raw_cid(b"not-this-snapshot");
+    let wrong_root = StorageEffect {
+        snapshot_root: &other_root,
+        ..effect
+    };
+    let transfer = RawSnapshotPublish {
+        local: &local,
+        remote: &remote,
+        session: &session,
+        snapshot: &snapshot,
+        relations: &relations,
+        entities: &entities,
+        limits: SnapshotTransferLimits::new(4096, 4, 4096, 8192),
+    };
+    assert_eq!(
+        publish_raw_snapshot(
+            wrong_root,
+            &StorageClaim {
+                effect: wrong_root,
+                ..claim
+            },
+            current,
+            transfer,
+            || async { panic!("early refresh") }
+        )
+        .await,
+        Err(RawSnapshotPublishError::Selection(
+            RawStorageMismatch::DifferentEffect
+        ))
+    );
+    assert_eq!(remote.0.load(Ordering::Relaxed), 0);
+    assert_eq!(session.stats().operations, 0);
+
+    local
+        .put(ContentBlock::new(ContentCodec::Raw, b"synthetic-arrow"))
+        .unwrap();
+    local
+        .put(ContentBlock::new(ContentCodec::Raw, b"coverage"))
+        .unwrap();
+    let unrestricted = [SourceLabel {
+        restricted: false,
+        ..labels[0]
+    }];
+    let allowed_effect = StorageEffect {
+        sources: &unrestricted,
+        ..effect
+    };
+    let allowed_claim = StorageClaim {
+        effect: allowed_effect,
+        ..claim
+    };
+    let transfer = RawSnapshotPublish {
+        local: &local,
+        remote: &remote,
+        session: &session,
+        snapshot: &snapshot,
+        relations: &relations,
+        entities: &entities,
+        limits: SnapshotTransferLimits::new(4096, 4, 4096, 8192),
+    };
+    assert_eq!(
+        publish_raw_snapshot(
+            allowed_effect,
+            &allowed_claim,
+            current,
+            transfer,
+            || async {
+                tokio::task::yield_now().await;
+                Ok(CurrentStorageState {
+                    epoch: 5,
+                    ..current
+                })
+            }
+        )
+        .await,
+        Err(RawSnapshotPublishError::Selection(
+            RawStorageMismatch::Stale
+        ))
+    );
+    assert_eq!(remote.0.load(Ordering::Relaxed), 2);
+    assert_eq!(session.stats().operations, 2);
+    let transfer = RawSnapshotPublish {
+        local: &local,
+        remote: &remote,
+        session: &session,
+        snapshot: &snapshot,
+        relations: &relations,
+        entities: &entities,
+        limits: SnapshotTransferLimits::new(4096, 4, 4096, 8192),
+    };
+    let published = publish_raw_snapshot(
+        allowed_effect,
+        &allowed_claim,
+        current,
+        transfer,
+        || async { Ok(current) },
+    )
+    .await
+    .unwrap();
+    assert_eq!(published.root(), snapshot.cid());
+    assert_eq!(remote.0.load(Ordering::Relaxed), 5);
+    assert_eq!(session.stats().operations, 5);
+}

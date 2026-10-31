@@ -1,0 +1,30 @@
+#+TITLE: Scoped Pseudonymization Claim Matching
+#+OPTIONS: toc:nil
+
+[[file:authorization.rs][authorization.rs]] relates an MRR Data snapshot and
+selected value to one requested =Deidentify= or =Reidentify= effect. A claim
+must match the subject, purpose, dataset, snapshot root, field, selected-value
+digest, context, complete token profile, action, current policy digest, and
+governance epoch. The expiry boundary is exclusive. A claim for another
+dataset or a de-identification claim reused for re-identification fails.
+
+The claim is an input from the deploying Host, not a credential minted by this
+library. =check_claim= only compares fields; it does not run Cedar, verify the
+claim issuer, authenticate the selected bytes, reserve a budget, or check a
+revocation store. The Host must do those steps and execute the effect under
+the same state epoch. For stateful controls, a successful comparison before an
+unrelated state change cannot authorize a later commit.
+
+This narrow check is reusable with a local cryptographic provider or Google
+Sensitive Data Protection. It deliberately does not depend on a Google SDK or
+the Cedar policy engine. A downstream Host can consume a Cedar decision from
+the =cedar-poo-spec= policy artifact, then bind its authenticated claim to this
+exact operation.
+
+#+begin_src mermaid
+flowchart LR
+  S[Snapshot and selected value] --> R[Token operation request]
+  C[Authenticated Host claim] --> M[Exact scope and freshness match]
+  R --> M
+  M --> H[Host authorization and atomic effect]
+#+end_src

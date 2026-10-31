@@ -4,7 +4,7 @@ use std::{
     collections::{HashMap, hash_map::Entry},
     hash::Hash,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, OnceLock},
     time::{Duration, Instant},
 };
 
@@ -34,6 +34,7 @@ pub struct PreparedGraphArSource {
     edge_count: usize,
     facts: Arc<[Fact]>,
     predicates: Arc<[Arc<str>]>,
+    admitted_projection: Arc<OnceLock<BinaryEntityProjection>>,
     timings: GraphArPrepareTimings,
 }
 
@@ -156,6 +157,22 @@ impl GraphArPrepareTimings {
 }
 
 impl PreparedGraphArSource {
+    // A bounded one-entry certificate applies only to immutable physical facts
+    // and the exact admitted schema/catalog. It is not query/result admission
+    // or fresh Host authorization. A different projection is fully validated.
+    fn admit_projection(
+        &self,
+        projection: &BinaryEntityProjection,
+    ) -> Result<Duration, GraphArReadError> {
+        let started = Instant::now();
+        if self.admitted_projection.get() == Some(projection) {
+            return Ok(started.elapsed());
+        }
+        admit_prepared_facts(&self.facts, &self.predicates, projection)?;
+        let _ = self.admitted_projection.set(projection.clone());
+        Ok(started.elapsed())
+    }
+
     #[must_use]
     pub fn root(&self) -> &Path {
         &self.root
@@ -190,7 +207,7 @@ impl PreparedGraphArSource {
         &self,
         projection: &BinaryEntityProjection,
     ) -> Result<GraphArQuerySource, GraphArReadError> {
-        admit_prepared_facts(&self.facts, &self.predicates, projection)?;
+        self.admit_projection(projection)?;
         Ok(GraphArQuerySource::new(
             self.root.clone(),
             projection,
@@ -212,7 +229,10 @@ impl PreparedGraphArSource {
             .map(|(dataset, _fact_admission)| dataset)
     }
 
-    /// Admits prepared facts and reports only projection-owned admission time.
+    /// Admits prepared facts and reports projection-owned validation/lookup time.
+    /// The first successful exact schema/catalog is certified for immutable
+    /// reuse. Changed projections revalidate every fact; Host authority and
+    /// final query admission remain separate.
     ///
     /// # Errors
     ///
@@ -221,7 +241,7 @@ impl PreparedGraphArSource {
         &self,
         projection: &BinaryEntityProjection,
     ) -> Result<(GraphArDataset, Duration), GraphArReadError> {
-        let fact_admission = admit_prepared_facts(&self.facts, &self.predicates, projection)?;
+        let fact_admission = self.admit_projection(projection)?;
         Ok((
             GraphArDataset {
                 root: self.root.clone(),
@@ -251,9 +271,47 @@ pub fn prepare_graphar_source(
     let root = root.as_ref();
     let graph_info_started = Instant::now();
     let graph_info = GraphInfo::load(root.join(GRAPH_INFO_FILE))?;
-    let graph_info_elapsed = graph_info_started.elapsed();
-    let vertices = read_and_admit_vertices(&graph_info, limits.max_vertices)?;
-    let edges = read_edge_batches(&graph_info, limits.max_edges)?;
+    prepare_with_info(root, &graph_info, limits, graph_info_started.elapsed())
+}
+
+/// Full native reference read for one explicitly selected physical layout.
+/// # Errors
+/// Refuses malformed native data and resource/semantic reconstruction failures.
+pub fn prepare_graphar_source_with_adjacency(
+    root: impl AsRef<Path>,
+    limits: GraphArReadLimits,
+    adjacency: crate::GraphArAdjacency,
+) -> Result<PreparedGraphArSource, GraphArReadError> {
+    let root = root.as_ref();
+    let started = Instant::now();
+    let graph_info = GraphInfo::load(root.join(GRAPH_INFO_FILE))?;
+    prepare_with_adjacency(root, &graph_info, limits, started.elapsed(), adjacency)
+}
+
+pub(crate) fn prepare_with_info(
+    root: &Path,
+    graph_info: &GraphInfo,
+    limits: GraphArReadLimits,
+    graph_info_elapsed: Duration,
+) -> Result<PreparedGraphArSource, GraphArReadError> {
+    prepare_with_adjacency(
+        root,
+        graph_info,
+        limits,
+        graph_info_elapsed,
+        crate::GraphArAdjacency::UnorderedBySource,
+    )
+}
+
+fn prepare_with_adjacency(
+    root: &Path,
+    graph_info: &GraphInfo,
+    limits: GraphArReadLimits,
+    graph_info_elapsed: Duration,
+    adjacency: crate::GraphArAdjacency,
+) -> Result<PreparedGraphArSource, GraphArReadError> {
+    let vertices = read_and_admit_vertices(graph_info, limits.max_vertices)?;
+    let edges = read_edge_batches(graph_info, limits.max_edges, adjacency)?;
     let facts = prepare_facts(&edges.values, edges.count, &vertices.physical_entities)?;
 
     Ok(PreparedGraphArSource {
@@ -262,6 +320,7 @@ pub fn prepare_graphar_source(
         edge_count: edges.count,
         facts: Arc::from(facts.values),
         predicates: Arc::from(facts.predicates),
+        admitted_projection: Arc::new(OnceLock::new()),
         timings: GraphArPrepareTimings {
             graph_info: graph_info_elapsed,
             native_vertex_read: vertices.native_read,
@@ -484,3 +543,22 @@ fn admit_prepared_facts(
     }
     Ok(fact_admission_started.elapsed())
 }
+
+#[cfg(feature = "selective-graphar")]
+pub(crate) fn admit_selected_batches(
+    batches: &[RecordBatch],
+    physical_entities: &[EntityId],
+    projection: &BinaryEntityProjection,
+) -> Result<Vec<Fact>, GraphArReadError> {
+    let facts = prepare_facts(
+        batches,
+        batches.iter().map(RecordBatch::num_rows).sum(),
+        physical_entities,
+    )?;
+    admit_prepared_facts(&facts.values, &facts.predicates, projection)?;
+    Ok(facts.values)
+}
+
+#[cfg(test)]
+#[path = "../tests/unit/prepared_admission.rs"]
+mod admission_tests;

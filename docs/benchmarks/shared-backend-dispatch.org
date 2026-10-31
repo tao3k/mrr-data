@@ -1,0 +1,116 @@
+#+TITLE: Shared Backend Dispatch and Mixed Recovery Receipt
+#+OPTIONS: toc:nil
+
+* Source and scope
+
+Clean measurement source: =e5351541999a009b7e8608379df47cecac8307c2=.
+2026-10-03 UTC, macOS 26.6.1, aarch64-apple-darwin, Rust 1.95.0,
+optimized test profile (opt-level 2, 16 codegen units, no debug info).
+Both optional providers run separately through the same Backend APIs.
+The complete JSON receipt (historical local/CI artifact; not stored in Git) retains compiler details, harness hashes,
+configuration and all rounds. [[file:../architecture/shared-backend.org][The architecture document]] specifies ownership,
+quota semantics and Host requirements.
+
+#+begin_src sh
+git checkout e5351541999a009b7e8608379df47cecac8307c2
+git status --short
+rustc -Vv
+just bench-backend-mixed
+just bench-backend
+#+end_src
+
+* Reproduced defects and implemented changes
+
+The engine at =5400bb20981f50f4fb3e293fb606bb878fbcc1ce= immediately
+submitted every accepted request to the Host blocking pool. A native Turso probe
+with two blocking threads, one held validated write and seven queued writes
+failed a 500 ms recovery deadline. Accepted read capacity did not prevent the
+writer connection's mutex waiters from consuming both threads.
+
+The shared dispatcher now waits asynchronously for separate write/read worker
+permits, defaulting to one each. Queue admission still owns its count/byte lease;
+caller cancellation cannot abandon an administrative update or owned drain.
+This avoids submitting the seven connection waiters to blocking threads.
+
+The initial dispatcher at =c1f40741840cdfa452eb2e7e896d11efb631cc9c=
+exposed a second race: recovery concurrency 8 returned =BeforeCommit(Saturated)=
+when the predecessor's successful response arrived before its lease was released.
+The final dispatcher delivers provider results after releasing accounting and
+worker permits. The regular native regression runs 64 commit/recover pairs with
+single-slot write/read admission and requires immediate capacity reuse after
+success. No admission limit was raised to hide the race.
+
+* Historical recovery while a native writer is stalled
+
+The mixed harness caps its own Host at two asynchronous workers and two blocking
+threads. One already-validated native transaction remains held while seven other
+writes are accepted. During the entire measured read window, the gate remains
+closed, eight writes remain accepted and one write job occupies the dispatcher.
+Recovery lanes are 1/4/8, with 32 exact lookups of the committed seed per lane.
+There is no read warmup. Three rounds alternate lane-count order.
+
+Rows below are medians of three round-level statistics, with individual-read
+nearest-rank p50/p95/p99 in milliseconds. =Drain ms= is released-stall-to-close
+wall time, including the eight pending writes. Drain begins while the writer is
+still held; canceling that initial 20 ms shutdown waiter must leave drain owned.
+
+| Provider | Read lanes | Operations/s | p50 ms | p95 ms | p99 ms | Drain ms |
+|----------+------------+--------------+--------+--------+--------+----------|
+| turso | 1 | 6763 | 0.062 | 0.414 | 0.615 | 13.628 |
+| turso | 4 | 12893 | 0.236 | 0.629 | 0.788 | 9.542 |
+| turso | 8 | 3528 | 0.491 | 12.241 | 19.596 | 25.487 |
+| duckdb | 1 | 2413 | 0.380 | 0.598 | 0.715 | 139.149 |
+| duckdb | 4 | 1211 | 1.507 | 7.542 | 39.901 | 69.225 |
+| duckdb | 8 | 2290 | 3.358 | 6.360 | 11.440 | 117.260 |
+
+All 18 cases passed: 162 fresh commits, 2,496 repeated exact historical reads
+while the writer remained stalled, and 162 exact record checks after reopen.
+Every accepted write finished during drain. Both close calls converge on Closed,
+zero accepted/submitted work, zero retained request bytes and exact completed
+counts. The 36 original/reopened Backend instances closed successfully.
+
+These limits govern one Backend's own submissions. Competing Host jobs, other
+Backend instances, or a Host with insufficient blocking capacity can still delay
+recovery. Neither the dispatcher nor this measurement reserves global OS threads.
+
+* Metadata baseline after dispatch changes
+
+The original workload was rerun unchanged except for recording the new worker
+limits and requiring zero blocking-job counts after close. Each commit row is
+the median of three round statistics. Wall throughput includes warmup and the
+full count; sampled latency excludes warmup. Hot-home latency includes
+application sequencing. Serial recovery checks every historical write after
+reopen. All 24 cases passed: 4,320 fresh commits, 4,320 exact recoveries and
+48 successful original/reopened closes.
+
+| Provider | Home layout | Lanes | Operations/s | p50 ms | p95 ms | p99 ms |
+|----------+-------------+-------+--------------+--------+--------+--------|
+| turso | hot-home | 1 | 795 | 0.682 | 3.007 | 8.920 |
+| turso | hot-home | 4 | 720 | 2.851 | 23.857 | 59.582 |
+| turso | independent-homes | 1 | 1698 | 0.634 | 1.387 | 3.471 |
+| turso | independent-homes | 4 | 815 | 2.908 | 17.151 | 34.756 |
+| duckdb | hot-home | 1 | 61 | 9.216 | 37.376 | 53.345 |
+| duckdb | hot-home | 4 | 77 | 33.495 | 138.414 | 199.013 |
+| duckdb | independent-homes | 1 | 71 | 9.036 | 46.123 | 123.145 |
+| duckdb | independent-homes | 4 | 76 | 34.124 | 134.800 | 213.761 |
+
+[[file:shared-backend-local.org][The earlier baseline]] retains its original source pin. These separate local
+runs are not a paired causal estimate of throughput improvement. The verified
+improvement is bounded native submission and recovery progress under the
+controlled stalled-writer workload. No Production latency SLO follows from
+these small samples. The shared host and native RSS are not isolated; block
+publication remains a synthetic ACK and authority guards are absent.
+
+* Additional functional checks and remaining experiments
+
+Local checks passed: default-feature source policy plus worker-limit validation;
+Turso's 12 existing consumer scenarios and three dispatch regressions;
+DuckDB's 14 existing consumers and three dispatch regressions; strict backend
+Clippy with all features/all targets/profile test; and the signed-budget
+shared-backend persistence/replay consumer. These gates preserve the earlier
+schema, transaction, authority and cancellation boundaries.
+
+Next experiments attribute provider-connection waiting, validator round trips
+and synchronous commit cost; add sustained mixed writes, guarded larger records
+and database growth; and qualify native cache budgets and competing Host load.
+Power-loss durability and authenticated latest-head/anti-rollback remain open.

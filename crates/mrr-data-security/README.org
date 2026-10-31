@@ -1,0 +1,24 @@
+#+TITLE: MRR Data Security
+#+OPTIONS: toc:nil
+
+This optional crate owns provider-neutral privacy bindings over immutable
+MRR Data snapshots. It is separate from =mrr-data-core=, which owns physical
+snapshot identity and operation contracts.
+
+- [[file:src/data_protection/pseudonymization.org][Selected pseudonymization input]] binds a selected value digest, context, and consumer profile to a snapshot, optionally at a checked relation child and row ordinal.
+- [[file:src/data_protection/profile.org][Cloud data protection profile]] binds a release receipt and two distinct Host-authenticated decisions.
+- [[file:src/data_protection/storage.org][Storage Effect V1]] binds authenticated source custody, exact CID, policy/lineage state and destination before the optional Tokio-backed raw snapshot publication path; restricted raw bytes are rejected. Its SPEC-generated decision matrix is replayed in Rust.
+
+The crate does not evaluate Cedar, perform cryptography, authenticate evidence,
+or redeem a release receipt. The Host checks current state and executes effects.
+The optional [[file:../mrr-data-pseudonymization/README.org][Cedar POO adapter]] adds
+policy and Google SDP types without making them dependencies of this crate.
+
+#+begin_src sh
+just test-data-protection
+just bench-data-protection
+#+end_src
+
+The stable microbenchmark measures borrowed input projection and scoped Cloud
+release checks. It does not include Cedar evaluation, provider execution, or
+Host receipt redemption.

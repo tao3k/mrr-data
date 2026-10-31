@@ -1,0 +1,127 @@
+#+title: MRR Data Python qualification project
+
+* Project
+
+This installable Python project owns glue for repository checks, upstream
+conformance fixtures and native qualification. =pyproject.toml= declares the
+package, CLI and development tools. =uv.lock= fixes their resolution.
+
+Rust owns semantic, immutable-source, result admission and resource behavior
+assertions. Put new tests there whenever the Rust API can exercise the behavior.
+Python invokes those tests, supervises processes and collects their receipts;
+its own tests target entry points, subprocess cleanup, package resources and
+protocol failures at the glue boundary.
+
+All commands below run from the MRR Data checkout root:
+
+#+begin_src sh
+uv sync --locked --project python
+uv run --locked --project python pytest python/tests -q
+uv run --locked --project python ruff check python
+uv run --locked --project python ruff format --check python
+uv run --locked --project python mrr-data-test run-process --phase test -- /path/to/test-binary --nocapture
+uv run --locked --project python mrr-data-test check-docs
+uv run --locked --project python mrr-data-test check-features
+uv run --locked --project python mrr-data-test check-spec-fixtures --spec-root /path/to/spec
+#+end_src
+
+The package resolves the checkout independently of the current directory.
+An installed wheel outside the checkout requires =MRR_DATA_ROOT=.
+
+For Cargo tests, compile first and record the build's exact executable identities.
+The test phase executes those binaries directly, keeping Cargo's dependency and
+fingerprint checks outside the test inactivity window. Failed/incomplete builds,
+missing targets and ambiguous artifacts are refused before launching any test.
+Rust continues to own all semantic assertions.
+
+#+begin_src sh
+cargo_artifacts=$(mktemp)
+uv run --locked --project python mrr-data-test run-process --phase build \
+  --cargo-artifacts "$cargo_artifacts" -- \
+  cargo test -vv -p mrr-data-core --locked --lib --no-run --message-format=json
+uv run --locked --project python mrr-data-test run-process --phase test \
+  --cargo-artifacts "$cargo_artifacts" --test-target mrr_data_core -- --nocapture
+rm "$cargo_artifacts"
+#+end_src
+
+Cargo =-vv= exposes build-script output that normal compilation hides. The
+build capture keeps executable identities and the successful finish record
+separate from very-verbose native diagnostics. It forwards real output to the
+existing supervisor and groups known LLVM note diagnostics without hiding errors.
+Interrupted, failed or incomplete builds remove the artifact file. Cargo may
+replay cached diagnostics: diagnostic counts are not fresh CPU-work measurements.
+Native compiler owners must also expose actual phase transitions; a Rust LLVM
+wrapper does not cover silent Gerbil imports, program staging or native linking.
+
+* Native and upstream suites
+
+- [[file:src/mrr_data_testing/duckgql/README.org][DuckGQL]]: =duckgql-build=, =duckgql-qualify= and Rust =query-resources= receipt collection.
+- [[file:src/mrr_data_testing/s3/README.org][S3 conformance]]: =s3-conformance=.
+- [[file:src/mrr_data_testing/kache/README.org][Kache upstream qualification]]: =kache-probe=.
+
+SQL, patches and provenance receipts live beside their owning suite and are
+packaged with it. Tests live in =tests=, outside the production package.
+Native suites require explicit provisioned SDKs and artifacts; ordinary Python
+unit tests do not download or build external SDKs. Small local compiler fixtures
+check compilation-unit framing and compiler-wrapper process behavior.
+
+* Progress and deadlines
+
+[[file:src/mrr_data_testing/process.py][The subprocess supervisor]] separates real-output inactivity from the wall
+deadline. Test policy refuses five seconds without output and has a 120-second
+wall limit. Build policy allows 30 seconds without output and has a 20-minute
+wall limit per phase. Control commands have a two-minute wall limit. Output
+does not extend a wall deadline. Timeout kills the process group and produces
+a refusal; it does not emit a successful receipt or artificial progress.
+
+For Rust code generation, the installed =mrr-data-rustc-progress=
+entry point can serve as Cargo's =RUSTC_WORKSPACE_WRAPPER=. When external
+dependencies also require progress, set =RUSTC_WRAPPER= to the same entry point.
+The nested wrapper adds diagnostics only at the direct compiler call. It forwards
+all compiler arguments and adds actual LLVM inline remarks and per-function
+stack-byte records during code generation. Front-end type-check, borrow-check
+and phase events use a narrowly selected =RUSTC_LOG= default; an explicitly
+supplied =RUSTC_LOG= remains authoritative. Debug-info, optimization and
+code-generation settings remain those of the caller; the compiler warning about
+absent source locations is preserved, as are compiler output and exit status.
+Registry and Git dependency compilers are included when =RUSTC_WRAPPER= is set.
+The build supervisor still enforces its existing inactivity and wall limits.
+
+#+begin_src sh
+RUSTC_WORKSPACE_WRAPPER="$PWD/python/.venv/bin/mrr-data-rustc-progress" \
+  uv run --locked --project python mrr-data-test run-process --phase build -- \
+  cargo test -p mrr-data-turso-query --features backend-worker --locked --no-run
+#+end_src
+
+The DuckGQL builder and its CI native test/comparison phases use this
+supervisor. Compilation runs separately from timed test execution. The migrated S3 and Kache suites
+retain their existing process contracts pending dedicated lifecycle migration;
+their retained bounds are visible in their modules.
+
+CI keeps native DuckGQL separate from GraphAr, with the existing 75-minute job
+ceiling. Python framework tests have their own five-minute job. Increasing a
+job ceiling requires measured phase evidence and a separate decision.
+
+* Original-source process resource receipts
+
+=source-resources= supervises the Rust original Healthcare query matrix on
+uniform and skewed fixtures. Rust launches one child process for each declared
+mode, checks the same snapshot across modes, independently verifies the four
+expected rows including NULL and duplicates, and checks resource cleanup.
+
+#+begin_src sh
+uv run --locked --project python mrr-data-test source-resources \
+  --cargo-artifacts /path/to/successful-source-build.jsonl \
+  --output /path/to/original-source-resources.jsonl
+#+end_src
+
+The contract lives in =crates/mrr-data-graphar/source-resources-schema.json=.
+Two warmups and three measured samples retain restoration, capture, relation
+read, conversion, original compilation/binding, execution/admission and result
+handoff times, process CPU, peak RSS and actual remote/relationship read bytes.
+Cold means an empty verified content cache; OS page-cache state is uncontrolled.
+Reused selective mode retains the verified source and property batches, while
+original compilation and engine registration still run for every request.
+Streaming first-result, engine spill and copy-byte evidence are unsupported
+fields, represented by =null=. These bounded fixtures qualify the measurement
+path; they do not establish a production-scale speedup or an operator RSS cap.

@@ -1,0 +1,48 @@
+#+title: Atomic publication delivery in the shared Backend
+#+begin_comment
+SPDX-FileCopyrightText: 2026 tao3k team and Contributors
+SPDX-License-Identifier: Apache-2.0 AND LGPL-2.1-or-later
+#+end_comment
+
+* Owner and fixed protocol
+
+MRR orchestrates native Library validation. MRR Data's existing Backend owns
+provider isolation, mandatory authority generations, head CAS, operation history
+and publication delivery. Turso and DuckDB implement the same transaction seam.
+No additional runtime or domain solver is introduced. The delivery record uses
+inert Scheme =mrr-data.backend-publication-delivery= version 1.
+
+Fresh commit validates the acknowledged physical CID, expected head and every
+enrolled authority, then invokes the Host validator inside the held transaction.
+Head, original operation receipt and exact pending delivery persist together.
+Authority changes and content writes share the home sequence to prevent write
+skew. The Host advances the Data fence before changing native source/proof state
+and issues new plans only after both states agree. External authority changes
+that bypass this Host protocol are outside this transaction contract.
+
+* Recovery and delivery
+
+Enumerate known revisions with =ProfilePort::publication_delivery=. Successful
+absence differs from failed observation. Recovery and exact replay require the
+matching operation/delivery tuple and do not invoke fresh validation or produce
+another intent. Unknown COMMIT requires recovery of the same operation identity.
+
+=acknowledge_publication= is idempotent and verifies the complete historical
+write and revision against both durable records. Reordered ACKs never update
+head or make a new use decision. Delivery consumers must recheck current use
+permission for external effects. This outbox provides durable intent and exact
+ACK recovery; it cannot promise exactly-once effects in an unrelated service.
+
+Pre-delivery stores with committed operations but missing delivery records are
+refused as corrupt/incomplete history. There is no inferred backfill or legacy
+repair path. Use a fresh configured home or explicitly controlled migration.
+
+* Executable gates
+
+Existing =backend_consumer= tests run unchanged for each selected native provider.
+Publication tests cover replacement, exact replay, reordered duplicate ACKs,
+restart, payload substitution, missing-delivery refusal, Host validator refusal,
+mandatory retirement and actual process death at all five tuple writes and after
+COMMIT before ACK. Injected validator refusal qualifies the Data boundary;
+actual POO native semantic and lease checks require the Library integration gate.
+Raw logs belong to local/CI artifacts and are never repository evidence.

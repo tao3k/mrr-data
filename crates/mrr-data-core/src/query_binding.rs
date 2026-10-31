@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::fmt;
 
 #[cfg(feature = "content-identity")]
-use crate::SnapshotBlock;
+use crate::{GraphProjectionKind, SnapshotBlock};
 #[cfg(feature = "content-identity")]
 use cid::Cid;
 use meta_relational_reasoning::{Binding, GenerationId, QueryResultValue};
@@ -40,6 +40,7 @@ pub struct BoundDataQuery {
     query: CatalogBoundQuery,
     snapshot_root: Cid,
     graph_projection_manifest: Option<Cid>,
+    graph_projection_kind: Option<GraphProjectionKind>,
     engine: DataEngineProfile,
 }
 
@@ -79,6 +80,7 @@ pub enum DataQueryBindingError {
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[cfg(feature = "content-identity")]
 pub enum DataGraphSourceBindingError {
+    GraphProjectionProfileMismatch,
     GraphProjectionRequired,
     SourceRelationUnavailable(RelationId),
     GraphProjectionManifestMismatch {
@@ -174,6 +176,11 @@ impl BoundDataQuery {
     #[must_use]
     pub const fn graph_projection_manifest(&self) -> Option<&Cid> {
         self.graph_projection_manifest.as_ref()
+    }
+
+    #[must_use]
+    pub const fn graph_projection_kind(&self) -> Option<GraphProjectionKind> {
+        self.graph_projection_kind
     }
 
     #[must_use]
@@ -281,6 +288,9 @@ pub fn bind_data_query(
         query: query.clone(),
         snapshot_root: *snapshot.cid(),
         graph_projection_manifest,
+        graph_projection_kind: manifest
+            .graph_projection()
+            .map(crate::GraphProjectionDescriptor::kind),
         engine: engine.clone(),
     })
 }
@@ -305,6 +315,9 @@ pub fn admit_graph_projection_source(
     let expected_manifest = query
         .graph_projection_manifest()
         .ok_or(DataGraphSourceBindingError::GraphProjectionRequired)?;
+    if query.graph_projection_kind() != Some(GraphProjectionKind::BinaryEntity) {
+        return Err(DataGraphSourceBindingError::GraphProjectionProfileMismatch);
+    }
     let relation_is_referenced = query.query().query().graph().paths().iter().any(|path| {
         path.segments()
             .iter()
@@ -365,4 +378,114 @@ fn required_features(query: &CatalogBoundQuery) -> BTreeSet<DataQueryFeature> {
         required.insert(DataQueryFeature::ParameterizedPagination);
     }
     required
+}
+
+/// Original Scheme v1 result and the physical binding selected by a trusted
+/// executor. This is a Rust handoff value, not a signed execution credential.
+#[cfg(feature = "content-identity")]
+#[derive(Clone, Debug)]
+pub struct DataQueryResultHandoff {
+    binding: BoundDataQuery,
+    result: Vec<u8>,
+}
+
+#[cfg(feature = "content-identity")]
+#[derive(Debug)]
+pub enum DataQueryHandoffError {
+    Projection(DataQueryOutputError),
+    Transport(meta_relational_reasoning::QueryResultTransportError),
+    PhysicalBindingMismatch,
+}
+
+#[cfg(feature = "content-identity")]
+impl fmt::Display for DataQueryHandoffError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+#[cfg(feature = "content-identity")]
+impl std::error::Error for DataQueryHandoffError {}
+
+#[cfg(feature = "content-identity")]
+impl DataQueryResultHandoff {
+    /// Preserve the exact root, engine and admitted query with the complete
+    /// original typed result. Does not prove the executor evaluated the root.
+    /// # Errors
+    /// Rejects a different engine, invalid MRR rows or an exceeded wire budget.
+    pub fn export(
+        binding: &BoundDataQuery,
+        engine: &DataEngineProfile,
+        output: PhysicalQueryOutput,
+        limits: meta_relational_reasoning::QueryResultLimits,
+        max_bytes: std::num::NonZeroUsize,
+    ) -> Result<Self, DataQueryHandoffError> {
+        let candidate = project_data_query_output(binding, engine, output)
+            .map_err(DataQueryHandoffError::Projection)?;
+        let result = meta_relational_reasoning::export_query_result_transport(
+            binding.query(),
+            &candidate,
+            limits,
+            max_bytes,
+        )
+        .map_err(DataQueryHandoffError::Transport)?;
+        Ok(Self {
+            binding: binding.clone(),
+            result,
+        })
+    }
+
+    /// Preserve MRR's original admitted dispatch candidate and backend binding.
+    /// The physical executor remains trusted; this is not an execution proof.
+    /// # Errors
+    /// Rejects query/candidate drift or an exceeded original Scheme wire budget.
+    pub fn export_execution(
+        execution: &meta_relational_reasoning::AdmittedPropertyExecution<BoundDataQuery>,
+        limits: meta_relational_reasoning::QueryResultLimits,
+        max_bytes: std::num::NonZeroUsize,
+    ) -> Result<Self, DataQueryHandoffError> {
+        let binding = execution.physical_evidence();
+        let result = meta_relational_reasoning::export_query_result_transport(
+            binding.query(),
+            execution.candidate(),
+            limits,
+            max_bytes,
+        )
+        .map_err(DataQueryHandoffError::Transport)?;
+        Ok(Self {
+            binding: binding.clone(),
+            result,
+        })
+    }
+
+    #[must_use]
+    pub fn binding(&self) -> &BoundDataQuery {
+        &self.binding
+    }
+    #[must_use]
+    pub fn result_bytes(&self) -> &[u8] {
+        &self.result
+    }
+
+    /// Compare against the receiver's independently selected physical binding,
+    /// then reconstruct the original candidate and admission receipt in MRR.
+    /// # Errors
+    /// Rejects root, engine, query or catalog drift and invalid result bytes.
+    pub fn verify(
+        &self,
+        expected: &BoundDataQuery,
+        limits: meta_relational_reasoning::QueryResultLimits,
+        max_bytes: std::num::NonZeroUsize,
+    ) -> Result<meta_relational_reasoning::VerifiedQueryResultTransport, DataQueryHandoffError>
+    {
+        if &self.binding != expected {
+            return Err(DataQueryHandoffError::PhysicalBindingMismatch);
+        }
+        meta_relational_reasoning::verify_query_result_transport(
+            expected.query(),
+            &self.result,
+            limits,
+            max_bytes,
+        )
+        .map_err(DataQueryHandoffError::Transport)
+    }
 }

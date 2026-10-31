@@ -1,0 +1,133 @@
+#+title: Restored property-query transformation provider
+
+** Delivered execution boundary
+
+~PropertyTransformationRuntime~ implements MRR's async transformation runtime
+on the existing catalog-bound query / restored DataFusion path. Forward and
+extraction are identity transport; solve executes the verified immutable
+physical closure and retains the original backend evidence and result admission.
+The supported shapes remain the existing one/two outgoing anonymous single-hop
+paths, unordered RETURN ALL, property projections and property=string filters.
+String, integer and null result cells and duplicate rows are retained.
+
+The endpoint identity binds original IR and semantic catalogs. It excludes the
+selected generation. The execution input binds the catalog-bound query and
+physical root; step parameters bind that root. The definition's dependency cut
+binds the implementation closure and lockfile rather than a selected snapshot.
+Operation artifacts include the owned runtime, reference checker, restoration,
+execution, validation, backend, manifests and dependency lockfile. These hashes
+are source identity, not a binary or DataFusion refinement theorem.
+
+The answer checker admits the original typed result transport and evaluates an
+independent relational oracle over the same verified closure. Exact answer bags
+retain duplicates and distinguish null, string and integer. It shares shape and
+budget admission, not DataFusion plans or SQL evaluation. Revocation is monotone
+within the live runtime. MRR rechecks the caller's current verifier after each
+await before continuing, including before extraction and final release.
+
+** Evidence and remaining gates
+
+Local portable qualification: 29 property tests, including real restored
+execution, malformed-but-well-typed empty answer rejection, live revocation,
+generation-stable endpoints, duplicate multiplicity, null and integer extremes;
+strict lib/test Clippy passes. Generic negative fixtures retain a visibly named
+TestOwner. The durable physical regression uses the production identity owner.
+Signed authorization uses an explicit test issuer and the real persistent grant
+ledger; runtime admission requires both the previously admitted edge and an
+authenticated grant. The runtime checks the exact physical cut and current
+binding, counts operations, checks permissions/transport byte budgets and
+refreshes authority after async work. Its identity binds the complete signed
+statement including expiry and bounds. Durable nonce revocation prevents new
+execution; reopening behavior is qualified by the MRR grant negative fixture.
+Publication runs the owner-provided synchronous action under a read lease.
+Expiry/local revocation after an action returns PublicationUncertain, with no
+new acknowledged result. The callback does not implement a physical store.
+
+MRR root and fuzz workspaces are both pinned to
+9b63ad408f8864bb0c0340dbf42dbaaab2a596ef. The preceding 0a2053c CI
+qualified async native dispatch, portable execution, and six production table
+access source-refinement theorems on both configured platforms. The table
+proofs do not prove this provider, DataFusion, codecs or arbitrary effects.
+
+The existing source-handoff CI lane explicitly runs the transformation tests
+with actual native ASCENT route discovery before physical execution. Its
+current-head result must be checked after submission; portable results cannot
+substitute for that native gate. No additional CI job is introduced.
+
+Implemented for this bounded identity profile: the production admission owner
+below, a concrete persisted physical-result store and durable support index.
+Still open as separate claims: complete source refinement for the provider
+guards, async driver, result codecs, oracle and DataFusion;
+general decision/partial/optimization providers and arbitrary effect/resource
+claims. The production runtime requires an already admitted edge and current
+verifier and never manufactures those credentials. Deployment credentials and
+Lambda/Marlin integration are separate product gates.
+
+** CI diagnostic correction
+
+The previous #12 macOS property run failed at the existing cargo wall deadline
+while emitting real compiler events. Its native step used Gerbil verbosity 9
+and redundant explicit GSC/GXPKG overrides. This submission uses verbosity 1
+and the SDK's configured tool discovery from the installed release environment.
+The wall/progress limits are preserved. This configuration change is not yet
+performance or current-head native-success evidence.
+
+The latest Arrow IPC fuzz failure was an E0308 type split: the fuzz workspace
+still pinned 3de6747 while the physical crates used the newer MRR revision.
+Both manifests and lockfiles now use the same fixed source; local locked fuzz
+compile and strict Clippy pass. This does not substitute for the sanitizer CI.
+
+Forward and extraction now call MRR's actual =transport_transformation_bytes=
+primitive. Its source freshness gate and nine Lean axiom-audited theorems
+prove exact byte preservation for arbitrary model slices. This is a source
+refinement of the primitive; provider guards, codecs and solver/oracle remain
+outside that theorem. The selected production identity owner below composes
+the checked primitive with explicit audited guard premises; full provider source
+refinement is not claimed. No test verifier is promoted to that owner.
+
+** Physical durable result publication
+
+=PropertyTransformationRuntime= now implements the MRR asynchronous publication
+port. The retained live lease owns the actual authenticated grant and shared
+monotone local revocation flag. Both local and persisted nonce revocation make
+an already published result stale. No runtime borrow survives in the store.
+
+The production =TransformationResultStore= persists actual provider execution,
+independent answer checks, the complete support cut and original typed result.
+The restored-query regression executes DataFusion, publishes, drops/reopens the
+store, replays the same physical query, verifies exact receipt equality, revokes
+the signed grant and persists reverse-support invalidation. Another reopen
+retains historical bytes and rejects replay of the invalidated record.
+
+This closes the concrete publication/restart path for this bounded profile.
+The generic test admission owner remains a test fixture; this lifecycle test
+uses the selected production identity policy. Native source-handoff and current-head CI must be
+qualified independently from these portable tests.
+
+** Production identity admission owner
+
+=PropertyIdentityTransformation::new= selects exactly one original catalog-bound
+query endpoint, restored root, authenticated source grant and library byte
+identity proof. It builds its definition/evidence internally, admits its edge,
+constructs the actual runtime and binds the final verifier to that exact runtime
+solver and input. Public construction accepts no arbitrary certificate,
+statement, foreign transformation, codec or solver hash.
+
+The verifier compares the complete expected evidence, current source cut,
+selected root parameter, exact instance, one ordered edge and selected solver.
+Its live lease observes local and persisted grant revocation. The durable test
+uses this production owner and rejects a changed root parameter and solver.
+
+The checked law is byte equality preserving an arbitrary endpoint witness
+relation. The endpoint relation stays owned by the original query owner, with
+actual results independently checked over the restored closure. The guard
+composition and physical checker remain audited trusted code; this is neither
+an automatic Lean proof checker for arbitrary imported certificates nor a
+machine proof of DataFusion, codecs or the entire provider wrapper. Current-head
+source proof and native CI are required before qualifying this implementation.
+
+The SDK build-time discovery gap observed on Brew is corrected upstream in
+=gerbil-scheme-rust= PR #18. MRR consumes the shared discovery API. The native
+archive owner rejects Ghostscript, recognizes development Gambit version output
+and infers the selected installation environment. Data does not add GSC/PATH
+compiler overrides. Current PR checks still determine final qualification.

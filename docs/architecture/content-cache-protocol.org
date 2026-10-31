@@ -50,6 +50,61 @@ provider's contract. Publication of a block is not publication of an entire
 snapshot: children must be uploaded before its root or discovery pointer becomes
 visible. There is no multi-object transaction in this interface.
 
+* Conditional head commit protocol
+
+=ConditionalContentWrite= describes a provider-neutral replacement of one
+authenticated content head. It binds a Host scope, stable operation ID, exact
+expected revision and CID, and replacement CID. =decide_commit= requires the
+replacement block's publication acknowledgement before returning =Apply=.
+Revision and CID are both compared, so returning to earlier bytes cannot reopen
+an earlier revision. Existing revisions are positive and increments cannot wrap.
+
+The Host authenticates the current head and operation receipt. It must compare
+the head, enforce operation uniqueness, and persist the new head and exact receipt
+in one backend transaction. =Apply= is a pure protocol decision, not evidence that
+the transaction occurred. The base content crate adds no database or head-storage implementation
+through this interface. A caller-created receipt projection is not provider evidence.
+
+An exact authenticated receipt returns =Replay= even after the head advances and
+without a new publication ACK; this is a status lookup and grants no new write.
+The same operation ID with different scope, expected state, or replacement CID
+is a conflict. An uncertain backend response is resolved by looking up that exact
+operation receipt. A missing or unreadable receipt does not establish failure or
+permit retrying the effect under a new ID.
+
+Domain-specific admission, such as Cedar POO ancestor budgets and revocation,
+belongs to the calling semantic layer. Its current authority must be rechecked
+within the backend transaction according to that domain's protocol. A block CID
+and a successful publication alone establish neither budget authority nor commit.
+
+The conditional protocol tests exercise malformed receipts, ABA, replay after a
+later revision, and two concurrent writers in a test-only serialized transaction.
+They provide no DB, crash-recovery or durability guarantee.
+
+* Atomic commit adapter port
+
+=ConditionalContentCommitPort= is an async interface for a Host-supplied backend.
+=commit= returns an exact =Committed= or =Replayed= receipt; =recover= looks up
+that same scope, operation ID, expected head and replacement CID. The port derives
+its checks from =decide_commit= and =recover_receipt=. No DB adapter is supplied.
+
+The backend runs fresh domain validation only for a new Apply, inside the same
+protected transaction that persists the head and operation receipt. It must
+serialize authority changes or compare their versions atomically. Merely calling
+a validation callback and then doing an unprotected write fails this contract.
+Replay is a status result that skips validation and creates no new reservation.
+
+=Protocol= and =Validation= are known refusals. =BeforeCommit= records a backend
+failure known to have made no new commit. =Unknown= records an ambiguous result:
+query the original exact operation and never assign a new ID for that uncertain
+effect. A successful lookup with no row is distinct from an unavailable ledger.
+Recovery itself grants no new effect; any new Apply repeats fresh validation.
+
+The test-only serialized provider exercises racing clients, validation refusal,
+lost commit acknowledgement, exact recovery after later head changes, changed
+operation rejection, and unavailable-ledger handling. These are protocol checks,
+not deployed transaction, crash or durability acceptance.
+
 * Adapter responsibilities and status
 
 The protocol does not implement eviction, cross-process locks, retry scheduling,
@@ -276,8 +331,8 @@ cargo test -p mrr-data-cache --features kache,blocking local::acceptance --locke
 
 ** Independent SigV4 and TLS acceptance
 
-Run =python3 tools/s3-conformance/run.py= as described in the
-[[file:../../tools/s3-conformance/README.org][conformance runner guide]]. It builds pinned
+Run =uv run --locked --project python mrr-data-test s3-conformance= as described in the
+[[file:../../python/src/mrr_data_testing/s3/README.org][conformance runner guide]]. It builds pinned
 upstream s3s-fs outside the workspace dependency graph and supplies a temporary
 loopback TLS terminator. Upstream s3s validates real signatures; the terminator
 only relays bytes. The ordinary fault fixture remains useful for deterministic
@@ -288,7 +343,7 @@ credentials, invalid access key/secret (GET and PUT), unknown CA, wrong hostname
 namespace separation, conditional creation, repeated identical publication,
 corrupt-object non-overwrite, bounded reads and genuine Arrow snapshot cold
 restore. The server is s3s-fs 0.16.0 at the runner's pinned commit, built separately
-with Rust 1.96.0. The [[file:../../evidence/s3-conformance-receipt.json][receipt]] identifies that build.
+with Rust 1.96.0. The receipt (historical local/CI artifact; not stored in Git) identifies that build.
 A dedicated Ubuntu/macOS CI job now invokes the same runner; remote CI results
 have not been observed.
 
@@ -307,3 +362,10 @@ Deployment configuration stays outside immutable manifests:
 No insecure TLS bypass is used. B2/R2-specific endpoints, credentials, mTLS and
 native server TLS were not exercised by this local test. Hosted smoke tests
 remain optional and require explicitly supplied deployment credentials.
+
+* Shared metadata backend
+
+The optional [[file:shared-backend.org][shared Production backend]] implements this port through optional Turso/DuckDB
+physical transactions and explicit owned-worker lifecycle. Domain adapters
+consume the same port; immutable block durability and current external authority
+remain independently qualified composition requirements.

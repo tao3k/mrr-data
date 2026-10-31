@@ -1,0 +1,326 @@
+//! Optional Turso native engine. This module owns its physical database dialect;
+//! the shared backend consumes only bounded opaque transaction records.
+use super::connection::{failure, full_writer};
+use super::writers::Writers;
+use crate::BackendError;
+use crate::providers::{MetadataTransaction, ProviderResult, TransactionProvider};
+use mrr_data_content::ConditionalCommitPortError as PortError;
+use mrr_data_profile::BACKEND_TURSO_SCHEMA;
+use std::{path::PathBuf, sync::Mutex, time::Duration};
+use tokio::runtime::Handle;
+/// Local Turso connections using the Host executor. No global allocator, remote
+/// replica, automatic runtime or process signal handler is enabled.
+/// Once closing begins this owner is terminal; recovery constructs a new provider
+/// around the original database. Resource readiness is not domain authorization.
+pub struct TursoProvider {
+    path: PathBuf,
+    runtime: Handle,
+    writer: Mutex<Option<turso::Connection>>,
+    reader: Mutex<Option<turso::Connection>>,
+    pub(super) writers: Writers,
+    mode: WriteMode,
+}
+#[derive(Clone, Copy)]
+enum WriteMode {
+    Serialized,
+    Concurrent,
+    Reusable(usize),
+}
+impl TursoProvider {
+    #[must_use]
+    pub fn new(path: PathBuf, runtime: Handle) -> Self {
+        Self {
+            path,
+            runtime,
+            writer: Mutex::new(None),
+            reader: Mutex::new(None),
+            writers: Writers::default(),
+            mode: WriteMode::Serialized,
+        }
+    }
+    /// Opt into MVCC for a new store or reopen an existing MVCC store.
+    /// Existing WAL stores are refused rather than silently converted. The Host
+    /// bounds connections through Backend write/shared worker admission. The
+    /// shared engine's home sequence remains the authority conflict witness.
+    #[must_use]
+    pub fn with_concurrent_writes(mut self) -> Self {
+        self.mode = WriteMode::Concurrent;
+        self
+    }
+    /// Bound and reuse private, FULL-verified MVCC writers. Capacity must match
+    /// the Host's admitted worker budget. Errors/Unknown/panic discard sessions.
+    /// # Errors
+    /// Zero or unsupported capacity is refused before storage is opened.
+    pub fn with_reusable_concurrent_writes(
+        mut self,
+        capacity: usize,
+    ) -> Result<Self, BackendError> {
+        if capacity == 0
+            || capacity > tokio::sync::Semaphore::MAX_PERMITS
+            || self
+                .writer
+                .lock()
+                .map_err(|_| BackendError::Unavailable)?
+                .is_some()
+        {
+            return Err(BackendError::InvalidConfiguration);
+        }
+        self.writers.ensure_fresh()?;
+        self.mode = WriteMode::Reusable(capacity);
+        Ok(self)
+    }
+}
+fn before(e: BackendError) -> PortError<BackendError, ()> {
+    PortError::BeforeCommit(e)
+}
+fn select_mode(
+    conn: &turso::Connection,
+    runtime: &Handle,
+    mode: WriteMode,
+    existed: bool,
+) -> Result<(), BackendError> {
+    runtime.block_on(async {
+        if !matches!(mode, WriteMode::Serialized) && !existed {
+            conn.pragma_update("journal_mode", "'mvcc'")
+                .await
+                .map_err(failure)?;
+        }
+        let mut rows = conn
+            .query("PRAGMA journal_mode", ())
+            .await
+            .map_err(failure)?;
+        let row = rows
+            .next()
+            .await
+            .map_err(failure)?
+            .ok_or(BackendError::Corrupt)?;
+        let expected = match mode {
+            WriteMode::Serialized => "wal",
+            WriteMode::Concurrent | WriteMode::Reusable(_) => "mvcc",
+        };
+        row.get::<String>(0)
+            .map_err(failure)?
+            .eq_ignore_ascii_case(expected)
+            .then_some(())
+            .ok_or(BackendError::UnsupportedCapabilities)
+    })
+}
+fn read(
+    conn: &turso::Connection,
+    runtime: &Handle,
+    key: &str,
+) -> Result<Option<Vec<u8>>, BackendError> {
+    runtime.block_on(async {
+        let mut rows = conn
+            .query(
+                "SELECT CASE WHEN length(value)<=65536 THEN value ELSE NULL END FROM mrr_backend_kv WHERE key=?1",
+                [key],
+            )
+            .await
+            .map_err(failure)?;
+        let Some(row) = rows.next().await.map_err(failure)? else {
+            return Ok(None);
+        };
+        match row.get_value(0).map_err(failure)? {
+            turso::Value::Blob(bytes) => Ok(Some(bytes)),
+            _ => Err(BackendError::Corrupt),
+        }
+    })
+}
+struct Transaction<'a> {
+    conn: &'a turso::Connection,
+    runtime: &'a Handle,
+    finished: bool,
+}
+impl MetadataTransaction for Transaction<'_> {
+    fn get(&mut self, key: &str) -> Result<Option<Vec<u8>>, BackendError> {
+        read(self.conn, self.runtime, key)
+    }
+    fn put(&mut self, key: &str, value: &[u8]) -> Result<(), BackendError> {
+        if key.len() > 8192 || value.len() > 65536 {
+            return Err(BackendError::Limit);
+        }
+        self.runtime
+            .block_on(self.conn.execute(
+                "INSERT INTO mrr_backend_kv VALUES (?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                [turso::Value::Text(key.into()), turso::Value::Blob(value.into())],
+            ))
+            .map_err(failure)?;
+        Ok(())
+    }
+}
+impl Drop for Transaction<'_> {
+    fn drop(&mut self) {
+        if !self.finished {
+            let _ = self.runtime.block_on(self.conn.execute("ROLLBACK", ()));
+        }
+    }
+}
+impl TransactionProvider for TursoProvider {
+    fn open_storage(&self) -> Result<(), BackendError> {
+        let path = self
+            .path
+            .to_str()
+            .filter(|p| !p.is_empty() && *p != ":memory:")
+            .ok_or(BackendError::InvalidConfiguration)?;
+        let mut writer = self.writer.lock().map_err(|_| BackendError::Unavailable)?;
+        if writer.is_some() {
+            return Err(BackendError::InvalidConfiguration);
+        }
+        self.writers.ensure_fresh()?;
+        let existed = self.path.exists();
+        let db = self
+            .runtime
+            .block_on(turso::Builder::new_local(path).build())
+            .map_err(failure)?;
+        let conn = db.connect().map_err(failure)?;
+        conn.busy_timeout(Duration::from_millis(250))
+            .map_err(failure)?;
+        select_mode(&conn, &self.runtime, self.mode, existed)?;
+        full_writer(&conn, &self.runtime)?;
+        initialize(&conn, &self.runtime, existed)?;
+        let reader = db.connect().map_err(failure)?;
+        reader
+            .busy_timeout(Duration::from_millis(250))
+            .map_err(failure)?;
+        *self.reader.lock().map_err(|_| BackendError::Unavailable)? = Some(reader);
+        let capacity = match self.mode {
+            WriteMode::Reusable(capacity) => Some(capacity),
+            _ => None,
+        };
+        self.writers.open(db, capacity)?;
+        *writer = Some(conn);
+        Ok(())
+    }
+    fn read(&self, key: &str) -> Result<Option<Vec<u8>>, BackendError> {
+        let guard = self.reader.lock().map_err(|_| BackendError::Unavailable)?;
+        read(
+            guard.as_ref().ok_or(BackendError::NotReady)?,
+            &self.runtime,
+            key,
+        )
+    }
+    fn transaction(
+        &self,
+        run: &mut dyn FnMut(&mut dyn MetadataTransaction) -> ProviderResult<()>,
+    ) -> ProviderResult<()> {
+        match self.mode {
+            WriteMode::Serialized => {
+                let guard = self
+                    .writer
+                    .lock()
+                    .map_err(|_| before(BackendError::Unavailable))?;
+                let conn = guard
+                    .as_ref()
+                    .ok_or_else(|| before(BackendError::NotReady))?;
+                transact(conn, &self.runtime, "BEGIN IMMEDIATE", run)
+            }
+            WriteMode::Concurrent | WriteMode::Reusable(_) => {
+                let mut writer = self.writers.checkout(&self.runtime).map_err(before)?;
+                let result = transact(
+                    writer.connection().map_err(before)?,
+                    &self.runtime,
+                    "BEGIN CONCURRENT",
+                    run,
+                );
+                if result.is_ok() {
+                    writer.committed();
+                }
+                result
+            }
+        }
+    }
+    fn close_storage(&self) -> Result<(), BackendError> {
+        // Match opening's lock order and serialize the complete resource image.
+        // No old split teardown may clear a newly opened reader/bootstrap handle.
+        let mut writer = self.writer.lock().map_err(|_| BackendError::Unavailable)?;
+        self.writers.close()?;
+        self.reader
+            .lock()
+            .map_err(|_| BackendError::Unavailable)?
+            .take();
+        writer.take();
+        Ok(())
+    }
+}
+pub(super) fn transact(
+    conn: &turso::Connection,
+    runtime: &Handle,
+    begin: &str,
+    run: &mut dyn FnMut(&mut dyn MetadataTransaction) -> ProviderResult<()>,
+) -> ProviderResult<()> {
+    runtime
+        .block_on(conn.execute(begin, ()))
+        .map_err(failure)
+        .map_err(before)?;
+    let mut tx = Transaction {
+        conn,
+        runtime,
+        finished: false,
+    };
+    run(&mut tx)?;
+    // No retry, even for BusySnapshot. An unsuccessful COMMIT remains Unknown;
+    // exact operation recovery is the only route back to the deciding outcome.
+    runtime
+        .block_on(conn.execute("COMMIT", ()))
+        .map_err(failure)
+        .map_err(PortError::Unknown)?;
+    tx.finished = true;
+    Ok(())
+}
+fn initialize(
+    conn: &turso::Connection,
+    runtime: &Handle,
+    existed: bool,
+) -> Result<(), BackendError> {
+    runtime
+        .block_on(conn.execute("BEGIN IMMEDIATE", ()))
+        .map_err(failure)?;
+    let mut tx = Transaction {
+        conn,
+        runtime,
+        finished: false,
+    };
+    let tables = runtime.block_on(async {
+        let mut rows = conn
+            .query(
+                "SELECT count(*) FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' AND name != '__turso_internal_mvcc_meta'",
+                (),
+            )
+            .await
+            .map_err(failure)?;
+        rows.next()
+            .await
+            .map_err(failure)?
+            .ok_or(BackendError::Corrupt)?
+            .get::<i64>(0)
+            .map_err(failure)
+    })?;
+    if tables == 0 {
+        if existed {
+            return Err(BackendError::Corrupt);
+        }
+        runtime
+            .block_on(conn.execute(
+                "CREATE TABLE mrr_backend_kv (key TEXT PRIMARY KEY NOT NULL, value BLOB NOT NULL)",
+                (),
+            ))
+            .map_err(failure)?;
+        tx.put(
+            "mrr.backend.schema",
+            &crate::scheme_record::schema_marker(BACKEND_TURSO_SCHEMA),
+        )?;
+    } else if tx
+        .get("mrr.backend.schema")
+        .map_err(|_| BackendError::Corrupt)?
+        .as_deref()
+        != Some(crate::scheme_record::schema_marker(BACKEND_TURSO_SCHEMA).as_slice())
+    {
+        return Err(BackendError::Corrupt);
+    }
+    runtime
+        .block_on(conn.execute("COMMIT", ()))
+        .map_err(failure)?;
+    tx.finished = true;
+    Ok(())
+}

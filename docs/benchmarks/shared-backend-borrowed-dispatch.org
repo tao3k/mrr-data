@@ -1,0 +1,247 @@
+#+TITLE: Borrowed Validation, Admission Experiments and Rejected Optimizations
+#+LANGUAGE: en
+#+OPTIONS: toc:2
+
+* Outcome and reviewed contract
+
+The subsequent [[file:shared-backend-host-envelope.org][Host-envelope and direct-retest record]] fixes evidence grades and
+predeclared gates, verifies source-currentness and separates admission O/A from
+validator A/AV effects. It retains every historical sample below.
+
+No production optimization is admitted in this round. The implementation retains
+the pinned Tokio oneshot request/answer channels and original asynchronous
+admission task. Both custom Condvar rendezvous and ready-permit dispatch were
+reviewed under Weaver SysML, implemented, tested, measured and withdrawn.
+Three additional real native guard/rejection/panic tests remain. No dependency
+pin, native provider, schema, default mode or qualification package changes.
+
+The callback borrows Host state and runs on the async caller while a worker
+holds its original transaction. Eliminating both handoffs by moving it into
+spawn_blocking would require static ownership or an unsafe lifetime extension.
+block_in_place would block sibling futures within the same polling task and
+alter cancellation/composability. Neither is an acceptable default shortcut.
+
+The Condvar candidate carried one revision/request and one irrevocable answer.
+Caller drop before an answer refused; published true remained accepted; worker
+exit without requesting validation woke the caller. Native lifecycle tests
+passed, but added protocol complexity did not earn a stable measured benefit.
+The source, frozen binary and failures/regressions are retained temporarily;
+the protocol is not included as dead code or a production alternative.
+
+The ready-permit candidate tried the existing worker/shared semaphores before
+spawning an admission task, falling back on the original wait path when either
+was unavailable. Partial acquisition released permits, not the original
+scheduler lease. Both paths released accounting before publishing completion.
+Its source-level removal of one task did not establish attributable throughput
+benefit; it too is withdrawn. Fairness of registered semaphore waiters is not
+global arrival FIFO before registration. Authority order remains the original
+durable CAS/home witness, never admission order.
+
+* Frozen comparison and Host context
+
+2026-10-31: 12 physical/logical CPUs, 12 runtime/write/shared workers, reusable
+capacity 12 and 16 blocking threads; use max(4, available CPUs). Each case has
+12 lanes with 64 real content/authority-validated metadata commits. Keep FULL,
+zero retries, original identities and the unchanged 30-second per-case bound.
+All accepted work drains; no task-owned build/test overlaps measurement.
+Every request sample remains in the raw temporary logs.
+Reporting serialization is outside timing but may affect subsequent cache/I/O
+state. Rotation does not eliminate this observer effect.
+
+Each candidate has its own fixed ABBA sequence: original, candidate, candidate,
+original. Modes rotate WAL/fresh/reuse, fresh/reuse/WAL, reuse/WAL/fresh in each
+domain shape. The benchmark and instrumentation are identical to the original
+fa351255 source; only the experimental production paths differ. Frozen SHA-256:
+
+| Executable | SHA-256 |
+|------------+---------|
+| Original | cd5744fa1a52c3faeff6355ddf3e2f8788aab3801c4fb38ff6f93e03474d11ca |
+| Condvar plus ready permits | b7f5c2929416599a1a10e749e8cb344fe944545cc471920945371a31ce8801c3 |
+| Ready permits only | 70515a49c49355129783089b6927e194b470d9bf8bc7c8dc5c31dc34ed6da3a8 |
+
+A read-only sysctl observation during the second series reports 12 physical/
+logical CPUs and load averages 50.16, 34.82, 29.52. This corroborates substantial
+shared-Host contention; it cannot assign each latency spike to a specific task,
+CPU frequency, kernel queue or disk. The sandboxed probe first failed; the
+authorized read-only Host probe succeeded. Both receipts remain temporary.
+Do not infer a dedicated Host, cold cache/build or isolated native CPU profile.
+
+* Every full-path matching sample
+
+TPS is rounded only for display. Reuse P95 is milliseconds; raw JSON retains
+all modes' latency distributions, phase counters and bounded per-request clocks.
+Each table row contains one matching WAL/fresh/reuse triplet.
+
+| Experiment | Run | Variant | Domain | Round | WAL TPS | Fresh TPS | Reuse TPS | Reuse P95 ms |
+|------------+-----+---------+--------+-------+---------+-----------+-----------+--------------|
+| Condvar | 1 | Baseline | Independent | 0 | 1456 | 2170 | 5123 | 5.10 |
+| Condvar | 1 | Baseline | Independent | 1 | 2476 | 2463 | 2807 | 18.92 |
+| Condvar | 1 | Baseline | Independent | 2 | 2557 | 1571 | 6380 | 2.79 |
+| Condvar | 1 | Baseline | Hot | 0 | 2148 | 645 | 1853 | 8.17 |
+| Condvar | 1 | Baseline | Hot | 1 | 2273 | 671 | 1482 | 18.41 |
+| Condvar | 1 | Baseline | Hot | 2 | 2225 | 643 | 1932 | 9.85 |
+| Condvar | 2 | Candidate | Independent | 0 | 1126 | 1736 | 4966 | 7.48 |
+| Condvar | 2 | Candidate | Independent | 1 | 1256 | 1677 | 3948 | 5.17 |
+| Condvar | 2 | Candidate | Independent | 2 | 1326 | 1383 | 1954 | 15.38 |
+| Condvar | 2 | Candidate | Hot | 0 | 991 | 489 | 2021 | 8.31 |
+| Condvar | 2 | Candidate | Hot | 1 | 1932 | 348 | 1331 | 15.55 |
+| Condvar | 2 | Candidate | Hot | 2 | 1853 | 497 | 1674 | 14.30 |
+| Condvar | 3 | Candidate | Independent | 0 | 2288 | 1678 | 7891 | 2.44 |
+| Condvar | 3 | Candidate | Independent | 1 | 615 | 1515 | 6665 | 4.47 |
+| Condvar | 3 | Candidate | Independent | 2 | 732 | 1456 | 6495 | 5.36 |
+| Condvar | 3 | Candidate | Hot | 0 | 570 | 267 | 504 | 54.00 |
+| Condvar | 3 | Candidate | Hot | 1 | 808 | 191 | 756 | 42.54 |
+| Condvar | 3 | Candidate | Hot | 2 | 559 | 370 | 462 | 89.47 |
+| Condvar | 4 | Baseline | Independent | 0 | 910 | 1371 | 2870 | 11.33 |
+| Condvar | 4 | Baseline | Independent | 1 | 1627 | 1472 | 4653 | 5.57 |
+| Condvar | 4 | Baseline | Independent | 2 | 1733 | 1428 | 5260 | 3.96 |
+| Condvar | 4 | Baseline | Hot | 0 | 1863 | 480 | 1115 | 18.84 |
+| Condvar | 4 | Baseline | Hot | 1 | 2061 | 524 | 1472 | 13.88 |
+| Condvar | 4 | Baseline | Hot | 2 | 1301 | 577 | 2229 | 6.65 |
+| Ready permits | 1 | Baseline | Independent | 0 | 1304 | 1678 | 5795 | 3.08 |
+| Ready permits | 1 | Baseline | Independent | 1 | 2542 | 1754 | 8056 | 2.97 |
+| Ready permits | 1 | Baseline | Independent | 2 | 1111 | 1516 | 6466 | 3.31 |
+| Ready permits | 1 | Baseline | Hot | 0 | 1783 | 777 | 1357 | 24.47 |
+| Ready permits | 1 | Baseline | Hot | 1 | 2234 | 642 | 2566 | 5.60 |
+| Ready permits | 1 | Baseline | Hot | 2 | 2328 | 801 | 2559 | 5.86 |
+| Ready permits | 2 | Candidate | Independent | 0 | 575 | 1645 | 3287 | 12.19 |
+| Ready permits | 2 | Candidate | Independent | 1 | 842 | 1815 | 6453 | 4.19 |
+| Ready permits | 2 | Candidate | Independent | 2 | 461 | 1223 | 2287 | 11.23 |
+| Ready permits | 2 | Candidate | Hot | 0 | 667 | 237 | 540 | 57.45 |
+| Ready permits | 2 | Candidate | Hot | 1 | 625 | 207 | 611 | 52.42 |
+| Ready permits | 2 | Candidate | Hot | 2 | 526 | 201 | 633 | 50.89 |
+| Ready permits | 3 | Candidate | Independent | 0 | 618 | 1872 | 5121 | 6.28 |
+| Ready permits | 3 | Candidate | Independent | 1 | 857 | 1620 | 3599 | 7.53 |
+| Ready permits | 3 | Candidate | Independent | 2 | 630 | 1753 | 3631 | 9.75 |
+| Ready permits | 3 | Candidate | Hot | 0 | 601 | 194 | 492 | 59.26 |
+| Ready permits | 3 | Candidate | Hot | 1 | 578 | 197 | 763 | 42.17 |
+| Ready permits | 3 | Candidate | Hot | 2 | 312 | 103 | 420 | 114.30 |
+| Ready permits | 4 | Baseline | Independent | 0 | 363 | 506 | 4541 | 7.74 |
+| Ready permits | 4 | Baseline | Independent | 1 | 695 | 850 | 1713 | 14.94 |
+| Ready permits | 4 | Baseline | Independent | 2 | 469 | 252 | 2878 | 12.42 |
+| Ready permits | 4 | Baseline | Hot | 0 | 209 | 89 | 303 | 92.69 |
+| Ready permits | 4 | Baseline | Hot | 1 | 661 | 150 | 1127 | 20.64 |
+| Ready permits | 4 | Baseline | Hot | 2 | 415 | 203 | 503 | 68.58 |
+
+Each sequence completes 72 cases and 55,296 commits/exact recoveries with zero
+refusal, Unknown or unexpected failure. Combined: 144 cases and 110,592 exact
+commits/recoveries. All regressions remain; none is replaced by a passing rerun.
+Test-body times in ABBA order are 12.34, 16.56, 26.98, 16.20 seconds for the
+Condvar experiment and 12.79, 33.13, 38.31, 52.51 seconds for ready permits only.
+These are full suites; the 30-second collection bound is independently retained
+per case, never widened to accommodate a slow suite.
+
+Compare candidate run 2 with original run 1, then candidate run 3 with original
+run 4 for each matching round. Hot reuse candidate/original TPS ratios are:
+
+| Candidate | All six matching ratios |
+|-----------+-------------------------|
+| Condvar plus ready permits | 1.09, 0.90, 0.87, 0.45, 0.51, 0.21 |
+| Ready permits only | 0.40, 0.24, 0.25, 1.63, 0.68, 0.84 |
+
+Neither set qualifies a stable benefit. This is not proof that either candidate
+is intrinsically slower under a controlled Host. It is also not permission to
+discard poor samples, normalize away regressions or ship a gain claim.
+
+* Cost attribution and unchanged native control
+
+For hot reuse round 0 in the Condvar series, original/candidate admission-
+dispatch-delivery cost is 47.37/19.27 microseconds, and bridge minus validator
+50.54/15.10. That isolated improvement does not survive the whole experiment:
+candidate run 3 has 301.42--330.48 microseconds outside the provider and
+170.56--432.43 in the bridge across its hot cases. In the ready-only series,
+original run 1 hot reads range 140.67--207.78 microseconds versus
+429.10--441.71 in candidate run 2, although physical read/provider source is
+unchanged. All are wall times, including driver scheduling.
+
+Two separate rotated public-MetadataProvider controls remove dispatcher and
+ProfilePort rendezvous from the timed interval. They retain the same file body,
+mandatory authority vector, original home sequence, FULL, one active transaction
+and CPU-sized driver runtime. Only preparation uses Backend admission. These
+controls do not inherit a new production permission or replace borrowed guards.
+
+| Binary | Round | Mode | Mean operation us | Gets us | FULL post-body us |
+|--------+-------+------+-------------------+---------+-------------------|
+| Baseline | 0 | wal | 488.52 | 138.76 | 154.02 |
+| Baseline | 0 | fresh-mvcc | 1438.15 | 193.13 | 357.77 |
+| Baseline | 0 | reused-mvcc | 431.84 | 158.44 | 82.26 |
+| Baseline | 1 | fresh-mvcc | 1364.29 | 179.54 | 354.06 |
+| Baseline | 1 | reused-mvcc | 383.86 | 135.82 | 92.72 |
+| Baseline | 1 | wal | 457.59 | 128.80 | 152.01 |
+| Baseline | 2 | reused-mvcc | 410.18 | 155.96 | 77.71 |
+| Baseline | 2 | wal | 467.98 | 140.01 | 137.41 |
+| Baseline | 2 | fresh-mvcc | 1485.90 | 193.75 | 380.14 |
+| Ready-permit candidate | 0 | wal | 539.26 | 150.58 | 180.44 |
+| Ready-permit candidate | 0 | fresh-mvcc | 2741.09 | 433.10 | 839.88 |
+| Ready-permit candidate | 0 | reused-mvcc | 1086.04 | 436.47 | 229.93 |
+| Ready-permit candidate | 1 | fresh-mvcc | 4035.01 | 372.14 | 1074.64 |
+| Ready-permit candidate | 1 | reused-mvcc | 873.69 | 311.82 | 146.00 |
+| Ready-permit candidate | 1 | wal | 1255.32 | 282.24 | 565.17 |
+| Ready-permit candidate | 2 | reused-mvcc | 785.00 | 289.51 | 197.38 |
+| Ready-permit candidate | 2 | wal | 1189.81 | 310.20 | 375.23 |
+| Ready-permit candidate | 2 | fresh-mvcc | 3932.26 | 378.65 | 1001.83 |
+
+The two controls add 18 cases and 13,824 commits/exact recoveries. Total retained
+measurement is 162 cases and 124,416 exact commits/recoveries. Dispatcher code
+does not execute inside their timed loop, yet get and commit/release wall costs
+also shift substantially. Thus the full-path differences cannot all be assigned
+to admission code. Native reuse/WAL get ratios are about 1.14/1.05/1.11 in the
+original control and 2.90/1.10/0.93 in the later candidate control. This undermines
+a universal fixed MVCC-read-penalty explanation, but does not prove equal native
+CPU cost. Host sensitivity, binary/cache context and native scheduling remain
+confounded. Pure fsync/device versus scheduler time still lacks kernel evidence.
+
+* Native guard and recovery acceptance
+
+The existing lifecycle target now also verifies:
+
+- A callback genuinely borrowing a stack guard executes on the caller thread.
+  While native COMMIT is paused, the guard remains live and the original worker
+  lease stays active. Only after known completion is the guard dropped; exact
+  recovery retains the original claim/reservation/history and held=4 frame.
+- Typed validation rejection drains and reconstructs the original unconsumed
+  obligation without inventing a new nonce or releasing unknown exposure.
+- Validator panic closes the pending answer, lets native cleanup drain within
+  the existing bound, and reconstructs the original unconsumed obligation.
+
+Existing queued cancellation, accepted approval with caller cancellation,
+known-commit reply loss, retired authority, late-return, simultaneous shutdown
+and independent-process crash-recovery tests remain mandatory. Same-process
+provider reconstruction is not process death or whole-machine rollback evidence.
+No fixture sends to an external provider or executes account-refund arithmetic.
+
+Original-runtime standard validation passes 67 tests in each WAL/fresh-MVCC
+configuration, 82 in expanded reusable Arrow/query + graph/publication, and
+strict all-target Clippy. No timeout, count, byte or ASP deny limit is relaxed.
+Initial ignored-unit-pattern lint failure was fixed without an exemption.
+Dependency manifests/lockfile and all production source match the original
+after candidate withdrawal. SPEC and existing Lean/Quint ownership do not change;
+there is no second authorization model.
+
+* Reproduction and next acceptance boundary
+
+Use the same existing Cargo targets to build a frozen executable before any
+source mutation, then invoke that executable directly for each fixed ABBA leg:
+
+#+begin_src text
+cargo test -p mrr-data-backend --features turso --locked --offline --test backend_concurrency_paired --no-run
+<original-or-candidate-executable> turso_paired_writer_reuse --ignored --exact --nocapture --test-threads=1
+<original-or-candidate-executable> worker_control::turso_worker_local_validator_control --ignored --exact --nocapture --test-threads=1
+MRR_BACKEND_TEST_MVCC=reuse cargo test -p mrr-data-backend --features turso,arrow-query,graph-publish --locked --offline
+cargo clippy -p mrr-data-backend --features turso,arrow-query,graph-publish --all-targets --locked --offline -- -D warnings
+#+end_src
+
+Raw mrr-borrowed-ABBA-*, mrr-borrowed-fast-ABBA-*, mrr-borrowed-native-* and
+Host-observation receipts remain under temporary local storage. Frozen binaries
+are mrr-borrowed-{baseline,candidate,fast}-bin-20261031. Rejected source is preserved
+as mrr-borrowed-condvar-tracked.patch, mrr-borrowed-condvar-rejected.rs and
+mrr-borrowed-ready-permits-rejected.patch; the latter captures ready permits
+after rendezvous withdrawal. They are not runtime dependencies or tracked logs.
+
+A performance optimization is still open. Reuse these workloads/binaries on a
+controlled Host, preserving actual CPUs, all samples and the borrowed/cancellation
+contract. Measure CPU/scheduling and kernel completion separately before claiming
+a native-read cause or a throughput improvement. Do not stop other people's work,
+weaken FULL, shrink to one worker, extend watchdogs, add an alternate backend/
+qualification runner, or release unknown budget to make measurement pass.
+

@@ -1,0 +1,44 @@
+//! One shared persistence engine; profiles own validation, providers own storage.
+//! Host-authenticated namespaces and live authority synchronization remain required.
+#![forbid(unsafe_code)]
+mod authority;
+mod config;
+mod control;
+pub use control::{ResourceControl, ResourceStop};
+mod dispatch;
+mod engine;
+pub mod providers;
+/// Data-owned physical driver for hosts with their own database schema.
+/// The host retains connection lifetime, admission, and transaction policy.
+#[cfg(feature = "turso")]
+pub use turso as turso_driver;
+#[cfg(feature = "arrow-query")]
+mod query;
+mod record;
+#[cfg(feature = "arrow-query")]
+pub use query::{
+    ArrowBatchLease, ArrowQuery, ArrowQueryEmitter, ArrowQueryError, ArrowQueryLimits,
+    ArrowQuerySummary,
+};
+mod resource;
+pub use resource::{ResourceHandle, ResourcePreparationError, ResourceTransformError};
+mod scheduler;
+mod scheme_record;
+mod transaction;
+pub use authority::{
+    AuthorityChange, AuthorityExpectation, AuthorityKey, AuthorityProposal, AuthorityState,
+    AuthorityStatus,
+};
+pub use config::{
+    AuthorityCapability, BackendConfig, BackendError, BackendStatus, Lifecycle,
+    ProviderCapabilities,
+};
+pub use engine::{Backend, ProfilePort};
+pub use providers::MetadataProvider;
+pub use record::{PublicationDelivery, StoredOutcome, StoredRevision, StoredWrite};
+#[cfg(test)]
+#[path = "../tests/unit/asp_rust_gate.rs"]
+mod asp_rust_gate;
+
+#[cfg(feature = "graph-publish")]
+mod graph_publication;

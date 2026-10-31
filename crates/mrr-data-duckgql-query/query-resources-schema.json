@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Isolated physical-query resource receipt matrix",
+  "type": "object",
+  "properties": {
+    "schema_namespace": {"const": "mrr-data.query-resources"},
+    "schema_version": {"const": 1},
+    "engines": {"const": ["duckgql", "turso", "datafusion"]},
+    "row_counts": {"const": [2, 128, 1024]},
+    "samples": {"const": 3}
+  },
+  "required": ["schema_namespace", "schema_version", "engines", "row_counts", "samples"],
+  "additionalProperties": false
+}
