@@ -1,0 +1,160 @@
+#+TITLE: CPU-Matched Writer Reuse and Recovery Requalification
+#+LANGUAGE: en
+#+OPTIONS: toc:2
+
+* Design review and frozen execution profile
+
+Weaver's existing SysML GovernancePolicyProjection was reviewed before changing
+the native acceptance target. Preserve [[file:../architecture/shared-backend-writer-lifecycle.org][terminal resource ownership]], original
+authority/claim/reservation/history identity, FULL and the existing final-use
+contract. No production provider code, dependency pin or qualification package
+changes in this round. SPEC owns semantics; no duplicate Lean/Quint model is added.
+
+On 2026-10-31 the runtime reports 12 available Host CPUs. The representative
+benchmark and lifecycle target use max(4, available CPUs): 12 runtime workers,
+12 write/shared workers, reusable capacity 12 and blocking capacity 16. Recovery
+workers remain bounded by the existing configuration. Other standard test runtimes
+retain their four-worker floor. Logical single-slot controls remain independent.
+The five lifecycle tests report their actual runtime allocation with nocapture.
+
+Use the existing =backend_concurrency_paired= target, test profile opt-level=2,
+Darwin arm64, Rust 1.95.0 and the unchanged Turso 0.8.3 dependency. Each case has
+12 lanes with 64 operations per lane. Each newly created database is independent;
+its content/authority preparation finishes before timing. Actual bounded local
+filesystem reads, CID checks, typed obligation equality and authority admission
+run on every attempt. The original hot home uses one application head sequencer
+in all modes; independent homes have distinct original obligations. No namespace
+sharding, implicit retry, synthetic validation delay or LLM I/O is introduced.
+
+Campaign A rotates WAL/fresh/reuse, fresh/reuse/WAL and reuse/WAL/fresh across
+three matching rounds for each domain shape. A single additional complete
+campaign B checks stability after A showed latency variation; it is not a retry
+until a pass. Preserve both complete campaigns, including every regression.
+No task-owned build or test overlaps either measurement. This is a shared Host,
+not a dedicated machine or cold OS-cache/build qualification. The unchanged
+30-second per-case collection bound still drains all accepted work before close.
+
+* Every paired sample
+
+TPS values are rounded only for display. Ratios use unrounded successful TPS.
+P95 is milliseconds, in WAL/fresh/reuse order. Rounds are zero-based; each has
+768 successful commits and exact recoveries per mode.
+
+| Campaign | Original domain | Round | WAL TPS | Fresh TPS | Reuse TPS | Reuse/fresh | Reuse/WAL | P95 WAL/fresh/reuse |
+|----------+-----------------+-------+---------+-----------+-----------+-------------+-----------+--------------------|
+| A | Independent | 0 | 2036 | 1700 | 8278 | 4.87 | 4.06 | 11.62 / 13.37 / 2.13 |
+| A | Independent | 1 | 2614 | 2465 | 5897 | 2.39 | 2.26 | 5.12 / 9.10 / 7.71 |
+| A | Independent | 2 | 1587 | 2609 | 8303 | 3.18 | 5.23 | 11.47 / 6.59 / 2.52 |
+| A | Hot | 0 | 1060 | 748 | 1868 | 2.50 | 1.76 | 40.88 / 18.75 / 8.87 |
+| A | Hot | 1 | 1381 | 656 | 2317 | 3.53 | 1.68 | 27.28 / 47.22 / 6.59 |
+| A | Hot | 2 | 1360 | 707 | 2377 | 3.36 | 1.75 | 16.97 / 18.22 / 8.23 |
+| B | Independent | 0 | 2763 | 2028 | 9676 | 4.77 | 3.50 | 5.22 / 8.73 / 1.98 |
+| B | Independent | 1 | 2687 | 2739 | 6198 | 2.26 | 2.31 | 4.95 / 6.30 / 5.51 |
+| B | Independent | 2 | 2641 | 2857 | 9948 | 3.48 | 3.77 | 5.28 / 5.56 / 1.80 |
+| B | Hot | 0 | 1492 | 718 | 2565 | 3.57 | 1.72 | 23.21 / 40.79 / 5.24 |
+| B | Hot | 1 | 2476 | 713 | 1835 | 2.57 | 0.74 | 5.96 / 18.02 / 11.45 |
+| B | Hot | 2 | 2397 | 669 | 2551 | 3.81 | 1.06 | 6.01 / 26.92 / 5.78 |
+
+Each campaign completes 18 cases, 13,824 commits and 13,824 exact recoveries.
+Combined: 36 cases and 27,648 commits/recoveries, zero refusals, unexpected
+failures or Unknown outcomes. A test body takes 15.17 seconds, process wall
+17.27 seconds; B takes 10.70 and 11.16 seconds respectively. Both use the same
+compiled benchmark executable, SHA-256
+=e41bd441ffd4f6213482597cd8693f92a331b4cb4ff0e7bea7b8fb83aefb38e2=.
+These times distinguish the full native test from its process/build envelope;
+the executable was built before either run. No cold-build speedup is claimed.
+
+* Hot-domain regression and causal limits
+
+Reuse beats fresh MVCC in all six matching hot-domain pairs (2.50--3.81x), but
+reuse/WAL spans 0.74--1.76x. The B/1 regression is retained: throughput falls
+about 26 percent against WAL, P95 grows from 5.96 to 11.45 ms, and P99 from
+9.48 to 65.97 ms. Independent B/1 and A/1 also have worse reuse P95 than WAL,
+despite higher aggregate throughput. A throughput win does not imply a tail win.
+
+For B/1's hot case, average per-transaction phase costs (microseconds) are:
+
+| Phase | WAL | Reuse |
+|-------+-----+-------|
+| Physical gets | 120.55 | 155.81 |
+| Physical puts | 82.19 | 81.25 |
+| Other transaction body | 85.39 | 145.75 |
+| Checkout/BEGIN/COMMIT/release envelope | 102.18 | 95.96 |
+
+The reuse envelope is lower while its body and tail are higher. These counters
+localize the observed cost distribution; they do not identify a pager, fsync,
+scheduler or Host-jitter cause. The body includes actual content validation and
+native scheduling. Concurrent phase sums are not wall-clock fractions. There is
+no controlled old/new provider comparison here: only test allocation and receipt
+metadata changed. Therefore campaign differences and historical ratios cannot
+be attributed to another provider optimization.
+
+A separate, sequential native write-phase diagnostic retains all 12 runtime
+workers, alternates fresh/reuse across three rounds and uses 512 FULL commits
+per variant per round. Its p50 values (microseconds) are:
+
+| Round | Variant | Setup | BEGIN | Read | Write | COMMIT | Release |
+|-------+---------+-------+-------+------+-------+--------+---------|
+| 0 | Fresh | 17.458 | 587.583 | 21.458 | 23.334 | 91.666 | 194.917 |
+| 0 | Reuse | 0.000 | 2.791 | 10.291 | 13.875 | 32.750 | 0.000 |
+| 1 | Fresh | 18.458 | 647.583 | 25.500 | 26.375 | 109.792 | 208.791 |
+| 1 | Reuse | 0.000 | 2.792 | 10.333 | 13.792 | 33.084 | 0.000 |
+| 2 | Fresh | 17.708 | 591.000 | 22.333 | 24.000 | 96.833 | 193.625 |
+| 2 | Reuse | 0.000 | 2.875 | 10.666 | 14.292 | 38.291 | 0.000 |
+
+Zero indicates timer resolution for a locally retained handle, not zero owner-lock
+cost. This diagnostic isolates public native calls, not the real validation or
+bounded-owner locks. It supports the fresh-connection first-BEGIN/disposal cost
+distinction; it cannot explain the reused hot-domain tail regression by itself.
+
+Keep reuse explicit, preserve WAL for hot ordered domains and select from the
+actual domain/tail requirements. Before changing scheduling or storage policy,
+obtain a dedicated-Host trace separating validator/queue delay, native calls and
+durability I/O with the same original identity and fixed workload. Do not add
+automatic mode switching, retries, weaker FULL or home splitting as a workaround.
+
+* Recovery acceptance and remaining premises
+
+The CPU-matched lifecycle target passes five tests covering six schedules:
+cancellation before validation, cancellation after validation before COMMIT,
+cancellation after known commit with lost delivery, historical replay while its
+original reply is pending, effective retirement during validation and competing
+pending retirement. Concurrent shutdown uses 12 callers. Fresh providers recover
+the exact original operation, authority vector and outbox, keep held=4 and reject
+new-nonce attempts under retired authority. Old provider resurrection remains
+forbidden. Driver Unknown disposal and late healthy return have separate existing
+native owner controls. Cancellation never establishes no-execution or refund.
+
+The standard reusable Arrow/query + graph/publication suite passes 78 tests,
+including existing independent-process partial-tuple and graph crash-recovery
+cases and the unchanged ASP deny gate. The new lifecycle tests reconstruct a
+provider in-process; process-death controls retain their existing minimum-four
+runtime profile. These evidence classes must not be conflated. Strict expanded
+all-target Clippy passes. No timeout or cleanup requirement is weakened.
+WAL-control and fresh-MVCC standard configurations additionally pass 63 tests
+each with the same updated lifecycle target. The WAL selector is absent rather
+than set to a non-reuse value. Ignored measurements are outside these counts.
+
+The immutable fixture checks retained exposure, not an account-refund algorithm.
+Whole-machine rollback, independent retained roots, cross-process credentials,
+effective external revocation and Rust final-send currentAtUse remain the
+existing Host/SPEC/executor premises. No external send is exercised here.
+
+* Standard reproduction and raw receipt ownership
+
+#+begin_src text
+cargo test -p mrr-data-backend --features turso --locked --offline --test backend_concurrency_paired turso_paired_writer_reuse -- --ignored --exact --nocapture --test-threads=1
+cargo test -p mrr-data-backend --features turso --locked --offline --test backend_writer_setup turso_writer_transaction_warmup -- --ignored --exact --nocapture --test-threads=1
+cargo test -p mrr-data-backend --features turso --locked --offline --test backend_writer_lifecycle -- --nocapture
+MRR_BACKEND_TEST_MVCC=reuse cargo test -p mrr-data-backend --features turso,arrow-query,graph-publish --locked --offline
+cargo clippy -p mrr-data-backend --features turso,arrow-query,graph-publish --all-targets --locked --offline -- -D warnings
+#+end_src
+
+Raw receipt basenames =mrr-cpu-matched-paired-20261031.log=,
+=mrr-cpu-matched-paired-crosscheck-20261031.log=,
+=mrr-cpu-matched-warmup-20261031.log= and
+=mrr-cpu-matched-recovery-suite-20261031.log= remain under temporary local storage.
+Retain the regressing samples and earlier failure receipts; do not Git-track logs
+or introduce a parallel runner. The committed tables preserve every paired result.
+Parse the JSON object even on libtest's first prefixed test line; filtering only
+lines beginning with an opening brace drops the first case and is invalid.

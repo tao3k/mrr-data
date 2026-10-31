@@ -4,6 +4,10 @@
 
 * Reviewed scope
 
+The [[file:shared-backend-cpu-matched-reuse.org][CPU-matched requalification]] retains all current paired samples, including a
+hot-domain reuse/WAL regression, and records actual-CPU cancellation acceptance.
+Its newer results do not replace or reclassify the historical measurements below.
+
 Extend the existing Turso provider with explicit
 =with_reusable_concurrent_writes(capacity)=. The trusted Host chooses a positive
 capacity alongside its existing Backend write/shared worker budget. Configuration

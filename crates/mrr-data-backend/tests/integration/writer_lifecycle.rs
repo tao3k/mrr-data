@@ -24,18 +24,36 @@ mod retained_obligation;
 use commit_pause::{Pause, PausePoint, PausedStorage, Release};
 use retained_obligation::{AcknowledgedFiles, RetainedObligation, body, body_with_burn, write};
 const SCOPE: &str = "original-budget/history-scope";
+fn workers() -> usize {
+    std::thread::available_parallelism().unwrap().get().max(4)
+}
+fn run(test: impl std::future::Future<Output = ()>) {
+    let workers = workers();
+    println!(
+        "lifecycle host_cpus={} workers={workers} blocking={}",
+        std::thread::available_parallelism().unwrap().get(),
+        workers + 4
+    );
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(workers)
+        .max_blocking_threads(workers + 4)
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(test);
+}
 fn config() -> BackendConfig {
     BackendConfig {
-        max_writes: 4,
-        max_write_workers: 4,
-        max_shared_workers: 4,
+        max_writes: workers(),
+        max_write_workers: workers(),
+        max_shared_workers: workers(),
         ..BackendConfig::default()
     }
 }
 fn native(path: &Path) -> Arc<TursoProvider> {
     Arc::new(
         TursoProvider::new(path.into(), tokio::runtime::Handle::current())
-            .with_reusable_concurrent_writes(4)
+            .with_reusable_concurrent_writes(workers())
             .unwrap(),
     )
 }
@@ -223,46 +241,50 @@ impl Fixture {
         backend.shutdown().await.unwrap();
     }
 }
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn cancel_before_validation_drains_without_consuming_or_releasing_original_hold() {
-    let dir = tempfile::tempdir().unwrap();
-    let f = Arc::new(Fixture::open(dir.path(), PausePoint::BeforeDecision).await);
-    f.pause.arm();
-    let work = f.clone();
-    let caller = tokio::spawn(async move {
-        port(&work.backend, work.authority)
-            .commit(
-                work.consume(),
-                Some(&work.physical),
-                |_| -> Result<(), ()> { panic!("canceled validator") },
-            )
+#[test]
+fn cancel_before_validation_drains_without_consuming_or_releasing_original_hold() {
+    run(async {
+        let dir = tempfile::tempdir().unwrap();
+        let f = Arc::new(Fixture::open(dir.path(), PausePoint::BeforeDecision).await);
+        f.pause.arm();
+        let work = f.clone();
+        let caller = tokio::spawn(async move {
+            port(&work.backend, work.authority)
+                .commit(
+                    work.consume(),
+                    Some(&work.physical),
+                    |_| -> Result<(), ()> { panic!("canceled validator") },
+                )
+                .await
+                .map(|_| ())
+        });
+        f.pause.entered().await;
+        caller.abort();
+        let _ = caller.await;
+        assert_eq!(f.backend.status().active_writes, 1);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), f.backend.shutdown())
+                .await
+                .is_err()
+        );
+        assert_eq!(f.closes.load(Ordering::SeqCst), 0);
+        f.pause.release();
+        tokio::time::timeout(Duration::from_secs(3), f.backend.shutdown())
             .await
-            .map(|_| ())
+            .unwrap()
+            .unwrap();
+        assert_eq!(f.closes.load(Ordering::SeqCst), 1);
+        f.recovered(dir.path(), false, AuthorityStatus::Active)
+            .await;
     });
-    f.pause.entered().await;
-    caller.abort();
-    let _ = caller.await;
-    assert_eq!(f.backend.status().active_writes, 1);
-    assert!(
-        tokio::time::timeout(Duration::from_millis(20), f.backend.shutdown())
-            .await
-            .is_err()
-    );
-    assert_eq!(f.closes.load(Ordering::SeqCst), 0);
-    f.pause.release();
-    tokio::time::timeout(Duration::from_secs(3), f.backend.shutdown())
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(f.closes.load(Ordering::SeqCst), 1);
-    f.recovered(dir.path(), false, AuthorityStatus::Active)
-        .await;
 }
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn cancellation_after_validation_and_concurrent_shutdown_keep_exact_unknown_consumption() {
-    for point in [PausePoint::BeforeCommit, PausePoint::CommittedReplyLost] {
-        cancellation_after_validation(point).await;
-    }
+#[test]
+fn cancellation_after_validation_and_concurrent_shutdown_keep_exact_unknown_consumption() {
+    run(async {
+        for point in [PausePoint::BeforeCommit, PausePoint::CommittedReplyLost] {
+            cancellation_after_validation(point).await;
+        }
+    });
 }
 async fn cancellation_after_validation(point: PausePoint) {
     let dir = tempfile::tempdir().unwrap();
@@ -290,7 +312,7 @@ async fn cancellation_after_validation(point: PausePoint) {
         .is_some();
     assert_eq!(original, point == PausePoint::CommittedReplyLost);
     let mut closers = Vec::new();
-    for _ in 0..4 {
+    for _ in 0..workers() {
         let backend = f.backend.clone();
         closers.push(tokio::spawn(async move { backend.shutdown().await }));
     }
@@ -315,151 +337,157 @@ async fn cancellation_after_validation(point: PausePoint) {
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     f.recovered(dir.path(), true, AuthorityStatus::Active).await;
 }
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn known_commit_lost_reply_reuses_resource_but_never_revalidates_original_consume() {
-    let dir = tempfile::tempdir().unwrap();
-    let f = Arc::new(Fixture::open(dir.path(), PausePoint::CommittedReplyLost).await);
-    f.pause.arm();
-    let work = f.clone();
-    let calls = Arc::new(AtomicUsize::new(0));
-    let count = calls.clone();
-    let caller = tokio::spawn(async move {
-        port(&work.backend, work.authority)
-            .commit(work.consume(), Some(&work.physical), |_| {
-                count.fetch_add(1, Ordering::SeqCst);
-                Ok::<_, ()>(())
+#[test]
+fn known_commit_lost_reply_reuses_resource_but_never_revalidates_original_consume() {
+    run(async {
+        let dir = tempfile::tempdir().unwrap();
+        let f = Arc::new(Fixture::open(dir.path(), PausePoint::CommittedReplyLost).await);
+        f.pause.arm();
+        let work = f.clone();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let count = calls.clone();
+        let caller = tokio::spawn(async move {
+            port(&work.backend, work.authority)
+                .commit(work.consume(), Some(&work.physical), |_| {
+                    count.fetch_add(1, Ordering::SeqCst);
+                    Ok::<_, ()>(())
+                })
+                .await
+                .map(|_| ())
+        });
+        f.pause.entered().await;
+        let p = port(&f.backend, f.authority);
+        let w = f.consume();
+        assert!(matches!(
+            p.commit(w, None, |_| -> Result<(), ()> {
+                panic!("no repeat validation")
             })
             .await
-            .map(|_| ())
-    });
-    f.pause.entered().await;
-    let p = port(&f.backend, f.authority);
-    let w = f.consume();
-    assert!(matches!(
-        p.commit(w, None, |_| -> Result<(), ()> {
-            panic!("no repeat validation")
-        })
-        .await
-        .unwrap(),
-        Outcome::Replayed(_)
-    ));
-    p.advance_authority(SCOPE, retired(f.authority, f.physical.cid))
-        .await
-        .unwrap();
-    let mut fresh = w;
-    fresh.operation_id = "new-nonce-old-authority";
-    fresh.expected = p.recover(w).await.unwrap().map(|r| r.committed);
-    assert!(matches!(
-        p.commit(fresh, Some(&f.physical), |_| -> Result<(), ()> {
-            panic!("retired authority")
-        })
-        .await,
-        Err(PortError::BeforeCommit(BackendError::AuthorityRetired))
-    ));
-    f.pause.release();
-    assert!(matches!(
-        tokio::time::timeout(Duration::from_secs(3), caller)
-            .await
-            .unwrap()
             .unwrap(),
-        Err(PortError::Unknown(BackendError::Unavailable))
-    ));
-    assert_eq!(calls.load(Ordering::SeqCst), 1);
-    f.retained(w.replacement, true);
-    f.backend.shutdown().await.unwrap();
-    f.recovered(dir.path(), true, AuthorityStatus::Retired)
-        .await;
-}
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn effective_retirement_before_seal_survives_fresh_owner_recovery() {
-    let dir = tempfile::tempdir().unwrap();
-    let f = Arc::new(Fixture::open(dir.path(), PausePoint::BeforeDecision).await);
-    let validation = Arc::new(Pause::default());
-    let _release = Release(validation.clone());
-    let work = f.clone();
-    let wait = validation.clone();
-    let caller = tokio::spawn(async move {
-        port(&work.backend, work.authority)
-            .commit(work.consume(), Some(&work.physical), |_| {
-                wait.block().then_some(()).ok_or(())
+            Outcome::Replayed(_)
+        ));
+        p.advance_authority(SCOPE, retired(f.authority, f.physical.cid))
+            .await
+            .unwrap();
+        let mut fresh = w;
+        fresh.operation_id = "new-nonce-old-authority";
+        fresh.expected = p.recover(w).await.unwrap().map(|r| r.committed);
+        assert!(matches!(
+            p.commit(fresh, Some(&f.physical), |_| -> Result<(), ()> {
+                panic!("retired authority")
             })
-            .await
-            .map(|_| ())
+            .await,
+            Err(PortError::BeforeCommit(BackendError::AuthorityRetired))
+        ));
+        f.pause.release();
+        assert!(matches!(
+            tokio::time::timeout(Duration::from_secs(3), caller)
+                .await
+                .unwrap()
+                .unwrap(),
+            Err(PortError::Unknown(BackendError::Unavailable))
+        ));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        f.retained(w.replacement, true);
+        f.backend.shutdown().await.unwrap();
+        f.recovered(dir.path(), true, AuthorityStatus::Retired)
+            .await;
     });
-    validation.entered().await;
-    let p = port(&f.backend, f.authority);
-    p.advance_authority(SCOPE, retired(f.authority, f.physical.cid))
-        .await
-        .unwrap();
-    validation.release();
-    assert!(
-        tokio::time::timeout(Duration::from_secs(3), caller)
+}
+#[test]
+fn effective_retirement_before_seal_survives_fresh_owner_recovery() {
+    run(async {
+        let dir = tempfile::tempdir().unwrap();
+        let f = Arc::new(Fixture::open(dir.path(), PausePoint::BeforeDecision).await);
+        let validation = Arc::new(Pause::default());
+        let _release = Release(validation.clone());
+        let work = f.clone();
+        let wait = validation.clone();
+        let caller = tokio::spawn(async move {
+            port(&work.backend, work.authority)
+                .commit(work.consume(), Some(&work.physical), |_| {
+                    wait.block().then_some(()).ok_or(())
+                })
+                .await
+                .map(|_| ())
+        });
+        validation.entered().await;
+        let p = port(&f.backend, f.authority);
+        p.advance_authority(SCOPE, retired(f.authority, f.physical.cid))
             .await
-            .unwrap()
-            .unwrap()
-            .is_err()
-    );
-    assert!(p.recover(f.consume()).await.unwrap().is_none());
-    f.backend.shutdown().await.unwrap();
-    f.recovered(dir.path(), false, AuthorityStatus::Retired)
-        .await;
+            .unwrap();
+        validation.release();
+        assert!(
+            tokio::time::timeout(Duration::from_secs(3), caller)
+                .await
+                .unwrap()
+                .unwrap()
+                .is_err()
+        );
+        assert!(p.recover(f.consume()).await.unwrap().is_none());
+        f.backend.shutdown().await.unwrap();
+        f.recovered(dir.path(), false, AuthorityStatus::Retired)
+            .await;
+    });
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_sealed_intent_is_not_a_commit_or_an_effective_revocation_ack() {
-    let dir = tempfile::tempdir().unwrap();
-    let f = Arc::new(Fixture::open(dir.path(), PausePoint::BeforeCommit).await);
-    f.pause.arm();
-    let work = f.clone();
-    let caller = tokio::spawn(async move {
-        port(&work.backend, work.authority)
-            .commit(work.consume(), Some(&work.physical), |_| Ok::<_, ()>(()))
-            .await
-            .map(|_| ())
-    });
-    f.pause.entered().await;
-    let p = port(&f.backend, f.authority);
-    let proposal = retired(f.authority, f.physical.cid);
-    let retirement = tokio::time::timeout(
-        Duration::from_secs(3),
-        p.advance_authority(SCOPE, proposal.clone()),
-    )
-    .await
-    .unwrap();
-    f.pause.release();
-    let consumed = tokio::time::timeout(Duration::from_secs(3), caller)
+#[test]
+fn a_sealed_intent_is_not_a_commit_or_an_effective_revocation_ack() {
+    run(async {
+        let dir = tempfile::tempdir().unwrap();
+        let f = Arc::new(Fixture::open(dir.path(), PausePoint::BeforeCommit).await);
+        f.pause.arm();
+        let work = f.clone();
+        let caller = tokio::spawn(async move {
+            port(&work.backend, work.authority)
+                .commit(work.consume(), Some(&work.physical), |_| Ok::<_, ()>(()))
+                .await
+                .map(|_| ())
+        });
+        f.pause.entered().await;
+        let p = port(&f.backend, f.authority);
+        let proposal = retired(f.authority, f.physical.cid);
+        let retirement = tokio::time::timeout(
+            Duration::from_secs(3),
+            p.advance_authority(SCOPE, proposal.clone()),
+        )
         .await
-        .unwrap()
         .unwrap();
-    assert!(
-        retirement.is_err() || consumed.is_err(),
-        "conflicting snapshots cannot both commit"
-    );
-    let observed = p.recover(f.consume()).await.unwrap();
-    let committed = observed.is_some();
-    assert!(
-        consumed.is_err() || committed,
-        "known success must recover exactly"
-    );
-    assert!(
-        retirement.is_err() || !committed,
-        "effective retirement cannot coexist with the stale consume"
-    );
-    // An unsuccessful update is not acknowledged as effective. Reconcile the
-    // same original proposal/generation rather than inventing another identity.
-    let exact = p.advance_authority(SCOPE, proposal).await.unwrap();
-    assert_eq!(exact.status, AuthorityStatus::Retired);
-    let mut retry = f.consume();
-    retry.operation_id = "new-nonce-after-retirement";
-    retry.expected = Some(observed.map_or(f.initial, |r| r.committed));
-    assert!(matches!(
-        p.commit(retry, Some(&f.physical), |_| -> Result<(), ()> {
-            panic!("retired snapshot")
-        })
-        .await,
-        Err(PortError::BeforeCommit(BackendError::AuthorityRetired))
-    ));
-    f.backend.shutdown().await.unwrap();
-    f.recovered(dir.path(), committed, AuthorityStatus::Retired)
-        .await;
+        f.pause.release();
+        let consumed = tokio::time::timeout(Duration::from_secs(3), caller)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            retirement.is_err() || consumed.is_err(),
+            "conflicting snapshots cannot both commit"
+        );
+        let observed = p.recover(f.consume()).await.unwrap();
+        let committed = observed.is_some();
+        assert!(
+            consumed.is_err() || committed,
+            "known success must recover exactly"
+        );
+        assert!(
+            retirement.is_err() || !committed,
+            "effective retirement cannot coexist with the stale consume"
+        );
+        // An unsuccessful update is not acknowledged as effective. Reconcile the
+        // same original proposal/generation rather than inventing another identity.
+        let exact = p.advance_authority(SCOPE, proposal).await.unwrap();
+        assert_eq!(exact.status, AuthorityStatus::Retired);
+        let mut retry = f.consume();
+        retry.operation_id = "new-nonce-after-retirement";
+        retry.expected = Some(observed.map_or(f.initial, |r| r.committed));
+        assert!(matches!(
+            p.commit(retry, Some(&f.physical), |_| -> Result<(), ()> {
+                panic!("retired snapshot")
+            })
+            .await,
+            Err(PortError::BeforeCommit(BackendError::AuthorityRetired))
+        ));
+        f.backend.shutdown().await.unwrap();
+        f.recovered(dir.path(), committed, AuthorityStatus::Retired)
+            .await;
+    });
 }

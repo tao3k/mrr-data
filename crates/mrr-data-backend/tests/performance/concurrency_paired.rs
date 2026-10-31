@@ -304,7 +304,11 @@ fn report(
     println!(
         "{}",
         serde_json::json!({"pair": pair, "order": order, "concurrent": mode != WriterMode::Wal, "writer_mode": mode.name(),
-        "hot_home": hot, "host_cpus": std::thread::available_parallelism().unwrap().get(), "workers": cpus, "validation_hold_ns": hold.map(|d| d.as_nanos()),
+        "hot_home": hot, "host_cpus": std::thread::available_parallelism().unwrap().get(), "workers": cpus,
+        "runtime_workers": cpus, "max_blocking_threads": cpus + 4,
+        "write_workers": cpus, "shared_workers": cpus,
+        "reusable_capacity": (mode == WriterMode::Reuse).then_some(cpus),
+        "validation_hold_ns": hold.map(|d| d.as_nanos()),
         "validation": if hold.is_some() { "simulated-hold" } else { "verified-filesystem-obligation-and-authority" },
         "attempts_per_lane": ATTEMPTS, "successes": records.len(), "failures": failures,
         "unknowns": unknowns, "refusals": refusals,

@@ -56,6 +56,10 @@ checks exact durable recovery. These are distinct evidence classes.
 
 * Standard native acceptance
 
+The later [[file:../benchmarks/shared-backend-cpu-matched-reuse.org][CPU-matched requalification]] raises the lifecycle target to actual available
+Host parallelism, with a four-worker floor, and retains the new performance
+regression. Earlier fixed-four receipts below remain historical evidence.
+
 =tests/unit/turso_writers.rs= contains eight owner tests. Four new tests cover
 resurrection refusal, driver Unknown during closing, late healthy return and
 eight simultaneous close callers. =tests/integration/writer_lifecycle.rs=
