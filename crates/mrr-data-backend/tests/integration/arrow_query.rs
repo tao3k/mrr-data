@@ -84,7 +84,7 @@ async fn until(mut condition: impl FnMut() -> bool) {
     .await
     .unwrap();
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn fallible_fetch_distinguishes_exact_limit_eof_from_late_failure_and_excess() {
     for terminal in [Ok(None), Err(ArrowQueryError::Driver), Ok(Some(batch()))] {
         let backend = backend().await;
@@ -131,7 +131,7 @@ async fn fallible_fetch_distinguishes_exact_limit_eof_from_late_failure_and_exce
         backend.shutdown().await.unwrap();
     }
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn empty_fallible_source_releases_reservation_and_reports_zero_batches() {
     let backend = backend().await;
     let mut query = backend
@@ -146,7 +146,7 @@ async fn empty_fallible_source_releases_reservation_and_reports_zero_batches() {
     drop(query);
     backend.shutdown().await.unwrap();
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn fallible_eof_fetch_waits_for_retained_bytes_and_cancel_skips_fetch() {
     let backend = backend().await;
     let bytes = batch().get_array_memory_size();
@@ -186,7 +186,7 @@ async fn fallible_eof_fetch_waits_for_retained_bytes_and_cancel_skips_fetch() {
     drop(query);
     backend.shutdown().await.unwrap();
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn late_errors_and_worker_panic_never_certify_partial_output() {
     for panic_worker in [false, true] {
         let backend = backend().await;
@@ -222,7 +222,7 @@ async fn late_errors_and_worker_panic_never_certify_partial_output() {
         backend.shutdown().await.unwrap();
     }
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn ignored_emitter_failure_remains_a_failed_terminal() {
     let backend = backend().await;
     let mut query = backend
@@ -244,7 +244,7 @@ async fn ignored_emitter_failure_remains_a_failed_terminal() {
     drop(query);
     backend.shutdown().await.unwrap();
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn final_batch_clone_holds_drain_after_successful_query_completion() {
     let backend = backend().await;
     let mut query = backend
@@ -277,7 +277,7 @@ async fn final_batch_clone_holds_drain_after_successful_query_completion() {
         .unwrap();
     assert_eq!(backend.status().resource_bytes, 0);
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn byte_backpressure_precedes_fetch_and_consumer_drop_wakes_the_producer() {
     let backend = backend().await;
     let bytes = batch().get_array_memory_size();
@@ -313,7 +313,7 @@ async fn byte_backpressure_precedes_fetch_and_consumer_drop_wakes_the_producer()
     drop(second);
     backend.shutdown().await.unwrap();
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn panicking_native_interrupt_cannot_unwind_cancellation_or_consumer_drop() {
     for explicit in [false, true] {
         let backend = backend().await;
@@ -350,7 +350,7 @@ async fn panicking_native_interrupt_cannot_unwind_cancellation_or_consumer_drop(
         assert_eq!(backend.status().resource_bytes, 0);
     }
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn configuration_row_and_batch_limits_refuse_without_complete_results() {
     let backend = backend().await;
     assert!(matches!(
@@ -390,7 +390,7 @@ async fn configuration_row_and_batch_limits_refuse_without_complete_results() {
     backend.shutdown().await.unwrap();
 }
 #[cfg(feature = "duckdb")]
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn native_duckdb_arrow_complete_count_and_late_execution_failure() {
     use mrr_data_backend::providers::{emit_duckdb_arrow, emit_duckdb_arrow_stream};
     for streaming in [false, true] {
@@ -486,7 +486,7 @@ async fn native_duckdb_arrow_complete_count_and_late_execution_failure() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn cancelled_query_queue_skips_native_work_and_a_cancelled_receive_can_resume() {
     let backend = backend().await;
     let gate = Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
@@ -541,7 +541,7 @@ async fn cancelled_query_queue_skips_native_work_and_a_cancelled_receive_can_res
 }
 
 #[cfg(feature = "duckdb")]
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn native_interrupt_cancels_running_execution_and_keeps_drain_owned() {
     for streaming in [false, true] {
         let backend = backend().await;
@@ -586,7 +586,7 @@ async fn native_interrupt_cancels_running_execution_and_keeps_drain_owned() {
 }
 
 #[cfg(feature = "duckdb")]
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn native_stream_late_fetch_failure_cannot_certify_delivered_prefix() {
     let backend = backend().await;
     let conn = duckdb::Connection::open_in_memory().unwrap();
@@ -643,7 +643,7 @@ async fn native_stream_late_fetch_failure_cannot_certify_delivered_prefix() {
 }
 
 #[cfg(feature = "duckdb")]
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn native_stream_empty_exact_limits_and_sticky_schema_or_row_refusal() {
     for (sql, rows, refusal) in [
         ("SELECT i::BIGINT AS id FROM range(0) t(i)", 0, None),
@@ -717,7 +717,7 @@ async fn native_stream_empty_exact_limits_and_sticky_schema_or_row_refusal() {
 }
 
 #[cfg(feature = "duckdb")]
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn native_stream_batch_survives_result_teardown_and_holds_backend_drain() {
     let backend = backend().await;
     let conn = duckdb::Connection::open_in_memory().unwrap();

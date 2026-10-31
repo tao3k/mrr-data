@@ -43,7 +43,7 @@ fn commit(
 fn provider(path: &std::path::Path, handle: &tokio::runtime::Handle) -> Arc<TursoProvider> {
     let provider = TursoProvider::new(path.into(), handle.clone());
     let provider = match std::env::var("MRR_BACKEND_TEST_MVCC").as_deref() {
-        Ok("reuse") => provider.with_reusable_concurrent_writes(2).unwrap(),
+        Ok("reuse") => provider.with_reusable_concurrent_writes(4).unwrap(),
         _ => provider.with_concurrent_writes(),
     };
     let p = Arc::new(provider);
@@ -99,7 +99,12 @@ fn overlap(
 }
 #[test]
 fn independent_homes_overlap_and_recover_exact_results() {
-    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(4)
+        .max_blocking_threads(4)
+        .enable_all()
+        .build()
+        .unwrap();
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("state.db");
     let p = provider(&path, runtime.handle());
@@ -126,7 +131,12 @@ fn independent_homes_overlap_and_recover_exact_results() {
 }
 #[test]
 fn same_home_conflict_does_not_retry_or_create_another_outcome() {
-    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(4)
+        .max_blocking_threads(4)
+        .enable_all()
+        .build()
+        .unwrap();
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("state.db");
     let p = provider(&path, runtime.handle());
@@ -149,7 +159,12 @@ fn same_home_conflict_does_not_retry_or_create_another_outcome() {
 }
 #[test]
 fn authority_change_invalidates_a_validated_snapshot_before_commit() {
-    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(4)
+        .max_blocking_threads(4)
+        .enable_all()
+        .build()
+        .unwrap();
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("state.db");
     let p = provider(&path, runtime.handle());
@@ -204,7 +219,12 @@ fn authority_change_invalidates_a_validated_snapshot_before_commit() {
 }
 #[test]
 fn snapshot_isolation_without_common_witness_allows_write_skew_counterexample() {
-    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(4)
+        .max_blocking_threads(4)
+        .enable_all()
+        .build()
+        .unwrap();
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("state.db");
     let p = provider(&path, runtime.handle());
@@ -246,7 +266,12 @@ fn snapshot_isolation_without_common_witness_allows_write_skew_counterexample() 
 }
 #[test]
 fn journal_mode_cannot_be_silently_changed_on_reopen() {
-    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(4)
+        .max_blocking_threads(4)
+        .enable_all()
+        .build()
+        .unwrap();
     let dir = tempfile::tempdir().unwrap();
     let wal = dir.path().join("wal.db");
     let mvcc = dir.path().join("mvcc.db");

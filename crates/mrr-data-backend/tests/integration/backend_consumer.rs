@@ -26,7 +26,7 @@ fn native(path: std::path::PathBuf) -> NativeProvider {
     {
         let provider = NativeProvider::new(path, tokio::runtime::Handle::current());
         match std::env::var("MRR_BACKEND_TEST_MVCC").as_deref() {
-            Ok("reuse") => provider.with_reusable_concurrent_writes(2).unwrap(),
+            Ok("reuse") => provider.with_reusable_concurrent_writes(4).unwrap(),
             Ok(_) => provider.with_concurrent_writes(),
             Err(_) => provider,
         }
@@ -72,7 +72,7 @@ async fn open(path: &Path) -> Backend {
     .await
     .unwrap()
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn independent_profiles_share_one_engine_and_restart_preserves_exact_history() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("state.db");
@@ -143,7 +143,7 @@ async fn independent_profiles_share_one_engine_and_restart_preserves_exact_histo
     );
     reopened.shutdown().await.unwrap();
 }
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn two_backend_instances_race_one_head_and_validation_refusal_leaves_no_row() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("race.db");
@@ -235,7 +235,7 @@ impl MetadataProvider for HeldProvider {
         self.native.close()
     }
 }
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn cancellation_keeps_owned_commit_drain_and_reserved_recovery_alive() {
     for config in [
         BackendConfig {
@@ -327,7 +327,7 @@ async fn cancellation_keeps_owned_commit_drain_and_reserved_recovery_alive() {
         reopened.shutdown().await.unwrap();
     }
 }
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn bounds_bad_configuration_and_corruption_refuse_before_ready_or_write() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("bounds.db");
@@ -409,7 +409,12 @@ fn durable_child_write() {
     let Ok(path) = std::env::var("MRR_BACKEND_CHILD_DB") else {
         return;
     };
-    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(4)
+        .max_blocking_threads(4)
+        .enable_all()
+        .build()
+        .unwrap();
     runtime.block_on(async {
         let backend = open(Path::new(&path)).await;
         let port = backend.profile("profile.v1", "tenant").unwrap();
@@ -432,7 +437,7 @@ fn durable_child_write() {
         std::process::exit(0); // Durable commit without backend shutdown/Drop.
     });
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn abrupt_process_exit_and_uncommitted_transaction_preserve_atomic_receipts() {
     for partial in [false, true] {
         let dir = tempfile::tempdir().unwrap();
@@ -498,7 +503,7 @@ impl MetadataProvider for LostAck {
         self.0.close()
     }
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn lost_ack_remains_unknown_then_recovers_original_receipt_without_validation() {
     let dir = tempfile::tempdir().unwrap();
     let backend = Backend::open(
@@ -528,7 +533,7 @@ async fn lost_ack_remains_unknown_then_recovers_original_receipt_without_validat
     ));
     backend.shutdown().await.unwrap();
 }
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn deleted_metadata_tables_are_not_recreated_as_fresh_authority() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("missing.db");
@@ -546,7 +551,7 @@ async fn deleted_metadata_tables_are_not_recreated_as_fresh_authority() {
     ));
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn cancellation_before_validator_creates_no_head_or_operation() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("cancel.db");
@@ -654,7 +659,7 @@ fn tamper(path: &Path, statement: &str, bytes: Option<&[u8]>, exit_uncommitted: 
 mod authorities;
 
 #[cfg(all(not(feature = "turso"), feature = "duckdb", unix))]
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn canonical_aliases_share_native_state_and_hardlinks_refuse() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("native.db");

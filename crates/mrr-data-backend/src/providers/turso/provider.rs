@@ -10,6 +10,8 @@ use std::{path::PathBuf, sync::Mutex, time::Duration};
 use tokio::runtime::Handle;
 /// Local Turso connections using the Host executor. No global allocator, remote
 /// replica, automatic runtime or process signal handler is enabled.
+/// Once closing begins this owner is terminal; recovery constructs a new provider
+/// around the original database. Resource readiness is not domain authorization.
 pub struct TursoProvider {
     path: PathBuf,
     runtime: Handle,
@@ -63,6 +65,7 @@ impl TursoProvider {
         {
             return Err(BackendError::InvalidConfiguration);
         }
+        self.writers.ensure_fresh()?;
         self.mode = WriteMode::Reusable(capacity);
         Ok(self)
     }
@@ -164,6 +167,7 @@ impl TransactionProvider for TursoProvider {
         if writer.is_some() {
             return Err(BackendError::InvalidConfiguration);
         }
+        self.writers.ensure_fresh()?;
         let existed = self.path.exists();
         let db = self
             .runtime
@@ -227,15 +231,15 @@ impl TransactionProvider for TursoProvider {
         }
     }
     fn close_storage(&self) -> Result<(), BackendError> {
+        // Match opening's lock order and serialize the complete resource image.
+        // No old split teardown may clear a newly opened reader/bootstrap handle.
+        let mut writer = self.writer.lock().map_err(|_| BackendError::Unavailable)?;
         self.writers.close()?;
         self.reader
             .lock()
             .map_err(|_| BackendError::Unavailable)?
             .take();
-        self.writer
-            .lock()
-            .map_err(|_| BackendError::Unavailable)?
-            .take();
+        writer.take();
         Ok(())
     }
 }

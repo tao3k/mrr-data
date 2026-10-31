@@ -93,7 +93,7 @@ fn transaction_sample(runtime: &tokio::runtime::Runtime, reuse: bool, round: usi
 #[test]
 #[ignore = "run alone; sequential physical MVCC phase diagnosis with real FULL commits"]
 fn turso_writer_transaction_warmup() {
-    let cpus = std::thread::available_parallelism().unwrap().get();
+    let cpus = std::thread::available_parallelism().unwrap().get().max(4);
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(cpus)
         .enable_all()
@@ -112,7 +112,7 @@ fn turso_writer_transaction_warmup() {
 #[test]
 #[ignore = "run alone; sequential setup component costs, not aggregate machine throughput"]
 fn turso_writer_setup_costs() {
-    let cpus = std::thread::available_parallelism().unwrap().get();
+    let cpus = std::thread::available_parallelism().unwrap().get().max(4);
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(cpus)
         .enable_all()
@@ -161,7 +161,7 @@ fn turso_writer_setup_costs() {
         }
         println!(
             "{}",
-            serde_json::json!({"round": round, "host_cpus": cpus,
+            serde_json::json!({"round": round, "host_cpus": std::thread::available_parallelism().unwrap().get(),
             "connect": summary(connect), "busy_timeout": summary(busy), "full_set_and_verify": summary(full),
             "autocommit": summary(autocommit), "drop": summary(drop_time), "cycle": summary(cycle)})
         );

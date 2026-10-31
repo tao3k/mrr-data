@@ -304,7 +304,7 @@ fn report(
     println!(
         "{}",
         serde_json::json!({"pair": pair, "order": order, "concurrent": mode != WriterMode::Wal, "writer_mode": mode.name(),
-        "hot_home": hot, "host_cpus": cpus, "workers": cpus, "validation_hold_ns": hold.map(|d| d.as_nanos()),
+        "hot_home": hot, "host_cpus": std::thread::available_parallelism().unwrap().get(), "workers": cpus, "validation_hold_ns": hold.map(|d| d.as_nanos()),
         "validation": if hold.is_some() { "simulated-hold" } else { "verified-filesystem-obligation-and-authority" },
         "attempts_per_lane": ATTEMPTS, "successes": records.len(), "failures": failures,
         "unknowns": unknowns, "refusals": refusals,
@@ -323,7 +323,7 @@ fn report(
 #[test]
 #[ignore = "run alone; real paired native metadata benchmark, not an LLM throughput claim"]
 fn turso_paired_concurrency() {
-    let cpus = std::thread::available_parallelism().unwrap().get();
+    let cpus = std::thread::available_parallelism().unwrap().get().max(4);
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(cpus)
         .max_blocking_threads(cpus + 4)
@@ -363,7 +363,7 @@ fn turso_paired_concurrency() {
 #[test]
 #[ignore = "run alone; real bounded content verification and native authority checks"]
 fn turso_paired_writer_reuse() {
-    let cpus = std::thread::available_parallelism().unwrap().get();
+    let cpus = std::thread::available_parallelism().unwrap().get().max(4);
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(cpus)
         .max_blocking_threads(cpus + 4)

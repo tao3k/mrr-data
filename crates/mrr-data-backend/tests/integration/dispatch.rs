@@ -53,10 +53,10 @@ fn ack(w: ConditionalContentWrite<'_>) -> PublishReceipt {
     }
 }
 #[test]
-fn recovery_progresses_when_write_admission_is_saturated_with_two_host_threads() {
+fn recovery_progresses_when_write_admission_is_saturated_with_four_host_threads() {
     let runtime = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2)
-        .max_blocking_threads(2)
+        .worker_threads(4)
+        .max_blocking_threads(4)
         .enable_all()
         .build()
         .unwrap();
@@ -147,7 +147,7 @@ fn recovery_progresses_when_write_admission_is_saturated_with_two_host_threads()
     });
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn queued_cancellation_preserves_owned_authority_and_drains_content_refusal() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("queue-cancel.db");
@@ -259,7 +259,7 @@ async fn cancel_queued(backend: &Backend, port: &ProfilePort, validated: Arc<Ato
     assert!(admin.await.unwrap_err().is_cancelled());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn successful_responses_release_single_slot_admission_before_the_next_request() {
     let dir = tempfile::tempdir().unwrap();
     let backend = Backend::open(
@@ -304,8 +304,8 @@ async fn successful_responses_release_single_slot_admission_before_the_next_requ
 #[test]
 fn recovery_progresses_while_resource_preparation_holds_the_shared_host_budget() {
     let runtime = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2)
-        .max_blocking_threads(2)
+        .worker_threads(4)
+        .max_blocking_threads(4)
         .enable_all()
         .build()
         .unwrap();
@@ -385,8 +385,8 @@ fn recovery_progresses_during_query_backpressure_with_queued_fresh_work() {
     use arrow_schema::{DataType, Field, Schema};
     use mrr_data_backend::ArrowQueryLimits;
     let runtime = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2)
-        .max_blocking_threads(2)
+        .worker_threads(4)
+        .max_blocking_threads(4)
         .enable_all()
         .build()
         .unwrap();

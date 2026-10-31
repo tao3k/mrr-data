@@ -12,6 +12,143 @@ fn open(path: &std::path::Path, runtime: &Handle) -> TursoProvider {
     p.open_storage().unwrap();
     p
 }
+#[test]
+fn closed_writer_owner_cannot_be_resurrected() {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(4)
+        .max_blocking_threads(4)
+        .enable_all()
+        .build()
+        .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let p = open(&dir.path().join("state.db"), runtime.handle());
+    p.close_storage().unwrap();
+    assert_eq!(p.open_storage(), Err(BackendError::InvalidConfiguration));
+}
+#[test]
+fn driver_unknown_during_close_discards_the_lease_and_retains_prior_obligation() {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(4)
+        .max_blocking_threads(4)
+        .enable_all()
+        .build()
+        .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("state.db");
+    let old = open(&path, runtime.handle());
+    let original = b"original-claim;original-reservation;original-history;unknown-held=4";
+    old.transaction(&mut |tx| {
+        tx.put("obligation", original)
+            .map_err(PortError::BeforeCommit)
+    })
+    .unwrap();
+    let lease = old.writers.checkout(runtime.handle()).unwrap();
+    let conn = lease.connection().unwrap();
+    assert_eq!(old.close_storage(), Err(BackendError::NotReady));
+    let result = transact(conn, runtime.handle(), "BEGIN CONCURRENT", &mut |tx| {
+        // Stage an invalid projection, then force a COMMIT error by aborting
+        // before COMMIT. This controls the driver-Unknown branch, not reply loss.
+        tx.put("obligation", b"invalid-held=0").unwrap();
+        runtime.block_on(conn.execute("ROLLBACK", ())).unwrap();
+        Ok(())
+    });
+    assert!(matches!(result, Err(PortError::Unknown(_))));
+    drop(lease);
+    assert_eq!(old.writers.counts(), (0, 0));
+    old.close_storage().unwrap();
+    let recovered = open(&path, runtime.handle());
+    assert_eq!(
+        recovered.read("obligation").unwrap().as_deref(),
+        Some(original.as_slice())
+    );
+    recovered.close_storage().unwrap();
+}
+#[test]
+fn late_successful_return_cannot_join_a_closed_or_replacement_owner() {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(4)
+        .max_blocking_threads(4)
+        .enable_all()
+        .build()
+        .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("state.db");
+    let old = open(&path, runtime.handle());
+    let mut lease = old.writers.checkout(runtime.handle()).unwrap();
+    let conn = lease.connection().unwrap();
+    runtime
+        .block_on(conn.execute("CREATE TEMP TABLE reuse_probe (id INTEGER)", ()))
+        .unwrap();
+    assert_eq!(old.close_storage(), Err(BackendError::NotReady));
+    // Close is not revocation: this accepted lease can finish, but cannot return idle.
+    transact(conn, runtime.handle(), "BEGIN CONCURRENT", &mut |tx| {
+        tx.put(
+            "original-obligation",
+            b"burned; original-reservation; unknown-held=4",
+        )
+        .map_err(PortError::BeforeCommit)
+    })
+    .unwrap();
+    lease.committed();
+    drop(lease);
+    assert_eq!(old.writers.counts(), (0, 0));
+    old.close_storage().unwrap();
+    assert_eq!(old.open_storage(), Err(BackendError::InvalidConfiguration));
+    let replacement = open(&path, runtime.handle());
+    old.close_storage().unwrap(); // Late old-owner close cannot address replacement resources.
+    let writer = replacement.writers.checkout(runtime.handle()).unwrap();
+    assert_eq!(probe(writer.connection().unwrap(), runtime.handle()), 0);
+    drop(writer);
+    assert_eq!(
+        replacement.read("original-obligation").unwrap().as_deref(),
+        Some(b"burned; original-reservation; unknown-held=4".as_slice())
+    );
+    replacement.close_storage().unwrap();
+}
+#[test]
+fn concurrent_closes_refuse_live_lease_then_close_only_the_original_owner() {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(4)
+        .max_blocking_threads(4)
+        .enable_all()
+        .build()
+        .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("state.db");
+    let old = open(&path, runtime.handle());
+    let lease = old.writers.checkout(runtime.handle()).unwrap();
+    std::thread::scope(|scope| {
+        let jobs: Vec<_> = (0..8)
+            .map(|_| scope.spawn(|| old.close_storage()))
+            .collect();
+        for job in jobs {
+            assert_eq!(job.join().unwrap(), Err(BackendError::NotReady));
+        }
+    });
+    assert!(matches!(
+        old.writers.checkout(runtime.handle()),
+        Err(BackendError::NotReady)
+    ));
+    drop(lease);
+    std::thread::scope(|scope| {
+        let jobs: Vec<_> = (0..8)
+            .map(|_| scope.spawn(|| old.close_storage()))
+            .collect();
+        for job in jobs {
+            job.join().unwrap().unwrap();
+        }
+    });
+    let replacement = open(&path, runtime.handle());
+    old.close_storage().unwrap();
+    assert_eq!(old.open_storage(), Err(BackendError::InvalidConfiguration));
+    replacement
+        .transaction(&mut |tx| {
+            tx.put("new-owner", b"same original database")
+                .map_err(PortError::BeforeCommit)
+        })
+        .unwrap();
+    replacement.close_storage().unwrap();
+}
 fn probe(conn: &turso::Connection, runtime: &Handle) -> i64 {
     runtime.block_on(async {
         let mut rows = conn
@@ -26,7 +163,12 @@ fn probe(conn: &turso::Connection, runtime: &Handle) -> i64 {
 }
 #[test]
 fn full_configuration_and_successful_session_are_reused_exclusively() {
-    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(4)
+        .max_blocking_threads(4)
+        .enable_all()
+        .build()
+        .unwrap();
     let dir = tempfile::tempdir().unwrap();
     let p = open(&dir.path().join("state.db"), runtime.handle());
     let mut first = p.writers.checkout(runtime.handle()).unwrap();
@@ -59,7 +201,12 @@ fn full_configuration_and_successful_session_are_reused_exclusively() {
 }
 #[test]
 fn close_refuses_live_lease_and_reopen_cannot_inherit_it() {
-    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(4)
+        .max_blocking_threads(4)
+        .enable_all()
+        .build()
+        .unwrap();
     let dir = tempfile::tempdir().unwrap();
     let p = open(&dir.path().join("state.db"), runtime.handle());
     let mut lease = p.writers.checkout(runtime.handle()).unwrap();
@@ -72,15 +219,21 @@ fn close_refuses_live_lease_and_reopen_cannot_inherit_it() {
     lease.committed();
     drop(lease);
     p.close_storage().unwrap();
-    p.open_storage().unwrap();
-    let lease = p.writers.checkout(runtime.handle()).unwrap();
+    assert_eq!(p.open_storage(), Err(BackendError::InvalidConfiguration));
+    let recovered = open(&dir.path().join("state.db"), runtime.handle());
+    let lease = recovered.writers.checkout(runtime.handle()).unwrap();
     assert!(lease.connection().unwrap().is_autocommit().unwrap());
     drop(lease);
-    p.close_storage().unwrap();
+    recovered.close_storage().unwrap();
 }
 #[test]
 fn unknown_commit_and_unwinding_discard_sessions_and_return_capacity() {
-    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(4)
+        .max_blocking_threads(4)
+        .enable_all()
+        .build()
+        .unwrap();
     let dir = tempfile::tempdir().unwrap();
     let p = open(&dir.path().join("state.db"), runtime.handle());
     let mut writer = p.writers.checkout(runtime.handle()).unwrap();
@@ -115,7 +268,12 @@ fn unknown_commit_and_unwinding_discard_sessions_and_return_capacity() {
 }
 #[test]
 fn validation_refusal_discards_partial_write_without_retry() {
-    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(4)
+        .max_blocking_threads(4)
+        .enable_all()
+        .build()
+        .unwrap();
     let dir = tempfile::tempdir().unwrap();
     let p = open(&dir.path().join("state.db"), runtime.handle());
     let mut calls = 0;

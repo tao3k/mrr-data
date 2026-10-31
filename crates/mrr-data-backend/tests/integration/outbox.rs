@@ -6,7 +6,7 @@ use super::{
 };
 use mrr_data_backend::providers::{MetadataTransaction, TransactionProvider};
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn replacement_replay_and_reordered_ack_preserve_exact_deliveries() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("deliveries.db");
@@ -134,7 +134,7 @@ impl TransactionProvider for CrashProvider {
         Ok(())
     }
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn crash_worker() {
     let Ok(path) = std::env::var("MRR_PUBLICATION_CRASH_PATH") else {
         return;
@@ -160,7 +160,7 @@ async fn crash_worker() {
         .unwrap();
     panic!("crash point not reached");
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn process_death_at_every_tuple_write_and_after_commit_is_recoverable() {
     let dir = tempfile::tempdir().unwrap();
     for point in 1..=6 {
@@ -208,7 +208,7 @@ async fn process_death_at_every_tuple_write_and_after_commit_is_recoverable() {
         println!("PUBLICATION-CRASH-RECOVERY-OK {point}");
     }
 }
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn missing_delivery_refuses_historical_repair() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("corrupt.db");
@@ -254,7 +254,7 @@ async fn missing_delivery_refuses_historical_repair() {
     reopened.shutdown().await.unwrap();
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn authority_and_validator_refusals_cannot_emit_delivery() {
     use mrr_data_backend::{AuthorityExpectation, AuthorityProposal, AuthorityStatus};
     let dir = tempfile::tempdir().unwrap();

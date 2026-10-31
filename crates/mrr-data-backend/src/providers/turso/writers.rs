@@ -12,9 +12,23 @@ struct State {
     idle: Vec<turso::Connection>,
     leased: usize,
     capacity: Option<usize>,
-    accepting: bool,
+    phase: Phase,
+}
+#[derive(Default, PartialEq)]
+enum Phase {
+    #[default]
+    Fresh,
+    Open,
+    Closing,
+    Closed,
 }
 impl Writers {
+    pub(super) fn ensure_fresh(&self) -> Result<(), BackendError> {
+        let state = self.0.lock().map_err(|_| BackendError::Unavailable)?;
+        (state.phase == Phase::Fresh)
+            .then_some(())
+            .ok_or(BackendError::InvalidConfiguration)
+    }
     #[cfg(test)]
     pub(super) fn counts(&self) -> (usize, usize) {
         let state = self.0.lock().unwrap();
@@ -26,18 +40,18 @@ impl Writers {
         capacity: Option<usize>,
     ) -> Result<(), BackendError> {
         let mut state = self.0.lock().map_err(|_| BackendError::Unavailable)?;
-        if state.database.is_some() || state.leased != 0 {
+        if state.phase != Phase::Fresh || state.database.is_some() || state.leased != 0 {
             return Err(BackendError::InvalidConfiguration);
         }
         state.database = Some(database);
         state.capacity = capacity;
-        state.accepting = true;
+        state.phase = Phase::Open;
         Ok(())
     }
     pub(super) fn checkout(&self, runtime: &Handle) -> Result<Writer<'_>, BackendError> {
         let (database, conn) = {
             let mut state = self.0.lock().map_err(|_| BackendError::Unavailable)?;
-            if !state.accepting {
+            if state.phase != Phase::Open {
                 return Err(BackendError::NotReady);
             }
             let database = state.database.clone().ok_or(BackendError::NotReady)?;
@@ -64,12 +78,13 @@ impl Writers {
     }
     pub(super) fn close(&self) -> Result<(), BackendError> {
         let mut state = self.0.lock().map_err(|_| BackendError::Unavailable)?;
-        state.accepting = false;
+        state.phase = Phase::Closing;
         state.idle.clear();
         if state.leased != 0 {
             return Err(BackendError::NotReady);
         }
         state.database.take();
+        state.phase = Phase::Closed;
         Ok(())
     }
 }
@@ -94,7 +109,7 @@ impl Drop for Writer<'_> {
         let conn = self.conn.take();
         if self.healthy
             && let Ok(mut state) = self.owner.0.lock()
-            && state.accepting
+            && state.phase == Phase::Open
             && state.capacity.is_some()
         {
             state.idle.extend(conn);

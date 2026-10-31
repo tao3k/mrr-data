@@ -9,7 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn async_queued_cancel_and_deadline_skip_driver_under_shared_worker_limit() {
     let (backend, _) = open(BackendConfig {
         max_resource_workers: 1,

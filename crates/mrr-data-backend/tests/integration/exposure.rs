@@ -2,76 +2,17 @@
 use mrr_data_backend::{Backend, BackendConfig, providers::TursoProvider};
 use mrr_data_content::{
     ConditionalCommitPortError, ConditionalContentCommitOutcome, ConditionalContentCommitPort,
-    ConditionalContentWrite, ContentBlock, ContentCodec, ContentStore, FilesystemContentStore,
-    MemoryContentStore, RemoteContentStore, RemoteError, RemoteFuture, publish_content,
+    ContentBlock, ContentCodec, FilesystemContentStore, MemoryContentStore, publish_content,
     read_through,
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
-#[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
-struct RetainedObligation {
-    claim: String,
-    reservation: String,
-    unknown_exposure: String,
-    history: String,
-    reserved: u64,
-    held: u64,
-}
-
-// Acknowledged file storage for this native experiment only. It delegates all
-// content addressing, bounded reads and durable writes to MRR's existing store.
-struct AcknowledgedFiles(FilesystemContentStore);
-impl RemoteContentStore for AcknowledgedFiles {
-    fn get<'a>(&'a self, cid: &'a cid::Cid, limit: usize) -> RemoteFuture<'a, Option<Vec<u8>>> {
-        let store = self.0.clone();
-        let cid = *cid;
-        Box::pin(async move {
-            tokio::task::spawn_blocking(move || store.get_bounded(&cid, limit))
-                .await
-                .map_err(|_| RemoteError::Unavailable)?
-                .map(Some)
-                .map_err(|_| RemoteError::Unavailable)
-        })
-    }
-    fn put<'a>(&'a self, block: ContentBlock<'a>) -> RemoteFuture<'a, ()> {
-        if block.bytes().len() > 8192 {
-            return Box::pin(async { Err(RemoteError::TooLarge) });
-        }
-        let store = self.0.clone();
-        let codec = block.codec();
-        let bytes = block.bytes().to_vec();
-        Box::pin(async move {
-            tokio::task::spawn_blocking(move || store.put(ContentBlock::new(codec, &bytes)))
-                .await
-                .map_err(|_| RemoteError::Unavailable)?
-                .map(|_| ())
-                .map_err(|_| RemoteError::Unavailable)
-        })
-    }
-}
-fn body() -> Vec<u8> {
-    let exposure = RetainedObligation {
-        claim: "original-claim".into(),
-        reservation: "original-reservation".into(),
-        unknown_exposure: "original-unknown-exposure".into(),
-        history: "original-history-prefix".into(),
-        reserved: 4,
-        held: 4,
-    };
-    // Opaque Host data: the backend preserves identity and bytes, not budget arithmetic.
-    serde_json::to_vec(&("original-budget/history-scope", true, exposure)).expect("typed body")
-}
-fn write<'a>(operation: &'a str, bytes: &[u8]) -> ConditionalContentWrite<'a> {
-    ConditionalContentWrite {
-        scope: "original-budget/history-scope",
-        operation_id: operation,
-        expected: None,
-        replacement: ContentBlock::new(ContentCodec::Raw, bytes).cid(),
-    }
-}
+#[path = "../support/retained_obligation.rs"]
+mod retained_obligation;
+use retained_obligation::{AcknowledgedFiles, RetainedObligation, body, write};
 async fn open(path: &std::path::Path) -> Backend {
     let provider = TursoProvider::new(path.to_path_buf(), tokio::runtime::Handle::current());
     let provider = match std::env::var("MRR_BACKEND_TEST_MVCC").as_deref() {
-        Ok("reuse") => provider.with_reusable_concurrent_writes(2).unwrap(),
+        Ok("reuse") => provider.with_reusable_concurrent_writes(4).unwrap(),
         Ok(_) => provider.with_concurrent_writes(),
         Err(_) => provider,
     };
@@ -84,7 +25,7 @@ async fn open(path: &std::path::Path) -> Backend {
     .expect("native MRR backend")
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn original_burn_exposure_body_survives_lost_reply_without_revalidation() {
     let temp = tempfile::tempdir().expect("directory");
     let db = temp.path().join("authority.db");
@@ -175,7 +116,7 @@ async fn original_burn_exposure_body_survives_lost_reply_without_revalidation() 
         .expect("natural recovered shutdown");
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn metadata_recovery_does_not_reconstruct_missing_exposure_body() {
     let temp = tempfile::tempdir().expect("directory");
     let remote = AcknowledgedFiles(
@@ -225,7 +166,7 @@ async fn metadata_recovery_does_not_reconstruct_missing_exposure_body() {
     backend.shutdown().await.expect("natural shutdown");
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn validation_callback_side_effect_precedes_refusal_counterexample() {
     let temp = tempfile::tempdir().expect("directory");
     let remote = AcknowledgedFiles(
@@ -270,7 +211,7 @@ async fn validation_callback_side_effect_precedes_refusal_counterexample() {
     backend.shutdown().await.expect("natural shutdown");
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn caller_selected_home_can_recommit_original_claim_counterexample() {
     let temp = tempfile::tempdir().expect("directory");
     let remote = AcknowledgedFiles(

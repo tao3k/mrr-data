@@ -29,13 +29,16 @@ connections. The Host must include those in its overall resource budget.
 A newly allocated private writer sets busy timeout and sets/reads FULL. Public
 metadata transactions cannot issue arbitrary SQL or alter session PRAGMAs. A
 lease starts non-reusable; only successful COMMIT followed by confirmed
-autocommit permits recycling. Any refusal, error, Unknown result or panic
+autocommit permits recycling. Any refusal, driver error/Unknown result or panic
 discards the connection. Drop finishes physical cleanup before releasing capacity.
+Lost delivery after a known successful commit can retain a healthy session;
+the caller must still reconcile the exact original operation as Unknown delivery.
 There is no callback retry, wait queue inside the writer owner or detached cleanup.
 
 Close stops new leases and clears idle writers. An outstanding lease makes close
 fail and retains the database owner; a returning lease cannot rejoin a closed
-idle set. Reopen requires complete closure. Normal Backend shutdown still drains
+idle set. Closing is terminal for the object; recovery constructs a fresh provider
+over the original database. Normal Backend shutdown still drains
 accepted work first. A failed close is not evidence of no execution or free
 budget. Pool state is process-local resource ownership, not a durable fence.
 A close request does not cancel an already running transaction. Only drained
@@ -48,6 +51,12 @@ The original reservation and unknown exposure cannot be replaced with a new key
 to avoid a conflict. Historical exact recovery remains observation, not authority
 to send or refund. A lost response does not become an abort because a connection
 was recycled or discarded.
+
+The later [[file:../architecture/shared-backend-writer-lifecycle.org][writer lifecycle review]] supersedes the initial same-object reopen
+contract and adds cancellation, retirement and concurrent-close recovery evidence.
+Current multithreaded test runtimes use at least four workers. CPU-derived paired
+measurement drivers retain actual Host parallelism with that minimum. Historical
+receipts below retain their recorded configurations and are not new measurements.
 
 * Component diagnosis
 
@@ -170,13 +179,13 @@ cargo test -p mrr-data-backend --features turso --locked --offline --test backen
 
 Invoke each measurement separately. Both diagnostic runtimes retain all 12
 available CPUs. Standard correctness runs cover exclusive capacity, retained FULL,
-successful reuse, refusal, Unknown COMMIT, panic, active-close refusal and reopen.
+successful reuse, refusal, Unknown COMMIT, panic, active-close refusal and fresh-owner recovery.
 The existing same-home/revocation races, original operation/outbox partial-write
 process recovery and typed unknown-exposure/body controls run through reuse.
 CI adds the same explicit factory at MSRV and in Ubuntu/Darwin Rust jobs;
 ignored measurements remain outside CI performance gates. Logs stay temporary.
 
-WAL, fresh MVCC and reusable MVCC each pass all 54 standard tests, including
+At the original implementation revision, WAL, fresh MVCC and reusable MVCC each passed all 54 standard tests, including
 the unchanged ASP Rust deny gate. Seven opt-in measurements are excluded from
 those correctness counts. Clippy passes with warnings denied. Initial structural
 gate failures were resolved by an interface-only mod.rs and acyclic configuration,

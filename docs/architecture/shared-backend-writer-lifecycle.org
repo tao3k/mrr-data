@@ -1,0 +1,104 @@
+#+TITLE: Writer Owner Cancellation, Retirement and Recovery
+#+LANGUAGE: en
+#+OPTIONS: toc:2
+
+* Reviewed resource contract
+
+This refines [[file:../benchmarks/shared-backend-writer-reuse.org][bounded writer reuse]] after review in Weaver's
+existing SysML execution-resource requirement. SPEC retains semantic ownership;
+no separate qualification package, accounting model or dependency pin is added.
+
+The provider previously closed the writer pool, reader and bootstrap connection
+in separate critical sections and allowed the same stopped object to reopen.
+That admits an overlapping resource-image teardown in source-level reasoning.
+The negative control =closed_writer_owner_cannot_be_resurrected= first failed:
+the original implementation returned success instead of InvalidConfiguration.
+This establishes owner resurrection, not observed database corruption.
+
+The writer owner now follows Fresh -> Open -> Closing -> Closed. Closing is
+terminal even when live leases prevent a successful close acknowledgment. Open
+and close hold the existing bootstrap mutex across the complete resource change;
+they use the same lock order. Recovery constructs a fresh provider over the
+original durable database, as the Backend factory already does. An old object's
+late close, late healthy return or reopening attempt cannot address the new
+owner. Idle plus leased execution writers remain within the configured bound.
+
+Close is not cancellation or revocation. An accepted lease may finish after
+close starts, and close must refuse while it remains live. A late return drops
+its connection before releasing capacity. Backend shutdown drains accepted work
+before closing storage. No detached cleanup or implicit operation retry is added.
+
+* Outcome and evidence boundaries
+
+| Boundary | Required result |
+|----------+-----------------|
+| Caller cancels before validation | Drain worker; no consume; original held exposure persists |
+| Caller cancels after validation | Worker may commit; reconcile the exact original operation |
+| Driver COMMIT returns Unknown | Discard session; retain original uncertainty |
+| Known COMMIT, reply lost | Healthy session can return; delivery remains Unknown; exact replay never revalidates |
+| Authority retired before seal | Stale authority cannot consume, including after provider reconstruction |
+| Consume writes staged, COMMIT pending | Seal is not commitment; a competing retirement attempt is not effective until committed |
+| Close races accepted lease | Refuse acknowledgment, deny checkout and discard late return |
+| Fresh owner over original database | Recover original head, operation, authority vector and outbox without new logical identity |
+
+The test body keeps the same claim, reservation, history, unknown-exposure and
+held=4 bindings. Successful consumption changes the original body's burn marker,
+not its reservation or held amount. Replaying the same authority retirement
+proposal resolves a failed/ambiguous update; inventing a new nonce or authority
+is not recovery. New-nonce operations under the retired authority are refused.
+A free physical slot, empty lease set or source-side silence is not a refund.
+
+The driver-Unknown unit injection aborts a staged transaction before COMMIT,
+then checks conservative error handling and physical disposal. It does not
+establish durability for an ambiguous successful commit. The integration wrapper
+separately delegates a real successful Turso commit, loses its response, and
+checks exact durable recovery. These are distinct evidence classes.
+
+* Standard native acceptance
+
+=tests/unit/turso_writers.rs= contains eight owner tests. Four new tests cover
+resurrection refusal, driver Unknown during closing, late healthy return and
+eight simultaneous close callers. =tests/integration/writer_lifecycle.rs=
+adds five tests covering six bounded schedules, using a real reusable provider
+and the standard Backend, shared engine and acknowledged filesystem content.
+The test-only pause wrapper delegates native transactions; it is not a DB adapter.
+
+Every multithreaded Backend test runtime has at least four workers. The lifecycle
+fixture has four write workers, four shared workers and reusable capacity four.
+Explicit blocking runtime budgets have a four-thread minimum. CPU-derived performance drivers
+use available Host CPUs with a four-worker minimum and report actual CPU count
+separately. Logical capacity-one refusal controls remain unchanged. No watchdog
+or timeout was increased. Historical two-thread receipts are not current-profile
+acceptance; old performance numbers are not remeasured by this correctness run.
+
+#+begin_src text
+env -u MRR_BACKEND_TEST_MVCC cargo test -p mrr-data-backend --features turso --locked --offline
+MRR_BACKEND_TEST_MVCC=1 cargo test -p mrr-data-backend --features turso --locked --offline
+MRR_BACKEND_TEST_MVCC=reuse cargo test -p mrr-data-backend --features turso,arrow-query,graph-publish --locked --offline
+cargo clippy -p mrr-data-backend --features turso,arrow-query,graph-publish --all-targets --locked --offline -- -D warnings
+#+end_src
+
+The environment selector must be absent for the WAL control: any non-reuse value
+selects fresh MVCC in applicable factories. A preliminary log labeled wal used
+that value and is retained as a mislabeled fresh-mode run, not WAL evidence.
+Explicit concurrency and lifecycle tests select MVCC/reuse directly in all runs.
+
+On 2026-10-31, the four-worker WAL-control, fresh-MVCC and reusable runs each pass 63 tests.
+The reusable run with Arrow/query and graph/publication features passes 78 tests;
+strict Clippy passes for all targets with the same expanded feature set. Seven
+opt-in measurements remain ignored. Existing ASP deny checks pass unchanged.
+These are local native correctness receipts, not a new throughput measurement
+or a claim that remote CI has finished.
+
+* Retained premises
+
+Fresh-provider reconstruction in these new tests is not process death. Existing
+process-death, partial-tuple and outbox recovery controls remain separate and run
+through the same standard targets. Neither proves physical power-loss durability,
+cross-process credential revocation or an independent anti-rollback root.
+SPEC currentAtUse, authority effectiveness, global original identity enrollment
+and Rust final transport admission remain Host/SPEC/executor obligations. No
+external send or account-release implementation is exercised by these fixtures.
+Existing Lean semantics and Quint timing responsibilities are reused, not cloned
+into another writer-pool authority model. Logs, including the initial regression
+and test-harness compile failures, remain temporary and outside Git.

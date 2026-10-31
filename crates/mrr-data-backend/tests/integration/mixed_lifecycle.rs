@@ -40,7 +40,7 @@ impl Drop for Consumer {
     }
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn mixed_profiles_recover_through_abandoned_io_and_drain_after_final_consumer() {
     let directory = tempfile::tempdir().unwrap();
     let backend = Backend::open(

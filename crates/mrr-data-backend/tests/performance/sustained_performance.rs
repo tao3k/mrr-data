@@ -233,17 +233,18 @@ async fn scenario<P: MetadataProvider>(name: &str, factory: &impl Fn(PathBuf) ->
     );
 }
 fn suite<P: MetadataProvider>(name: &str, factory: impl Fn(PathBuf) -> P) {
+    let workers = std::thread::available_parallelism().unwrap().get().max(4);
     let runtime = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2)
-        .max_blocking_threads(2)
+        .worker_threads(workers)
+        .max_blocking_threads(workers + 4)
         .enable_all()
         .build()
         .unwrap();
     runtime.block_on(async {
         println!(
             "{}",
-            serde_json::json!({"provider": name, "host_max_blocking_threads": 2,
-            "runtime_workers": 2, "max_writes": 4, "max_recoveries": READERS,
+            serde_json::json!({"provider": name, "host_max_blocking_threads": workers + 4,
+            "runtime_workers": workers, "max_writes": 4, "max_recoveries": READERS,
             "max_write_workers": 1, "max_recovery_workers": 1, "writer_lanes": WRITERS,
             "reader_lanes": READERS, "attempts_per_writer": ATTEMPTS, "rounds": 3,
             "required_cargo_profile": "test", "block_publication": "synthetic-ack-metadata-only",

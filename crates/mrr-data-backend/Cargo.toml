@@ -77,6 +77,11 @@ path = "tests/integration/exposure.rs"
 required-features = ["turso"]
 
 [[test]]
+name = "backend_writer_lifecycle"
+path = "tests/integration/writer_lifecycle.rs"
+required-features = ["turso"]
+
+[[test]]
 name = "backend_concurrency_paired"
 path = "tests/performance/concurrency_paired.rs"
 required-features = ["turso"]

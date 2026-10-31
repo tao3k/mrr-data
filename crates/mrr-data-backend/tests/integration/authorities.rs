@@ -106,7 +106,7 @@ async fn rotate_and_retire(backend: &Backend) -> RetiredHome {
         head,
     }
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn mandatory_authority_rotation_retirement_and_historical_replay_share_the_home() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("authority.db");
@@ -206,7 +206,7 @@ async fn mandatory_authority_rotation_retirement_and_historical_replay_share_the
     );
     reopened.shutdown().await.unwrap();
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn authority_guard_order_aba_limits_and_membership_are_exact() {
     use mrr_data_backend::{
         AuthorityExpectation as Guard, AuthorityProposal as Update, AuthorityStatus as Status,
@@ -311,7 +311,7 @@ async fn authority_guard_order_aba_limits_and_membership_are_exact() {
 }
 
 #[cfg(all(feature = "duckdb", not(feature = "turso")))]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn native_snapshot_isolation_cannot_write_skew_past_committed_retirement() {
     use mrr_data_backend::{
         AuthorityExpectation as Guard, AuthorityProposal as Update, AuthorityStatus as Status,
@@ -403,7 +403,7 @@ async fn native_snapshot_isolation_cannot_write_skew_past_committed_retirement()
     admin.shutdown().await.unwrap();
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn lost_logical_head_cannot_be_reenrolled_as_fresh_authority() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("lost-head.db");
@@ -559,7 +559,7 @@ async fn simulate_disclosure_retirement_race(
     retirement.await.unwrap()
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn simulated_host_disclosure_rotation_retirement_and_replay_are_separate() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("simulated-host.db");

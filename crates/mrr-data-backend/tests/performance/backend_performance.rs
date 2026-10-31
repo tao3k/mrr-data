@@ -216,7 +216,7 @@ async fn suite<P: MetadataProvider>(name: &str, factory: impl Fn(PathBuf) -> P) 
         "os": std::env::consts::OS, "arch": std::env::consts::ARCH,
         "required_cargo_profile": "test", "rounds": ROUNDS,
         "operations_per_lane": OPERATIONS, "warmup_per_lane": WARMUP,
-            "runtime_workers": 2, "max_writes": config.max_writes, "max_recoveries": config.max_recoveries,
+            "runtime_workers": 4, "max_writes": config.max_writes, "max_recoveries": config.max_recoveries,
             "max_write_workers": config.max_write_workers, "max_recovery_workers": config.max_recovery_workers,
             "max_retained_bytes": config.max_retained_bytes, "sequencing": "application-per-home-mutex",
         "block_publication": "synthetic-ack-metadata-only"})
@@ -236,7 +236,7 @@ async fn suite<P: MetadataProvider>(name: &str, factory: impl Fn(PathBuf) -> P) 
 }
 
 #[cfg(feature = "turso")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore = "native performance measurement; run alone with --ignored --nocapture"]
 async fn turso_measurement() {
     suite("turso", |path| {
@@ -246,7 +246,7 @@ async fn turso_measurement() {
 }
 
 #[cfg(feature = "duckdb")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore = "native performance measurement; run alone with --ignored --nocapture"]
 async fn duckdb_measurement() {
     suite("duckdb", mrr_data_backend::providers::DuckDbProvider::new).await;

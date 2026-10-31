@@ -39,7 +39,7 @@ fn write(
         replacement,
     }
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn complete_ack_protected_cas_and_restart_recover_exact_operation() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("graph.db");
@@ -139,7 +139,7 @@ async fn complete_ack_protected_cas_and_restart_recover_exact_operation() {
     ));
     backend.shutdown().await.unwrap();
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn lost_root_ack_leaves_original_operation_absent_then_exact_content_retry_commits() {
     let directory = tempfile::tempdir().unwrap();
     let backend = open(&directory.path().join("graph.db")).await;
@@ -304,47 +304,54 @@ fn graph_publication_crash_child() {
     };
     let phase = std::env::var("MRR_GRAPH_CRASH_PHASE").unwrap();
     eprintln!("publication child entering {phase}");
-    tokio::runtime::Runtime::new().unwrap().block_on(async {
-        let directory = std::path::Path::new(&directory);
-        let backend = Backend::open(
-            BackendConfig::default(),
-            ProcessProvider {
-                native: native(&directory.join("graph.db")),
-                phase: phase.clone(),
-            },
-            tokio::runtime::Handle::current(),
-        )
-        .await
-        .unwrap();
-        let port = backend.profile("graph.v1", "tenant").unwrap();
-        let prior = prior_head(&port).await;
-        let port = protected_port(&backend).await;
-        let f = Fixture::new();
-        let prepared = f.prepare();
-        let remote = ProcessRemote {
-            directory: directory.join("objects"),
-            root: *prepared.root(),
-            inventory: *f.binding.inventory_root(),
-            snapshot: *f.binding.snapshot_root(),
-            phase: phase.clone(),
-        };
-        let publication = publish_graph_dataset(&prepared, &f.local, &remote, &remote, || async {
-            if phase == "before-root" {
-                std::process::exit(CRASH_EXIT);
-            }
-            Ok(())
-        })
-        .await
-        .unwrap();
-        if phase == "complete-ack" {
-            std::process::exit(CRASH_EXIT);
-        }
-        let operation = write("crash-publication", Some(prior), *prepared.root());
-        port.commit_graph_publication(operation, Some(&publication), |_| Ok::<_, ()>(()))
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(4)
+        .max_blocking_threads(4)
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            let directory = std::path::Path::new(&directory);
+            let backend = Backend::open(
+                BackendConfig::default(),
+                ProcessProvider {
+                    native: native(&directory.join("graph.db")),
+                    phase: phase.clone(),
+                },
+                tokio::runtime::Handle::current(),
+            )
             .await
             .unwrap();
-        panic!("configured crash point was not reached");
-    });
+            let port = backend.profile("graph.v1", "tenant").unwrap();
+            let prior = prior_head(&port).await;
+            let port = protected_port(&backend).await;
+            let f = Fixture::new();
+            let prepared = f.prepare();
+            let remote = ProcessRemote {
+                directory: directory.join("objects"),
+                root: *prepared.root(),
+                inventory: *f.binding.inventory_root(),
+                snapshot: *f.binding.snapshot_root(),
+                phase: phase.clone(),
+            };
+            let publication =
+                publish_graph_dataset(&prepared, &f.local, &remote, &remote, || async {
+                    if phase == "before-root" {
+                        std::process::exit(CRASH_EXIT);
+                    }
+                    Ok(())
+                })
+                .await
+                .unwrap();
+            if phase == "complete-ack" {
+                std::process::exit(CRASH_EXIT);
+            }
+            let operation = write("crash-publication", Some(prior), *prepared.root());
+            port.commit_graph_publication(operation, Some(&publication), |_| Ok::<_, ()>(()))
+                .await
+                .unwrap();
+            panic!("configured crash point was not reached");
+        });
 }
 
 async fn run_crash_child(directory: &std::path::Path, phase: &str) {
@@ -464,7 +471,7 @@ async fn recover_crashed_publication(directory: &std::path::Path, phase: &str) {
     backend.shutdown().await.unwrap();
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn publication_process_exit_preserves_original_operation_and_complete_head() {
     for phase in [
         "child-ack",

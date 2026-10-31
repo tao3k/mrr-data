@@ -58,7 +58,7 @@ async fn until(mut condition: impl FnMut() -> bool) {
     .await
     .unwrap();
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn final_clone_holds_shared_drain_and_resource_budget() {
     let (backend, closes) = open(BackendConfig {
         max_resources: 1,
@@ -98,7 +98,7 @@ async fn final_clone_holds_shared_drain_and_resource_budget() {
     assert_eq!(backend.status().lifecycle, Lifecycle::Closed);
     assert_eq!(closes.load(Ordering::SeqCst), 1);
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn failure_and_panicking_workers_return_all_reservations() {
     let (backend, _) = open(BackendConfig::default()).await;
     assert!(matches!(
@@ -128,7 +128,7 @@ async fn failure_and_panicking_workers_return_all_reservations() {
     assert_eq!(backend.status().resource_bytes, 0);
     backend.shutdown().await.unwrap();
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn cancelled_queue_skips_work_and_running_cancellation_keeps_worker_lease() {
     let (backend, _) = open(BackendConfig::default()).await;
     let gate = Arc::new((Mutex::new(false), Condvar::new()));
@@ -180,7 +180,7 @@ async fn cancelled_queue_skips_work_and_running_cancellation_keeps_worker_lease(
     backend.shutdown().await.unwrap();
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn controlled_stops_refuse_before_driver_and_keep_first_reason() {
     use mrr_data_backend::{ResourceControl, ResourcePreparationError, ResourceStop};
     let (backend, _) = open(BackendConfig::default()).await;
@@ -206,7 +206,7 @@ async fn controlled_stops_refuse_before_driver_and_keep_first_reason() {
     backend.shutdown().await.unwrap();
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn caller_abort_signals_running_control_but_cleanup_keeps_admission() {
     use mrr_data_backend::{ResourceControl, ResourceStop};
     let (backend, _) = open(BackendConfig::default()).await;
@@ -255,7 +255,7 @@ async fn caller_abort_signals_running_control_but_cleanup_keeps_admission() {
     backend.shutdown().await.unwrap();
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn explicit_queued_stops_return_before_held_worker_releases() {
     use mrr_data_backend::{ResourceControl, ResourcePreparationError, ResourceStop};
     for resource_workers in [1, 2] {
@@ -330,7 +330,7 @@ async fn explicit_queued_stops_return_before_held_worker_releases() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn consuming_conversion_transfers_lease_and_refuses_shared_input() {
     use mrr_data_backend::ResourceTransformError;
     let (backend, _) = open(BackendConfig {
