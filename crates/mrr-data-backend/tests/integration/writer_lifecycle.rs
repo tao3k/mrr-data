@@ -23,6 +23,7 @@ mod commit_pause;
 mod retained_obligation;
 use commit_pause::{Pause, PausePoint, PausedStorage, Release};
 use retained_obligation::{AcknowledgedFiles, RetainedObligation, body, body_with_burn, write};
+mod borrowed_validation;
 const SCOPE: &str = "original-budget/history-scope";
 fn workers() -> usize {
     std::thread::available_parallelism().unwrap().get().max(4)

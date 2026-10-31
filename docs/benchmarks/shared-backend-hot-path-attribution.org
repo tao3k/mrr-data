@@ -4,6 +4,10 @@
 
 * Reviewed scope and accounting boundaries
 
+The later [[file:shared-backend-borrowed-dispatch.org][borrowed-validator/admission review]] retains two rejected optimization
+experiments and additional caller-guard evidence. It does not overwrite the
+attribution and counterexamples below or claim a qualified throughput gain.
+
 Weaver's existing SysML GovernancePolicyProjection was reviewed before these
 test-only changes. Preserve [[file:shared-backend-cpu-matched-reuse.org][the original 0.74 reuse/WAL sample]] rather than
 claiming to retroactively trace it. No production provider, dependency pin or
