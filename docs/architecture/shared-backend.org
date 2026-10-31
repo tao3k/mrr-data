@@ -3,6 +3,59 @@
 
 * Ownership and dependency direction
 
+** Turso workspace release qualification
+
+The workspace selects exact Turso =0.8.3=; optional backend, query and public
+=turso_driver= consumers share that version. The lockfile advances the nine
+Turso-family packages from =0.8.1= together. Other package versions and dependency
+edges, including the Cedar and MRR semantic source revisions, remain unchanged.
+This is an upgrade of the existing provider, not another database backend.
+
+The isolated PR 12 qualification starts from
+=8e3384c7f2a257b37319927206d756d989e08dac= on Darwin arm64. The actual workspace
+backend suite with =--no-default-features --features turso --locked --offline=
+passes 41 tests: ten unit, eighteen consumer, five dispatch and eight resource
+cases. Three opt-in measurement tests are excluded from that count. Backend
+Clippy with =--all-targets -- -D warnings= passes. The actual Commerce consumer
+with =--all-features --locked --offline= passes 57 tests, including shared
+backend reopen/replay, current authority rejection and original reservation caps.
+The combined =turso-fts,turso-sync= feature build also passes =cargo check= with
+the same locked versions; this does not exercise live sync or FTS query behavior.
+The original ignored =turso_sustained_measurement= test passes all three rounds,
+including exact recovery after reopen and zero unexpected errors/unknown outcomes.
+Other qualification compilation overlapped this run, so its throughput and
+latency samples are excluded from performance comparisons. The original worker,
+admission and deadline limits remain unchanged. This is a continuous-load
+correctness receipt, not an isolated or matched-release speed measurement.
+These results cover native
+crash recovery, exact operation replay and bounded lifecycle behavior; they are
+not remote-CI, all-platform or every optional graph-query feature acceptance.
+
+The first default-PATH build failed while linking =turso_sdk_kit= because the
+selected Nix compiler could not find =libiconv=. The qualification uses the
+system Xcode toolchain with the original test limits, rather than changing the
+provider or ignoring the failure. Raw failed and successful logs remain outside
+Git in temporary storage.
+
+=TursoProvider= still has one mutex-protected writer connection, one reader
+connection and =BEGIN IMMEDIATE= transactions. More admitted tasks or worker
+threads alone do not create concurrent physical writers. This upgrade neither
+enables an unqualified concurrency mode nor claims an AI-agent throughput gain.
+Performance claims require the existing separately run continuous-load workload
+and a matched baseline. Shared-budget coordination cannot be split into new
+homes merely to increase write parallelism.
+
+For Gateway consumers, a recovered exact result is historical evidence, not a
+new transport permit. The Host must bind the original canonical coordination
+home, retain the recoverable obligation body, synchronize mutable authorities
+and recheck final-use authorization. Metadata presence alone does not discharge
+unknown exposure when its content body is missing. Validation callbacks must be
+inert: a callback that performs an external effect before returning refusal is
+not made atomic by the metadata transaction. Those are consumer refinement
+obligations, not additional policy or accounting semantics in this library.
+
+** Existing owner contract
+
 ASP consumes the physical driver through =mrr_data_backend::turso_driver=.
 MRR Data owns the exact Turso dependency revision. The optional =turso-fts= and
 =turso-sync= features forward capabilities to that same driver. ASP retains its
