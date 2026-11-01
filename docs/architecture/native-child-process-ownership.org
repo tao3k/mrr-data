@@ -185,3 +185,27 @@ with brew --prefix openssl, retaining existing flags and all version pins.
 The complete original-source recovery gate remains mandatory. Workflow syntax
 inspection also retains pre-existing shellcheck style/info findings in the three
 native dependency setup blocks; those are not reported as a clean lint pass.
+
+* Keep heavy diagnostics outside default acceptance
+
+At 6a2fb69d Ubuntu completes the entire original-source gate, including retained
+source resources. Darwin fails the original 1200-second wall again. Its archive
+finishes about 82 seconds before that wall; Rust application compilation starts
+only seconds before expiry. The linker C preprocessing now reports 16 MB GGC,
+then completes parsing and assembly, rather than the earlier multi-GB setup.
+Neither this observation nor the earlier 19844e9c linker failure is a controlled
+compiler-speedup comparison. The OpenSSL correction remains unqualified on
+Darwin until a complete link and recovery run succeeds.
+
+Default acceptance now sets GERBIL_BUILD_VERBOSE=0 and leaves explicit LLVM
+pass selection unset. The pinned SDK's ordinary run path still emits real
+operation start/terminal observations through ProgramArchiveObserver. Rust
+coarse phase/function and owned-artifact observation remains active; MRR native
+operation observations remain enabled. Only heavyweight GCC optimizer notes,
+IRA/reload dumps and LLVM pass-number/assembly tracing become opt-in diagnostic
+work. Optimization, ABI, full module graph, feature profiles, test/resource
+matrix, compiler identity and 1200/30 limits are unchanged. If a real operation
+is silent for 30 seconds, it must still fail; no output/CPU heartbeat replaces
+missing evidence. The complete local source cohort is still unavailable, so
+focused observer tests cannot qualify hosted source recovery. Previous failures
+and every benchmark sample remain retained outside Git.
