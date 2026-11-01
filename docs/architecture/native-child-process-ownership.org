@@ -197,15 +197,36 @@ Neither this observation nor the earlier 19844e9c linker failure is a controlled
 compiler-speedup comparison. The OpenSSL correction remains unqualified on
 Darwin until a complete link and recovery run succeeds.
 
-Default acceptance now sets GERBIL_BUILD_VERBOSE=0 and leaves explicit LLVM
-pass selection unset. The pinned SDK's ordinary run path still emits real
-operation start/terminal observations through ProgramArchiveObserver. Rust
-coarse phase/function and owned-artifact observation remains active; MRR native
-operation observations remain enabled. Only heavyweight GCC optimizer notes,
-IRA/reload dumps and LLVM pass-number/assembly tracing become opt-in diagnostic
-work. Optimization, ABI, full module graph, feature profiles, test/resource
+The 7c79d914 experiment sets GERBIL_BUILD_VERBOSE=0 and leaves explicit LLVM
+pass selection unset. It fails Ubuntu's original 30-second idle bound. The SDK
+does invoke ProgramArchiveObserver, but MRR's pinned CargoObserver suppresses
+those callbacks at verbosity zero; MRR_NATIVE_PROGRESS controls runtime events,
+not this build adapter. The earlier claim of emitted native operation progress
+was incomplete. SDK callback invocation is not evidence of Cargo-visible output.
+Optimization, ABI, full module graph, feature profiles, test/resource
 matrix, compiler identity and 1200/30 limits are unchanged. If a real operation
 is silent for 30 seconds, it must still fail; no output/CPU heartbeat replaces
 missing evidence. The complete local source cohort is still unavailable, so
 focused observer tests cannot qualify hosted source recovery. Previous failures
 and every benchmark sample remain retained outside Git.
+
+The correction restores numeric native verbosity 1 and retains lighter Rust
+observation. Supported CORCXXFLAGS_GAMBUILD options additionally direct only
+optional GCC optimizer notes to the platform null sink. GCC errors, real GC/phase
+output and owned compiler artifact/dump observation remain enabled. Explicit
+report destinations refuse unless --optimizer-notes opts into them. No parser
+quirk, shared report file (overwritten across translation units), fake heartbeat
+or dependency patch is used. See
+[[https://gcc.gnu.org/onlinedocs/gcc/Developer-Options.html][GCC developer options]].
+Independent control of native allocation dumps remains an upstream API gap.
+
+Ten focused option controls pass. A real installed paired Gambit/GCC control
+uses the SDK's exact runtime options and produces identical objects with and
+without note suppression: SHA256
+695fc913c612f94704075eaaec98e7c270779425fb6e69f77dd5a844e07d6c5a.
+Only the baseline emits optimizer notes; a syntax-error negative control retains
+nonzero exit and error output. The initial missing home mapping (zero exit,
+ERROR, no object) and invalid hand-written runtime option remain retained as
+failures. This newer installed SDK control proves diagnostic routing, not
+hosted source qualification or compiler speedup. The failed quiet-mode run
+and every original benchmark sample remain retained outside Git.

@@ -8,6 +8,7 @@ import shlex
 import subprocess
 
 TRACKING_OFF = "-ftrack-macro-expansion=0"
+OPTIMIZER_NOTES_OFF = f"-fopt-info-all={os.devnull}"
 
 
 def diagnostic_flags(flags):
@@ -24,7 +25,22 @@ def diagnostic_flags(flags):
     return flags if tracking else f"{flags.rstrip()} {TRACKING_OFF}".lstrip()
 
 
-def configured_flags(gsc, inherited=None):
+def quiet_optimizer_flags(flags):
+    """Suppress optional optimizer notes, never errors or actual phase events."""
+    diagnostic_flags(flags)
+    destinations = [
+        option
+        for option in shlex.split(flags)
+        if option.startswith("-fopt-info") and "=" in option
+    ]
+    if destinations and destinations != [OPTIMIZER_NOTES_OFF]:
+        raise ValueError(
+            "explicit optimizer report destination requires --optimizer-notes"
+        )
+    return flags if destinations else f"{flags.rstrip()} {OPTIMIZER_NOTES_OFF}".lstrip()
+
+
+def configured_flags(gsc, inherited=None, optimizer_notes=False):
     """Read SDK defaults through its documented override/query, never ambient CC."""
     gsc = Path(gsc).resolve(strict=True)
     if not gsc.is_file() or not os.access(gsc, os.X_OK):
@@ -44,17 +60,23 @@ def configured_flags(gsc, inherited=None):
     defaults = result.stdout.removesuffix("\n")
     # Even an inherited override cannot bypass validating the selected SDK.
     diagnostic_flags(defaults)
-    return diagnostic_flags(defaults if inherited is None else inherited)
+    flags = diagnostic_flags(defaults if inherited is None else inherited)
+    return flags if optimizer_notes else quiet_optimizer_flags(flags)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--github-env", type=Path, required=True)
+    parser.add_argument("--optimizer-notes", action="store_true")
     args = parser.parse_args()
     gsc = os.environ.get("GERBIL_GSC")
     if not gsc:
         parser.error("GERBIL_GSC must identify the selected immutable SDK")
-    flags = configured_flags(gsc, os.environ.get("CORCXXFLAGS_GAMBUILD"))
+    flags = configured_flags(
+        gsc, os.environ.get("CORCXXFLAGS_GAMBUILD"), args.optimizer_notes
+    )
     with args.github_env.open("a") as output:
         output.write(f"CORCXXFLAGS_GAMBUILD={flags}\n")
-    print("Gambit GCC diagnostics: macro tracking off; all SDK defaults retained")
+    print(
+        "Gambit GCC diagnostics: macro tracking off; code generation defaults retained"
+    )
