@@ -298,3 +298,35 @@ digests. This newer installed SDK plumbing control is not a Linux root-cause
 result, a native-source qualification or a performance benchmark. Linux compiler
 silence versus Cargo forwarding remains an explicit unresolved obligation until
 the exact failed-input replay returns. No source dependency pin changes.
+
+* Authoritative ownership correction
+
+The consumer-side Python compiler controls and direct GCC replay were the wrong
+ownership boundary. They are removed, together with their compiler-policy tests
+and workflow hooks. Historical failures, raw diagnostics and benchmark samples
+remain retained. A diagnostic experiment is not justification for maintaining a
+second compiler policy in MRR Data.
+
+| Owner | Responsibility |
+|-------+----------------|
+| MRR build.ss | Scheme PackageSpec, module graph and package build declaration |
+| gerbil-scheme-rust build support | Generic GSC/C compilation, optimization, ABI, linking, compiler observations and replay |
+| MRR mrr-gerbil build.rs | Delegate package preparation and embedded archive construction to those owners |
+| MRR Data Rust tests/benchmarks | Data/source admission, borrowed guards, cancellation, recovery, unknown exposure and performance |
+| MRR Data Python | Invoke existing entrypoints, bound processes and retain artifacts; no GSC/GCC compilation policy |
+
+MRR Data has no independent Scheme package. Its base storage adapter does not
+embed Scheme. The optional source-handoff dependency path does bring embedded
+Scheme transitively: mrr-property-source depends on mrr-frontends, whose pinned
+default enables embedded-runtime, forwarding to mrr-gerbil/embedded-runtime.
+That crate's build.rs invokes mrr-gerbil-native-build; prepare_package invokes
+MRR's existing build.ss in isolated Cargo output. Additional native-inference
+features enable reasoning/search consumers of the same MRR runtime.
+
+The consumer CI therefore prepares MRR's dependencies and invokes Cargo. Its
+redundant preliminary gerbil build is removed; MRR's canonical build.rs/build.ss
+path still performs the actual build. No feature is disabled, no package graph
+is replaced, no dependency pin changes and no watchdog is relaxed. The Rust
+workspace's profile.test optimization remains a Rust workspace concern, distinct
+from Scheme/C flags owned by the bridge SDK. Existing source acceptance failures
+remain unresolved until their owning SDK/MRR layer is fixed and qualified.

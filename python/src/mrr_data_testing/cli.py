@@ -6,7 +6,6 @@ import sys
 
 COMMANDS = {
     "run-process": "execution",
-    "gambit-diagnostics": "gambit_controls",
     "check-docs": "checks.docs",
     "check-features": "checks.features",
     "check-spec-fixtures": "checks.spec_fixtures",
