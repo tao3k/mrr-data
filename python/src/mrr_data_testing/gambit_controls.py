@@ -38,8 +38,8 @@ def quiet_optimizer_flags(flags):
     return flags if destinations else f"{flags.rstrip()} {OPTIMIZER_NOTES_OFF}".lstrip()
 
 
-def configured_flags(gsc, inherited=None, optimizer_notes=True):
-    """Read SDK defaults through its documented override/query, never ambient CC."""
+def sdk_driver(gsc):
+    """Resolve the selected SDK's declared GCC driver, never ambient CC."""
     gsc = Path(gsc).resolve(strict=True)
     if not gsc.is_file() or not os.access(gsc, os.X_OK):
         raise ValueError("GERBIL_GSC must select an executable SDK compiler")
@@ -48,14 +48,23 @@ def configured_flags(gsc, inherited=None, optimizer_notes=True):
     features = re.findall(r'^BUILD_FEATURE_C_COMP=["\']?([a-z]+)', source, re.M)
     if features != ["gcc"] or "CORCXXFLAGS_GAMBUILD+set" not in source:
         raise ValueError("selected SDK must declare GCC and the public flag override")
+    return driver
+
+
+def sdk_option(driver, name):
     result = subprocess.run(
-        [driver, "CORCXXFLAGS_GAMBUILD"],
+        [driver, name],
         capture_output=True,
         check=True,
         timeout=5,
         text=True,
     )
-    defaults = result.stdout.removesuffix("\n")
+    return result.stdout.removesuffix("\n")
+
+
+def configured_flags(gsc, inherited=None, optimizer_notes=True):
+    """Read SDK defaults through its documented override/query, never ambient CC."""
+    defaults = sdk_option(sdk_driver(gsc), "CORCXXFLAGS_GAMBUILD")
     # Even an inherited override cannot bypass validating the selected SDK.
     diagnostic_flags(defaults)
     flags = diagnostic_flags(defaults if inherited is None else inherited)
@@ -64,7 +73,10 @@ def configured_flags(gsc, inherited=None, optimizer_notes=True):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--github-env", type=Path, required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--github-env", type=Path)
+    mode.add_argument("--replay-linker", type=Path)
+    parser.add_argument("--replay-receipt", type=Path)
     parser.add_argument(
         "--suppress-optimizer-notes",
         action="store_true",
@@ -74,6 +86,15 @@ def main():
     gsc = os.environ.get("GERBIL_GSC")
     if not gsc:
         parser.error("GERBIL_GSC must identify the selected immutable SDK")
+    if args.replay_linker:
+        if not args.replay_receipt or args.suppress_optimizer_notes:
+            parser.error(
+                "linker replay requires its receipt and original optimizer output"
+            )
+        from mrr_data_testing.gambit_linker_replay import replay_linker
+
+        replay_linker(gsc, args.replay_linker, args.replay_receipt)
+        return
     flags = configured_flags(
         gsc, os.environ.get("CORCXXFLAGS_GAMBUILD"), not args.suppress_optimizer_notes
     )

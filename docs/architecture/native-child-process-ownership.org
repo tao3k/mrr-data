@@ -269,3 +269,32 @@ A static replay of one retained failure tail transforms 445866 display-input
 bytes into 207225 display bytes (46.477%), while retaining all 441320 native
 bytes separately. This is a tail-only presentation ratio, not a compiler or
 runtime speedup benchmark. No benchmark samples or historical failures change.
+
+* Retained-input direct compiler diagnosis
+
+At ef3a9f57 Ubuntu still refuses idle30 after the preprocessed linker reaches
+59703296 bytes. Receiver compaction preserves about 72 MB native stderr and
+1.9 MB native stdout in the uploaded artifact; reducing display is not a fix
+for absent upstream output. The compiler command retains O2, macro tracking
+zero, SDK ABI options, load-motion exclusion and original diagnostic options.
+The standard source gate remains unqualified on Linux at this revision.
+
+The next diagnostic retains generated program_link.c, program_link.i and the
+program manifest. After a rejected gate only, it selects exactly one confined
+nonempty input, queries C_COMPILER and FLAGS_OBJ from the paired SDK driver,
+and compiles that preprocessed input directly into separate temporary outputs.
+It records compiler version, exact arguments, input digest before/after, and
+actual received output chunk timestamps, byte counts and newline counts. The
+unchanged 1200/30 policy applies; no read-only input access or CPU activity
+counts as output. Input ambiguity, alias escape, observed mutation and original
+watchdog refusal remain failures. A replay does not rerun the original source
+acceptance or supply a replacement pass. Matching before/after digests are
+diagnostic observations, not a hostile-host immutability certificate.
+
+The standard Python suite passes all 81 cases after this diagnostic addition.
+A tiny local preprocessed input also completes through the selected real SDK
+compiler, records its identity and direct chunks, and keeps matching input
+digests. This newer installed SDK plumbing control is not a Linux root-cause
+result, a native-source qualification or a performance benchmark. Linux compiler
+silence versus Cargo forwarding remains an explicit unresolved obligation until
+the exact failed-input replay returns. No source dependency pin changes.

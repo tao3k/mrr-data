@@ -451,12 +451,27 @@ jobs:
           uv run --locked --project python mrr-data-test run-process --phase build --compact-native-diagnostics --cargo-artifacts "$RUNNER_TEMP/mrr-source-clippy.jsonl" -- cargo clippy -vv -p mrr-data-datafusion -p mrr-data-graphar --all-targets --features mrr-data-datafusion/source-handoff,mrr-data-datafusion/search-dispatch,mrr-data-graphar/source-handoff,mrr-data-graphar/backend,mrr-data-graphar/selective-graphar --profile test --locked --message-format=json -- -D warnings
           uv run --locked --project python mrr-data-test run-process --phase test --cargo-artifacts "$RUNNER_TEMP/mrr-source-artifacts.jsonl" --test-target mrr_data_graphar -- tests::entity_properties::combined::source_handoff::backend::process_recovery::original_source_process_recovery_matrix --exact --ignored --nocapture --test-threads=1
           uv run --locked --project python mrr-data-test source-resources --scales 1 8 64 256 --cargo-artifacts "$RUNNER_TEMP/mrr-source-artifacts.jsonl" --output "$RUNNER_TEMP/original-source-resources.jsonl"
+      - name: Replay rejected linker input outside Cargo
+        if: failure()
+        run: uv run --locked --project python mrr-data-test gambit-diagnostics --replay-linker "$GITHUB_WORKSPACE/target" --replay-receipt "$RUNNER_TEMP/mrr-source-linker-replay.json"
       - name: Retain exact native compiler diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: source-compiler-observations-${{ matrix.os }}
-          path: ${{ runner.temp }}/mrr-source-*.native-*.log
+          path: |
+            ${{ runner.temp }}/mrr-source-*.native-*.log
+            ${{ runner.temp }}/mrr-source-linker-replay.*
+          if-no-files-found: ignore
+      - name: Retain generated compiler inputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-compiler-inputs-${{ matrix.os }}
+          path: |
+            target/debug/build/mrr-gerbil-*/out/gerbil-program/program_link.c
+            target/debug/build/mrr-gerbil-*/out/gerbil-program/program_link.i
+            target/debug/build/mrr-gerbil-*/out/gerbil-program/program.json
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
