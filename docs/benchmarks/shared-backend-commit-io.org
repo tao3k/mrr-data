@@ -199,6 +199,12 @@ new dispatcher, connection backend or weaker durability setting is promoted.
 
 * Separate kernel trace refinement
 
+The notification split is an observation boundary, not an I/O attribution rule.
+Pre-notification can overlap another operation's synchronous persistence; after
+notification the blocked caller still has to reacquire its park mutex and run.
+The kernel refinement below separates observed scheduling residence without
+claiming a request-correlated device-time decomposition.
+
 A five-second Xcode System Trace attaches only to owned Rust PID 77540 using
 the same frozen executable and enabled decorator. The benchmark independently
 finishes all 18 cases, 13824 commits and exact recoveries, natural exit, with no

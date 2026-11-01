@@ -152,3 +152,25 @@ remain enabled remotely. A local source build reaches a separate missing
 :asp-gerbil-scheme/building-api dependency in the local Gerbil package cohort.
 That failure does not reproduce the hosted immutable source environment and
 does not qualify its full source gate. Raw receipts remain outside Git.
+
+* SDK-selected diagnostic tracking control
+
+The next 6f839950 run still fails both source jobs. On Ubuntu the last native
+artifact is the approximately 59 MB program_link.i; Rust artifact reconstruction
+shows the remaining owner is mrr-gerbil's native archive build script, not a
+quiet application Rust compiler. Its GCC invocation retains O2 and SINGLE_HOST
+but enables macro diagnostic tracking implicitly. The pinned SDK already adds
+-fno-gcse-lm to this linker object's native-object phase; adding it again is not
+an explanation or a repair.
+
+CI now queries the selected GERBIL_GSC's paired gambuild-C through its public
+CORCXXFLAGS_GAMBUILD command and preserves the returned defaults verbatim,
+appending only -ftrack-macro-expansion=0. The exact pinned Gambit dcd677cd source
+declares this query and override. No SDK file, compiler identity, optimization,
+ABI default, timeout or dependency pin changes. Literal single-line options,
+GCC declaration and conflicting explicit overrides are checked before exporting
+through GITHUB_ENV. This existing CI-glue module is not a benchmark implementation.
+Eight focused controls and a real installed SDK query pass; the local SDK is
+newer and is not a cold-build reproduction of the hosted release. Full source
+CI remains required before calling this candidate a fix. Earlier failed logs
+remain retained outside Git; CPU use alone never supplies watchdog progress.

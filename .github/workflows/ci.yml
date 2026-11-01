@@ -413,6 +413,8 @@ jobs:
         uses: tao3k/gerbil-scheme-rust/.github/actions/setup-gerbil@f61643b3a787d005612dc5021b4941612f3e1f68
         with:
           release-root: ${{ runner.temp }}/mrr-gerbil
+      - name: Configure SDK-owned GCC diagnostics
+        run: uv run --locked --project python mrr-data-test gambit-diagnostics --github-env "$GITHUB_ENV"
       - name: Build the MRR-owned source frontend package
         shell: bash
         run: |
