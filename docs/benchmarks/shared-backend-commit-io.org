@@ -196,3 +196,47 @@ kernel runnable/mutex timing; a matched Linux campaign; and controlled-host
 replication. FULL, budgets, pins, worker floor, retries and recovery contracts
 are unchanged. Keep existing Turso group commit and final-use authority; no
 new dispatcher, connection backend or weaker durability setting is promoted.
+
+* Separate kernel trace refinement
+
+A five-second Xcode System Trace attaches only to owned Rust PID 77540 using
+the same frozen executable and enabled decorator. The benchmark independently
+finishes all 18 cases, 13824 commits and exact recoveries, natural exit, with no
+unexpected outcome. This profiled leg is not pooled into the paired campaign.
+The trace and all exports remain under /private/tmp/mrr-commit-io-system-*;
+its table of contents verifies the attached PID and successful original exit.
+The initial sandbox cache-initialization failure and malformed first presentation
+conversion are retained separately, not admitted as successful trace analysis.
+
+All 102150 syscall rows resolve to the owned PID. Of 138747 thread-state rows,
+130348 resolve to it, 2614 resolve elsewhere and 5785 remain unresolved; only
+owned rows participate. Initial zero-time censored state intervals are excluded
+from syscall-overlap joins. Do not interpret unavailable typed CPU/wait cells
+as zero; this analysis instead joins explicit thread-state intervals by PID,
+kernel TID and the same trace clock.
+
+There are 2215 fsync syscalls in this process window. Of these, 1047 have a
+recognized COMMIT-function stack (CommitStateMachine or the observer function),
+totalling 91.428163 ms: mean 87.324 us, P95 178.500 us, maximum 5.880 ms.
+The other 1168 lack that recognized stack; block_on ancestry alone does not
+label them COMMIT or setup. Compiler inlining and preparation can affect stack
+classification. This is a process-window subset, not 1047 identified timed requests.
+
+| Kernel state within the recognized fsync spans | Thread-time ms |
+|------------------------------------------------+----------------|
+| Running | 43.490666 |
+| Blocked | 29.548792 |
+| Preempted | 13.058208 |
+| Runnable | 4.578048 |
+| Interrupted | 0.752449 |
+
+The state intervals cover all 91.428163 ms exactly, with zero overcoverage calls.
+Preempted plus Runnable accounts for about 19.3% of this syscall wall time;
+Blocked about 32.3%. Kernel blocking inside fsync is not proven pure device
+service: it can include filesystem/locking waits. This separates observable
+scheduling residence from syscall execution/blocking, without attributing all
+off-CPU time to storage. It does not bind the main campaign's slow COMMIT or
+notification to a kernel interval: the benchmark lacks an exported cross-clock
+and original-operation/kernel-TID anchor. Group tickets, pure device service,
+post-notification mutex versus runnable delay and controlled replication remain
+unproved. No trace record can discharge unknown exposure or authorize release.

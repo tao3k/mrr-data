@@ -123,3 +123,32 @@ same OSError boundary as individual descriptor reads. Missing or inaccessible
 observation produces no progress event and never changes compiler exit status.
 Permission-denied and disappeared-directory regression controls cover the
 discovery/listing boundary; the original failed job log remains outside Git.
+
+* Compiler observation cost and application-tail ownership
+
+At 30856fb1, remote CI completes 13 of 14 jobs successfully; macOS original
+source qualification hits the unchanged 1200-second build wall. At 3a552e2e,
+the macOS source build again hits that wall, while Ubuntu hits 30 seconds of
+build inactivity after the graphar-rs artifact. Generic property tests/lint pass.
+The macOS log is about 80 MB and contains sustained compiler diagnostics; this
+is a wall-time failure, not a silent test or failed recovery assertion.
+
+The observer cost repair removes globally enabled per-inference/coercion and
+inline-decision logs. Ordinary compilers retain coarse phase logs, backend
+function-boundary remarks and owned-output observation. Detailed LLVM ordinals
+and assembly remarks are restricted to the actual application tails,
+mrr_data_datafusion and mrr_data_graphar, rather than the ASP implementation
+dependency. Explicit Host RUSTC_LOG remains authoritative. No periodic/CPU
+heartbeat, timeout change, source/SPEC pin change or disabled CI test is added.
+Updated controls require no inline flood while preserving compiler output,
+error/signal/jobserver and actual-artifact behavior.
+
+The local full Python run retains 61 passing tests and two cold native-launch
+timeouts at the existing five-second bound, including the unchanged C++
+partition control and the unwrapped Rust reference binary. It is not reported
+as a full pass. Thirteen focused observer controls pass, with the native
+compiler-output test explicitly outside that focused scope; all 63 tests
+remain enabled remotely. A local source build reaches a separate missing
+:asp-gerbil-scheme/building-api dependency in the local Gerbil package cohort.
+That failure does not reproduce the hosted immutable source environment and
+does not qualify its full source gate. Raw receipts remain outside Git.

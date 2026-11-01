@@ -42,7 +42,10 @@ def test_frontend_logging_preserves_explicit_host_configuration(monkeypatch):
     monkeypatch.setenv("RUSTC_LOG", "temporary-test-setting")
     monkeypatch.delenv("RUSTC_LOG")
     rustc_progress.main()
-    assert "rustc_hir_typeck::coercion=info" in rustc_progress.os.environ["RUSTC_LOG"]
+    assert (
+        rustc_progress.os.environ["RUSTC_LOG"]
+        == "rustc_interface::passes=info,rustc_codegen_ssa::base=info"
+    )
     assert calls == [("rustc", ["rustc", "--emit=metadata"])]
     monkeypatch.setenv("RUSTC_LOG", "host-selected-logging")
     rustc_progress.main()
@@ -66,7 +69,7 @@ def test_workspace_wrapper_preserves_compiler_output_and_failure(tmp_path, monke
         capture_limit=2 * 1024 * 1024,
         output_filter=CompilerOutput(),
     )
-    assert b"inline (" in result.stdout
+    assert b" inline (" not in result.stdout
     assert b"prologepilog (analysis)" in result.stdout
     assert b"asm-printer (analysis)" in result.stdout
     assert b" Running pass " in result.stdout
@@ -89,7 +92,7 @@ def test_workspace_wrapper_preserves_compiler_output_and_failure(tmp_path, monke
         capture_limit=2 * 1024 * 1024,
         output_filter=CompilerOutput(),
     )
-    assert b"inline (" in result.stdout
+    assert b"prologepilog (analysis)" in result.stdout
     assert subprocess.check_output([plain], timeout=5) == subprocess.check_output(
         [nested], timeout=5
     )
@@ -134,10 +137,11 @@ def test_phase_trace_is_owned_and_never_duplicated(monkeypatch):
             rustc_progress.main()
         assert len(observed_calls) == previous + int(observes)
         if enabled:
-            assert "remark=inline prologepilog asm-printer" in observed_calls[-1]
+            assert "remark=prologepilog asm-printer" in observed_calls[-1]
             assert "llvm-args=--print-pass-numbers" in observed_calls[-1]
         elif observes:
             assert "llvm-args=--print-pass-numbers" not in observed_calls[-1]
+            assert "remark=prologepilog" in observed_calls[-1]
 
 
 @pytest.mark.parametrize("kind", ["metadata", "dep-graph"])

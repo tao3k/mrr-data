@@ -208,7 +208,7 @@ def main():
     if not nested:
         os.environ.setdefault(
             "RUSTC_LOG",
-            "rustc_hir_typeck::coercion=info,rustc_borrowck::region_infer=info,rustc_interface::passes=info,rustc_codegen_ssa::base=info",
+            "rustc_interface::passes=info,rustc_codegen_ssa::base=info",
         )
     if not nested and emits_link:
         if os.environ.get("MRR_DATA_RUSTC_PHASE_TRACE_CRATES"):
@@ -222,9 +222,10 @@ def main():
             )
             if crate in os.environ["MRR_DATA_RUSTC_PHASE_TRACE_CRATES"].split(","):
                 observed = True
-        remarks = (
-            "inline prologepilog asm-printer" if observed else "inline prologepilog"
-        )
+        # Inline decisions and per-inference logs can dominate compilation.
+        # One backend function boundary is enough for ordinary dependencies;
+        # detailed pass ordinals remain owned by explicitly selected crates.
+        remarks = "prologepilog asm-printer" if observed else "prologepilog"
         arguments.extend(["-C", f"remark={remarks}"])
     if observed:
         # The sampled quiet tail is the new-PM ThinLTO optimizer. Pass ordinals
