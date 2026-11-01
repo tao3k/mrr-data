@@ -210,7 +210,7 @@ missing evidence. The complete local source cohort is still unavailable, so
 focused observer tests cannot qualify hosted source recovery. Previous failures
 and every benchmark sample remain retained outside Git.
 
-The correction restores numeric native verbosity 1 and retains lighter Rust
+The 788ffe02 experiment restores numeric native verbosity 1 and retains lighter Rust
 observation. Supported CORCXXFLAGS_GAMBUILD options additionally direct only
 optional GCC optimizer notes to the platform null sink. GCC errors, real GC/phase
 output and owned compiler artifact/dump observation remain enabled. Explicit
@@ -230,3 +230,42 @@ ERROR, no object) and invalid hand-written runtime option remain retained as
 failures. This newer installed SDK control proves diagnostic routing, not
 hosted source qualification or compiler speedup. The failed quiet-mode run
 and every original benchmark sample remain retained outside Git.
+
+* Cargo framing and receiver-side diagnostic compaction
+
+At 788ffe02 the complete Darwin original-source gate passes; Ubuntu still fails
+idle30 after the linker preprocessed artifact reaches 59716516 bytes. This
+qualifies the Darwin OpenSSL/recovery path at that exact commit, not the Linux
+progress path. The failing Linux log does not independently timestamp bytes
+inside GCC's pipe; compiler silence and forwarding delay are not fully split.
+
+A dependency-free Rust/Cargo build-script control under the same 15-second
+control bound writes a fragment, flushes, waits one second, then writes its
+newline. Cargo delivers both markers together (received gap zero). With a
+newline on the first marker, the received gap is 1.005142 seconds. Thus an SDK
+raw-byte forwarder is insufficient to guarantee Cargo-visible byte progress.
+Object-code equality under note suppression does not prove progress equivalence.
+All control chunks and Rust source remain in /private/tmp/mrr-cargo-fragment-control-20261101.
+
+Default acceptance therefore keeps native verbosity and GCC optimizer notes.
+The existing run-process/CargoArtifactCapture boundary optionally compacts
+received native note/detail lines for display, while preserving exact received
+native lines in adjacent .native-stdout.log/.native-stderr.log files. Errors,
+warnings, operation/phase summaries, artifact growth and machine Cargo records
+remain visible. Batch summaries count actual received lines/bytes only. The
+existing process loop refreshes idle from raw input before display filtering;
+no timer, CPU activity or input-file read is promoted to progress. Silence
+still fails idle30, wall1200 stays unchanged and all original tests remain.
+Failure retains the native partial tail but removes invalid artifact identity.
+The source CI uploads raw native observations even on failure, outside Git.
+Other jobs keep their existing default presentation.
+
+The changed process/artifact suite passes all 76 cases locally. An additional
+real Rust/Cargo integration control passes separately: it verifies the native
+prefix, exact raw note retention, compact display, successful Cargo metadata,
+then a failing build-script panic with preserved errors and no valid metadata.
+These receipts are separate from complete hosted source recovery acceptance.
+A static replay of one retained failure tail transforms 445866 display-input
+bytes into 207225 display bytes (46.477%), while retaining all 441320 native
+bytes separately. This is a tail-only presentation ratio, not a compiler or
+runtime speedup benchmark. No benchmark samples or historical failures change.

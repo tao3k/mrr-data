@@ -31,11 +31,7 @@ def test_sdk_query_preserves_all_flags_and_sdk_files(tmp_path, monkeypatch):
     monkeypatch.setattr(subprocess, "run", query)
     assert (
         gambit_controls.configured_flags(compiler)
-        == flags
-        + " "
-        + gambit_controls.TRACKING_OFF
-        + " "
-        + gambit_controls.OPTIMIZER_NOTES_OFF
+        == flags + " " + gambit_controls.TRACKING_OFF
     )
     assert calls[0][0] == [driver, "CORCXXFLAGS_GAMBUILD"]
     assert calls[0][1]["timeout"] == 5
@@ -65,7 +61,7 @@ def test_inherited_options_keep_their_abi_flags(tmp_path, monkeypatch):
     )
     assert (
         gambit_controls.configured_flags(compiler, "-m64 -fPIC")
-        == "-m64 -fPIC -ftrack-macro-expansion=0 " + gambit_controls.OPTIMIZER_NOTES_OFF
+        == "-m64 -fPIC -ftrack-macro-expansion=0"
     )
 
 
@@ -77,7 +73,7 @@ def test_unsupported_sdk_refuses_before_execution(tmp_path, monkeypatch):
         lambda *args, **kw: pytest.fail("wrong compiler must not execute"),
     )
     with pytest.raises(ValueError, match="declare GCC"):
-        gambit_controls.configured_flags(compiler)
+        gambit_controls.configured_flags(compiler, optimizer_notes=False)
 
 
 def test_optimizer_notes_are_independent_of_codegen_flags():
@@ -96,7 +92,7 @@ def test_explicit_report_destination_requires_opt_in(tmp_path, monkeypatch):
         lambda *args, **kw: subprocess.CompletedProcess(args, 0, flags + "\n", ""),
     )
     with pytest.raises(ValueError, match="optimizer report destination"):
-        gambit_controls.configured_flags(compiler)
+        gambit_controls.configured_flags(compiler, optimizer_notes=False)
     assert (
         gambit_controls.configured_flags(compiler, optimizer_notes=True)
         == flags + " " + gambit_controls.TRACKING_OFF

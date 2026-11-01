@@ -34,13 +34,11 @@ def quiet_optimizer_flags(flags):
         if option.startswith("-fopt-info") and "=" in option
     ]
     if destinations and destinations != [OPTIMIZER_NOTES_OFF]:
-        raise ValueError(
-            "explicit optimizer report destination requires --optimizer-notes"
-        )
+        raise ValueError("explicit optimizer report destination cannot be suppressed")
     return flags if destinations else f"{flags.rstrip()} {OPTIMIZER_NOTES_OFF}".lstrip()
 
 
-def configured_flags(gsc, inherited=None, optimizer_notes=False):
+def configured_flags(gsc, inherited=None, optimizer_notes=True):
     """Read SDK defaults through its documented override/query, never ambient CC."""
     gsc = Path(gsc).resolve(strict=True)
     if not gsc.is_file() or not os.access(gsc, os.X_OK):
@@ -67,13 +65,17 @@ def configured_flags(gsc, inherited=None, optimizer_notes=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--github-env", type=Path, required=True)
-    parser.add_argument("--optimizer-notes", action="store_true")
+    parser.add_argument(
+        "--suppress-optimizer-notes",
+        action="store_true",
+        help="Diagnostic experiment only; suppression can hide Cargo-visible progress",
+    )
     args = parser.parse_args()
     gsc = os.environ.get("GERBIL_GSC")
     if not gsc:
         parser.error("GERBIL_GSC must identify the selected immutable SDK")
     flags = configured_flags(
-        gsc, os.environ.get("CORCXXFLAGS_GAMBUILD"), args.optimizer_notes
+        gsc, os.environ.get("CORCXXFLAGS_GAMBUILD"), not args.suppress_optimizer_notes
     )
     with args.github_env.open("a") as output:
         output.write(f"CORCXXFLAGS_GAMBUILD={flags}\n")
