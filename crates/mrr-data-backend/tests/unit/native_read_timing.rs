@@ -13,6 +13,8 @@ use std::{
     time::Instant,
 };
 use tokio::runtime::Handle;
+#[path = "commit_io.rs"]
+pub(crate) mod commit_io;
 #[path = "../performance/concurrency_paired.rs"]
 pub(crate) mod workload;
 
@@ -367,7 +369,7 @@ fn turso_original_bridge_commit_cpu() {
         .unwrap();
     println!(
         "{}",
-        serde_json::json!({"phase_pid":std::process::id(),"workers":cpus})
+        serde_json::json!({"phase_pid":std::process::id(),"workers":cpus,"io_wrapper":commit_io::enabled()})
     );
     println!(
         "{}",
@@ -397,6 +399,7 @@ fn turso_original_bridge_commit_cpu() {
                     "mode":match mode {WriterMode::Wal=>"wal",WriterMode::Fresh=>"fresh-mvcc",WriterMode::Reuse=>"reused-mvcc"},"records":&records,"process_usage":phase_cpu::process_usage(),"process_usage_scope":"process bookend; zero counters do not prove zero I/O"})
                 );
                 phase_cpu::validate_records(&records, cpus * workload::ATTEMPTS);
+                phase_cpu::validate_io(&records, commit_io::enabled());
             }
         }
     }

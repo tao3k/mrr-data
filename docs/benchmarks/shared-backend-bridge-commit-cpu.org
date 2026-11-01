@@ -4,6 +4,9 @@
 
 * SysML-first boundary and ownership
 
+The next [[file:shared-backend-commit-io.org][COMMIT IO and notification-origin experiment]] uses the public Rust IO
+boundary to separate synchronous calls from shared progress and resumption.
+
 Weaver ControlActivation.GovernancePolicyProjection owns the reviewed contract.
 This extends [[file:shared-backend-read-stages.org][the preserved native read-stage regression]].
 Use actual available CPUs with a floor of four; this Host exposes 12, so runtime,

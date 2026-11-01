@@ -1,0 +1,198 @@
+#+TITLE: Commit IO and Notification-Origin Attribution
+#+LANGUAGE: en
+#+OPTIONS: toc:2
+
+* Reviewed experiment
+
+Weaver SysML GovernancePolicyProjection owns this refinement of
+[[file:shared-backend-bridge-commit-cpu.org][the preserved CPU/wake evidence]]. Keep actual available CPUs, minimum four,
+FULL, zero retries, the original 30-second case bound, borrowed validation,
+original scope/operation/authority, accepted-work drain, exact reopen recovery
+and unknown-exposure retention. This is diagnostic attribution, not runtime
+promotion, a second persistence backend or a production send test.
+
+Use the existing Rust unit benchmark and a single frozen binary. Declare one
+wrapper-off/on/on/off block, three rotated WAL/fresh/reuse rounds and two
+original-domain profiles per leg, 64 operations per lane. Observation changes
+only cfg(test); Cargo.lock and dependency manifests remain unchanged. The
+test-only builder uses the pinned public turso::core re-export and with_io_impl.
+It delegates the same PlatformIO and original completion/result objects.
+
+Clock/collector, IO lifetime, bounded wake forwarding and native record validation
+now have separate owner modules under tests/support/phase_cpu. The test-only
+IO/File decorator lives in tests/unit/commit_io.rs. The ASP deny gate originally
+rejects the oversized combined helper; that failed receipt remains outside Git.
+The fix separates responsibilities, not a lint waiver or changed gate.
+
+* Source semantics and observable layers
+
+| Source boundary | Actual behavior | Allowed interpretation |
+|-----------------+-----------------+------------------------|
+| SDK step_inner | StepResult IO/Yield/Sleep become one Io status | Pending can be a driver/lock/yield condition |
+| Default Unix PlatformIO | pread/pwrite/pwritev/sync complete in the calling thread | Delegate-call wall is inside poll |
+| UnixIO step | No-op | Its elapsed time is not an asynchronous device wait |
+| MVCC group park | A waiter can register while another transaction holds the pager commit lock | Waiter latency may depend on another original operation |
+| Group unlock/wake | Shared progress releases parked completions | Publisher context can correlate with a different COMMIT |
+| Target wake forwarding | Notify original block_on without waiting for observation publication | Detail absence is not a lost commit or permission |
+
+The decorator forwards every IO/File method, including clocks, optional shared
+WAL operations, memory IO access, fixed-buffer registration, cancel/drain and
+backoff. Only selected synchronous file calls and driver step/wait/drain/backoff
+are timed; it does not claim complete kernel-call coverage. Data-path File methods
+preserve arguments, buffers, results and completion objects. No new retry,
+durability setting, callback placement or authority check is introduced.
+
+An IO scope is confined to the original COMMIT's synchronous worker thread, with
+a fixed 256-event limit. Native checks require IO spans inside COMMIT and outside
+its Pending gaps, exact operation joins, bounded notifications and a real sync
+sample when the wrapper is enabled; disabled probes must emit none. A completion
+control checks the original completion finishes and its callback runs once.
+Unwinding clears only observation context, never application authority.
+
+Each wake retains a bounded start/end/thread-CPU receipt and publisher's current
+scope/operation, if available. Do not mistake execution context for a causal
+group identifier. A late publisher can forward before it publishes details;
+snapshotting never waits for it. Preserve timestamp/detail publication gaps,
+early/unobserved notifications, overlapping forwarding/resumption and overflow.
+
+Delegate-call wall includes the underlying syscall, native completion callbacks,
+dispatch and preemption. It is not device-only service time. Synchronous FULL
+is the original database setting; this probe does not independently certify
+F_FULLFSYNC or physical power-loss persistence. Group sync is charged to its
+executing context only. A waiter's overlap with that context's sync is temporal
+evidence, not a new durability or causal theorem. Notifications and borrowed
+resource return never settle unknown budget or create a final send capability.
+
+* Evidence boundaries
+
+All raw requests, CPU/IO events and notification records remain in /private/tmp,
+outside Git. Preserve every failed build, ASP gate refusal and benchmark case.
+The first on leg overlaps presentation parsing of the completed first off leg;
+keep that provenance explicitly. No compiler or second Rust workload overlaps
+any timed leg. Host load is disclosed and never blocks execution. This campaign
+cannot be pooled with older notification-only probes or upgraded to controlled
+performance acceptance.
+
+Python remains existing CI process/artifact glue. Semantic assertions, clocks,
+loads and recovery checks are Rust-owned; tools use explicit environment/PATH.
+SPEC/Lean owns semantics and Quint owns interleavings. There is no duplicate
+formal model for diagnostic clocks and no dependency pin change.
+
+* Frozen evidence and all paired cases
+
+The frozen executable SHA-256 is
+2e5b48623bb685b0d5f09b11c13ecefdbdfc551762b9d091cdb702604a8c4b0b.
+The base is PR head 30856fb1 plus the test-only delegation/module changes.
+Source hashes and binary/log hashes are retained in
+/private/tmp/mrr-commit-io-source.sha256 and mrr-commit-io-evidence.sha256.
+No Cargo package version/source or lockfile change is present.
+
+All four legs use 12 actual/runtime/write/shared workers, reuse capacity 12
+and 16 blocking threads. Each leg completes 18 cases and 13824 successful
+commits with exact recoveries: 72 cases, 55296 commits/recoveries and 165888
+joined phase records overall. Zero unexpected refusal/error/Unknown, natural
+exit, unchanged case bound. Before/after load1: B1 36.34/38.80; I2 38.80/25.62;
+I3 25.62/17.70; B4 17.70/30.93. No sample is excluded by Host load.
+
+TPS rounded for display. Each row retains all three matching mode cases.
+Raw JSON preserves per-request data, every phase, P95/P99 and notifications.
+
+| Leg | Domain | Round | WAL TPS | Fresh TPS | Reuse TPS | Reuse P95 ms |
+|-----+--------+-------+---------+-----------+-----------+--------------|
+| B1 | Independent | 0 | 665 | 458 | 5540 | 4.094 |
+| B1 | Independent | 1 | 886 | 1093 | 2034 | 18.427 |
+| B1 | Independent | 2 | 442 | 1003 | 6759 | 4.385 |
+| B1 | Hot | 0 | 522 | 193 | 678 | 44.320 |
+| B1 | Hot | 1 | 338 | 109 | 467 | 59.240 |
+| B1 | Hot | 2 | 813 | 283 | 794 | 25.848 |
+| I2 | Independent | 0 | 494 | 1047 | 3127 | 13.108 |
+| I2 | Independent | 1 | 533 | 858 | 5840 | 4.916 |
+| I2 | Independent | 2 | 510 | 1428 | 2229 | 19.024 |
+| I2 | Hot | 0 | 605 | 173 | 489 | 66.072 |
+| I2 | Hot | 1 | 553 | 179 | 358 | 115.048 |
+| I2 | Hot | 2 | 1364 | 624 | 1456 | 13.301 |
+| I3 | Independent | 0 | 2235 | 2085 | 7524 | 2.755 |
+| I3 | Independent | 1 | 2100 | 1909 | 9512 | 1.870 |
+| I3 | Independent | 2 | 2057 | 2604 | 10759 | 1.518 |
+| I3 | Hot | 0 | 1899 | 911 | 2865 | 4.498 |
+| I3 | Hot | 1 | 2326 | 886 | 1921 | 9.104 |
+| I3 | Hot | 2 | 2479 | 683 | 1973 | 11.927 |
+| B4 | Independent | 0 | 760 | 1261 | 2381 | 13.860 |
+| B4 | Independent | 1 | 887 | 1020 | 5620 | 6.171 |
+| B4 | Independent | 2 | 678 | 1964 | 5288 | 4.752 |
+| B4 | Hot | 0 | 1227 | 344 | 923 | 25.428 |
+| B4 | Hot | 1 | 1160 | 288 | 903 | 27.117 |
+| B4 | Hot | 2 | 585 | 221 | 750 | 38.863 |
+
+* Synchronous IO and Pending contributions
+
+Independent/reuse microseconds per original operation, except the final two
+columns, which are means per matched detailed notification window. Sync/write
+totals are charged once to the actual caller. Do not add nested columns to total
+COMMIT, or compare per-window values as per-operation values.
+
+| Leg | Round | COMMIT wall | COMMIT CPU | Sync wall | Sync CPU | Sync calls | Write wall | Pending gap | Pre-notify | Notify-to-repoll | Forward per window | After-forward per window |
+|-----+-------+-------------+------------+-----------+----------+------------+------------+-------------+------------+------------------+--------------------+--------------------------|
+| I2 | 0 | 872.3 | 101.1 | 76.5 | 37.1 | 557 | 39.2 | 607.0 | 184.2 | 422.8 | 4.65 | 718.5 |
+| I2 | 1 | 499.5 | 86.7 | 45.9 | 31.5 | 563 | 21.4 | 366.3 | 255.3 | 111.0 | 1.90 | 159.9 |
+| I2 | 2 | 1563.7 | 94.0 | 188.2 | 33.4 | 496 | 32.8 | 1230.6 | 589.2 | 641.4 | 2.66 | 842.3 |
+| I3 | 0 | 294.2 | 82.4 | 45.0 | 27.5 | 454 | 20.3 | 189.3 | 83.0 | 106.3 | 2.74 | 126.2 |
+| I3 | 1 | 249.5 | 85.2 | 38.8 | 27.9 | 450 | 18.6 | 148.4 | 89.4 | 59.0 | 3.27 | 55.1 |
+| I3 | 2 | 225.8 | 85.9 | 37.7 | 27.0 | 442 | 17.0 | 132.3 | 95.9 | 36.4 | 2.62 | 31.2 |
+
+Across all cases: 9959 Pending windows, 26 early and 6 without an in-window
+notification; notification timestamps have zero unpublished slots and no
+notification/window overflow. Twenty forwarding detail records are not yet
+published at snapshot time. They remain incomplete, never repaired by waiting,
+treated as zero forwarding cost, or confused with a workload Unknown outcome.
+
+For I2/I3 independent/reuse, every matched detailed non-early notification has
+another original operation's active COMMIT context. This is actual context
+evidence, not a group-membership theorem. Enabled probes show 442-563 sync calls
+for 768 operations per case and exactly 768 writes. Shared progress reduces sync
+count relative to operations; a sync cannot be billed afresh to each waiter.
+
+The same enabled probe I2 round 2 versus I3 round 2 changes COMMIT wall
+1563.7 -> 225.8 us and CPU 94.0 -> 85.9 us. Own sync wall changes
+188.2 -> 37.7 us, write wall 32.8 -> 17.0 us. Pending changes
+1230.6 -> 132.3 us, accounting for about 82% of excess total wall.
+Pre-notification contributions are 589.2 -> 95.9 us per operation;
+post-notification contributions 641.4 -> 36.4 us. Direct file sync alone
+does not account for the measured regression.
+
+Within the slow I2 round 2 matched windows, mean forwarding is 2.66 us
+(thread CPU 2.34 us), versus 842.3 us from forwarding end to repoll.
+About 71% of split pre-notify time temporally overlaps a sync in the observed
+notifying operation's context; I3 rounds show about 71-73%, while the other I2
+rounds show 19-48%. These are correlated-overlap fractions, not device-time
+fractions or a proof that a specific sync released each waiter.
+
+The pinned Tokio 1.53.1 Handle.block_on uses BlockingRegionGuard and
+CachedParkThread::block_on: poll under a cooperative budget, then park; park
+uses a notification state plus mutex/Condvar. This is not a task being requeued
+on Tokio's multi-thread task executor. Post-forward delay therefore narrows to
+the original thread's park/unpark/OS resumption and immediate loop bookkeeping,
+with observation effects retained. Kernel ready-to-run versus mutex reacquire
+time remains unmeasured. Low forwarding CPU does not itself prove pure runnable
+contention or rule out all scheduling/locking effects.
+
+The off/on ratios change direction across order/round. Host drift and probe
+intrusion remain inseparable here; neither an observer speedup nor production
+nonregression is established. Do not merge these samples with the old A/AV
+runtime comparison or retroactively erase the historical 0.200/11.105 failure.
+
+* Validation and remaining evidence
+
+The modular source passes the standard backend suite with the wrapper enabled
+for test-only provider construction and strict all-target Clippy, without an ASP
+waiver. Standard integration libraries retain production construction: their
+real cancellation/restart/unknown-exposure tests remain independent gates,
+not claimed decorator-specific integration coverage. The unit benchmark exercises
+decorated physical IO through full original transactions, drain and recovery.
+
+Still missing: exact syscall/device service times separated from callbacks and
+preemption; group-ticket linkage rather than execution-context correlation;
+kernel runnable/mutex timing; a matched Linux campaign; and controlled-host
+replication. FULL, budgets, pins, worker floor, retries and recovery contracts
+are unchanged. Keep existing Turso group commit and final-use authority; no
+new dispatcher, connection backend or weaker durability setting is promoted.

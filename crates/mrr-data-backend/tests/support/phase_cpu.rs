@@ -4,16 +4,25 @@ use nix::sys::resource::{UsageWho, getrusage};
 use nix::time::{ClockId, clock_gettime};
 use std::{
     cell::{Cell, RefCell},
-    collections::BTreeMap,
     future::{Future, poll_fn},
     pin::pin,
     sync::{
         Arc, Mutex, OnceLock,
         atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
     },
-    task::{Context, Wake, Waker},
+    task::{Context, Waker},
     time::Instant,
 };
+#[path = "phase_cpu/io.rs"]
+mod io;
+#[path = "phase_cpu/validation.rs"]
+mod validation;
+#[path = "phase_cpu/wake.rs"]
+mod wake;
+use io::IoScope;
+pub use io::{FileRole, IoEvent, IoKind, io_call};
+pub use validation::{validate_io, validate_records};
+use wake::{ObservedWake, WakeDetail};
 static ON: AtomicBool = AtomicBool::new(false);
 static EPOCH: OnceLock<Instant> = OnceLock::new();
 static GENERATION: AtomicU64 = AtomicU64::new(0);
@@ -108,6 +117,9 @@ pub struct Commit {
     wake_count: usize,
     wake_unpublished: usize,
     wake_overflow: bool,
+    wake_details: Vec<WakeDetail>,
+    wake_details_unpublished: usize,
+    io: Vec<IoEvent>,
 }
 #[derive(serde::Serialize)]
 struct WaitWindow {
@@ -117,47 +129,6 @@ struct WaitWindow {
 }
 fn at(instant: Instant) -> u64 {
     ns(instant.duration_since(*EPOCH.get().unwrap()))
-}
-struct ObservedWake {
-    target: Waker,
-    next: AtomicUsize,
-    times: [AtomicU64; WAKE_LIMIT],
-}
-impl ObservedWake {
-    fn new(target: Waker) -> Self {
-        Self {
-            target,
-            next: AtomicUsize::new(0),
-            times: std::array::from_fn(|_| AtomicU64::new(0)),
-        }
-    }
-    fn forward(&self) {
-        let index = self.next.fetch_add(1, Ordering::Relaxed);
-        if let Some(slot) = self.times.get(index) {
-            slot.store(at(Instant::now()) + 1, Ordering::Release);
-        }
-        // Observation saturation must never suppress or invent a scheduler wake.
-        self.target.wake_by_ref();
-    }
-    fn snapshot(&self, commit: &mut Commit) {
-        commit.wake_count = self.next.load(Ordering::Acquire);
-        commit.wake_overflow = commit.wake_count > WAKE_LIMIT;
-        for slot in self.times.iter().take(commit.wake_count.min(WAKE_LIMIT)) {
-            match slot.load(Ordering::Acquire).checked_sub(1) {
-                Some(time) => commit.wakes.push(time),
-                None => commit.wake_unpublished += 1,
-            }
-        }
-        commit.wakes.sort_unstable();
-    }
-}
-impl Wake for ObservedWake {
-    fn wake(self: Arc<Self>) {
-        self.forward();
-    }
-    fn wake_by_ref(self: &Arc<Self>) {
-        self.forward();
-    }
 }
 struct Worker {
     start: Stamp,
@@ -321,6 +292,7 @@ pub async fn observe_commit<F: Future>(future: F) -> F::Output {
         return future.await;
     }
     let mut future = pin!(future);
+    let io = IoScope::enter();
     let start = stamp();
     let mut commit = Commit::default();
     let mut waiting = None::<Instant>;
@@ -366,6 +338,7 @@ pub async fn observe_commit<F: Future>(future: F) -> F::Output {
     })
     .await;
     commit.total = Span::between(start, stamp());
+    commit.io = io.finish();
     proxy.unwrap().snapshot(&mut commit);
     assert_eq!(commit.polls, commit.pending + 1);
     assert!(commit.poll_wall_ns + commit.pending_gap_ns <= commit.total.wall);
@@ -420,96 +393,6 @@ pub fn drain() -> Vec<Record> {
     records
 }
 
-#[derive(Default)]
-struct Joined<'a> {
-    worker: Option<&'a Record>,
-    caller: Option<&'a Record>,
-    receipt: Option<&'a Record>,
-}
-impl Joined<'_> {
-    fn check(&self) {
-        let (
-            Some(Record::Worker {
-                total,
-                body,
-                post,
-                bridge,
-                commit,
-                ..
-            }),
-            Some(Record::Caller { validation, .. }),
-            Some(Record::Receipt { at_ns, .. }),
-        ) = (self.worker, self.caller, self.receipt)
-        else {
-            panic!("one worker/caller/receipt per original operation required")
-        };
-        let order = [
-            total.start,
-            body.start,
-            bridge.start,
-            validation.start,
-            validation.end,
-            bridge.end,
-            body.end,
-            post.start,
-            commit.total.start,
-            commit.total.end,
-            post.end,
-            total.end,
-            *at_ns,
-        ];
-        assert!(
-            order.windows(2).all(|pair| pair[0] <= pair[1]),
-            "original causal order"
-        );
-        assert_eq!(commit.polls, commit.pending + 1);
-        assert!(!commit.window_overflow && !commit.wake_overflow);
-        assert_eq!(u64::try_from(commit.windows.len()).unwrap(), commit.pending);
-        assert_eq!(
-            commit
-                .windows
-                .iter()
-                .map(|window| window.next_poll - window.pending_start)
-                .sum::<u64>(),
-            commit.pending_gap_ns
-        );
-    }
-}
-/// # Panics
-/// Rejects missing, duplicated or causally inconsistent original-operation phases.
-pub fn validate_records(records: &[Record], expected: usize) {
-    assert_eq!(records.len(), expected * 3);
-    assert_eq!(records.len(), COUNT.load(Ordering::Relaxed));
-    let mut joined = BTreeMap::<(&str, &str), Joined<'_>>::new();
-    for record in records {
-        let (scope, operation) = match record {
-            Record::Worker {
-                scope, operation, ..
-            }
-            | Record::Caller {
-                scope, operation, ..
-            }
-            | Record::Receipt {
-                scope, operation, ..
-            } => (&**scope, &**operation),
-        };
-        let original = joined.entry((scope, operation)).or_default();
-        let slot = match record {
-            Record::Worker { .. } => &mut original.worker,
-            Record::Caller { .. } => &mut original.caller,
-            Record::Receipt { .. } => &mut original.receipt,
-        };
-        assert!(
-            slot.replace(record).is_none(),
-            "duplicate original phase record"
-        );
-    }
-    assert_eq!(joined.len(), expected);
-    for original in joined.values() {
-        original.check();
-    }
-}
-
 /// # Panics
 /// Requires a supported monotonic per-thread CPU clock.
 #[must_use]
@@ -534,42 +417,4 @@ fn thread_cpu_is_not_a_sleep_wall_clock() {
         elapsed.cpu < elapsed.wall,
         "sleep has positive off-CPU time"
     );
-}
-
-#[test]
-fn forwarding_waker_never_suppresses_notifications_when_observation_is_full() {
-    struct Target(AtomicUsize);
-    impl Wake for Target {
-        fn wake(self: Arc<Self>) {
-            self.0.fetch_add(1, Ordering::Relaxed);
-        }
-        fn wake_by_ref(self: &Arc<Self>) {
-            self.0.fetch_add(1, Ordering::Relaxed);
-        }
-    }
-    EPOCH.get_or_init(Instant::now);
-    let target = Arc::new(Target(AtomicUsize::new(0)));
-    let proxy = Arc::new(ObservedWake::new(Waker::from(target.clone())));
-    let waker = Waker::from(proxy.clone());
-    let workers = std::thread::available_parallelism().unwrap().get().max(4);
-    std::thread::scope(|scope| {
-        for _ in 0..workers {
-            let waker = waker.clone();
-            scope.spawn(move || {
-                for _ in 0..WAKE_LIMIT + 2 {
-                    waker.wake_by_ref();
-                }
-            });
-        }
-    });
-    waker.wake();
-    assert_eq!(
-        target.0.load(Ordering::Relaxed),
-        workers * (WAKE_LIMIT + 2) + 1
-    );
-    let mut snapshot = Commit::default();
-    proxy.snapshot(&mut snapshot);
-    assert!(snapshot.wake_overflow);
-    assert_eq!(snapshot.wakes.len(), WAKE_LIMIT);
-    assert_eq!(snapshot.wake_unpublished, 0);
 }

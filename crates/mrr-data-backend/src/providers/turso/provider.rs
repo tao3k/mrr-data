@@ -173,10 +173,10 @@ impl TransactionProvider for TursoProvider {
         }
         self.writers.ensure_fresh()?;
         let existed = self.path.exists();
-        let db = self
-            .runtime
-            .block_on(turso::Builder::new_local(path).build())
-            .map_err(failure)?;
+        let builder = turso::Builder::new_local(path);
+        #[cfg(test)]
+        let builder = super::read_timing::commit_io::builder(builder);
+        let db = self.runtime.block_on(builder.build()).map_err(failure)?;
         let conn = db.connect().map_err(failure)?;
         conn.busy_timeout(Duration::from_millis(250))
             .map_err(failure)?;
