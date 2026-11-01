@@ -385,6 +385,8 @@ jobs:
           else
             brew install apache-arrow gcc jq openssl pkg-config sqlite zlib
             arrow_prefix="$(brew --prefix apache-arrow)"
+            openssl_prefix="$(brew --prefix openssl)"
+            echo "RUSTFLAGS=${RUSTFLAGS:-} -Lnative=$openssl_prefix/lib" >> "$GITHUB_ENV"
             echo "PKG_CONFIG_PATH=$arrow_prefix/lib/pkgconfig:$(brew --prefix openssl)/lib/pkgconfig" >> "$GITHUB_ENV"
             echo "CMAKE_PREFIX_PATH=$arrow_prefix:$(brew --prefix)" >> "$GITHUB_ENV"
             echo "DYLD_FALLBACK_LIBRARY_PATH=$arrow_prefix/lib" >> "$GITHUB_ENV"

@@ -174,3 +174,14 @@ Eight focused controls and a real installed SDK query pass; the local SDK is
 newer and is not a cold-build reproduction of the hosted release. Full source
 CI remains required before calling this candidate a fix. Earlier failed logs
 remain retained outside Git; CPU use alone never supplies watchdog progress.
+
+At 19844e9c both immutable source packages build and the Python gate passes all
+71 tests. Darwin then completes native archive compilation and reaches Rust
+linking in the original-source stage; it fails because the SDK's build-host
+OpenSSL Cellar directory is absent and ld cannot find ssl. This is a distinct
+link failure, not the former wall deadline and not a controlled speedup claim.
+CI supplies an additional native search directory through RUSTFLAGS, discovered
+with brew --prefix openssl, retaining existing flags and all version pins.
+The complete original-source recovery gate remains mandatory. Workflow syntax
+inspection also retains pre-existing shellcheck style/info findings in the three
+native dependency setup blocks; those are not reported as a clean lint pass.
