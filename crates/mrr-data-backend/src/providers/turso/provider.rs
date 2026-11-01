@@ -110,6 +110,10 @@ fn read(
     runtime: &Handle,
     key: &str,
 ) -> Result<Option<Vec<u8>>, BackendError> {
+    #[cfg(test)]
+    if let Some(result) = super::read_timing::read_if_armed(conn, runtime, key) {
+        return result;
+    }
     runtime.block_on(async {
         let mut rows = conn
             .query(

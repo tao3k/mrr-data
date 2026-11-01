@@ -10,7 +10,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::{Barrier, Mutex};
-const ATTEMPTS: usize = 64;
+pub(crate) const ATTEMPTS: usize = 64;
 #[path = "../support/bound_obligation.rs"]
 mod bound_obligation;
 #[path = "../support/decision_timing.rs"]
@@ -26,7 +26,7 @@ use storage_timing::{PhaseSample, TimedStorage, Timings};
 #[path = "../support/worker_control.rs"]
 mod worker_control;
 #[derive(Clone, Copy, PartialEq)]
-enum WriterMode {
+pub(crate) enum WriterMode {
     Wal,
     Fresh,
     Reuse,
@@ -208,13 +208,13 @@ async fn open(path: &std::path::Path, cpus: usize, mode: WriterMode) -> (Backend
     (backend, timings)
 }
 #[derive(Clone, Copy)]
-struct Case {
-    cpus: usize,
-    mode: WriterMode,
-    hot: bool,
-    hold: Option<Duration>,
-    pair: usize,
-    order: usize,
+pub(crate) struct Case {
+    pub(crate) cpus: usize,
+    pub(crate) mode: WriterMode,
+    pub(crate) hot: bool,
+    pub(crate) hold: Option<Duration>,
+    pub(crate) pair: usize,
+    pub(crate) order: usize,
 }
 async fn prepare(
     backend: &Backend,
@@ -238,6 +238,9 @@ async fn prepare(
     prepared
 }
 async fn case(config: Case) {
+    case_observed(config, || {}, || {}).await;
+}
+pub(crate) async fn case_observed(config: Case, begin: fn(), finish: fn()) {
     let Case {
         cpus,
         mode,
@@ -269,6 +272,7 @@ async fn case(config: Case) {
         ));
     }
     timings.reset();
+    begin();
     let start = Instant::now();
     barrier.wait().await;
     let collected = tokio::time::timeout(Duration::from_secs(30), async {
@@ -283,6 +287,7 @@ async fn case(config: Case) {
     while jobs.join_next().await.is_some() {}
     let elapsed = start.elapsed();
     let phases = timings.snapshot();
+    finish();
     let close = Instant::now();
     backend.shutdown().await.unwrap();
     let close_ns = close.elapsed().as_nanos();

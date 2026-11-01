@@ -1,6 +1,8 @@
 //! One shared persistence engine; profiles own validation, providers own storage.
 //! Host-authenticated namespaces and live authority synchronization remain required.
 #![forbid(unsafe_code)]
+#[cfg(all(test, feature = "turso"))]
+extern crate self as mrr_data_backend;
 mod authority;
 mod config;
 mod control;

@@ -4,6 +4,9 @@
 
 * Reviewed scope and evidence grade
 
+The next [[file:shared-backend-read-stages.org][native read-stage review]] retains the reproduced independent-domain
+regression, query-stage clocks, observer interference and all serialized/pilot samples.
+
 Weaver SysML GovernancePolicyProjection owns runtime responsibility and this
 predeclared measurement contract. MRR Data owns the existing standard Cargo
 tests and benchmark targets. No new qualification package, dependency pin,
