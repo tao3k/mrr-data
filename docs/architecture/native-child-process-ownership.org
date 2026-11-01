@@ -115,3 +115,11 @@ owned archive growth, read-only/adjacent/stale exclusions, diagnostic feedback
 refusal, idle-stall refusal, signal propagation and jobserver descriptors.
 Raw failure/success receipts remain under =/private/tmp/mrr-phase-ci-*=, outside
 Git. New remote CI is tracked separately without relaxing limits.
+
+At 6483f1fb, Linux fuzz, Python and both S3 jobs pass remotely. The Linux
+property job exposes a separate observer race: =/proc/207074/fd= is discoverable
+but listing raises PermissionError. Snapshot descriptor enumeration under the
+same OSError boundary as individual descriptor reads. Missing or inaccessible
+observation produces no progress event and never changes compiler exit status.
+Permission-denied and disappeared-directory regression controls cover the
+discovery/listing boundary; the original failed job log remains outside Git.

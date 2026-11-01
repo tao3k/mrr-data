@@ -10,6 +10,17 @@ from mrr_data_testing.duckgql.build import CompilerOutput
 from mrr_data_testing.process import Limits, run
 
 
+@pytest.mark.parametrize("failure", [PermissionError, FileNotFoundError])
+def test_proc_descriptor_snapshot_race_is_not_progress(monkeypatch, failure):
+    monkeypatch.setattr(Path, "is_dir", lambda path: True)
+
+    def inaccessible(path):
+        raise failure("descendant changed after discovery")
+
+    monkeypatch.setattr(Path, "iterdir", inaccessible)
+    assert rustc_progress.compiler_artifacts(123) == []
+
+
 def test_host_tool_environment_is_authoritative(tmp_path, monkeypatch):
     tool = tmp_path / "selected-tool"
     tool.write_text("fixture")

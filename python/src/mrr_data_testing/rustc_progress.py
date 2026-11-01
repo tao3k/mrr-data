@@ -59,7 +59,13 @@ def compiler_artifacts(pid):
     descriptors = Path(f"/proc/{pid}/fd")
     if descriptors.is_dir():
         paths = []
-        for descriptor in descriptors.iterdir():
+        try:
+            entries = list(descriptors.iterdir())
+        except OSError:
+            # A descendant can exit or lose inspectability after discovery.
+            # Missing observation is not progress; preserve the compiler result.
+            return []
+        for descriptor in entries:
             if descriptor.name.isdigit() and int(descriptor.name) < 3:
                 continue
             try:
