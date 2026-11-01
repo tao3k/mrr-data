@@ -14,7 +14,7 @@ use std::{
 };
 use tokio::runtime::Handle;
 #[path = "../performance/concurrency_paired.rs"]
-mod workload;
+pub(crate) mod workload;
 
 const SQL: &str = "SELECT CASE WHEN length(value)<=65536 THEN value ELSE NULL END FROM mrr_backend_kv WHERE key=?1";
 const MAX_READS: usize = 100_000;
@@ -349,6 +349,54 @@ fn turso_original_transaction_read_stages() {
                     "mode": match mode { WriterMode::Wal => "wal", WriterMode::Fresh => "fresh-mvcc", WriterMode::Reuse => "reused-mvcc" },
                     "split": split, "workers": cpus, "samples": samples})
                 );
+            }
+        }
+    }
+}
+
+#[test]
+#[ignore = "run alone; original borrowed bridge and COMMIT CPU/Pending attribution"]
+fn turso_original_bridge_commit_cpu() {
+    use workload::{Case, WriterMode, case_observed, phase_cpu};
+    let cpus = std::thread::available_parallelism().unwrap().get().max(4);
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(cpus)
+        .max_blocking_threads(cpus + 4)
+        .enable_all()
+        .build()
+        .unwrap();
+    println!(
+        "{}",
+        serde_json::json!({"phase_pid":std::process::id(),"workers":cpus})
+    );
+    println!(
+        "{}",
+        serde_json::json!({"clock_calibration":phase_cpu::calibration(),"unit":"ns","clock":"CLOCK_THREAD_CPUTIME_ID"})
+    );
+    for hot in [false, true] {
+        for pair in 0..3 {
+            let mut modes = [WriterMode::Wal, WriterMode::Fresh, WriterMode::Reuse];
+            modes.rotate_left(pair);
+            for (order, mode) in modes.into_iter().enumerate() {
+                runtime.block_on(case_observed(
+                    Case {
+                        cpus,
+                        mode,
+                        hot,
+                        hold: None,
+                        pair,
+                        order,
+                    },
+                    phase_cpu::begin,
+                    phase_cpu::finish,
+                ));
+                let records = phase_cpu::drain();
+                println!(
+                    "{}",
+                    serde_json::json!({"phase_records":true,"hot_home":hot,"pair":pair,"order":order,
+                    "mode":match mode {WriterMode::Wal=>"wal",WriterMode::Fresh=>"fresh-mvcc",WriterMode::Reuse=>"reused-mvcc"},"records":&records,"process_usage":phase_cpu::process_usage(),"process_usage_scope":"process bookend; zero counters do not prove zero I/O"})
+                );
+                phase_cpu::validate_records(&records, cpus * workload::ATTEMPTS);
             }
         }
     }

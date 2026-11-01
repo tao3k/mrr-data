@@ -26,6 +26,7 @@ impl MetadataProvider for TimedDecisions {
         physical: Option<&PublishReceipt>,
         validate: &mut dyn FnMut(Option<ContentRevision>) -> bool,
     ) -> ProviderResult<StoredOutcome> {
+        let _span = super::phase_cpu::WorkerSpan::enter(write);
         self.0.commit(write, physical, &mut |current| {
             self.0.timings.bridge(|| validate(current))
         })

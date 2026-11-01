@@ -27,6 +27,7 @@ arrow-array = { workspace = true, optional = true }
 arrow-schema = { workspace = true, optional = true }
 
 [dev-dependencies]
+nix.workspace = true
 serde.workspace = true
 mrr-data-content = { workspace = true, features = ["filesystem"] }
 serde_json.workspace = true

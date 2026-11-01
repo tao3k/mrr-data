@@ -4,6 +4,10 @@
 
 * Predeclared SysML contract
 
+The next [[file:shared-backend-bridge-commit-cpu.org][borrowed bridge and COMMIT CPU review]] preserves this failure,
+adds native synchronous CPU/notification evidence and keeps missing kernel
+attribution explicit.
+
 Weaver ControlActivation.GovernancePolicyProjection owns this review. The
 existing MRR Data backend Cargo targets own evidence. Run directly on the shared
 Host, never wait for a quiet runner, never drop slow cases, and never change pins

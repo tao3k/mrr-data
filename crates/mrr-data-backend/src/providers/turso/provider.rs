@@ -265,8 +265,11 @@ pub(super) fn transact(
     run(&mut tx)?;
     // No retry, even for BusySnapshot. An unsuccessful COMMIT remains Unknown;
     // exact operation recovery is the only route back to the deciding outcome.
+    let commit = conn.execute("COMMIT", ());
+    #[cfg(test)]
+    let commit = super::read_timing::workload::phase_cpu::observe_commit(commit);
     runtime
-        .block_on(conn.execute("COMMIT", ()))
+        .block_on(commit)
         .map_err(failure)
         .map_err(PortError::Unknown)?;
     tx.finished = true;

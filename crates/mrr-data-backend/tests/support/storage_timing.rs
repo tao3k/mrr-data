@@ -48,8 +48,10 @@ fn record(counter: &AtomicU64, start: Instant) {
 }
 impl Timings {
     pub fn bridge(&self, run: impl FnOnce() -> bool) -> bool {
+        let cpu = super::phase_cpu::bridge_start();
         let start = Instant::now();
         let result = run();
+        super::phase_cpu::bridge_finish(cpu);
         record(&self.bridge, start);
         self.bridges.fetch_add(1, Ordering::Relaxed);
         result
@@ -146,6 +148,7 @@ impl TransactionProvider for TimedStorage {
         let start = Instant::now();
         let mut end_body = None;
         let result = self.provider.transaction(&mut |tx| {
+            super::phase_cpu::body_start();
             let begin = Instant::now();
             self.timings.pre_body.fetch_add(
                 u64::try_from(begin.duration_since(start).as_nanos()).unwrap(),
@@ -155,6 +158,7 @@ impl TransactionProvider for TimedStorage {
                 tx,
                 timings: &self.timings,
             });
+            super::phase_cpu::body_finish();
             let end = Instant::now();
             self.timings.body.fetch_add(
                 u64::try_from(end.duration_since(begin).as_nanos()).unwrap(),

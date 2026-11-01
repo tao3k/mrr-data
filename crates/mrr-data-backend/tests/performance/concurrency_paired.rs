@@ -23,6 +23,8 @@ mod storage_timing;
 use bound_obligation::BoundObligation;
 use request_timing::RequestCost;
 use storage_timing::{PhaseSample, TimedStorage, Timings};
+#[path = "../support/phase_cpu.rs"]
+pub mod phase_cpu;
 #[path = "../support/worker_control.rs"]
 mod worker_control;
 #[derive(Clone, Copy, PartialEq)]
@@ -44,6 +46,24 @@ impl WriterMode {
 enum Validation {
     Hold(Duration),
     Bound(Arc<BoundObligation>),
+}
+impl Validation {
+    fn check(
+        &self,
+        current: Option<ContentRevision>,
+        expected: Option<ContentRevision>,
+        cost: &mut bound_obligation::ValidationCost,
+    ) -> Result<(), ()> {
+        match self {
+            Self::Hold(hold) => {
+                std::thread::sleep(*hold);
+                Ok(())
+            }
+            Self::Bound(bound) => bound.validate_timed(current, expected).map(|v| {
+                *cost = v;
+            }),
+        }
+    }
 }
 struct Record {
     scope: String,
@@ -120,22 +140,17 @@ async fn lane(
         };
         let result = port
             .commit(w, Some(&physical), |current| {
+                let cpu = phase_cpu::caller_start();
                 cost.to_validator_ns = api.elapsed().as_nanos();
                 let start = Instant::now();
-                let result = match &validation {
-                    Validation::Hold(hold) => {
-                        std::thread::sleep(*hold);
-                        Ok(())
-                    }
-                    Validation::Bound(bound) => bound.validate_timed(current, expected).map(|v| {
-                        cost.validation = v;
-                    }),
-                };
+                let result = validation.check(current, expected, &mut cost.validation);
                 cost.validator_ns = start.elapsed().as_nanos();
+                phase_cpu::caller_finish(&scope, &operation, cpu);
                 result
             })
             .await;
         cost.api_ns = api.elapsed().as_nanos();
+        phase_cpu::receipt(&scope, &operation);
         let stop = match result {
             Ok(Outcome::Committed(r)) => {
                 let committed = r.committed;
