@@ -213,6 +213,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: nightly-2026-09-17
+      - name: Record the verified ASan compiler
+        run: rustc --version --verbose
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz --version 0.13.2 --locked
       - name: Run bounded ASan IPC campaign

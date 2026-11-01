@@ -79,3 +79,39 @@ reaper, accept a file marker as an exit status, or relax watchdogs. Those action
 would bypass ownership or introduce another race. No release of a patched
 Gerbil toolchain, power-loss durability, hard RSS limit or shared-process child
 ownership is established by the current controls.
+
+* Compiler-output progress and bounded fuzz CI
+
+The existing build wall/idle limits remain 1200/30 seconds and test limits remain
+120/5 seconds. Rust owns benchmark loads, thread CPU and semantic assertions.
+The existing Python owner supervises processes and captures artifacts; it adds
+no benchmark runner, policy model or package.
+
+The compiler observer watches actual writable regular files held by each live
+compiler and its descendants, including archive/link outputs. It does not scan
+neighboring Cargo targets. Read-only inputs, inherited files and standard
+diagnostic streams are excluded; observer output cannot feed itself back as
+progress. Closed outputs remain scoped to the compiler's own incremental working
+generation. CPU use and periodic timers are not output progress. A stalled child
+must still fail the original idle limit with process-group cleanup.
+
+All link-emitting compiler invocations receive owned-output observation. Extra
+LLVM diagnostics remain restricted to the explicit crate selection. Nested
+workspace wrappers do not duplicate tracing. Host tools use =MRR_DATA_LSOF= and
+=MRR_DATA_PGREP= when explicitly configured, otherwise =PATH= discovery. An invalid
+explicit executable refuses configuration; no system-directory path is embedded.
+
+At PR head ba292e3e, the Arrow fuzz job fails before execution on Rust
+1.101.0-nightly (f9ceb4a4d, 2026-10-31): fixed MRR QueryType reports E0391 in
+async-drop queries. Unchanged Cargo/SPEC sources, cargo-fuzz 0.13.2, the original
+corpus and ASan flags complete 10000 runs locally on nightly-2026-09-17
+(1.100.0-nightly, 923c95cdf), max_len=65536. CI fixes only the fuzz compiler to
+that tested date; stable/MSRV jobs retain their roles. This is a local compiler
+compatibility receipt, not a claimed Linux CI pass or semantic proof.
+Property-driven semantic tests and byte fuzzing have separate roles.
+
+The existing framework's 61 local tests pass, including real Rust compilation,
+owned archive growth, read-only/adjacent/stale exclusions, diagnostic feedback
+refusal, idle-stall refusal, signal propagation and jobserver descriptors.
+Raw failure/success receipts remain under =/private/tmp/mrr-phase-ci-*=, outside
+Git. New remote CI is tracked separately without relaxing limits.

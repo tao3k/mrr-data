@@ -10,6 +10,20 @@ from mrr_data_testing.duckgql.build import CompilerOutput
 from mrr_data_testing.process import Limits, run
 
 
+def test_host_tool_environment_is_authoritative(tmp_path, monkeypatch):
+    tool = tmp_path / "selected-tool"
+    tool.write_text("fixture")
+    tool.chmod(0o700)
+    monkeypatch.setenv("MRR_DATA_LSOF", str(tool))
+    assert rustc_progress.host_tool("lsof") == str(tool)
+    monkeypatch.setenv("MRR_DATA_LSOF", str(tmp_path / "missing"))
+    with pytest.raises(ValueError, match="MRR_DATA_LSOF"):
+        rustc_progress.host_tool("lsof")
+    monkeypatch.delenv("MRR_DATA_LSOF")
+    monkeypatch.setattr(shutil, "which", lambda name: f"discovered-{name}")
+    assert rustc_progress.host_tool("lsof") == "discovered-lsof"
+
+
 def test_frontend_logging_preserves_explicit_host_configuration(monkeypatch):
     calls = []
     monkeypatch.setattr(sys, "argv", ["wrapper", "rustc", "--emit=metadata"])
@@ -100,16 +114,19 @@ def test_phase_trace_is_owned_and_never_duplicated(monkeypatch):
             sys, "argv", ["wrapper", compiler, "--crate-name", crate, "--emit=link"]
         )
         previous = len(observed_calls)
-        if enabled:
+        observes = compiler == "rustc"
+        if observes:
             with pytest.raises(SystemExit) as exit_status:
                 rustc_progress.main()
             assert exit_status.value.code == 0
         else:
             rustc_progress.main()
-        assert len(observed_calls) == previous + int(enabled)
+        assert len(observed_calls) == previous + int(observes)
         if enabled:
             assert "remark=inline prologepilog asm-printer" in observed_calls[-1]
             assert "llvm-args=--print-pass-numbers" in observed_calls[-1]
+        elif observes:
+            assert "llvm-args=--print-pass-numbers" not in observed_calls[-1]
 
 
 @pytest.mark.parametrize("kind", ["metadata", "dep-graph"])
@@ -167,6 +184,35 @@ def test_observer_preserves_inherited_jobserver_descriptors(tmp_path):
         os.close(write_fd)
 
 
+def test_owned_linker_archive_growth_is_progress_but_readonly_neighbor_is_not(
+    tmp_path, capsys
+):
+    archive = tmp_path / "libowned.rlib"
+    foreign = tmp_path / "libforeign.rlib"
+    foreign.write_bytes(b"preexisting" * 1024)
+    writer = (
+        "import sys,time\n"
+        "with open(sys.argv[1], 'wb', buffering=0) as out:\n"
+        " for _ in range(4):\n"
+        "  out.write(b'x' * 4096)\n"
+        "  time.sleep(0.7)\n"
+    )
+    compiler = tmp_path / "link_owner.py"
+    compiler.write_text(
+        "import subprocess,sys\n"
+        "with open(sys.argv[2], 'rb') as foreign:\n"
+        f" child=subprocess.Popen([sys.executable,'-c',{writer!r},sys.argv[1]])\n"
+        " sys.exit(child.wait())\n"
+    )
+    assert (
+        rustc_progress.run_observed([sys.executable, compiler, archive, foreign]) == 0
+    )
+    output = capsys.readouterr().err
+    assert str(archive) in output
+    assert str(foreign) not in output
+    assert archive.stat().st_size == 16384
+
+
 def test_metadata_observer_does_not_turn_a_stall_into_progress(tmp_path):
     from mrr_data_testing.process import ProgressTimeout
 
@@ -195,6 +241,26 @@ def test_observer_preserves_compiler_signal_exit():
     )
     result = subprocess.run([sys.executable, "-c", observer], timeout=5)
     assert result.returncode == -signal.SIGTERM
+
+
+def test_inherited_diagnostic_file_cannot_feed_back_as_compiler_progress(tmp_path):
+    from mrr_data_testing.process import ProgressTimeout
+
+    log = tmp_path / "diagnostics.log"
+    observer = tmp_path / "feedback.py"
+    observer.write_text(
+        "import os,sys\nfrom mrr_data_testing.rustc_progress import run_observed\n"
+        "with open(sys.argv[1], 'w') as log:\n"
+        " os.dup2(log.fileno(), 2)\n"
+        " run_observed([sys.executable, '-c', "
+        "\"import sys,time; print('one event',file=sys.stderr,flush=True);time.sleep(10)\"])\n"
+    )
+    with pytest.raises(ProgressTimeout, match="no output progress"):
+        run(
+            [sys.executable, observer, log],
+            limits=Limits(wall_seconds=5, idle_seconds=1),
+        )
+    assert log.read_text() == "one event\n"
 
 
 def test_owned_incremental_directory_reports_closed_outputs_not_stale_or_foreign(
