@@ -456,16 +456,6 @@ jobs:
           path: |
             ${{ runner.temp }}/mrr-source-*.native-*.log
           if-no-files-found: ignore
-      - name: Retain generated compiler inputs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: source-compiler-inputs-${{ matrix.os }}
-          path: |
-            target/debug/build/mrr-gerbil-*/out/gerbil-program/program_link.c
-            target/debug/build/mrr-gerbil-*/out/gerbil-program/program_link.i
-            target/debug/build/mrr-gerbil-*/out/gerbil-program/program.json
-          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           name: original-source-resources-${{ matrix.os }}
