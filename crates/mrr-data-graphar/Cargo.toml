@@ -1,6 +1,6 @@
 [package]
 name = "mrr-data-graphar"
-description = "Fail-closed MRR binary-Entity projection contracts for Apache GraphAr"
+description = "Fail-closed MRR topology and entity-property projections for Apache GraphAr"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,21 +9,54 @@ repository.workspace = true
 
 [features]
 default = []
-native-graphar = ["dep:arrow-array", "dep:graphar-rs", "dep:tempfile"]
+source-handoff = ["combined-graph", "dep:mrr-property-source"]
+combined-graph = ["native-graphar", "dep:mrr-data-content"]
+file-inventory = ["dep:mrr-data-core"]
+backend = ["native-graphar", "dep:mrr-data-backend"]
+selective-graphar = ["native-graphar", "dep:parquet", "dep:bytes", "dep:arrow-select"]
+native-graphar = ["file-inventory", "dep:arrow-array", "dep:arrow-schema", "dep:graphar-rs", "dep:tempfile", "dep:cid", "dep:serde", "dep:serde_ipld_dagcbor"]
 
 [dependencies]
+mrr-property-source = { workspace = true, optional = true }
+mrr-data-content = { workspace = true, optional = true, features = ["graph-snapshot"] }
+cid = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+serde_ipld_dagcbor = { workspace = true, optional = true }
+arrow-select = { workspace = true, optional = true }
+parquet = { workspace = true, optional = true }
+bytes = { workspace = true, optional = true }
 arrow-array = { workspace = true, optional = true }
+arrow-schema = { workspace = true, optional = true }
 graphar-rs = { git = "https://github.com/GTrunSec/incubator-graphar", rev = "4d4b29715d9825bd3e9b78589cfb863880b9d1d8", optional = true }
 meta-relational-reasoning.workspace = true
 mrr-data-profile.workspace = true
+mrr-data-core = { workspace = true, optional = true, features = ["content-identity"] }
 tempfile = { workspace = true, optional = true }
+mrr-data-backend = { workspace = true, optional = true }
+
+[[bench]]
+name = "graphar_range_workload"
+path = "benches/graphar_range_workload/mod.rs"
+harness = false
+required-features = ["selective-graphar"]
 
 [dev-dependencies]
+arrow-ipc.workspace = true
+ipld-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+blake3.workspace = true
+
+mrr-data-content.workspace = true
+tempfile.workspace = true
 mrr-data-asp-rust-build-support.workspace = true
 mrr-data-arrow.workspace = true
 mrr-data-core = { workspace = true, features = ["content-identity"] }
 mrr-data-datafusion.workspace = true
 tokio.workspace = true
+
+[target.'cfg(unix)'.dev-dependencies]
+nix.workspace = true
 
 [lints]
 workspace = true

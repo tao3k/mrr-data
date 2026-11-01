@@ -1,0 +1,833 @@
+#+TITLE: RFC 0002: GraphAr, Arrow and the Shared Production Backend
+#+OPTIONS: toc:2
+
+* Current delivery ledger
+
+The [[file:../architecture/backend-rfc-delivery-audit.org][consolidated audit and milestone plan]] records the current published
+baseline, supported-scope boundaries and M0-M3 exit criteria. Initial interface
+tables and dated implementation receipts below retain their original version
+boundaries; later code must not be judged only from an earlier capability table.
+
+Current platform baseline =14ee37e3= passed required Linux/macOS checks with
+MRR =294cb95= and GSC =3635dfa=. Historical interface tables below describe
+their original checkpoints. Current supported scope includes combined original
+Healthcare source, shared admission/lifecycle, full/ordered-outgoing selective
+reads and retained consumers. The current local composition additionally passes actual process-crash recovery,
+a distinct Research catalog case and 32 matched resource cases at scales
+1/8/64/256. GSC =072acac= and MRR =4ccca98= are published; Data integration
+and current-head platform CI remain acceptance gates. Selective scale 8 reads
+more bytes than full mode and skewed scale 8 is slower; retained timings exclude
+setup. Global copies/spill and consumer streaming first-result remain unknown.
+Release-scale performance remains outside the qualified fixture scope.
+
+* Status and scope
+
+Status: architecture agreed; partially implemented on [[https://github.com/tao3k/mrr-data/pull/12][MRR Data PR #12]]. The delivery ledger
+distinguishes qualified slices from remaining platform and performance gates.
+The shared Backend now composes combined relation/property publication, bounded
+cold restoration, native capture, physical execution and retained consumer
+transport for the declared Healthcare schema. Optional original-source
+compilation delegates to the pinned MRR owner. Authenticated selective outgoing
+range access now binds the complete Dataset and original property source;
+arbitrary layouts and a general selective query planner remain outside its scope.
+
+Originally written 2026-10-03 against the MRR Data interfaces at
+=8704d46a7c4d2af3749726dac3e583a3d1725c50=. This RFC extends
+[[file:../architecture/0001-mrr-data-plane.org][RFC 0001]] and [[file:../architecture/shared-backend.org][the shared Backend contract]]. It covers all Production
+profiles using graph snapshots, rather than one Example or application.
+
+[[file:../architecture/arrow-execution-practices.org][The Arrow performance audit]] binds official guidance and the exact GitHub SDK
+source to code decisions and falsifiable performance gates.
+
+The design uses one Host-owned Backend lifecycle with optional physical
+capabilities. GraphAr owns immutable graph projection storage, Arrow owns typed
+interchange, and DuckDB owns optional native execution. Existing metadata
+providers remain responsible for atomic head/operation/authority transactions.
+The graph file format alone cannot replace that transaction contract.
+
+* GraphAr strategic role
+
+GraphAr is the provider-independent graph physical-data foundation for
+Production graph workloads: vertices, edges, adjacency/offset chunks, property
+groups and metadata. Native Turso and DuckDB provide optional transactions and
+relational/columnar execution. Their SQL tables are derived execution images;
+this design assigns neither provider a built-in graph model or graph authority.
+DuckGQL is a separately qualified extension capability. GraphAr's position is
+independent of that extension and of database-query benchmark results.
+
+[[file:../architecture/0001-mrr-data-plane.org][The canonical data-plane ownership table]] fixes MRR semantics/admission,
+GraphAr graph representation, Arrow interchange and shared Backend lifecycle.
+Native GraphAr packaging remains opt-in. The current delivery ledger covers
+binary-Entity topology, declared entity-property tables, combined original-source
+capture and the narrow ordered-outgoing selective source. Broader layouts and
+end-to-end selective-query performance remain explicit acceptance gates.
+
+* Current interfaces and specific gaps
+
+| Interface | Implemented today | Remaining gate |
+|-----------+-------------------+----------------|
+| =BinaryEntityProjection= | Admits exactly two non-null Entity endpoints | Explicit profiles for property-bearing or reified relations |
+| =write_graphar_dataset= | Native graph metadata, Parquet chunks, stable semantic properties | Bounded, content-addressed publication of the complete dataset |
+| =GraphArQuerySource= | Root path, relation, endpoint roles, identity properties and counts | Generation/catalog identity plus a verified immutable child inventory |
+| =prepare_graphar_source= | Imports native Arrow C Stream batches, validates and materializes facts | Streaming admission with bounded buffers; preparation currently retains facts |
+| =admit_graphar_query_source= | Re-hashes =mrr.graph.yaml= against the bound projection CID | Protect all referenced metadata and data chunks, including read-time drift |
+| Shared =Backend= | Independent write/recovery/resource admission and dispatch; resource handles join owned drain | Fallible streaming Arrow query execution and measured native memory bounds |
+| =CapturedGraphArSnapshot= | Authenticated binding/inventory, private verified copies, catalog-bound fixed schema, immutable facts | Additional graph profiles and streaming native buffer ownership |
+| Optional DuckDB | Local metadata transactions; this change enables and tests native Arrow capabilities | A public bounded graph/query port using the shared dispatcher |
+
+The current graph-info check authenticates the entry metadata bytes. It does
+not hash every referenced chunk and does not seal a mutable filesystem path
+against a subsequent replacement. A =GraphArQuerySource= or prepared fact cache
+must not be treated as fresh authorization or complete physical integrity.
+
+* Ownership and feature composition
+
+| Owner | Responsibility |
+|-------+----------------|
+| MRR | Relation/Entity/Fact identities, semantic generations, catalogs, query admission and candidate-result admission |
+| MRR Data core/content | Snapshot descriptors, content identity, publication ACKs and verified immutable reads |
+| MRR Data GraphAr | Declared projection, native graph file mapping, chunk traversal, Arrow import, physical validation |
+| Shared Backend | Admission, retained-resource accounting, owned tasks, provider composition, drain and metadata commit/recovery |
+| DuckDB/DataFusion adapters | Engine-specific registration/planning/execution, typed batch limits, rebuildable caches |
+| Host | Runtime lifetime/capacity, credentials, policy commitments, operation validation and final disclosure |
+
+=backend-duckdb= implies =backend= and =arrow=. The DuckDB SDK enables
+=appender-arrow=, which also enables =vtab-arrow=; Arrow results are supplied by
+the pinned SDK. Rust Arrow types use the workspace's Arrow 58 family. The optional =DuckDbArrowInput= carrier checks native vector capacity, explicit
+row/buffer limits, unique nonempty field names and the qualified Int64/Utf8/Binary
+subset before registration. It grants no semantic authority or Backend lease.
+The generic
+Backend and =backend-turso= do not opt into DuckDB or this Arrow capability.
+=backend-graphar= composes the same Backend with native graph capture; it does
+not select a database. =graphar= remains a portable projection contract; =graphar-native= opts into the
+pinned C++ provider. GraphAr never depends on DuckDB. Engine composition stays
+above the physical graph format and adds no provider-owned runtime.
+
+* Projection and identity contract
+
+The first qualified profile remains binary Entity-to-Entity. Endpoint roles are
+explicitly named in the admitted relation; native vertex positions and adjacency
+orientation cannot infer those roles. Duplicate endpoints are allowed when
+=FactId= differs. Duplicate facts, missing/dangling endpoints, mixed relations,
+unsupported types and ambiguous physical-to-semantic mapping fail closed.
+
+Preserve =EntityId=, =FactId=, =RelationId=, =GenerationId=, authority,
+provenance, completeness and validity through export/import. The current writer
+already emits these semantic properties; new readers and batch paths must retain
+them. GraphAr vertex/edge row IDs, chunks and offsets remain physical identities.
+An ordinary property table is not the complete-Fact Arrow profile. Reification
+of n-ary relations and nullable or non-Entity endpoints requires a separately
+versioned, lossless MRR-owned projection contract before enabling it.
+
+* Dataset manifest and verified reads
+
+Propose a versioned GraphAr dataset manifest composed with the existing snapshot
+manifest. Its canonical body binds:
+
+- semantic snapshot generation and admitted catalog digests;
+- projection namespace/version, relation identity and endpoint roles;
+- metadata entry CID and a complete metadata/data child inventory;
+- each child's relative logical path, role, content CID and encoded byte length;
+- vertex/edge counts, property schema, file codec, adjacency orientation and
+  chunk sizes sufficient to validate the declared projection;
+- aggregate encoded-byte, row, child-count and open-handle limits.
+
+Paths are relative logical identifiers: reject absolute paths, parent traversal,
+backslash ambiguity, duplicates and filesystem aliases escaping the admitted
+root. The manifest cannot list itself. Duplicate or unavailable children,
+unknown required fields, unsupported codecs and mismatched lengths/CIDs refuse
+admission. A schema or manifest version change is explicit; do not reinterpret
+an existing V1 snapshot in place.
+
+Native GraphAr currently reads paths. A provider must first materialize verified
+children into an owned immutable local snapshot, then open native handles there.
+Verify the exact bytes used by native I/O; hashing a path and reopening that
+mutable path is insufficient. A production implementation must qualify its
+platform-specific sealing/handle strategy against concurrent replacement.
+Retain the snapshot lease while queries or Arrow export buffers depend on it.
+Metadata-only admission remains available with its current bounded claim until
+the full verified-read gate passes.
+
+* Publication and recovery state machine
+
+1. Admit the projection and catalogs, and reserve bounded graph work in the
+   shared Backend before allocating native builders or staging files.
+2. Write into a unique owned staging root. Freeze metadata and chunks, verify
+   all semantic and physical invariants, then construct the canonical child
+   inventory and dataset manifest.
+3. Publish immutable children first, followed by the dataset manifest. Require
+   ACKs for the configured durability contract; a local file close alone is not
+   a remote or power-loss receipt.
+4. Submit the manifest CID through the shared protected head/operation commit,
+   with exact expected revision and applicable authority generations. SQL and
+   provider transactions remain adapter details.
+5. Report success only after both required physical publication and metadata
+   commit. If ACK/COMMIT is ambiguous, report Unknown and recover the exact
+   operation identity. Never infer failure and issue a new operation ID.
+6. Historical replay verifies the same request body and returns its original
+   receipt, without granting fresh publication/query/disclosure permission.
+
+Crash after child publication can leave unreferenced immutable objects. These
+are reclaimable only through a later bounded reachability policy that respects
+active snapshot leases, retained generations and recovery history. This RFC
+does not enable automatic deletion or reset. Cancellation before validation
+refuses new content; accepted administrative work and validated commit/drain
+stay owned under the existing lifecycle contract.
+
+* Arrow execution and resource contract
+
+Use typed =RecordBatch= boundaries between GraphAr and native engines. Inputs
+carry admitted schema/catalog identity and an immutable snapshot lease. Validate
+all types, nullability, semantic metadata and buffer/row limits before native
+registration. Physical columns are translated by declared projection mapping;
+engine column names cannot supply missing semantic roles.
+
+DuckDB input slicing is lazy and validates the retained source once. Native
+Rust VTab conversion still copies values; Python/R Arrow zero-copy guidance does
+not qualify this path. The future port must provide a fallible terminal result
+contract, because the pinned SDK iterators do not expose late fetch errors as
+Result items. Native scan pushdown, memory/thread limits and materialization
+behavior have distinct qualification gates in the performance audit.
+
+DuckDB may register bounded Arrow input or append into rebuildable staging
+relations and return Arrow results. A bulk appender does not establish protected
+metadata CAS, authorize the query, or make partial output publishable. One
+connection's transaction must encompass any staging mutation; flush is followed
+by the required commit or rollback. Native SDK buffers and prepared state have
+explicit owners until no consumer can access them.
+
+The future graph/query port must use the shared admission and dispatcher,
+retain queued request/batch resources, and track row/buffer/native-handle budgets.
+Do not call native work directly from async code or allocate an independent
+runtime. Graph readers, Arrow buffers, temporary files and database caches need
+separate measured budgets: current =retained_bytes= covers requests, not total
+native RSS. Limit defaults are selected from measurements, rather than inferred
+from GraphAr's empirical chunk defaults. Recovery capacity remains reserved.
+Drain seals new work and waits for accepted graph jobs and leases before closing
+native state. The exact policy for externally retained result buffers must be
+qualified before the public port is released.
+
+Returned engine results remain MRR candidates with the bound semantic generation
+and coverage. MRR performs final candidate admission; the Host performs any fresh
+protected disclosure check. Prepared Arrow/GraphAr data is reusable physical
+state, not reusable authority.
+
+* Implementation slices and acceptance gates
+
+| Slice | Code seam | Required executable evidence |
+|-------+-----------+------------------------------|
+| A: DuckDB Arrow features | Workspace dependency and facade feature graph | Shared Arrow types; 4,097-row append/query/reopen; null/empty/Unicode/BLOB preservation; rollback; virtual Arrow input; no-provider isolation |
+| B: Dataset manifest | Core/content descriptors and GraphAr writer receipt | Canonical decode/encode; complete child inventory; duplicate/path/CID/length/codec/limit refusal; preserve existing snapshot versions |
+| C: Verified native snapshot | GraphAr preparation plus content-store adapter | Tampered chunk, metadata drift, missing child, alias traversal, replacement race, generation/catalog mismatch all refuse before engine registration |
+| D: Publication composition | Existing ProfilePort protected commit/recover | Authority retirement race, historical replay, canceled caller, lost ACK and crash at every publication phase; no partial head advance |
+| E: Shared Arrow query port | Backend dispatch plus optional engine adapter | Read/write pressure, cancellation, buffer lease lifetime, busy drain, overload counters and exact post-reopen results |
+| F: Performance qualification | Existing GraphAr phase timings and matched query fixtures | Equal facts/results, separate native I/O/C Stream/semantic admission/planning phases, varying chunks/guards, cache/RSS limits and both OS native receipts |
+
+The initial 1.10502.0 SDK virtual-table callback copied a complete input batch into
+one native vector. A direct 4,097-row probe reproduced =data.len() <= capacity()=
+failure followed by a non-unwinding FFI panic and process abort. The public input
+carrier reads native capacity using the SDK safe API and rejects over-capacity
+batches before registration. Qualification then queries the complete 4,097-row
+fixture in admitted vector-sized slices, preserving order and all values.
+Appender qualification keeps the original unsplit 4,097-row fixture, since that
+separate SDK path handles vector splitting. A caller using raw SDK APIs can still
+bypass the carrier; the future public port must require it, aggregate buffer
+leases and bounded scheduling.
+
+The current 1.10506.0 VTab internally slices inputs across native vectors.
+Our carrier keeps its conservative native-capacity slice contract. The new
+SDK's =arrow_recordbatch_to_query_params= retains every registered source in a
+process-lifetime global store so views can rebind later. Its raw VTab fixture
+therefore qualifies value conversion only, not bounded source lifetime or drain.
+Production input uses the qualified native appender/table path until a
+releasable safe registration is available; the streaming result driver does not
+use that global store. VTab lifetime release remains an explicit input-port gate.
+
+Slice A is implemented. Slice B now has a standalone core file inventory under
+=content-identity=: =mrr.graphar.file-inventory.v1= uses a DAG-CBOR root and RAW
+SHA-256 child CIDs, deterministic path ordering, exact declared lengths and
+borrowed-payload verification. Decode checks the encoded-byte budget and root
+before parsing, then refuses unknown fields, unsupported versions, unsafe paths,
+duplicate paths, wrong CID codecs, total-length overflow and noncanonical order.
+Distinct logical paths may share a CID; declared bytes still count per path.
+
+The initial portable path profile admits lowercase ASCII letters, digits,
+=._-= and relative slash-separated components. It rejects traversal, platform
+reserved names and aliases such as backslashes or drive prefixes. This profile
+is narrower than the GraphAr format; native producers must explicitly meet it.
+File/path/count limits bound declared inventory work; encoding checks the byte
+budget after serialization and does not promise a pre-allocation byte cap or
+native engine RSS bound. Empty physical payloads are refused by this profile.
+
+The controlled native writer now enumerates its staging directory before rename
+and returns the inventory in =GraphArDatasetReceipt=. =file-inventory= is an
+optional adapter feature without the native SDK; =native-graphar= composes it.
+Streaming SHA-256 uses a fixed 32 KiB scratch buffer, bounds remaining declared
+bytes while reading and checks file count plus a traversal-entry budget of twice
+=max_files= (directories included). YAML, native count names and Parquet chunk
+names follow the pinned writer profile; count width and Parquet =PAR1= framing
+and footer metadata bounds are checked. Framing does not prove a valid Parquet schema or row layout.
+
+Directory re-verification compares exact paths, types, lengths and CIDs, refusing
+changed, missing or extra files. Symlink entries and Unix hard-linked files
+refuse at observation time. This is an observational receipt, not a filesystem
+seal: replacement between inspection/open/hash/rename remains possible. Native
+writing precedes inventory checks, so these limits do not cap native writer RSS
+or bytes already written to staging. Explicit writer limits allow larger
+qualified datasets without replacing the default manifest budgets.
+
+The writer's existing metadata uses an absolute committed prefix, so its exact
+metadata identity remains location-specific. A separate
+=mrr.graphar.dataset-binding.v1= DAG-CBOR root now binds the inventory root,
+snapshot root, generation, semantic digest, relation/entity catalog digests,
+relation ID and entry metadata CID. The existing V1 graph descriptor retains its
+RAW metadata binding. The Host must authenticate the new binding root through
+publication authority; constructing a candidate from V1 metadata alone does not
+authenticate data chunks.
+
+=BinaryEntityProjection::admit_catalog= admits the relation from its complete
+catalog. Capture requires that catalog digest to match the bound query. Before
+native I/O, =capture_graphar_snapshot= verifies the binding and inventory, copies
+only declared files with bounded streaming CID/length checks into a private
+random directory, and checks the copied count/Parquet framing. Only declared
+paths are created; files are hashed once during copy, with no second full scan. Native GraphInfo
+uses the fixed binary-Entity writer schema with a private prefix. Authenticated
+YAML bytes are preserved but never interpreted as path instructions, so external
+YAML references cannot redirect this entry point. This qualifies the fixed writer
+profile, not arbitrary GraphAr metadata import.
+
+After native preparation, every fact must pass the admitted projection and match
+the binding's generation. Immutable Rust fact buffers are exposed only through a
+query-scope check. All native handles are gone and temporary files are removed on
+the preparation worker before a successful return. Source deletion or mutation
+cannot change these facts. This is a captured semantic snapshot, not an OS
+sandbox or a streaming Arrow query engine; existing legacy readers remain mutable
+path entry points.
+
+The =backend= feature in the GraphAr adapter composes this capture with
+=Backend::prepare_resource=. It uses shared count/byte admission, independent
+resource worker slots and the same Host runtime. Queued cancellation skips work;
+submitted native work keeps its lease until completion. Cloned ResourceHandles
+retain the reservation until final destruction; shutdown refuses new work and
+waits for these handles before closing metadata providers. The Host reservation
+must cover declared physical bytes and separately budget native decompression
+and fact materialization. It does not measure or cap native RSS.
+
+Slice C is implemented for captured binary-Entity facts. Slice E now includes
+a shared fallible output port with leased buffers, pre-fetch backpressure, sticky
+errors, cancellation and terminal completion. DuckDB now implements both the
+materialized result and safe native streaming drivers. Exact-version native
+fetch-error, lifecycle and integration receipts qualify each implementation.
+Slice D now implements complete closure preparation, child/root ACK ordering,
+cold restoration and the typed protected ProfilePort composition described below.
+Process/power-loss injection at every phase, additional profiles and matched
+performance/RSS qualification (F) remain open.
+
+The implementation and malformed-wire qualification are in
+[[file:../../crates/mrr-data-core/src/graph_inventory.rs][the core inventory]] and [[file:../../crates/mrr-data-core/tests/unit/graph_inventory.rs][its focused tests]], with [[file:../../crates/mrr-data-graphar/src/inventory.rs][directory enumeration]] in the GraphAr adapter.
+
+* Local qualification for the directory receipt slice
+
+On 2026-10-03, core =content-identity= tests passed 35 cases. A minimal external
+caller, using the repository dependency lock versions and the production crates,
+passed four repository directory-test cases plus two native public-interface
+cases: complete two-Fact reconstruction with all file identities re-verified,
+and inventory-budget refusal leaving no committed or staging directory.
+The native build used the pinned GraphAr fork, workspace Rust Arrow 58.4.0,
+system Arrow C++ 25.0.1 and optimized test settings on aarch64 macOS.
+
+Strict Clippy passed both changed crates with all features, all targets and the
+test profile. The =file-inventory= normal dependency graph includes core identity
+without =graphar-rs=, Arrow arrays, DuckDB or Turso. Format, diff and Org link
+checks passed. Full package-level GraphAr tests and parity scenarios remain
+separate CI gates; no throughput, native RSS or concurrent replacement claim is
+made by this local receipt.
+
+* Local qualification for semantic capture and shared leases
+
+On 2026-10-03, the final focused checks passed on aarch64 macOS:
+
+- Core: 36 tests, including binding root round-trip, changed inventory, unknown
+  fields, wrong root and semantic/relation/entity digest drift.
+- Generic Backend: 5 library/policy tests and 3 integration cases. Resource
+  saturation preserves write/recovery capacity; final clones hold drain; failed
+  and panicking workers release reservations; queued cancellation skips work and
+  running cancellation retains its worker lease.
+- A minimal external caller with dependency versions matching the workspace lock
+  passed 12 cases: 4 repository directory tests, 2 native writer cases, and 6
+  repository capture cases. These use the real pinned C++ SDK, including source
+  deletion, tampering, hostile YAML path instructions, catalog/generation refusal
+  and capture under the same Backend's final-handle drain.
+- Strict all-feature/all-target Clippy for core/GraphAr and provider-free
+  all-target Backend Clippy passed in the test profile. The facade compiled with
+  only =backend-graphar=; its normal graph includes Backend, native GraphAr and
+  Arrow arrays without DuckDB, Turso, rusqlite or Commerce.
+- rustfmt, diff checks and 19 Org documents / 5 Org READMEs passed.
+
+The native build used system Arrow C++ 25.0.1; Rust Arrow remains 58.4.0. These
+are focused local receipts. The complete GraphAr package suite, both-OS CI,
+protected publication, fallible Arrow query completion and performance/RSS
+qualification remain separate gates. The two lint failures observed on the prior
+remote head were repaired: the iterator now supplies a meaningful must-use
+message, and the sustained benchmark uses a diagnostic empty-array comparison.
+
+* Alternatives and decisions
+
+- Use GraphAr as an immutable physical capability under the shared lifecycle.
+  It lacks the metadata transaction semantics required to act as a replacement
+  =TransactionProvider= on its file-format guarantees alone.
+- Use Arrow for input/output and semantic profile boundaries. Durable graph
+  chunks keep their qualified GraphAr codec, initially Parquet; Arrow IPC is
+  not silently relabeled as a GraphAr physical format.
+- Keep one lifecycle and explicit provider capabilities. Query-engine indexes,
+  CSR caches and prepared plans are rebuildable state with generation keys.
+- Reject undeclared graph projections. A guessed generic conversion can lose
+  relation arity, Fact identity or authority/provenance meaning.
+
+* Sources
+
+- [[https://parquet.apache.org/docs/file-format/][Apache Parquet file format]]: header/footer magic and the footer metadata-length field;
+  these cheap framing checks precede streaming hashing without replacing native parsing.
+- [[https://github.com/GTrunSec/incubator-graphar/blob/4d4b29715d9825bd3e9b78589cfb863880b9d1d8/cpp/src/graphar/graph_info.cc][Pinned maintained GraphAr file naming]]: chunk files, vertex counts and partition edge counts.
+
+- [[https://graphar.apache.org/docs/specification/format/][Apache GraphAr format specification]]: metadata, property groups, supported file
+  codecs, adjacency layouts, physical vertex indexing and empirical chunk sizes.
+- [[https://docs.rs/crate/duckdb/1.10506.0/features][Pinned duckdb-rs feature definitions]]: =appender-arrow= enables =vtab-arrow=.
+- [[https://duckdb.org/docs/current/clients/rust/result_handling][DuckDB Rust Arrow result/input interfaces]]: RecordBatch export and native Arrow
+  virtual-table input. Behavior is qualified against the immutable SDK pin.
+- [[https://arrow.apache.org/docs/format/CStreamInterface.html][Apache Arrow C Stream interface]]: schema, stream/buffer ownership and release.
+- [[file:../../crates/mrr-data-graphar/src/query_source.rs][Current graph source]], [[file:../../crates/mrr-data-graphar/src/reader_prepared.rs][prepared source]], [[file:../../crates/mrr-data/src/graphar_binding.rs][metadata binding]],
+  and [[file:../../crates/mrr-data-backend/tests/integration/duckdb_arrow.rs][DuckDB Arrow qualification tests]] are the concrete starting seams.
+
+
+* Complete graph publication and protected recovery
+
+=backend-graph-publish= composes the generic Backend and the portable content
+=graph-snapshot= feature. It selects no native GraphAr SDK, database, cache or
+network provider. =backend-graphar= independently enables immutable native
+capture; an application selects both when it needs capture and publication.
+
+[[file:../../crates/mrr-data-content/src/graph_snapshot.rs][The graph closure protocol]] verifies the binding, inventory, legacy snapshot,
+complete catalogs, every referenced child CID and declared byte length before
+any remote PUT. Count, per-block and aggregate logical payload bounds include
+all three roots. Identical CIDs share one stored payload. Preparation currently
+materializes the closure; these bounds do not establish native RSS or streaming
+performance. A disk ContentStore must execute on the Host blocking executor.
+The same =Backend::prepare_resource= holds its reservation until final handle
+destruction; retain that handle throughout publication and protected CAS.
+
+Publication ACKs ordinary children first, then inventory and legacy snapshot,
+and finally the binding root. =GraphPublication= has private construction and
+is returned only after every ACK. A fresh before-root callback is distinct from
+synchronized authorization: the Host's root transport must hold the actual
+policy guard throughout PUT. A later [[file:../../crates/mrr-data-backend/src/graph_publication.rs][ProfilePort::commit_graph_publication]]
+requires the matching receipt, current enrolled authority generations and fresh
+validation inside the existing protected metadata transaction. Failure or
+cancellation may leave immutable orphans; it neither deletes shared content nor
+selects a head. No new provider runtime or metadata transaction engine is added.
+
+After an uncertain metadata COMMIT, recover the original operation, expected
+revision, replacement and authority expectations. Exact historical replay can
+omit publication and skips new validation. It conveys the original receipt and
+grants no fresh content or disclosure permission. Restoration starts from a
+Host-authenticated binding root and verifies the entire bounded closure again;
+it does not discover or authenticate the latest head by itself.
+
+[[file:../../crates/mrr-data-content/tests/integration/graph_publication.rs][Transport tests]] cover every block ACK failure, final ACK loss and exact CID
+retry, denied/cancelled root gate, cold restoration, tampered children, absence
+and aggregate limits. Opaque payloads qualify transport integrity; native graph
+format and semantic facts are qualified by the separate capture tests.
+[[file:../../crates/mrr-data-backend/tests/integration/graph_publication.rs][Native metadata composition tests]] cover retained resource preparation, missing
+or mismatched receipts, fresh policy refusal, complete ACK-to-CAS, retired
+versions, original-operation absence/retry, close/reopen recovery and historical
+replay without new transport or validation. These are local native restart
+receipts, not power-loss or deployed blob durability measurements.
+
+#+begin_src sh
+cargo test -p mrr-data-content --features graph-snapshot --test graph_publication --locked
+cargo test -p mrr-data-backend --no-default-features --features graph-publish,turso --test backend_graph_publication --locked
+cargo test -p mrr-data-backend --no-default-features --features graph-publish,duckdb --test backend_graph_publication --locked
+cargo check -p mrr-data --no-default-features --features backend-graph-publish --locked
+#+end_src
+
+* Ordered implementation after the architecture audit
+
+The portable =backend-arrow-query= capability now shares the existing Backend
+resource admission, combined worker budget and final-handle drain. Metadata keeps
+one selected transaction provider; additional physical capabilities compose under
+that lifecycle. No Profile/Case or provider creates a separate Backend/runtime.
+
+The native graph lifecycle consumer composes existing crates rather than adding
+a second coordination engine. Both Turso and DuckDB graph ACK/CAS/recovery tests
+are selected independently; the facade's native consumer additionally uses real
+GraphAr files, Arrow IPC, source deletion, cold restore and final MRR admission.
+This consumer exercises finite native close/reopen and configured remote ACKs.
+They do not qualify power loss, deployed object durability or live application
+revocation integration.
+
+| Order | Owner / code seam | Gate before claiming completion |
+|-------+-------------------+----------------------------------|
+| 1 | Backend query/output and dispatch | Explicit successful terminal; late failure/panic stays failure; leases/backpressure/cancellation; recovery during stalled resource work |
+| 2 | Optional DuckDB driver | Both materialized and native streaming drivers; schema/null/binary preservation, late native fetch errors, exact-limit EOF, native interrupt and retained buffer teardown |
+| 3 | Facade Production composition | Real native publication/CAS/reopen/cold-read/query/MRR admission on both providers and OS, bound to exact source/pins |
+| 4 | Host/domain authority integration | Simulated Host policy/key snapshot enrollment, rotation and retirement synchronized with fresh effects and final protected disclosure |
+| 5 | Fault injection at every publication phase | Original-operation recovery after child/root ACK loss and process crash; no partial head; separate power-loss and deployed-store receipts |
+| 6 | Matched performance matrix | Same facts and admitted results; queue/validation/native fetch/export/admission timings; first batch, retained buffers, RSS/spill, cold/warm and both OS |
+
+** Fallible streaming source seam
+
+=ArrowQueryEmitter::emit_next= now accepts =Result<Option<RecordBatch>>= under
+the shared output reservation and lifecycle. Its fixtures cover empty sources,
+exact row/batch-limit EOF, errors after the last allowed batch, refused excess
+output, sticky refusal and cancellation before an EOF fetch blocked by retained
+bytes. These fixtures qualify the portable protocol, not a native streaming
+DuckDB driver.
+
+The workspace now pins the published =duckdb= and =libduckdb-sys= crates to
+=1.10506.0=. The downloaded SDK manifest declares Rust 1.85.1; our Rust 1.95
+and Arrow 58.4.0 contracts remain in place. All Turso packages remain 0.8.1.
+The published crate records upstream source
+[[https://github.com/duckdb/duckdb-rs/tree/0fec186cdd4ada2f7703a2df5ee18f9f78d95f8e][0fec186cdd4ada2f7703a2df5ee18f9f78d95f8e]].
+
+=emit_duckdb_arrow_stream= executes =stream_arrow=, captures the executed schema,
+and calls =Statement::step= directly under =emit_next= reservations. The safe
+SDK checks the native result error before accepting null/empty chunks as EOF;
+Arrow conversion errors also return =Err=. The adapter maps those errors to
+sanitized =Driver= and makes execution/schema refusals sticky. It does not use
+the SDK Arrow iterator, which panics on fetch errors. The materialized driver
+remains available and also uses the new fallible =step=.
+
+Native fixtures exercise both drivers with 4,097 Int64/Utf8/Binary rows and
+null/empty/Unicode/raw bytes, both native interrupt paths, a delivered prefix
+followed by a native execution error during fetching, exact-limit/empty EOF,
+schema/row refusal and leased buffers after statement/connection teardown.
+These are functional conformance gates, not deployed authorization, crash or
+RSS/performance receipts. Upstream allows internal materialization for some
+statements, so native streaming is not sufficient evidence of bounded RSS.
+
+The resource reservation is a Host estimate. Maximum batch and retained output
+bytes do not constrain native query materialization, compression scratch, caches
+or arbitrary external Arrow clones. A managed lease must accompany every shared
+buffer. SDK-native row-count qualification is not evidence of a native streaming
+memory bound. Historical metadata benchmarks are not reused as query-throughput
+or Turso 0.8.1 measurements. Build parallelism remains Cargo's default.
+
+** Local publication process-exit acceptance
+
+The shared Backend consumer now drives the original graph publication operation
+through child, inventory, snapshot and root ACK-loss exits, pre-root and complete
+publication exits, provider pre-CAS exit, and post-native-commit/pre-receipt exit.
+It reopens the native provider under the persisted policy guard and verifies old
+head preservation or exact committed revision, historical replay, exact-operation
+retry and cold closure parity. The transport is a file-backed local simulation;
+no deployed Host or credentials are prerequisites. Each child has a bounded
+watchdog and a required fault exit code. This gate does not claim native COMMIT
+interruption, power-loss durability or native GraphAr decoding from opaque fixture
+blocks. See the [[file:../architecture/backend-rfc-delivery-audit.org][delivery audit]] for the precise evidence boundary.
+
+** Snapshot-pinned ordered outgoing access
+
+Optional =selective-graphar= (facade =graphar-selective= /
+=backend-graphar-selective=) delivers the controlled native ordered-by-source
+binary-Entity profile using pinned Arrow/Parquet 58.4.0 row selection. The
+maintained native writer/full reader remain the format and parity reference.
+The Rust reader uses fixed schemas/paths and explicit bounded chunk dimensions;
+it does not execute source metadata path instructions. Source/destination IDs
+remain physical indexes resolved through admitted canonical MRR identities.
+
+Complete inventory CID verification precedes capture. Preparation retains vertex
+and offset indexes plus read-only descriptors to a private verified copy, removes
+the directory before export, and executes only selected edge/property ranges with
+adjacent topology probes. Exact field/row alignment and selected context/identity
+admission are mandatory; malformed range boundaries refuse the slice. On Linux
+and macOS the last retained handle releases descriptors. Windows descriptor
+unlink lifetime is not qualified. Checkpoints supply cooperative cancellation
+between files/chunks; native calls do not acquire a hard-interrupt guarantee.
+
+The one shared Backend owns workers, preparation/output reservations and drain.
+There is no provider-specific Backend. Selected facts are a physical execution
+input; MRR owns plan semantics and final result admission. Full CID setup remains
+full-source I/O. Ordered layout does not establish arbitrary property profiles,
+incoming traversal, path semantics, globally checked facts outside a slice, RSS
+bounds or end-to-end reduced I/O. The [[file:../architecture/backend-rfc-delivery-audit.org][delivery audit]] records the matched
+uniform/skewed experiment, exact parity/refusal fixtures and remaining gates.
+
+** Physical process measurement and consuming ownership
+
+=GraphArSelection::into_facts= transfers its existing Vec; the shared Backend
+fixture consumes it through =ResourceHandle::try_transform=, checks allocation
+identity and preserves the original reservation through final-clone drain.
+This supplies a physical handoff, not final MRR query admission or RSS enforcement.
+
+The Rust =graphar_range_workload= benchmark measures full/reference outgoing
+reads and selected ranges in separate fresh exec processes on one native fixture.
+It records OS RSS high-water, preparation, first query, retained-source reuse,
+reader bytes, Arrow rows, CPU and page-fault/context-switch diagnostics. The
+parent checks native parity and the children check independent ordered Fact
+digests; watchdogs fail silent/stalled children and reclaim them. Complete CID
+verification remains mandatory. OS caches are uncontrolled and engine spill is
+not measured. See [[file:../../crates/mrr-data-graphar/benches/README.org][the experiment contract]].
+
+At this historical physical slice, P2 property-path execution still required
+declared lossless entity-property mapping and an MRR-owned original-source
+plan/admission receipt. Later combined-source slices below and the current
+acceptance ledger close the simulated original-source gate; this early slice
+alone did not close it.
+A simulated Host/caller is the current acceptance boundary; deployed services
+or credentials are not prerequisites for this framework stage.
+
+** Declared native entity property tables (P2-A physical slice)
+
+=GraphArEntityPropertyProjection::admit= now maps the exact MRR EntityCatalog
+into standard GraphAr vertex types and Parquet property groups. A physical label
+=mrr_entity_<canonical type digest>= is derived from the supplied identity;
+logical labels are never guessed from source text. Each type has canonical
+=entity_id= plus its declared String properties/nullability. Unsupported scalars
+and reserved identity-property names refuse admission. Types with zero rows and
+isolated entities are explicit tables; they are not inferred from relation ends.
+This follows the [[https://graphar.apache.org/docs/specification/format/][GraphAr vertex/property format]] and leaves topology at the existing
+native binary-Entity/ordered-adjacency owner.
+
+=write_graphar_entity_properties= checks complete table coverage, exact Arrow
+shape, unique canonical IDs across types, aggregate row/value/type/property
+limits, and source nullability before native construction. It stages the full
+native table set, checks physical inventory limits and renames once. Its local
+receipt binds inventory, full entity catalog, semantic snapshot digest,
+generation, row count and chunk layout. The receipt does not infer publication
+or disclosure authority; an external caller must authenticate it in its root
+protocol. =descriptor= encodes versioned canonical DAG-CBOR control metadata
+and its CID, without local paths. =decode_descriptor_checked= authenticates
+exact bytes, known version/fields, inventory/row/layout limits and the supplied
+admitted MRR catalog; it never constructs a catalog identity from untrusted bytes.
+This is a property artifact descriptor, separate from the existing binary-Entity
+projection descriptor. The property profile can now be registered in SnapshotManifest through
+=GraphArEntityPropertyBlock::snapshot_projection=. A registered capture resolves
+its descriptor CID from =BoundDataQuery= and retains the exact physical root.
+
+=capture_graphar_entity_properties= checks that receipt scope against the
+MRR-bound query before I/O, copies only CID-verified files, and reconstructs
+native metadata from the declared catalog in a private directory. Authenticated
+source YAML is retained as content, never interpreted as native path instructions.
+Native handles/files are gone before returning immutable Arrow tables. Reuse
+rejects semantic snapshot, generation and entity catalog changes. Native vertex
+string import currently copies into Arrow StringArray buffers; this is not a
+zero-copy vertex C Stream or a selective property-pushdown claim. Row/inventory
+bounds precede native reads; decoded value bounds do not enforce native RSS.
+
+=prepare_graphar_entity_properties= uses the same shared Backend scheduler,
+reservations, cooperative stops and drain lifecycle. =into_tables= plus
+=ResourceHandle::try_transform= transfers the existing table vector under its
+lease. Native calls remain nonpreemptible; reservations are ownership contracts.
+Physical two-hop acceptance consumes these restored tables in the existing
+property executor and admits its candidate through MRR. Direct-IR acceptance
+is distinct from original-source compilation; the parser-owned Healthcare
+caller and a combined native topology/property publication closure remain separate
+delivery slices.
+Fresh-process acceptance persists descriptor bytes and its trusted fixture CID,
+drops writer objects, then reopens native files in a separate executable process
+and compares complete canonical rows, including null/empty/Unicode values. The
+worker has a strict five-second wall gate; its trusted CID simulates caller root
+authority, rather than establishing production disclosure authorization.
+
+** Snapshot-root registration and profile isolation
+
+The property projection has the explicit =mrr.graphar.entity-properties.v1=
+profile and a DAG-CBOR descriptor CID. =GraphProjectionKind::EntityProperties=
+selects this wire profile. The existing =BinaryEntity= profile still authenticates
+RAW topology metadata; its bytes and golden snapshot roots are unchanged.
+Each kind refuses the other's metadata codec. A bound query retains the selected
+kind, and relation-specific topology admission refuses a property profile.
+The property artifact descriptor remains MRR Data control metadata, not a new
+native GraphAr data-file format.
+
+=capture_registered_graphar_entity_properties= resolves the descriptor from the
+bound SnapshotManifest, then validates its complete catalog/snapshot/generation
+scope and every native file CID. =RegisteredGraphArEntityProperties= additionally
+checks the exact physical snapshot root and descriptor on retained/consuming
+access. Equal generations and semantic digests do not authorize switching roots.
+The registered preparation API uses the same Backend pool, reservations,
+cooperative checks and lease-preserving transformation as other resources.
+A fresh process now authenticates SnapshotManifest bytes using a trusted fixture
+root, binds the MRR query and restores the native property artifact through this
+registered API. No live Host or credentials are required for this framework gate.
+
+SnapshotManifest selects one graph projection. Its =mrr.graphar.dataset.v1=
+profile now selects an acyclic =GraphDatasetDescriptor=: one typed property
+inventory and exactly one inventory for every relation in the admitted catalog.
+The descriptor embeds semantic snapshot, catalog and generation scope, but no
+physical snapshot root. The complete descriptor CID is registered only after
+native child identities are fixed; the snapshot then references that descriptor.
+This construction avoids a CID cycle. Legacy topology/property profile bytes
+remain unchanged. The typed property descriptor is shared by Core, transfer and
+native capture so there is one canonical control-plane decoder.
+
+=prepare_combined_graph= verifies the entire Arrow/coverage/lineage/native
+closure before publication. =publish_combined_graph= requires each child ACK,
+then the dataset descriptor ACK, the simulation/Host gate, and finally the
+snapshot root ACK. Failed/lost ACKs return no complete receipt; same-CID retry
+may recover previously uploaded orphans. Protected discovery CAS is still a
+separate operation. Generic snapshot transfer still refuses graph profiles, and
+legacy binary graph transfer does not silently accept the combined profile.
+
+=restore_combined_graph= admits the caller-selected root, exact descriptor,
+full relation membership, semantic scope and every child's CID/declared length
+under block/count/aggregate budgets before returning a prepared closure.
+=capture_combined_graphar= reconstructs private native metadata from admitted
+catalogs, checks native framing and scope, and returns immutable Arrow property
+tables plus fully re-admitted contextual MRR relation facts. Source YAML never
+chooses native paths. Shared Backend preparation reserves the complete payload,
+checks cooperative controls between files/phases, and retains the same lease
+through consuming handoff and final-clone shutdown. Native calls are not
+preemptible; decoded metadata, provider copies and decompression need Host
+headroom and are not a hard RSS ceiling. Topology row limits accumulate across
+all relation artifacts, including repeated physical vertices.
+
+The native acceptance deletes original source directories before publication,
+publishes to a simulated content service, restores into a cold cache, captures
+both native relations and properties, executes a direct-IR two-hop DataFusion
+query, compares all three independent expected rows, and verifies the original
+MRR result transport intended for Scheme consumers. Equal descriptors and
+semantic scopes under another physical root refuse capture/result reuse.
+This qualifies the declared string-property slice and simulated publication
+framework; original GQL parser/compiler invocation remains a separate gate.
+
+The optional facade feature =backend-graphar-combined= selects this composition;
+providers do not create their own Backend runtime. Turso/DuckDB remain optional
+physical providers; neither becomes the graph capability owner. GraphAr retains
+the graph storage/projection role across all Production profiles and cases.
+
+** Content acquisition within shared Backend admission
+
+The low-level transfer API remains useful without a native runtime. Its
+=prepare_combined_graph_checked= variant accepts caller-owned checkpoints and
+preserves the caller's typed stop/error contract. Checks surround every bounded
+provider read, including failed reads, plus closure verification. A blocking
+provider call remains nonpreemptible; a checkpoint prevents partial buffers from
+escaping after the call completes.
+
+=CombinedGraphArContentRequest= adds shared Backend orchestration. The
+reservation is acquired before the descriptor or child payload is loaded, and
+effective payload bytes are capped by the smaller of transfer budget and Host
+reservation. =prepare_combined_graph_content= retains the complete immutable
+closure lease across async publication. =prepare_combined_graphar_from_content=
+loads and captures on one existing worker under one reservation, releasing the
+input payload before exposing captured Arrow properties and MRR facts. These
+functions use the existing scheduler and control; they create no provider runtime.
+
+Admission/cancel/deadline refusals perform no content reads. In-flight caller
+abandonment keeps admission alive until the nonpreemptible read returns, then
+releases partial input and prevents later native phases. Backend shutdown waits
+for that cleanup. Provider/cache storage, decoded metadata and native scratch
+remain separate Host headroom; these payload limits do not enforce a hard RSS
+ceiling. Original-query compilation and result admission remain MRR-owned.
+
+** Cooperative cold restoration
+
+=restore_combined_graph_checked= extends the low-level cold transfer with a
+caller-owned typed checkpoint. Checks run before acquisition, before and after
+snapshot/descriptor/child read-throughs (including failures), and around complete
+closure verification. The existing =restore_combined_graph= delegates to this
+implementation with an always-successful checkpoint; wire formats and admission
+semantics remain unchanged.
+
+Each read-through comprises local lookup, optional remote fetch, CID verification
+and optional cache admission. Checks bracket that entire operation; they do not
+interrupt an in-flight operation or roll back already cached immutable blocks.
+A stopped restore exposes no complete closure. The caller must retain resource
+admission across async acquisition and the returned payload. The checkpoint
+primitive itself is runtime-neutral; the optional Backend adapter below supplies
+that reservation.
+Original GQL compilation and result admission remain MRR-owned.
+
+** Shared async cold-restore admission
+
+=Backend::prepare_resource_async_controlled= uses the borrowed Host runtime and
+the existing resource/shared worker permits. Admission precedes driver invocation;
+queued cancellation and deadlines skip the driver. Started async work remains
+owned by the dispatcher after caller abandonment and must check cooperative
+control between provider operations. Its reservation survives until cleanup or
+the returned =ResourceHandle='s final clone. Async I/O does not increment the
+blocking-worker counter. Blocking preparation and async preparation share worker
+limits; neither provider creates an independent runtime.
+
+=CombinedGraphArRestoreRequest= and =restore_combined_graph_content= combine this
+primitive with the checked cold transfer. They cap the complete payload by both
+transfer and reservation limits before cache/remote reads. The returned immutable
+closure retains its shared Backend drain barrier. Cache copies and provider
+scratch remain additional Host headroom; this is not a hard RSS guarantee. Native
+capture remains a separate blocking phase and must retain appropriate admission.
+
+** Current acceptance and request-local range coalescing (2026-10-05)
+
+The accepted baseline =a4e36c20= passed all 14 PR checks, including original
+Source handoff and GraphAr on Ubuntu/macOS. Its 48 cases per platform cover
+cold/warm full, warm selective and retained selective paths over uniform/skewed
+sources, with original MRR admission, aggregate budgets and process recovery.
+This closes the simulated P0-P2 framework gate. See the current acceptance
+section of [[https://github.com/tao3k/mrr-data/pull/12][PR 12]] for immutable run/artifact identities. It does not establish
+power-loss durability, multi-writer metadata, hard RSS isolation or deployed Host
+qualification.
+
+=outgoing_many= extends the same authenticated source with source-set semantics:
+duplicate source IDs are ignored and physical duplicate edges remain intact.
+All selected edges count against one aggregate limit before physical reads.
+Request-local planning groups neighborhoods by partition/chunk. Topology guard
+ranges are merged and read once per chunk; selected property ranges are merged
+and read once per chunk. Every original neighborhood retains its boundary probe,
+including empty neighborhoods. Arrow slices share the selected batch buffers;
+no retained payload cache, mutable catalog authority or full-source shortcut is
+introduced. Generation checks and final scope admission remain mandatory.
+
+This uses Parquet [[https://arrow.apache.org/rust/parquet/arrow/arrow_reader/struct.RowSelection.html][RowSelection]] before column materialization. The linked current
+API documentation describes the principle; the implementation remains pinned to
+Parquet 58.4.0. Coalescing readers within one request does not guarantee that
+compressed-page I/O contains only selected rows. Actual positioned read bytes
+and materialized rows are measured separately. The second-hop Source resource
+consumer uses this API; the existing single-source path remains a matched control.
+Elapsed time, native scratch and consumer-visible streaming are separate claims.
+
+Local qualification for this slice keeps the unchanged idle5/wall120 tests and
+idle30/wall1200 builds. Eight selective tests pass, including source deletion,
+duplicate-edge parity, aggregate-limit refusal, stale scope, truncated offsets,
+noncontiguous/chunk-boundary reads, cancellation and fresh retry. A matched
+same-capture fixture records =10522 -> 5261= actual read bytes and =10 -> 9=
+materialized rows; this is a bounded I/O result, not an elapsed-time claim.
+Ten original-source tests and the real process-recovery matrix pass; the full
+48-case matrix admits all results and returns zero cleanup bytes. Clippy passes.
+
+An additional all-feature single-process run records 80 passes and one failure:
+=property_descriptor_reopens_in_new_process= receives =ECHILD= from =try_wait=.
+The later [[file:../architecture/native-child-process-ownership.org][native child-ownership audit]] reproduces the failure without
+descriptor I/O and identifies the exact pinned Gambit global reaper. It
+supersedes the root-cause hypothesis below, while retaining this historical
+failed receipt. Shared-process repair remains a separate unqualified gate.
+The same descriptor test passes in a fresh isolated process. Native Scheme
+initialization occurs earlier in the failing combined run; a process-reaping
+interaction is a hypothesis, not a proven upstream root cause. Keep this failed
+receipt; do not count the aggregate run as passing or hide the failure with an
+exit-marker fallback. The maintained GraphAr and Source CI feature groups remain
+separate gates. Cross-platform elapsed-time comparisons and fixture roots from
+separate runs do not establish a speedup.
+
+The Source feature qualifies the descriptor parent in its own exec process via
+Python process supervision and requires its genuine exit status plus the Rust
+child's semantic receipt. This exact test is explicitly invoked by Source CI on
+both operating systems; the maintained GraphAr feature group still runs it by
+default. Under Source it is marked as requiring fresh-process qualification,
+as the existing recovery/resource process suites are. This closes test lifecycle
+ownership without claiming to repair the native runtime's process-wide signal
+behavior; no signals are reset and no missing child status is accepted.
+
+After explicit process isolation, the combined Source-feature test run passes
+80 tests with nine separately driven/experimental workers ignored. The descriptor
+parent then passes in its mandatory isolated invocation. Strict Clippy passes
+again. The earlier 80-pass/one-failure aggregate receipt remains a recorded
+negative control for lifecycle qualification.
+
+CI run =37293719391= at =dc76e246= retains an Ubuntu Source failure at
+Clippy, after native no-run, Source/descriptor tests and facade checks passed.
+CI stable is Clippy 1.99; the local toolchain is 1.95. The newer
+=assert_is_empty= lint refuses =assert!(empty.facts().is_empty())= and requires
+=assert_eq!(empty.facts(), [])= for failure diagnostics. The assertion is changed
+as prescribed; no lint is disabled and neither its semantic condition nor the
+native watchdog changes. The 48-case CI matrix did not run on that failed job.

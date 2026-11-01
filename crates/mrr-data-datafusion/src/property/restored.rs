@@ -45,7 +45,63 @@ pub async fn execute_restored_property_path_query(
     check_ipc_decode_budget(input.restored, manifest, input.limits)?;
     let entities = decode_entity_tables(input.restored, manifest)?;
     let relations = decode_relation_tables(input.restored, manifest, input.relation_catalog)?;
-    execute_property_path_query(input.query, &entities, &relations, input.limits).await
+    let output =
+        execute_property_path_query(input.query, &entities, &relations, input.limits).await?;
+    super::reference::verify_property_path_output(
+        input.query,
+        &entities,
+        &relations,
+        input.limits,
+        &output,
+    )?;
+    Ok(output)
+}
+
+/// Independently check a complete answer against the same verified immutable
+/// closure. The checker evaluates original IR and never executes `DataFusion`.
+/// # Errors
+/// Rejects binding or content drift, decode budgets and incorrect answer bags.
+pub fn verify_restored_property_path_output(
+    input: &RestoredPropertyQuery<'_>,
+    output: &PhysicalQueryOutput,
+) -> Result<()> {
+    let manifest = input.restored.snapshot().manifest();
+    validate_restored_binding(input, manifest)?;
+    check_declared_limits(manifest, input.limits)?;
+    check_ipc_decode_budget(input.restored, manifest, input.limits)?;
+    let entities = decode_entity_tables(input.restored, manifest)?;
+    let relations = decode_relation_tables(input.restored, manifest, input.relation_catalog)?;
+    super::reference::verify_property_path_output(
+        input.query,
+        &entities,
+        &relations,
+        input.limits,
+        output,
+    )
+}
+
+/// Execute the restored immutable root and retain its complete original MRR
+/// result in a Scheme v1 handoff. No Temporal interpretation occurs here.
+/// # Errors
+/// Rejects physical binding drift, failed restoration/query checks, result
+/// admission failures and exceeded Scheme transport limits.
+pub async fn execute_restored_property_query_handoff(
+    input: RestoredPropertyQuery<'_>,
+    result_limits: meta_relational_reasoning::QueryResultLimits,
+    max_bytes: std::num::NonZeroUsize,
+) -> Result<mrr_data_core::DataQueryResultHandoff> {
+    let profile = crate::datafusion_engine_profile()?;
+    let binding = mrr_data_core::bind_data_query(input.query, input.restored.snapshot(), &profile)
+        .map_err(DataFusionQueryError::PhysicalBinding)?;
+    let output = execute_restored_property_path_query(input).await?;
+    mrr_data_core::DataQueryResultHandoff::export(
+        &binding,
+        &profile,
+        output,
+        result_limits,
+        max_bytes,
+    )
+    .map_err(DataFusionQueryError::ResultHandoff)
 }
 
 fn validate_restored_binding(
@@ -216,9 +272,18 @@ fn decode_entity_tables(
         .map(|entity| {
             let mut fields = vec![Field::new("entity_id", DataType::Utf8, false)];
             fields.extend(
-                entity.schema().properties().iter().map(|property| {
-                    Field::new(property.name(), DataType::Utf8, property.nullable())
-                }),
+                entity
+                    .schema()
+                    .properties()
+                    .iter()
+                    .map(|property| {
+                        Ok(Field::new(
+                            property.name(),
+                            super::execution::property_arrow_type(property.schema())?,
+                            property.nullable(),
+                        ))
+                    })
+                    .collect::<Result<Vec<_>>>()?,
             );
             Ok(EntityPropertyTable {
                 schema: entity.schema().clone(),

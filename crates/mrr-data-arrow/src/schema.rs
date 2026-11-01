@@ -8,6 +8,7 @@ use meta_relational_reasoning::{
 };
 
 use crate::error::ArrowRelationError;
+use mrr_data_profile::ARROW_VALUE_SCHEMA;
 
 fn temporal_unit_name(unit: TemporalUnit) -> &'static str {
     match unit {
@@ -27,7 +28,7 @@ fn timezone_name(timezone: TimezonePolicy) -> &'static str {
 
 fn value_schema_identity(schema: &ValueSchema) -> String {
     match schema {
-        ValueSchema::Entity => "entity:typed-text-v1".to_owned(),
+        ValueSchema::Entity => "entity:typed-text".to_owned(),
         ValueSchema::Boolean => "boolean".to_owned(),
         ValueSchema::Integer => "integer".to_owned(),
         ValueSchema::Decimal { precision, scale } => format!("decimal-lexical:{precision}:{scale}"),
@@ -49,9 +50,9 @@ fn value_schema_identity(schema: &ValueSchema) -> String {
             temporal_unit_name(*unit),
             timezone_name(*timezone)
         ),
-        ValueSchema::Duration => "duration-lexical:v1".to_owned(),
-        ValueSchema::List { .. } => "list:v1".to_owned(),
-        ValueSchema::Record { .. } => "record:v1".to_owned(),
+        ValueSchema::Duration => "duration-lexical".to_owned(),
+        ValueSchema::List { .. } => "list".to_owned(),
+        ValueSchema::Record { .. } => "record".to_owned(),
     }
 }
 
@@ -93,8 +94,14 @@ pub(super) fn project_schema_field(
     Ok(
         Field::new(name, arrow_data_type(schema)?, nullable).with_metadata(
             [
-                ("mrr.value-schema".to_owned(), value_schema_identity(schema)),
-                ("mrr.value-schema-version".to_owned(), "v1".to_owned()),
+                (
+                    ARROW_VALUE_SCHEMA.namespace.to_owned(),
+                    value_schema_identity(schema),
+                ),
+                (
+                    "mrr.value-schema-version".to_owned(),
+                    ARROW_VALUE_SCHEMA.version.to_string(),
+                ),
             ]
             .into_iter()
             .collect(),

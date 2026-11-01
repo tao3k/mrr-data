@@ -1,98 +1,130 @@
-#+title: POO Flow static-edge consumer acceptance — 2026-09-20
+#+title: POO Flow native typed consumer acceptance
 
-The first POO Flow consumer is its existing Python Runtime graph tool boundary.
-The maintained binding lives in =integrations/poo_flow=; it imports the actual
-POO Flow public API and invokes the optional =mrr-data-poo-flow= Rust process.
-It publishes static dependency edges and returns MRR-admitted endpoint results.
-It does not implement the Healthcare multi-hop/property queries, a replacement
-POO Flow runtime, complete executable plan restore, or a new cache engine.
+* Native Scheme v2 handoff — 2026-10-04 implementation slice
 
-The source owner supplies a projected plan and immutable source/revision. Tool
-registration fixes the root and semantic scope before Agent invocation. Rust
-owns bounded physical transfer, Arrow decoding, DataFusion execution and the
-call to MRR's existing result admission. Publication and query receipts have
-distinct outcomes. A locally trusted worker receipt is not a signed credential
-or an authorization to execute the graph's effects.
+The workspace now pins MRR =9ee5ace469e7a9319c74b8be0308e9062a47e587=,
+retaining the original property source API and adding result Scheme v2.
+=DataQueryResultHandoff::export= projects physical output with the exact bound
+engine, exports complete original columns/typed rows and native admission digest,
+and retains the selected =BoundDataQuery=. =verify= requires a receiver-selected
+binding to match the root, graph projection, engine and semantic query before
+MRR reconstructs the original result and receipt. Result bytes are never JSON.
 
-* Findings corrected
+The executor is an explicit trusted premise. These bytes and binding equality
+prove identity/typing consistency; they do not prove physical evaluation truth,
+complete inventory or authorization. The Rust handoff is not a serialized
+physical envelope. The Legacy static-edge worker and Python consumer have
+been removed; remote publication and recovery remain separate gates.
 
-- DataFusion used =EntityId::from_canonical_bytes= on an already encoded Entity
-  ID, deriving a second identity. Parsing the typed ID preserves the source ID
-  and rejects malformed/wrong-domain values. Direct source-identity tests now
-  complement parity, which could miss the same defect in both compared paths.
-- The first consumer query reused internal binding names as output names; MRR
-  correctly rejected them. Dedicated output bindings now pass admission.
-- Blocking cache/client setup happens before the dedicated worker runtime.
-  Existing =BlockingContentStore= owns later disk work.
-- Restore checks fact generation, authority, provenance, completeness, validity,
-  duplicate fact IDs/edges and actual row counts before producing query results.
+The production =execute_restored_property_query_handoff= binds the restored
+root before executing and exporting. The cold/warm property restore tests invoke
+this entrypoint after actual DataFusion
+execution. Core controls reject a changed physical root and an exceeded result
+wire cap. This slice does not qualify an original GQL event/position query into
+POO Temporal in one end-to-end scenario, external S3 service or real-model
+physical lifecycle. Retired static-edge JSON receipts have been removed.
 
-* Local evidence
+Local final checks for this slice: core 36/36 (0.21s), DataFusion 19/19
+(0.25s), each under the five-second genuine-output watchdog. All-target core
+and DataFusion Clippy passed with =-D warnings=. The first core build exposed
+an internal crate-path mistake; the first root-control run exposed a fixture
+that only reordered canonical inputs. Both were corrected before the final
+36-test run. No thresholds were relaxed. POO's separate Scheme v2 native
+Temporal receiver passed at =662a20620b4155c5d2fa50e70ba8d8c67bd2f392=.
+Remote CI and the joined original-GQL Temporal roundtrip remain separate gates.
 
-[[file:../../evidence/poo-flow-consumer-receipt.json][Source-bound receipt]] records the source digest,
-upstream S3 service and patch, POO Flow revision and worker binary hash.
-POO Flow revision is =7f60e82b609ed2227ce3e71d17c5a1a351902e54=, fetched from the
-public repository; the tool implementation matches the active sibling checkout
-apart from license headers. No edits were made to that dirty sibling checkout.
+* Native integer properties — 2026-10-04
 
-- Full workspace with the optional consumer enabled: 131 tests passed, 3 ordinary
-  ignored entries retain their existing subprocess/external-service ownership.
-- Full workspace/all-target Clippy with =-D warnings=: passed, no warnings.
-- All 18 facade feature-isolation cases and dependency-free consumer defaults:
-  passed. Only Arrow remains a default facade feature.
-- Four Python negative contract tests and two conformance receipt freshness tests:
-  passed.
-- Independent S3 SigV4/TLS test, both existing examples and the actual POO Flow
-  tool invocation: passed, with zero warning diagnostics in the conformance log.
-- Formatting, whitespace and actionlint (without optional ShellCheck): passed.
+The bounded DataFusion property path now accepts exact Utf8/String and
+Int64/Integer catalog mappings. Input validation rejects mismatched physical
+types and null non-nullable properties. Verified IPC restoration derives each
+property's Arrow type from the original catalog; result decoding retains typed
+integers without text or float conversion. Other property types and integer
+filter expressions remain unsupported by this slice.
 
-The two-edge scenario produced these logical counters:
+Tests cover signed 64-bit extrema, nullable values, non-nullable rejection,
+text substitution and cold/warm restored integer results through the original
+Scheme v2 handoff. These enable Temporal's event:String/position:Integer
+projection, but do not independently qualify the joined original GQL scenario.
 
-| Invocation | Remote operations | Charged bytes |
-|---+---+---|
-| Producer-local query | 0 | 0 |
-| Empty-cache consumer | 3 | 7,146 |
-| Warm-cache consumer | 0 | 0 |
-| Reopened worker/cache | 0 | 0 |
+Final integer-path local qualification: 20/20 tests in 0.17s under the five-second
+genuine-output watchdog; all-target DataFusion Clippy passed with =-D warnings=.
 
-All four results have identical rows, semantic generation and MRR admission
-digest. Every worker call is a separate process. This is a clean-restart check;
-kill-during-publication recovery remains qualified by the transport tests.
-Recorded elapsed times measure the worker data phase, excluding process startup
-and initial configuration. These are fixture observations, not P95/throughput or
-hosted-provider performance claims.
+* Legacy integration removal — 2026-10-04
 
-Seven real negative cases reject success: stale generation, substituted source,
-Agent scope overrides, duplicate edges, unavailable transport, process timeout
-and an independently corrupted S3 root. Conditional/dangling plans and malformed
-receipts are separately rejected by the Python contracts.
+Removed the static-edge Rust worker and its workspace/lock entry, copied Python
+resource, conformance driver, obsolete fixture/JSON receipt and CI consumer
+steps. The S3 runner no longer fetches an old POO runtime or accepts its retired
+consumer option. Generic SigV4/TLS, snapshot and cache checks remain active.
+The Python qualification project no longer carries POO runtime dependencies.
 
-* Remote acceptance
+Local checks: resolved locked Cargo metadata has no retired package/member;
+Python framework 16/16, Ruff lint/format and Org-link checks pass. This removal
+does not claim new S3 execution, remote recovery or a cross-process native
+physical envelope. The existing read-only Scheme v2 handoff remains the
+consumer path.
 
-The existing Ubuntu/macOS S3 jobs now test and lint the consumer, fetch the
-pinned public POO Flow runtime source, run its real tool node and retain the
-consumer receipt inside the S3 artifact. The transport aggregate therefore includes these
-consumer checks as well.
+* MRR-owned dispatch into the Data backend — implementation slice
 
-Final tested revision: =c18f7d373e07d927e3c2f66d2d85b4706c714a54=.
-[[https://github.com/tao3k/mrr-data/actions/runs/35463412334][CI run 35463412334]]
-passed all nine checks, including Ubuntu/macOS Rust, native GraphAr and S3/consumer
-jobs, Rust 1.95 MSRV, Arrow IPC fuzz and the transport aggregate. Reviewed final-run logs
-contain zero warning diagnostics.
+MRR's contract facade owns =PropertyQueryBackend= and
+=CatalogBoundQuery::execute_with=. MRR Data's =RestoredPropertyBackend=
+implements this port with the original admitted query, verified immutable
+snapshot, original relation/entity catalogs and physical execution limits.
+It composes existing =bind_data_query=, restored DataFusion execution and
+=project_data_query_output=. MRR then admits the returned candidate against
+its original query and result limits. Backend success cannot bypass this
+final admission. Physical evidence retains the selected root and engine.
 
-Both platform conformance receipts match source SHA256
-=12eb0adca2100ef98e2122f48bdd902f64f054d42f4013a2e64334a6e66af8c6=
-and service patch SHA256
-=f41967b9050bd8c30b49b42a04ff0db1776695d19002071547c42d9e4f16b1c6=.
-Both verify equivalent admitted rows/root/generation/admission digest and all seven
-negative cases. This closes the named static-edge profile at that revision.
-[[https://github.com/tao3k/mrr-data/pull/1][PR #1]] recorded the static-edge delivery;
-that earlier acceptance did not imply Healthcare query or release acceptance.
+Data's dependency disables the facade's default inference feature. No parser,
+Scheme SDK or native solver is a dependency of the ordinary Backend build.
+Production MRR selects native Scheme inference separately. Data owns Backend
+and Protocol implementation; MRR owns dispatch and semantic admission.
+The restored backend currently uses already verified restored content. This
+slice does not add remote dispatch, retries, cancellation, provider admission,
+Temporal current-cut selection, atomic publication or recovery semantics.
 
-The [[file:0001-mrr-data-plane.org][canonical roadmap]] separates original Healthcare
-query delivery from reuse and real-workload qualification.
+The new executable controls cover actual restored DataFusion dispatch,
+corrupt IPC rejection, query/physical generation mismatch, and MRR result
+admission rejection after physical success. They use the original typed MRR
+query fixture; source compilation remains in MRR. Tests do not reconstruct
+queries from receipts or reinterpret backend failures as empty results.
 
-CI environment follow-up: the first Ubuntu run passed all six consumer Rust
-tests, then correctly failed because its Rust 1.95 toolchain lacked Clippy. The
-S3 jobs now explicitly install that component. Local independent conformance
-was rerun successfully and its source-bound receipt refreshed for this workflow.
+The root and fuzz manifests and lockfiles select MRR
+=8f389fd0aede8d8000197c959da69b6ba3e9bb86=. The resolved normal/build Backend
+graph contains no Gerbil SDK, MRR frontend or Rust ASCENT package. No local
+patches substitute the published source. =DataQueryResultHandoff::export_execution=
+exports the original admitted candidate and backend-selected binding, without
+executing the query again. The receiver retains its own root/query checks.
+
+Final local checks: Core 38/38 (0.08s), DataFusion 24/24 (0.15s), with the
+unchanged five-second genuine-output and 45-second batch watchdog. All-target
+Core/DataFusion Clippy passed with =-D warnings=. The first lint run rejected
+a missing technical-name backtick and a numeric literal separator; both were
+fixed without suppressions. Remote CI, external Protocol execution, deployed
+executor trust, complete Temporal current-cut correspondence, IFC publication
+and recovery remain separate gates. No new model call or performance
+improvement is claimed by this implementation slice.
+
+* Native dependency alignment after public Temporal qualification
+
+The root and independent fuzz manifests and Cargo-generated lockfiles now
+select the same MRR commit =d5beb4030bf875fa851cddc27789030c551154c3=.
+The actual workspace/fuzz pin-identity check passes. DataFusion's 24 baseline
+cases pass under the unchanged five-second genuine-output and 45-second batch
+limits. The optional =source-handoff= feature is a distinct native gate; the
+baseline result does not qualify GQL compilation or native result admission.
+
+The subsequent explicit =source-handoff= native build and run pass all 26
+DataFusion cases in 2.71s under those same limits, including original-source
+compilation, cold/warm physical restoration, semantic-drift refusal and final
+admission-budget refusal. Tests use the original source and admitted result;
+they do not reconstruct an observation from its receipt. POO's downstream
+physical correction and native Temporal re-admission remain a separate gate.
+
+The Python CI job now explicitly prepares Rust 1.95.0 before its compiler
+supervision fixture. The previous CI run timed out in the first unwrapped
+native compiler invocation; neither its ten-second compiler bound nor its
+five-second output bound was widened. The same wrapper/output/failure fixture
+passes locally. The full Python glue project subsequently passes 33/33 cases
+in 8.97s under the five-second actual-output and 45-second total limits.
+Remote qualification on the new commit is still required.

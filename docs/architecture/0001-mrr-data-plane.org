@@ -53,6 +53,41 @@ flowchart LR
 second source of truth.  It must not redefine MRR types and MRR must not import
 Arrow, GraphAr, IPLD, CAR, or storage-provider types.
 
+* GraphAr strategic role
+
+GraphAr is the graph physical-data foundation for Production graph workloads.
+Native Turso and DuckDB are optional relational/transactional execution engines;
+this architecture assigns neither a built-in graph model, graph persistence
+contract nor graph-query semantic authority to either provider. A relational
+edge table is a derived execution image, not a replacement graph data plane.
+
+| Layer | Architectural responsibility |
+|-------+------------------------------|
+| MRR | Admitted Entity/Relation/Fact identities, catalog, generations, graph-query semantics and result admission |
+| GraphAr | Provider-independent physical graph representation: vertices, edges, adjacency/offset chunks, property groups and metadata |
+| Arrow | Typed in-memory exchange, checked batches and engine interchange |
+| Shared Backend | One Host-owned lifecycle, publication/recovery, admission, leases, cancellation and drain across Profiles/Cases |
+| Turso/DuckDB | Optional metadata transactions and bounded native relational/columnar execution over derived images |
+| DuckGQL | Optional external graph-query operators on DuckDB; separately qualified extension capability |
+
+GraphAr's vertex/edge chunks, property groups and ordered adjacency follow the
+[[https://graphar.apache.org/docs/specification/format/][Apache GraphAr format]]. Ordered source/destination adjacency supports CSR/CSC
+physical views; those local indices never replace canonical MRR identities.
+The complete published graph inventory and its snapshot/root/generation/catalog
+binding govern verification, cold restoration and cache reuse across providers.
+Changing a database provider rebuilds its tables/indexes from the same verified
+graph source; it must not redefine or migrate the authoritative graph contract
+into engine-specific SQL schemas or plugin-local CSR identifiers.
+
+The pinned native library remains an explicit packaging feature. That choice
+controls C++ dependencies and deployment footprint, not GraphAr's architectural
+priority. Current code qualifies a bounded binary-Entity projection. General
+property layouts and selective snapshot-pinned adjacency scans remain concrete
+implementation gates; the format's support is not proof they are implemented.
+GraphAr is a storage representation, not a query engine or a replacement for MRR
+semantic admission. Its strategic role does not depend on DuckGQL availability
+or on winning a database-query benchmark.
+
 * Design objective
 
 The governing rule is:
@@ -314,8 +349,20 @@ engine cannot supply or replace this identity.  The output remains a
 owners admit it through =admit_query_result_candidate=.  This protocol is
 implemented.  The first opt-in engine adapter lowers the admitted single-hop
 binary-Entity slice directly to DataFusion expressions without reparsing SQL.
-It owns no async runtime and rejects every undeclared shape before execution;
-general query execution remains a later engine-specific feature.
+It owns no async runtime and rejects every undeclared shape before execution.
+An additional opt-in =mrr-data-turso-query= adapter executes the captured
+binary-Entity outgoing single-hop slice through parameterized Turso statements
+and a temporary transaction. It returns physical output for the same MRR
+admission bridge. Its =execute_turso_graphar_on_backend= entrypoint uses
+=Backend::run_resource= and the Host runtime on shared bounded workers. Queued
+cancellation skips execution; running work retains its lease through completion.
+The retained entrypoint returns a Backend resource handle and retains its
+reservation through the final clone; driver refusals release admission.
+Cooperative cancellation/deadline checks are implemented; native interruption
+and hard in-flight-call timeouts remain gates in
+[[file:../rfcs/0003-gql-duckdb-turso-backends.org][RFC 0003]]; the standalone executor does not enforce Backend admission.
+Shared scheduling does not complete all query lifecycle gates. General query
+execution remains a later engine-specific feature.
 
 The native GraphAr contract suite covers the first differential engine slice.
 It sends the same admitted binary-Entity facts through an Arrow =RecordBatch=
@@ -331,8 +378,11 @@ Native GraphAr publication and prepared import project a
 canonical GraphAr metadata entry point, admitted relation and endpoint roles,
 semantic identity property names, and bounded row counts.  It deliberately
 contains no SQL, connection, mutable catalog, or engine execution trait.  A
-downstream package can combine this crate with DuckDB/DuckGQL or another engine
-without adding that database to =mrr-data=.  Its catalog, indexes, statistics,
+Host can compose this source with optional engine adapter crates. RFC 0003
+allows bounded SQL adapters in this repository behind explicit features;
+DuckDB graph planning belongs to the separately gated DuckGQL typed bridge.
+The core, GraphAr descriptor and default facade remain provider-neutral, and
+the shared Backend has no generic SQL API.  Its catalog, indexes, statistics,
 and CSR caches are derived state and must be rebuildable from the GraphAr
 source plus the MRR snapshot manifest.
 
@@ -843,8 +893,8 @@ cover access key/secret, CA trust, hostname verification, namespace roots,
 conditional creation, idempotent publication, corrupt-object non-overwrite,
 bounded reads and genuine Arrow snapshot cold restore through Kache.
 
-The reproducible =tools/s3-conformance/run.py= isolates the server build and
-records its binary hash; see [[file:../../evidence/s3-conformance-receipt.json][the conformance receipt]].
+The reproducible =python/src/mrr_data_testing/s3/run.py= isolates the server build and
+records its binary hash; see the conformance receipt (historical local/CI artifact; not stored in Git).
 The test server uses Rust 1.96.0; MRR Data stays at Rust 1.95.0. No default
 feature or production dependency changed. A dedicated Ubuntu/macOS CI job runs
 this conformance gate, but its remote execution has not been observed.
@@ -962,44 +1012,13 @@ This historical entry-point audit did not establish consumer integration. The
 subsequent static-edge resource acceptance below closes that profile only; Healthcare
 execution and hosted-provider qualification remain outside that result.
 
-*** POO Flow static-edge resource — accepted
+*** POO Flow native typed handoff
 
-The first concrete consumer uses the existing Python =RuntimeGraphPlan= and
-=RuntimeGraphToolNode= boundary. Its fixed =poo-flow.static-edges.v1= profile
-publishes only explicit static dependencies and queries their MRR Entity
-endpoints. It is a separate useful operation, not a substitute for the declared
-Healthcare queries. Conditional routes, arbitrary GQL, full plan restoration
-and effect authorization remain outside this profile.
-
-=mrr-data-poo-flow= is a workspace crate with no default dependencies; its
-=runtime= feature enables the external process worker. The Python binding in
-=integrations/poo_flow/= fixes query scope at tool registration. Rust restores
-the exact root, validates fact context and snapshot identity, executes the
-existing DataFusion slice and calls MRR result admission. The source/revision
-owner supplies immutable input; credentials stay in runtime configuration.
-
-Acceptance imports the clean pinned POO Flow public runtime source, invokes its
-real tool node, and compares admitted results across producer-local, empty-cache,
-warm-cache and reopened-process execution. Warm/reopened caches require zero
-remote operations. Scope substitution, stale generation, duplicate edges,
-transport failure, process timeout and actual S3 corruption must fail closed.
-The existing Ubuntu/macOS S3 jobs also test/lint this feature and retain consumer
-measurements and source binding in their receipts. See
-=integrations/poo_flow/README.org= for exact limits and deployment instructions.
-
-A source-identity regression discovered during this integration was corrected
-in DataFusion: an encoded Arrow Entity ID must be parsed as that typed ID,
-not fed back into =from_canonical_bytes= to derive a second identity. Direct
-source-ID and malformed/wrong-domain regression tests complement cross-engine
-parity, which alone could miss a shared decoding defect.
-
-Remote closure is recorded at =c18f7d373e07d927e3c2f66d2d85b4706c714a54=:
-[[https://github.com/tao3k/mrr-data/actions/runs/35463412334][CI run 35463412334]]
-passed all nine checks, including both platform consumer jobs, with zero warning
-diagnostics in the reviewed logs. Both platform receipts match the tested source.
-See =poo-flow-consumer-audit.org= for the fingerprint and observed counters.
-[[https://github.com/tao3k/mrr-data/pull/1][PR #1]] remains open; acceptance is not
-merge or release publication. This source revision is the baseline for M5.1.
+The Legacy static-edge worker, Python adapter and their acceptance entrypoints
+have been removed. Consumers use MRR-owned source compilation and admission,
+MRR Data physical restoration/execution, and the original Scheme v2 result
+handoff. This removal does not qualify remote publication or durable recovery.
+See =poo-flow-consumer-audit.org= for the bounded native library evidence.
 
 *** Healthcare case-profile property-path query
 
@@ -1012,9 +1031,8 @@ WHERE s.identity = 'healthcare'
 RETURN s.identity, c.id, p.identity
 #+end_src
 
-The current static-edge snapshot contains neither the required entity properties
-nor a complete Healthcare catalog. Merely extending the hop count cannot satisfy
-this query. The following are ordered dependencies within one delivery batch,
+The retired static-edge snapshot did not contain the required entity properties
+or a complete Healthcare catalog. The following are ordered dependencies within one delivery batch,
 not independent completion claims.
 
 Implementation status (2026-09-23): the bounded DataFusion property-path layer,

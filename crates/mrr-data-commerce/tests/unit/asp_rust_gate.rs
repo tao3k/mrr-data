@@ -1,0 +1,3 @@
+//! Shared MRR Data package policy gate.
+
+mrr_data_asp_rust_build_support::mrr_data_asp_rust_member_dev_gate!();

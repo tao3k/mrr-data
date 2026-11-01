@@ -1,0 +1,94 @@
+#+title: Physical Search Composition Boundary
+
+* Actual candidate execution
+
+=mrr-data-core::compose_data_search_candidates= receives actual owner sets from
+consumer physical leaves and executes their merge. =Single= preserves its leaf,
+including partial evidence. =RankJoin= preserves the first complete truth set;
+secondary ranked evidence may be partial. =Intersect= requires every leaf to be
+complete and untruncated, then computes the actual set intersection. Ranking and
+rendering stay with the consumer.
+
+The caller binds scope, immutable source digest, resident view digest,
+composition ABI and MRR generation. Every leaf must match this binding exactly.
+These are caller-owned identities; Data compares them and does not independently
+authenticate a resident provider. Empty intersections are valid. Invalid factors,
+foreign bindings and resource overflow fail before publication.
+
+The receipt retains the merged owners, completeness flags, factor edges and
+original acquisition/refinement observations. Its =composition_id= commits mode,
+ordered factors, all physical owner sets and completeness flags. Observation
+identities also commit this ID. =native-search= enables
+=evaluate_data_search_candidates=, which passes exactly those observations to
+MRR's native factor inference. A native inference receipt proves factor lineage;
+it does not establish provider completeness or certify C3/C4 itself. POO Flow
+owns declarative C3/C4 composition and certificate bindings.
+
+* Restored property acquisition
+
+=mrr-data-datafusion::execute_restored_property_search_stage= executes the
+original catalog-bound query against verified restored Arrow data through MRR's
+=execute_with= port. It checks the independently selected physical binding and
+runtime generation before execution, retains the original admitted result
+transport, and projects row occurrence observations. Physical source, engine,
+query or generation substitution fails. Row occurrence candidates include the
+immutable root, canonical result digest and ordinal; they are not entity IDs.
+
+* Immutable upstream source
+
+Root and fuzz manifests/lockfiles consume published MRR revision
+=c202aa2753678c02dc7daafdec853f66f3368a70=. Consumers use that exact MRR
+dependency's types without relabeling identities from another revision.
+Local source overrides used by consumer integration tests must be
+reported separately from published dependency qualification.
+
+
+* Owner candidate identity admission
+
+=DataSearchSourceBinding::candidate_identity= exposes the existing Version 1
+identity derived from all five binding components and the exact UTF-8 owner
+bytes. Length prefixes count bytes. Data keeps provider strings opaque and does
+not normalize paths or authenticate files.
+
+The immutable receipt retains =candidate_owners= across all branches, including
+auxiliary or excluded candidates. =verify_candidate= first checks the receiver's
+current source binding, then rejects unknown owners or substituted identities.
+Distinct owner identities must be distinct within the admitted inventory; a
+collision fails admission instead of merging observations.
+
+Rust tests independently check canonical Unicode input, all five binding
+components, exact owner spelling, forged identities, unknown owners and revoked
+source/generation. ASP consumes this gate before MRR inference. A separate V1
+diagnostic supports Lean structural correspondence; neither logging nor Lean
+becomes the canonical identity or physical source authority.
+
+
+* Configurable execution bridge
+
+MRR Rust connects Scheme/POO semantic plans with reusable Data execution
+capabilities. Data owns physical adapters, their dependencies and receipts; ASP
+selects concrete scenario profiles and retains source/resident authority.
+The existing restored property stage uses MRR's Query =execute_with= port.
+The first =dispatch_restored_property_search_stage= port now uses MRR dispatch
+leases for original acquisition roots, with actual byte/result admission and
+retirement rejection. Candidate merging itself does not schedule a plan.
+Dependent Scheme continuation and general capability selection remain separate.
+
+Candidate spaces and exact-versus-ranked guarantees must be admitted before
+cross-modal composition. Opaque Unicode strings are not a multimodal backend.
+Model/index/profile changes must invalidate affected bindings and caches;
+ANN/top-k completion cannot certify corpus absence. See MRR
+=docs/architecture/0037-configurable-search-execution.org= for the contract and
+acceptance sequence. POO producer proofs, MRR FFI admission and Data physical
+qualification remain separate owners and gates.
+
+* Reusable candidate execution
+
+=execute_poo_data_search_candidates= owns the common execution sequence:
+original POO graph admission, physical set composition, candidate identity
+admission, bounded MRR inference and generation/completion admission. Consumers
+supply the existing MRR inference port; Data does not select a Scheme runtime.
+ASP keeps its scenario binding, query interpretation and public receipt
+projection. This consolidates the generic execution previously repeated in the
+ASP bridge without moving code-language policy into Data. Existing Version 1
+identities and receipts are unchanged.

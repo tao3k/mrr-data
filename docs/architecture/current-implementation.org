@@ -1,5 +1,13 @@
 * Current implementation and development
 
+** Shared Production backend
+
+The opt-in ~backend~ feature exposes one provider-neutral persistence engine.
+~backend-turso~ and ~backend-duckdb~ select optional native provider modules.
+The shared engine contains no database/SQL driver or schema. Profiles
+supply validation and stable enrollment; all Cases share admission, recovery and
+shutdown. See [[file:shared-backend.org][implementation, tests and open qualification boundaries]].
+
 ** Current status
 
 The public ~mrr-data~ facade now defaults to ~arrow,filesystem~. Its dependency-light
@@ -88,6 +96,19 @@ The optional ~mrr-data-content~ crate also exposes a provider-neutral
 verified read-through, explicit cache admission, and remote-acknowledged publication.
 Enable ~cache~ for Kache and ~s3~ for the remote adapter (~cache,s3~ for both). S3 credentials and TLS policy
 belong to adapters; local integration tests require no cloud account.
+
+The facade's ~pseudonymization~ feature adds only borrowed selected-input
+bindings above ~content-identity~. ~pseudonymization-cedar~ opts into the
+separate =mrr-data-pseudonymization= package and its pinned, lightweight
+=cedar-poo-bridge/pseudonymization= token profile. ~google-sdp~ additionally
+exposes the provider wire contract. None of these features enables the
+official Cedar runtime unless a downstream Host explicitly selects it.
+[[file:../../crates/mrr-data-core/src/operation_binding.org][Operation bindings]] and
+[[file:../../crates/mrr-data-pseudonymization/README.org][Pseudonymization binding]] document those boundaries next to the code.
+The [[file:sensitive-data-storage-plane.org][sensitive-data storage proposal]]
+separates these implemented bindings from future Host authorization,
+client-side protection, Google batching and protected S3 distribution.
+
 The bounded POO Flow static-edge worker owns a durable local outbox above the
 default filesystem store. A protection receipt follows complete closure
 verification and a durable pending record write; the record binds source, revision and
@@ -151,7 +172,7 @@ are in [[file:0001-mrr-data-plane.org][RFC 0001]]. Its snapshot distribution del
 records local acceptance for S3/Kache snapshot publication and cold restore,
 whole-operation budgets and cancellation, Kache integration under concurrent
 consumers, and independent SigV4/TLS conformance. The reproducible
-[[file:../../tools/s3-conformance/README.org][local S3 runner]] needs no cloud account.
+[[file:../../python/src/mrr_data_testing/s3/README.org][local S3 runner]] needs no cloud account.
 The [[file:s3-kache-transport-audit.org::*Final remote acceptance][transport acceptance audit]]
 records the final nine-job remote CI acceptance and both platform fingerprints.
 Hosted B2/R2 acceptance and the Healthcare reasoning caller remain separate.
@@ -207,8 +228,15 @@ Facade features:
 | ~graphar-native~ | no | maintained GraphAr C++ writer/readback path |
 | ~content-identity~ | yes, through ~filesystem~ | CID/DAG-CBOR identity and immutable manifests |
 | ~content~ | yes, through ~filesystem~ | verified blocks, memory store and protocol; implies ~content-identity~ |
+| ~backend~ | no | shared metadata lifecycle and provider-neutral profile commit port |
+| ~backend-turso~ | no | native Turso metadata provider; implies ~backend~ |
+| ~backend-duckdb~ | no | native DuckDB metadata provider; implies ~backend~ |
+| ~backend-graphar~ | no | native graph capture using shared resource admission and drain; no database implied |
 | ~snapshot~ | no | complete Arrow snapshot publication/restore; implies ~content~, not CAR |
 | ~transfer~ | no | Tokio snapshot sessions: deadline, cancellation, retry budgets and blocking local adapter |
+| ~raw-publish~ | no | SPEC Storage Effect projection and 17-case replay, with initial and pre-root current-state checks before unrestricted raw snapshot publication over ~transfer~ |
+| ~protected-envelope~ | no | randomized authenticated ciphertext blocks and intent binding |
+| ~protected-publish~ | no | staged ciphertext closure, pre-root refresh, one session root call, physical receipt and guarded cold/warm restore |
 | ~car~ | no | CARv1 packaging/import; implies ~content~ |
 | ~filesystem~ | yes | local filesystem store; implies ~content~ |
 | ~cache~ | no | content protocol and Kache local cache |
@@ -224,7 +252,7 @@ Member crates also default to no optional providers: ~mrr-data-core/content-iden
 not require Tokio; ~transfer~ enables the runtime boundary, with Kache and S3
 still selected independently. The ~content~ feature now means
 the base protocol; consumers of CAR/filesystem APIs must select those features.
-Run ~python3 tools/check-features.py~ to compile each slice and check dependency
+Run ~uv run --locked --project python mrr-data-test check-features~ to compile each slice and check dependency
 absence as well as presence.
 
 CI runs this contract on both Ubuntu and macOS, verifies the declared Rust 1.95
@@ -235,8 +263,56 @@ member crate.
 
 ** POO Flow consumer
 
-The optional [[file:../../integrations/poo_flow/README.org][POO Flow resource]] publishes
-static runtime-plan edges and restores them through S3/Kache before executing
-an MRR-admitted endpoint query. It plugs into the existing Python Runtime tool
-boundary; it does not execute the Healthcare GQL queries or restore a full plan.
-Build it explicitly with ~cargo build -p mrr-data-poo-flow --features runtime~.
+The Legacy static-edge worker and Python resource have been removed.
+The generic ~mrr-data-content/property-snapshot~ feature materializes typed
+Arrow/CID property snapshots. ~mrr-data-datafusion~ restores and executes a
+bounded physical query supplied by MRR. Source compilation and semantic
+admission belong to MRR; ~execute_restored_property_query_handoff~ exports
+complete original Scheme v2 result bytes and the exact physical binding.
+POO Flow consumes that typed handoff through its native Temporal bridge.
+This is a read-only library path; durable remote publication and recovery are
+separate gates and have no replacement worker in this slice.
+
+* GraphAr and Arrow Backend design
+
+[[file:../rfcs/0002-graphar-arrow-backend.org][RFC 0002]] defines the proposed graph dataset manifest, verified native
+snapshot, protected publication and shared Arrow query lifecycle. The optional
+DuckDB feature enables native Arrow appending and virtual-table input and
+composes the facade Arrow feature. Native tests qualify workspace Arrow types,
+4,097-row append/reopen, explicit rollback and Arrow virtual-table queries.
+The optional =DuckDbArrowInput= carrier bounds native virtual-table input before
+the SDK callback: oversized batches refuse, and vector-sized slices preserve the
+complete fixture. Its qualified scalar subset is Int64/Utf8/Binary.
+The current Backend public provider contract still serves metadata transactions;
+the RFC explicitly tracks the graph/query port and complete child-integrity
+gates as proposed work.
+
+[[file:arrow-execution-practices.org][The Arrow execution audit]] records official and pinned GitHub source evidence.
+The bounded input iterator lazily slices shared Rust buffers after one source
+validation. Native VTab conversion still copies values; complete streamed
+result/error propagation and scan-performance qualification remain open gates.
+
+The optional core =content-identity= feature now exports a standalone
+=GraphDatasetInventory= with canonical root verification, portable logical
+paths, per-file RAW CID/length verification and declared resource limits.
+It adds no native database dependency and preserves existing snapshot wire
+bindings. The optional GraphAr =file-inventory= feature enumerates physical
+files with bounded streaming hashes and verifies exact directory contents. The
+native writer records this inventory before rename; explicit writer limits are
+available. Count width and Parquet framing are checked, without claiming schema
+validation. Receipts observe files; they do not prevent concurrent replacement
+or constrain native writer RSS.
+
+=GraphDatasetBinding= adds a separate canonical root binding inventory, snapshot,
+generation, semantic/catalog digests and relation. The Host authenticates this
+root separately from the legacy RAW metadata CID. =CapturedGraphArSnapshot=
+copies verified files privately and uses the fixed binary-Entity schema rather
+than following YAML references. It requires a catalog-bound projection and checks
+fact generations. Owned facts remain stable after source mutation/deletion;
+temporary files are cleaned on the worker before return. General metadata import,
+streaming Arrow execution and protected graph publication remain RFC 0002 gates.
+
+=backend-graphar= prepares these snapshots through the same Backend's independent
+resource admission/worker lane. Shared ResourceHandle clones hold reservations
+through final drop and participate in drain. Reservations are Host budgets, not
+native RSS measurements; no database dependency is required by this feature.

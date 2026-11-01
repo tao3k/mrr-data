@@ -1,4 +1,5 @@
-//! Frozen V1 schema and physical profile identifiers.
+//! Admitted schema and physical profile identifiers.
+use crate::{GRAPHAR_DATASET_SCHEMA, GRAPHAR_ENTITY_PROPERTIES_SCHEMA};
 
 /// Stable namespace of the content snapshot schema; version is a separate field.
 pub const SNAPSHOT_SCHEMA_NAMESPACE: &str = "mrr.data.snapshot";
@@ -23,10 +24,18 @@ pub const DAG_CBOR_CODEC_NAME: &str = "dag-cbor";
 /// Multihash name pinned by the V1 content identity profile.
 pub const SHA2_256_NAME: &str = "sha2-256";
 /// Numeric CID version pinned by the V1 content identity profile.
-pub const CID_VERSION_V1: u64 = 1;
+pub const CID_VERSION: u64 = 1;
 /// Registered multicodec number for opaque raw bytes.
 pub const RAW_CODEC: u64 = 0x55;
 /// Registered multicodec number for DAG-CBOR.
 pub const DAG_CBOR_CODEC: u64 = 0x71;
 /// Registered multihash number for SHA-256.
 pub const SHA2_256_CODE: u64 = 0x12;
+
+/// Catalog-declared string entity-property artifacts, distinct from topology.
+pub const GRAPHAR_ENTITY_PROPERTIES_NAMESPACE: &str = GRAPHAR_ENTITY_PROPERTIES_SCHEMA.namespace;
+/// Initial property artifact projection profile.
+pub const GRAPHAR_ENTITY_PROPERTIES_VERSION: u64 = GRAPHAR_ENTITY_PROPERTIES_SCHEMA.version;
+
+/// Acyclic combined native dataset control profile.
+pub const GRAPHAR_DATASET_NAMESPACE: &str = GRAPHAR_DATASET_SCHEMA.namespace;

@@ -1,0 +1,227 @@
+#+TITLE: Borrowed Validator and Durable Commit CPU Attribution
+#+LANGUAGE: en
+#+OPTIONS: toc:2
+
+* SysML-first boundary and ownership
+
+The next [[file:shared-backend-commit-io.org][COMMIT IO and notification-origin experiment]] uses the public Rust IO
+boundary to separate synchronous calls from shared progress and resumption.
+
+Weaver ControlActivation.GovernancePolicyProjection owns the reviewed contract.
+This extends [[file:shared-backend-read-stages.org][the preserved native read-stage regression]].
+Use actual available CPUs with a floor of four; this Host exposes 12, so runtime,
+writer and shared workers and reusable capacity are 12, with 16 blocking threads.
+Run directly despite load, with FULL, zero retries and the unchanged 30-second
+case bound. Retain borrowed callbacks, original identity, drain, terminal old
+owners, exact restart recovery and unknown exposure.
+
+This is a Rust-native ignored benchmark in the existing backend libtest target,
+not a Python benchmark or a new qualification package. The unit owner is necessary
+to observe the provider's private COMMIT through cfg(test); the existing standard
+concurrency workload supplies real filesystem/CID/body/authority validation.
+Test-profile optimization remains 2 with 16 codegen units. It is not a release
+profile or provider/LLM throughput claim. Entry:
+
+#+begin_src text
+cargo test -p mrr-data-backend --no-default-features --features turso,arrow-query,graph-publish --locked --lib providers::turso::read_timing::turso_original_bridge_commit_cpu -- --ignored --nocapture --test-threads=1
+#+end_src
+
+Libtest's single test thread serializes scenarios, never reduces workload workers.
+Freeze each compiled executable before timing. No task-owned build or second
+workload overlaps a timed leg. Per-thread preallocated test collectors drain and
+serialize only after accepted work finishes. Raw request/CPU/notification samples
+remain outside Git under /private/tmp/mrr-phase-*.
+
+The root workspace owns nix's existing fixed version and resource/time feature
+inventory. The backend inherits it only as a dev-dependency. Cargo.lock adds that
+dependency edge without changing any package version, checksum or source.
+Python remains the existing CI process/artifact glue; it does not own loads,
+CPU clocks, identity joins or semantic assertions. Host tools use explicit
+MRR_DATA_LSOF/MRR_DATA_PGREP, otherwise PATH; no host system-directory path is
+embedded in source.
+
+* Clocks, nesting and observer limitations
+
+CLOCK_THREAD_CPUTIME_ID uses the existing safe POSIX wrapper. Each CPU span
+starts and ends synchronously on one OS thread. Worker body/bridge/post-body,
+caller validation and COMMIT are joined by the original scope and operation;
+profile and namespace are checked against the workload fixture. Native Rust
+rejects missing/duplicate records and invalid causal order. No CPU subtraction
+crosses await or task migration.
+
+Bridge wall includes the caller's validation on another thread. Separate delivery,
+caller validation and answer intervals; do not add these to bridge wall again.
+COMMIT poll wall/CPU and Pending gaps are nested inside total COMMIT. Wall minus
+CPU includes both blocking and runnable waiting. Pending is not pure device time.
+Process-wide getrusage counters are not individual-operation I/O; Darwin zero
+block counters do not prove no I/O. Signed clock residuals remain unmodified.
+
+A test-only forwarding waker records 64 bounded atomic notification slots per
+COMMIT and every Pending-to-next-poll window. It forwards all notifications to
+the original block_on target, including on observation overflow. A native
+concurrent saturation control checks this with max(4, CPUs) callers. Original
+waker identity and synchronous OS-thread ownership are asserted.
+
+Classify a window using its first observed notification between poll entry and
+next poll entry. A notification before Pending is explicitly early; absent
+observations remain unsplit. Other windows separate Pending-to-notification and
+notification-to-repoll. A wake is a hint, potentially spurious, not an I/O
+completion, durable outcome or authorization. Notification-to-repoll includes
+forwarding/glue and runtime/OS resumption; it is not pure runnable latency.
+Overflow and unpublished observations remain visible. The pre-proxy and proxy
+campaigns cannot be pooled as identical treatments.
+
+* Frozen campaigns and provenance
+
+A is ready admission; AV adds Condvar. This contrast estimates the validator
+change conditional on ready admission, not the admission change against O.
+Both remain research candidates; no runtime implementation is promoted.
+
+| Campaign | A executable SHA-256 | AV executable SHA-256 |
+|----------+----------------------+-----------------------|
+| Pre-proxy | 39c189e3b55e5ee354206c73c930bd57945fc49e1f18a4cd15aaa4f36c79aa42 | 4068fc0542604cb3732119f36a41a8dd5288b291082145638567cbd714d611bd |
+| Forwarding proxy | ef611b185c5727b60c90189188dddc20167f55c9276df9f06ac34bc330c052d0 | c83b48d7c2a68cdc7a949dabf3a339de6a85a08e8c30bb59c36f39284546c242 |
+
+Candidate base is 895a06c3. Backend-only cleaning before switching source,
+actual compile-path receipts and AV's extra close-order witness prevent shared
+target reuse from impersonating another candidate. Dependency caching is not
+claimed as a cold build. Forwarding helper SHA-256 is
+f0dc7a72f4aa75cc78650383e4bb61ffcbc194a6a31318798c41696fb2791a0e.
+Pre-proxy helper is retained separately with SHA-256
+6994f702ba55b028f62ad606aceecdaf23ef30a43d4a7314e1025593fd06c475.
+
+Each campaign runs one predeclared serial A/AV/AV/A block, three rotated modes
+times three rounds times two domains per leg. Each completes 72 cases, 55296
+commits/exact recoveries and 165888 joined phase records, with zero unexpected
+refusal/error/Unknown and natural exits. Together these are two diagnostic
+campaigns, not independent controlled-host replication. Host load never blocks
+measurement. The forwarding A1 Host observation was taken after startup rather
+than before it; retain this provenance gap without synthesizing a preflight.
+
+* Every forwarding-proxy case
+
+TPS rounded for presentation; raw JSON preserves all requests, P95/P99 and
+phase samples. Each row includes three complete mode cases.
+
+| Leg | Domain | Round | WAL TPS | Fresh TPS | Reuse TPS | Reuse P95 ms |
+|-----+--------+-------+---------+-----------+-----------+--------------|
+| A1 | Independent | 0 | 409 | 1066 | 5307 | 5.744 |
+| A1 | Independent | 1 | 973 | 1592 | 6825 | 3.771 |
+| A1 | Independent | 2 | 966 | 1526 | 2386 | 15.674 |
+| A1 | Hot | 0 | 546 | 218 | 550 | 55.057 |
+| A1 | Hot | 1 | 658 | 153 | 634 | 36.458 |
+| A1 | Hot | 2 | 447 | 247 | 639 | 35.708 |
+| AV2 | Independent | 0 | 684 | 1975 | 3637 | 5.893 |
+| AV2 | Independent | 1 | 601 | 1704 | 3185 | 10.326 |
+| AV2 | Independent | 2 | 677 | 1956 | 4800 | 6.254 |
+| AV2 | Hot | 0 | 435 | 246 | 632 | 65.133 |
+| AV2 | Hot | 1 | 670 | 185 | 384 | 50.731 |
+| AV2 | Hot | 2 | 800 | 323 | 782 | 44.648 |
+| AV3 | Independent | 0 | 838 | 1461 | 3800 | 11.548 |
+| AV3 | Independent | 1 | 1820 | 2531 | 2821 | 15.436 |
+| AV3 | Independent | 2 | 1119 | 2679 | 7842 | 3.004 |
+| AV3 | Hot | 0 | 1201 | 577 | 2210 | 6.364 |
+| AV3 | Hot | 1 | 1713 | 481 | 1130 | 20.076 |
+| AV3 | Hot | 2 | 1836 | 492 | 1227 | 23.668 |
+| A4 | Independent | 0 | 1192 | 2111 | 8862 | 2.358 |
+| A4 | Independent | 1 | 2530 | 2290 | 8370 | 2.508 |
+| A4 | Independent | 2 | 2740 | 1351 | 3058 | 12.585 |
+| A4 | Hot | 0 | 2537 | 666 | 1620 | 11.355 |
+| A4 | Hot | 1 | 1805 | 742 | 2538 | 5.705 |
+| A4 | Hot | 2 | 2272 | 314 | 2531 | 7.839 |
+
+* Independent reuse phase means
+
+Microseconds per original operation. Before/after notification contributions are
+sums over classified windows divided by all 768 operations; early and unobserved
+windows remain excluded from that split but retained in total gap. CPU columns
+are synchronous thread CPU. A CPU comparison must not count caller CPU as
+worker CPU or add overlapping intervals.
+
+| Leg | Round | Bridge wall | Worker bridge CPU | Caller CPU | COMMIT wall | COMMIT CPU | Pending gap | Pre-notify | Notify-to-repoll | Early windows | Unobserved windows |
+|-----+-------+-------------+-------------------+------------+-------------+------------+-------------+------------+------------------+---------------+--------------------|
+| A1 | 0 | 441.4 | 7.6 | 58.3 | 329.8 | 90.4 | 201.0 | 49.4 | 151.6 | 0 | 0 |
+| A1 | 1 | 205.3 | 6.9 | 52.9 | 254.5 | 80.5 | 133.1 | 42.3 | 90.8 | 2 | 0 |
+| A1 | 2 | 1348.8 | 7.4 | 65.1 | 826.9 | 94.2 | 606.0 | 210.2 | 395.7 | 0 | 0 |
+| AV2 | 0 | 538.3 | 7.0 | 64.8 | 483.9 | 88.7 | 347.2 | 115.1 | 232.1 | 0 | 19 |
+| AV2 | 1 | 1265.3 | 6.7 | 70.3 | 588.0 | 92.8 | 420.6 | 166.9 | 253.7 | 1 | 15 |
+| AV2 | 2 | 524.0 | 7.2 | 66.5 | 437.9 | 87.6 | 280.7 | 96.2 | 184.5 | 0 | 14 |
+| AV3 | 0 | 643.5 | 5.9 | 57.4 | 342.1 | 85.7 | 212.7 | 44.6 | 168.1 | 0 | 15 |
+| AV3 | 1 | 1090.0 | 5.9 | 57.8 | 698.2 | 79.8 | 477.0 | 162.0 | 315.0 | 2 | 15 |
+| AV3 | 2 | 214.1 | 6.6 | 54.8 | 306.4 | 80.7 | 188.9 | 81.2 | 107.6 | 1 | 15 |
+| A4 | 0 | 169.6 | 7.4 | 54.9 | 237.6 | 78.1 | 139.7 | 60.9 | 78.8 | 0 | 0 |
+| A4 | 1 | 168.4 | 7.7 | 53.8 | 251.7 | 84.3 | 147.7 | 62.5 | 85.2 | 0 | 0 |
+| A4 | 2 | 867.0 | 7.1 | 60.3 | 1142.9 | 94.2 | 829.6 | 364.1 | 465.5 | 3 | 0 |
+
+Across all 72 cases there are 11076 Pending windows, 11 early windows and
+1335 windows without an observed notification in the window. No record has
+notification/window overflow or unpublished notification slots. Unobserved is
+not zero device time, lost commit or a workload Unknown outcome.
+
+* What is now localized
+
+The pre-proxy independent/reuse A1-to-A4 same-binary contrast changes throughput
+from 5218/5614/5281 to 11465/10649/9728. Caller CPU remains about 47-57 us;
+worker bridge CPU about 6-7 us. Approximately 96-99% of the excess bridge wall
+is outside caller validation, and 80-90% of the excess COMMIT wall is in Pending
+gaps. This rejects a simple validator-CPU-only explanation; it does not identify
+pure Host contention or reconstruct the historical uninstrumented bad request.
+
+The forwarding campaign reproduces substantial drift within the same A4
+binary: independent/reuse round 0 to 2 falls from 8862 to 3058 TPS and P95 rises
+2.358 to 12.585 ms. Caller CPU changes 54.9 to 60.3 us; worker bridge CPU 7.4
+to 7.1 us. COMMIT wall changes 237.6 to 1142.9 us, while COMMIT CPU changes
+78.1 to 94.2 us. Pending gaps change 139.7 to 829.6 us: pre-notification
+contribution 60.9 to 364.1 us; notification-to-repoll 78.8 to 465.5 us.
+Both driver residence and notification/resumption have material excess.
+Neither pure query CPU nor pure fsync alone explains these measured wall gaps.
+
+The conditional AV/A direction flips across round/order, and the pre-proxy
+late A baseline outperforms early A. A fixed 0.200 multiplier is therefore not
+an established intrinsic validator cost. The historical 0.200/11.105 failure
+remains valid evidence, not retroactively erased by a faster later run.
+The proxy changes observation overhead; it cannot establish its own
+performance improvement over the pre-proxy campaign.
+
+* Kernel evidence and remaining obligations
+
+A separate owned-process sample succeeds for A and finds pinned Turso
+CommitStateMachine -> DurableStorage.sync -> UnixFile.sync -> fsync plus WAL
+sync/pwrite. It also samples preparation's content-store sync_root and idle/hot
+workers: whole-profile fcntl/waits cannot be assigned to measured COMMIT.
+AV's separate sampler exits 255 because its target has already exited; preserve
+that failed observation and its successful benchmark rather than rerun to green.
+Sampling itself can pause threads; sampled-leg throughput is not pooled above.
+Privileged fs_usage preflight fails without a sudo credential. This never blocks
+the run and is not a reason to label all off-CPU time scheduler wait.
+
+Still missing: operation-correlated syscall durations, device completion versus
+runnable time, notification provenance for unsplit windows, matched Linux
+attribution and a separate O/A admission comparison with the same probes.
+The fixed acceptance/nonregression criteria in the host-envelope document are
+not met merely by this diagnostic campaign. No timeout, durability mode, retry,
+guard ownership or unknown-budget obligation is weakened.
+
+Lean/SPEC retains semantic ownership; Quint retains interleaving ownership.
+No second state model is created for clocks. Native cancellation, accepted-work
+drain, close/restart, original-operation recovery and retained exposure tests
+remain the executable contract gates. CPU/wall evidence is not their proof.
+
+* Current-source verification
+
+The current PR source passes 89 standard backend tests with turso, arrow-query
+and graph-publish enabled and MRR_BACKEND_TEST_MVCC=reuse. This includes real
+borrowed-guard/cancellation/close/restart, retained exposure and graph-publication
+crash controls; the ignored timing campaigns are separate receipts. The frozen
+A candidate passes 89 tests, AV 90 including its extra close-order witness.
+Narrower default-WAL and Turso-only checks are retained separately, not counted
+as equivalent feature coverage. Strict all-target Clippy, rustfmt and the Org
+document checker are separate gates.
+
+CI observer repair cfae659b is pushed to PR 12. The prior 6483f1fb run has
+remote MSRV, Arrow ASan fuzz, Python and S3 successes but its Linux property
+job fails on descriptor enumeration permissions. The repair's two race controls
+bring local Python glue tests to 63; Ruff and formatting pass. Compiler progress
+remains artifact-based with unchanged watchdogs. Remote pending/cancelled jobs
+are not passing receipts. See the existing
+[[file:../architecture/native-child-process-ownership.org][process-ownership document]] for exact failure and tool-discovery boundaries.

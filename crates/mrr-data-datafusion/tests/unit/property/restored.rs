@@ -21,6 +21,155 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+mod search;
+#[cfg(feature = "source-handoff")]
+mod source_handoff;
+mod transformation;
+#[tokio::test]
+async fn mrr_dispatches_to_data_backend_and_admits_original_physical_candidate() {
+    let f = fixture();
+    let (cold, _, relations, entities) = restored(&f, EntityChildMode::Valid).await;
+    println!("Dispatch fixture immutable physical root restored");
+    let query = f.query.clone();
+    println!("Original MRR query supplied to backend");
+    let backend = crate::RestoredPropertyBackend {
+        restored: &cold,
+        relation_catalog: &relations,
+        entity_catalog: &entities,
+        limits: limits(),
+    };
+    let result_limits = mrr::QueryResultLimits::new(
+        NonZeroUsize::new(100).unwrap(),
+        NonZeroUsize::new(300).unwrap(),
+    );
+    let execution = query
+        .execute_with(&backend, result_limits)
+        .await
+        .expect("MRR dispatch and result admission");
+    println!("Data backend execution returned to MRR admission");
+    assert_eq!(execution.receipt().row_count(), 3);
+    assert_eq!(execution.physical_evidence().query(), &query);
+    assert_eq!(
+        execution.physical_evidence().snapshot_root(),
+        cold.snapshot().cid()
+    );
+    assert_eq!(execution.candidate().rows().len(), 3);
+    let cap = NonZeroUsize::new(1_048_576).unwrap();
+    let handoff =
+        mrr_data_core::DataQueryResultHandoff::export_execution(&execution, result_limits, cap)
+            .unwrap();
+    let received = handoff
+        .verify(execution.physical_evidence(), result_limits, cap)
+        .unwrap();
+    assert_eq!(received.candidate(), execution.candidate());
+    assert_eq!(received.receipt(), execution.receipt());
+    println!("Original dispatch candidate preserved through Scheme v2 handoff");
+}
+
+#[tokio::test]
+async fn mrr_dispatch_preserves_corrupt_backend_failure_instead_of_empty_success() {
+    let f = fixture();
+    let (cold, _, relations, entities) = restored(&f, EntityChildMode::InvalidIpc).await;
+    println!("Corrupt dispatch fixture immutable root restored");
+    let query = f.query.clone();
+    println!("Original MRR query admitted before physical decode");
+    let backend = crate::RestoredPropertyBackend {
+        restored: &cold,
+        relation_catalog: &relations,
+        entity_catalog: &entities,
+        limits: limits(),
+    };
+    let result_limits = mrr::QueryResultLimits::new(
+        NonZeroUsize::new(100).unwrap(),
+        NonZeroUsize::new(300).unwrap(),
+    );
+    assert!(matches!(
+        query.execute_with(&backend, result_limits).await,
+        Err(mrr::PropertyExecutionError::Backend(
+            DataFusionQueryError::RestoredSnapshot("truncated IPC metadata")
+        ))
+    ));
+}
+
+#[tokio::test]
+async fn mrr_dispatch_rejects_a_new_generation_bound_to_an_old_physical_root() {
+    let f = fixture();
+    let (cold, _, relations, entities) = restored(&f, EntityChildMode::Valid).await;
+    println!("Old-generation physical root restored");
+    let generation = mrr::GenerationId::from_canonical_bytes("dispatch-new-generation").unwrap();
+    let semantic = mrr::SemanticSnapshot::admit(
+        generation,
+        vec![
+            mrr::RevisionBinding::admit(
+                mrr::ExternalRevisionIdentity::new("test", "source", "new-revision").unwrap(),
+                generation,
+            )
+            .unwrap(),
+        ],
+    )
+    .unwrap();
+    let bundle = mrr::ReasoningBundle::admit(mrr::ReasoningBundleDeclaration {
+        entities: f
+            .entities
+            .iter()
+            .map(|table| table.schema.clone())
+            .collect(),
+        relations: f
+            .relations
+            .iter()
+            .map(|table| table.schema.clone())
+            .collect(),
+        query_templates: vec![mrr::QueryTemplate::new(f.query.query().clone(), vec![])],
+        ..Default::default()
+    })
+    .unwrap();
+    let query = mrr::bind_query_to_catalog(&bundle, f.query.query().id(), &semantic).unwrap();
+    assert_ne!(query.digest(), f.query.digest());
+    assert_eq!(
+        crate::property_transformation_endpoint(&query),
+        crate::property_transformation_endpoint(&f.query),
+        "generation changes instance binding, not query semantics"
+    );
+    println!("New-generation query admitted by MRR");
+    let backend = crate::RestoredPropertyBackend {
+        restored: &cold,
+        relation_catalog: &relations,
+        entity_catalog: &entities,
+        limits: limits(),
+    };
+    let result_limits = mrr::QueryResultLimits::new(
+        NonZeroUsize::new(100).unwrap(),
+        NonZeroUsize::new(300).unwrap(),
+    );
+    assert!(matches!(
+        query.execute_with(&backend, result_limits).await,
+        Err(mrr::PropertyExecutionError::Backend(
+            DataFusionQueryError::PhysicalBinding(
+                mrr_data_core::DataQueryBindingError::GenerationMismatch { .. }
+            )
+        ))
+    ));
+}
+
+#[tokio::test]
+async fn backend_success_still_requires_mrr_result_admission() {
+    let f = fixture();
+    let (cold, _, relations, entities) = restored(&f, EntityChildMode::Valid).await;
+    println!("Physical root restored before MRR admission limit gate");
+    let backend = crate::RestoredPropertyBackend {
+        restored: &cold,
+        relation_catalog: &relations,
+        entity_catalog: &entities,
+        limits: limits(),
+    };
+    let result_limits =
+        mrr::QueryResultLimits::new(NonZeroUsize::new(1).unwrap(), NonZeroUsize::new(3).unwrap());
+    assert!(matches!(
+        f.query.execute_with(&backend, result_limits).await,
+        Err(mrr::PropertyExecutionError::Admission(_))
+    ));
+}
+
 #[derive(Default)]
 struct Remote(Mutex<BTreeMap<String, Vec<u8>>>);
 impl RemoteContentStore for Remote {
@@ -66,6 +215,14 @@ enum EntityChildMode {
     Compressed,
 }
 
+fn test_property_type(schema: &mrr::ValueSchema) -> DataType {
+    match schema {
+        mrr::ValueSchema::String => DataType::Utf8,
+        mrr::ValueSchema::Integer => DataType::Int64,
+        _ => panic!("unsupported test property"),
+    }
+}
+
 fn snapshot(
     f: &Fixture,
     mode: EntityChildMode,
@@ -104,7 +261,11 @@ fn snapshot(
                     matches!(mode, EntityChildMode::NullableDrift) && index == 0,
                 )];
                 fields.extend(table.schema.properties().iter().map(|property| {
-                    Field::new(property.name(), DataType::Utf8, property.nullable())
+                    Field::new(
+                        property.name(),
+                        test_property_type(property.schema()),
+                        property.nullable(),
+                    )
                 }));
                 ipc(
                     &table.batch,
@@ -227,8 +388,9 @@ async fn restored(
 
 #[tokio::test]
 async fn verified_cold_and_warm_property_snapshots_reach_the_existing_mrr_admission() {
-    let f = fixture();
+    let f = super::integer_fixture();
     let (cold, warm, relations, entities) = restored(&f, EntityChildMode::Valid).await;
+    println!("Cold and warm immutable property snapshots restored");
     assert!(
         warm.sources()
             .values()
@@ -237,31 +399,49 @@ async fn verified_cold_and_warm_property_snapshots_reach_the_existing_mrr_admiss
     let direct = execute_property_path_query(&f.query, &f.entities, &f.relations, limits())
         .await
         .unwrap();
+    println!("Direct property query completed");
+    let result_limits = mrr::QueryResultLimits::new(
+        NonZeroUsize::new(100).unwrap(),
+        NonZeroUsize::new(300).unwrap(),
+    );
+    let cap = NonZeroUsize::new(1024 * 1024).unwrap();
     for snapshot in [&cold, &warm] {
-        let output = execute_restored_property_path_query(RestoredPropertyQuery {
-            query: &f.query,
-            restored: snapshot,
-            relation_catalog: &relations,
-            entity_catalog: &entities,
-            limits: limits(),
-        })
+        let handoff = crate::execute_restored_property_query_handoff(
+            RestoredPropertyQuery {
+                query: &f.query,
+                restored: snapshot,
+                relation_catalog: &relations,
+                entity_catalog: &entities,
+                limits: limits(),
+            },
+            result_limits,
+            cap,
+        )
         .await
         .unwrap();
-        assert_eq!(output.rows(), direct.rows());
-        let candidate = mrr::CandidateQueryResult::new(
-            mrr::QueryResultBinding::for_query(&f.query),
-            output.columns().to_vec(),
-            output.rows().to_vec(),
+        let profile = crate::datafusion_engine_profile().unwrap();
+        let bound =
+            mrr_data_core::bind_data_query(&f.query, snapshot.snapshot(), &profile).unwrap();
+        let candidate =
+            mrr_data_core::project_data_query_output(&bound, &profile, direct.clone()).unwrap();
+        let receipt =
+            mrr::admit_query_result_candidate(&f.query, &candidate, result_limits).unwrap();
+        let bytes = handoff.result_bytes();
+        assert!(bytes.starts_with(b"(object "));
+        let received = handoff.verify(&bound, result_limits, cap).unwrap();
+        assert_eq!(received.candidate(), &candidate);
+        assert_eq!(received.receipt(), &receipt);
+        assert_eq!(bound.snapshot_root(), snapshot.snapshot().cid());
+        assert!(
+            mrr::verify_query_result_transport(
+                &f.query,
+                &bytes[..bytes.len() - 1],
+                result_limits,
+                cap,
+            )
+            .is_err()
         );
-        mrr::admit_query_result_candidate(
-            &f.query,
-            &candidate,
-            mrr::QueryResultLimits::new(
-                NonZeroUsize::new(100).unwrap(),
-                NonZeroUsize::new(300).unwrap(),
-            ),
-        )
-        .unwrap();
+        println!("RESTORED-PROPERTY -> ORIGINAL-MRR-SCHEME-V2 verified");
     }
 }
 

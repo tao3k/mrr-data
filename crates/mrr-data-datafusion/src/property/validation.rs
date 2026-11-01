@@ -1,7 +1,7 @@
 //! Physical table and catalog validation before planning.
 use super::execution::{
-    BinaryRelationTable, EntityPropertyTable, PropertyQueryLimits, Result, invalid, strings,
-    unsupported,
+    BinaryRelationTable, EntityPropertyTable, PropertyQueryLimits, Result, invalid,
+    property_arrow_type, strings,
 };
 use crate::DataFusionQueryError;
 use arrow_array::Array;
@@ -86,13 +86,13 @@ fn validate_entities(entities: &[EntityPropertyTable]) -> Result<BTreeSet<Entity
             }
         }
         for (index, field) in table.schema.properties().iter().enumerate() {
-            if field.schema() != &ValueSchema::String {
-                return unsupported("only string properties supported");
-            }
             if table.batch.schema().field(index + 1).name() != field.name() {
                 return invalid("property column mismatch");
             }
-            let values = strings(table.batch.column(index + 1).as_ref())?;
+            let values = table.batch.column(index + 1);
+            if values.data_type() != &property_arrow_type(field.schema())? {
+                return invalid("property Arrow type mismatch");
+            }
             if !field.nullable() && values.null_count() != 0 {
                 return invalid("null non-nullable property");
             }

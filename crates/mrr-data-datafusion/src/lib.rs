@@ -3,13 +3,30 @@
 
 mod adapter;
 mod property;
+mod search;
 pub use property::{
-    BinaryRelationTable, EntityPropertyTable, PropertyQueryLimits, RestoredPropertyQuery,
-    execute_property_path_query, execute_restored_property_path_query,
+    BinaryRelationTable, EntityPropertyTable, PropertyExecutionMetrics,
+    PropertyIdentityTransformation, PropertyIdentityVerifier, PropertyQueryLimits,
+    PropertyTransformationRuntime, RestoredPropertyBackend, RestoredPropertyQuery,
+    execute_property_path_query, execute_property_path_query_observed,
+    execute_restored_property_path_query, execute_restored_property_query_handoff,
+    property_transformation_artifact, property_transformation_endpoint,
+    property_transformation_grant_catalog, property_transformation_root,
+    reference_property_path_query, verify_property_path_output,
+    verify_restored_property_path_output,
 };
+pub use search::{DataSearchExecutionError, execute_restored_property_search_stage};
 
-pub use adapter::{DataFusionQueryError, datafusion_engine_profile, execute_binary_entity_query};
+pub use adapter::{
+    DataFusionExecutionTimings, DataFusionQueryError, datafusion_engine_profile,
+    execute_binary_entity_query, execute_binary_entity_query_observed,
+};
 
 #[cfg(test)]
 #[path = "../tests/unit/mod.rs"]
 mod tests;
+
+pub use search::{
+    DataSearchDispatchError, DataSearchDispatchReceipt, DataSearchDispatchRequest,
+    dispatch_restored_property_search_stage,
+};

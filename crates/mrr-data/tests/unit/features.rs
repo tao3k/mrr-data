@@ -57,6 +57,20 @@ fn content_identity_surface_is_available_without_storage() {
 }
 
 #[test]
+#[cfg(feature = "data-protection")]
+fn data_protection_surface_is_available_without_cedar() {
+    let _ = core::mem::size_of::<crate::data_protection::DataProtectionDecisions<'static>>();
+    let _ = core::mem::size_of::<crate::data_protection::DataProtectionProfile<'static>>();
+}
+
+#[test]
+#[cfg(feature = "google-sdp")]
+fn cloud_google_selection_is_available_from_the_facade() {
+    let _ = crate::pseudonymization::prepare_cloud_google_aes_siv_deidentify;
+    let _ = core::mem::size_of::<crate::pseudonymization::CloudGateMismatch>();
+}
+
+#[test]
 #[cfg(feature = "car")]
 fn car_surface_requires_its_feature() {
     let _ = crate::content::CarImportLimits::new(100, 1, 100, 100);

@@ -1,0 +1,52 @@
+#+TITLE: Storage Effect and Raw Snapshot Admission
+#+OPTIONS: toc:nil
+
+[[file:storage.rs][storage.rs]] implements the physical projection of Cedar
+POO Spec's =CedarPooSpec.Data.StorageEffect= rule. The checked
+[[file:../../fixtures/storage-effect-v1.json][17-case fixture]] is generated
+by SPEC's =Productions/Data/StorageEffectFixture.lean= and replayed by this
+crate's test. It includes two allowed raw effects and negative cases for
+restricted custody, tenant/owner mismatch, substituted operation, subject,
+purpose, source, destination or CID, changed policy/lineage/epoch, expiry and
+denial. The fixture is test evidence, not an authorization credential.
+
+The storage effect projection keeps Cedar entity UIDs as separate =type= and =id= fields.
+Its snapshot root is a parsed CID; the fixture parser requires canonical
+lowercase CIDv1 base32 text. The policy root and lineage revision are exact
+strings, not local hashes of policy source. An operation ID is an opaque
+Host-issued single-use value. All of these fields participate in the exact
+claim comparison. The Host rejects SPEC natural-number epoch and time values
+that do not fit Rust's =u64= instead of truncating them. The Host authenticates
+labels, source-to-snapshot lineage,
+destination configuration, policy root and current state. The Host also
+atomically redeems an approval and records the committed effect. Rust's
+=check_raw= is a borrowed, allocation-free comparison with a 64-label and
+64-owner bound; it does not evaluate Cedar or persist any approval.
+
+The optional =raw-publish= feature checks this projection before invoking
+the existing Tokio-backed =TransferSession=. It checks that the projected CID
+is the actual snapshot root and that the tier is remote. Restricted raw bytes
+are rejected before any transfer operation or remote PUT. The focused test
+also publishes an unrestricted three-block fixture. The wrapper requires a
+fresh Host projection after child publication and before the root PUT. The
+root PUT makes one =TransferSession= call; an explicit retry must repeat both
+checks. The provider adapter must document any internal retries.
+A revoked pre-root check leaves already uploaded raw child bytes remotely, so
+the Host must admit raw remote storage only when that exposure is acceptable.
+This is not a durable Host commit protocol. =check_raw= supports a
+durable-local projection, but no guarded local-write wrapper exists yet.
+
+Generic =ContentStore= and =publish_snapshot= transports remain label-blind.
+The legacy static-edge worker lacks authenticated sensitivity and tenant
+facts, so it is not a sensitive-data Host. Restricted storage still needs a
+protected envelope, ciphertext outbox, destination-specific authorization
+and audited commit as described in
+[[file:../../../../docs/architecture/sensitive-data-storage-plane.org][the architecture proposal]].
+
+#+begin_src sh
+cargo test -p mrr-data-security --features raw-publish --locked
+cargo clippy -p mrr-data-security --features raw-publish --all-targets --locked -- -D warnings
+#+end_src
+
+[[file:protected.org][Protected Storage]] supplies a separate intent and
+commit projection, encrypted envelope and bounded local/remote path.

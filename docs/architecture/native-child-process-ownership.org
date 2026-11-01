@@ -1,0 +1,332 @@
+#+TITLE: Native Scheme and Host child-process ownership
+
+* Current qualification
+
+The shared Backend retains one lifecycle and provider composition. This issue
+concerns the process hosting the native Scheme frontend, not GraphAr storage or
+the number of Backend providers. GraphAr remains the common physical graph
+foundation; Turso, DuckDB and DataFusion do not acquire native graph capability
+through this qualification.
+
+The Data delivery at =f21b2707= passed all 14 required CI checks, including Source
+and GraphAr on Ubuntu and macOS. Its descriptor/recovery parents deliberately
+initialize neither Scheme nor Tokio before supervising workers. That acceptance
+does not qualify arbitrary Host subprocesses after in-process Scheme setup.
+
+* Source identity and bounded root cause
+
+The installed Gerbil build receipt names revision
+=2591dcd9b7c6d2c4e9dd8611a17c5b1a5d82bbdb= and patchset
+=f5cedd8168cb365ba41289327601d9305738c9a0=. Fetching that exact commit from
+=https://git.cons.io/mighty-gerbils/gerbil.git= identifies =src/gambit= as gitlink
+=dcd677cd3e40860bdd27dfbdbf5e3ce46ab03813=.
+
+Its [[https://github.com/gambit/gambit/blob/dcd677cd3e40860bdd27dfbdbf5e3ce46ab03813/lib/os_io.c#L8503][child interrupt handler]] calls =waitpid(-1, ..., WNOHANG)= before
+looking for the PID in Scheme's process-device group. A child absent from that
+group has already been reaped. =io_module_setup= installs the handler
+unconditionally on the POSIX path. The installed Darwin spawn patch changes
+Scheme child creation, not this reaper. The setup parameter structure has no
+Host child-ownership switch. Thread-local signal masking does not establish
+process-wide child ownership in a concurrent Host.
+
+This source mechanism explains the observed =ECHILD= without involving
+descriptor decoding, Parquet or GraphAr admission. The direct Rust probe below
+reproduces it after compiling the original Source, without any descriptor I/O.
+This is source-plus-behavior evidence, not an instrumented handler stack trace.
+
+* Executable controls
+
+The Unix Rust module =child_ownership= owns assertions and real wait statuses.
+Python only launches the captured Cargo executable under idle5/wall120.
+Every probe must run in a fresh process with =--exact --ignored --nocapture
+--test-threads=1=. Do not run the probe module as one combined native process.
+
+| Probe suffix | Scope | Local macOS result |
+|-------------+-------+--------------------|
+| =host_wait_baseline= | Rust Host children before native setup | Actual exits 0, 7, 23; pass |
+| =isolated_native_preserves_host_wait= | Parent waits for a native Source worker; parent never initializes Scheme | Native worker exits 0, then actual Host exits 0, 7, 23; pass |
+| =initialized_native_preserves_host_wait= | Host exits before and after native Source compilation in the same process | Before: 0, 7, 23; after: ECHILD; Rust exit 101, supervisor exit 1 |
+
+The diagnostic asserts correct ownership and remains explicitly unqualified;
+it does not accept =ECHILD= as a successful result. The 100 ms delay lets child
+exit notifications occur before =wait=, exposing the race an immediate wait can
+win. It is not a benchmark, progress heartbeat or timeout change. The isolated
+parent requires the native worker's genuine process status before testing the
+Host children. The two positive controls are mandatory Source CI invocations
+on Ubuntu and macOS. The negative diagnostic is not a required passing gate.
+
+The receipt (historical local/CI artifact; not stored in Git) binds the compiled binary, Cargo artifact stream, exact upstream
+source file and compressed raw logs. The full local Source-feature GraphAr
+suite passes 80 tests with 13 explicit process/experimental workers ignored;
+the positive controls are separately driven. No shared-process repair is claimed.
+
+* Ordered closure gates
+
+| Priority | Deliverable | Acceptance boundary |
+|----------+-------------+---------------------|
+| P0 | Preserve Source/descriptor/recovery parent isolation and genuine exit propagation; add ownership controls | Existing f21 CI accepted; new controls require their own exact-head CI |
+| P1 | Qualify a native runtime that waits only for registered Scheme child PIDs, or provide a separate native frontend worker API | Shared probe must pass unchanged; Scheme-owned process status and cleanup must also pass |
+| P2 | Stress concurrent Host and Scheme children, failure/cancellation and runtime teardown on both OSes | No stolen statuses, zombies, orphan workers, signal disposition damage or changed admission authority |
+
+A registered-PID reaper is an upstream runtime change, requiring an audit of
+process-device registration, removal, signal safety and teardown. This document
+does not prescribe iteration over a concurrently mutable device list. A worker
+API must bind Source identity and generation, transport typed errors, and keep
+final admission in MRR; it must not silently replace the existing in-process API.
+
+Do not restore SIGCHLD globally around =___setup=, install an application-wide
+reaper, accept a file marker as an exit status, or relax watchdogs. Those actions
+would bypass ownership or introduce another race. No release of a patched
+Gerbil toolchain, power-loss durability, hard RSS limit or shared-process child
+ownership is established by the current controls.
+
+* Compiler-output progress and bounded fuzz CI
+
+The existing build wall/idle limits remain 1200/30 seconds and test limits remain
+120/5 seconds. Rust owns benchmark loads, thread CPU and semantic assertions.
+The existing Python owner supervises processes and captures artifacts; it adds
+no benchmark runner, policy model or package.
+
+The compiler observer watches actual writable regular files held by each live
+compiler and its descendants, including archive/link outputs. It does not scan
+neighboring Cargo targets. Read-only inputs, inherited files and standard
+diagnostic streams are excluded; observer output cannot feed itself back as
+progress. Closed outputs remain scoped to the compiler's own incremental working
+generation. CPU use and periodic timers are not output progress. A stalled child
+must still fail the original idle limit with process-group cleanup.
+
+All link-emitting compiler invocations receive owned-output observation. Extra
+LLVM diagnostics remain restricted to the explicit crate selection. Nested
+workspace wrappers do not duplicate tracing. Host tools use =MRR_DATA_LSOF= and
+=MRR_DATA_PGREP= when explicitly configured, otherwise =PATH= discovery. An invalid
+explicit executable refuses configuration; no system-directory path is embedded.
+
+At PR head ba292e3e, the Arrow fuzz job fails before execution on Rust
+1.101.0-nightly (f9ceb4a4d, 2026-10-31): fixed MRR QueryType reports E0391 in
+async-drop queries. Unchanged Cargo/SPEC sources, cargo-fuzz 0.13.2, the original
+corpus and ASan flags complete 10000 runs locally on nightly-2026-09-17
+(1.100.0-nightly, 923c95cdf), max_len=65536. CI fixes only the fuzz compiler to
+that tested date; stable/MSRV jobs retain their roles. This is a local compiler
+compatibility receipt, not a claimed Linux CI pass or semantic proof.
+Property-driven semantic tests and byte fuzzing have separate roles.
+
+The existing framework's 61 local tests pass, including real Rust compilation,
+owned archive growth, read-only/adjacent/stale exclusions, diagnostic feedback
+refusal, idle-stall refusal, signal propagation and jobserver descriptors.
+Raw failure/success receipts remain under =/private/tmp/mrr-phase-ci-*=, outside
+Git. New remote CI is tracked separately without relaxing limits.
+
+At 6483f1fb, Linux fuzz, Python and both S3 jobs pass remotely. The Linux
+property job exposes a separate observer race: =/proc/207074/fd= is discoverable
+but listing raises PermissionError. Snapshot descriptor enumeration under the
+same OSError boundary as individual descriptor reads. Missing or inaccessible
+observation produces no progress event and never changes compiler exit status.
+Permission-denied and disappeared-directory regression controls cover the
+discovery/listing boundary; the original failed job log remains outside Git.
+
+* Compiler observation cost and application-tail ownership
+
+At 30856fb1, remote CI completes 13 of 14 jobs successfully; macOS original
+source qualification hits the unchanged 1200-second build wall. At 3a552e2e,
+the macOS source build again hits that wall, while Ubuntu hits 30 seconds of
+build inactivity after the graphar-rs artifact. Generic property tests/lint pass.
+The macOS log is about 80 MB and contains sustained compiler diagnostics; this
+is a wall-time failure, not a silent test or failed recovery assertion.
+
+The observer cost repair removes globally enabled per-inference/coercion and
+inline-decision logs. Ordinary compilers retain coarse phase logs, backend
+function-boundary remarks and owned-output observation. Detailed LLVM ordinals
+and assembly remarks are restricted to the actual application tails,
+mrr_data_datafusion and mrr_data_graphar, rather than the ASP implementation
+dependency. Explicit Host RUSTC_LOG remains authoritative. No periodic/CPU
+heartbeat, timeout change, source/SPEC pin change or disabled CI test is added.
+Updated controls require no inline flood while preserving compiler output,
+error/signal/jobserver and actual-artifact behavior.
+
+The local full Python run retains 61 passing tests and two cold native-launch
+timeouts at the existing five-second bound, including the unchanged C++
+partition control and the unwrapped Rust reference binary. It is not reported
+as a full pass. Thirteen focused observer controls pass, with the native
+compiler-output test explicitly outside that focused scope; all 63 tests
+remain enabled remotely. A local source build reaches a separate missing
+:asp-gerbil-scheme/building-api dependency in the local Gerbil package cohort.
+That failure does not reproduce the hosted immutable source environment and
+does not qualify its full source gate. Raw receipts remain outside Git.
+
+* SDK-selected diagnostic tracking control
+
+The next 6f839950 run still fails both source jobs. On Ubuntu the last native
+artifact is the approximately 59 MB program_link.i; Rust artifact reconstruction
+shows the remaining owner is mrr-gerbil's native archive build script, not a
+quiet application Rust compiler. Its GCC invocation retains O2 and SINGLE_HOST
+but enables macro diagnostic tracking implicitly. The pinned SDK already adds
+-fno-gcse-lm to this linker object's native-object phase; adding it again is not
+an explanation or a repair.
+
+CI now queries the selected GERBIL_GSC's paired gambuild-C through its public
+CORCXXFLAGS_GAMBUILD command and preserves the returned defaults verbatim,
+appending only -ftrack-macro-expansion=0. The exact pinned Gambit dcd677cd source
+declares this query and override. No SDK file, compiler identity, optimization,
+ABI default, timeout or dependency pin changes. Literal single-line options,
+GCC declaration and conflicting explicit overrides are checked before exporting
+through GITHUB_ENV. This existing CI-glue module is not a benchmark implementation.
+Eight focused controls and a real installed SDK query pass; the local SDK is
+newer and is not a cold-build reproduction of the hosted release. Full source
+CI remains required before calling this candidate a fix. Earlier failed logs
+remain retained outside Git; CPU use alone never supplies watchdog progress.
+
+At 19844e9c both immutable source packages build and the Python gate passes all
+71 tests. Darwin then completes native archive compilation and reaches Rust
+linking in the original-source stage; it fails because the SDK's build-host
+OpenSSL Cellar directory is absent and ld cannot find ssl. This is a distinct
+link failure, not the former wall deadline and not a controlled speedup claim.
+CI supplies an additional native search directory through RUSTFLAGS, discovered
+with brew --prefix openssl, retaining existing flags and all version pins.
+The complete original-source recovery gate remains mandatory. Workflow syntax
+inspection also retains pre-existing shellcheck style/info findings in the three
+native dependency setup blocks; those are not reported as a clean lint pass.
+
+* Keep heavy diagnostics outside default acceptance
+
+At 6a2fb69d Ubuntu completes the entire original-source gate, including retained
+source resources. Darwin fails the original 1200-second wall again. Its archive
+finishes about 82 seconds before that wall; Rust application compilation starts
+only seconds before expiry. The linker C preprocessing now reports 16 MB GGC,
+then completes parsing and assembly, rather than the earlier multi-GB setup.
+Neither this observation nor the earlier 19844e9c linker failure is a controlled
+compiler-speedup comparison. The OpenSSL correction remains unqualified on
+Darwin until a complete link and recovery run succeeds.
+
+The 7c79d914 experiment sets GERBIL_BUILD_VERBOSE=0 and leaves explicit LLVM
+pass selection unset. It fails Ubuntu's original 30-second idle bound. The SDK
+does invoke ProgramArchiveObserver, but MRR's pinned CargoObserver suppresses
+those callbacks at verbosity zero; MRR_NATIVE_PROGRESS controls runtime events,
+not this build adapter. The earlier claim of emitted native operation progress
+was incomplete. SDK callback invocation is not evidence of Cargo-visible output.
+Optimization, ABI, full module graph, feature profiles, test/resource
+matrix, compiler identity and 1200/30 limits are unchanged. If a real operation
+is silent for 30 seconds, it must still fail; no output/CPU heartbeat replaces
+missing evidence. The complete local source cohort is still unavailable, so
+focused observer tests cannot qualify hosted source recovery. Previous failures
+and every benchmark sample remain retained outside Git.
+
+The 788ffe02 experiment restores numeric native verbosity 1 and retains lighter Rust
+observation. Supported CORCXXFLAGS_GAMBUILD options additionally direct only
+optional GCC optimizer notes to the platform null sink. GCC errors, real GC/phase
+output and owned compiler artifact/dump observation remain enabled. Explicit
+report destinations refuse unless --optimizer-notes opts into them. No parser
+quirk, shared report file (overwritten across translation units), fake heartbeat
+or dependency patch is used. See
+[[https://gcc.gnu.org/onlinedocs/gcc/Developer-Options.html][GCC developer options]].
+Independent control of native allocation dumps remains an upstream API gap.
+
+Ten focused option controls pass. A real installed paired Gambit/GCC control
+uses the SDK's exact runtime options and produces identical objects with and
+without note suppression: SHA256
+695fc913c612f94704075eaaec98e7c270779425fb6e69f77dd5a844e07d6c5a.
+Only the baseline emits optimizer notes; a syntax-error negative control retains
+nonzero exit and error output. The initial missing home mapping (zero exit,
+ERROR, no object) and invalid hand-written runtime option remain retained as
+failures. This newer installed SDK control proves diagnostic routing, not
+hosted source qualification or compiler speedup. The failed quiet-mode run
+and every original benchmark sample remain retained outside Git.
+
+* Cargo framing and receiver-side diagnostic compaction
+
+At 788ffe02 the complete Darwin original-source gate passes; Ubuntu still fails
+idle30 after the linker preprocessed artifact reaches 59716516 bytes. This
+qualifies the Darwin OpenSSL/recovery path at that exact commit, not the Linux
+progress path. The failing Linux log does not independently timestamp bytes
+inside GCC's pipe; compiler silence and forwarding delay are not fully split.
+
+A dependency-free Rust/Cargo build-script control under the same 15-second
+control bound writes a fragment, flushes, waits one second, then writes its
+newline. Cargo delivers both markers together (received gap zero). With a
+newline on the first marker, the received gap is 1.005142 seconds. Thus an SDK
+raw-byte forwarder is insufficient to guarantee Cargo-visible byte progress.
+Object-code equality under note suppression does not prove progress equivalence.
+All control chunks and Rust source remain in /private/tmp/mrr-cargo-fragment-control-20261101.
+
+Default acceptance therefore keeps native verbosity and GCC optimizer notes.
+The existing run-process/CargoArtifactCapture boundary optionally compacts
+received native note/detail lines for display, while preserving exact received
+native lines in adjacent .native-stdout.log/.native-stderr.log files. Errors,
+warnings, operation/phase summaries, artifact growth and machine Cargo records
+remain visible. Batch summaries count actual received lines/bytes only. The
+existing process loop refreshes idle from raw input before display filtering;
+no timer, CPU activity or input-file read is promoted to progress. Silence
+still fails idle30, wall1200 stays unchanged and all original tests remain.
+Failure retains the native partial tail but removes invalid artifact identity.
+The source CI uploads raw native observations even on failure, outside Git.
+Other jobs keep their existing default presentation.
+
+The changed process/artifact suite passes all 76 cases locally. An additional
+real Rust/Cargo integration control passes separately: it verifies the native
+prefix, exact raw note retention, compact display, successful Cargo metadata,
+then a failing build-script panic with preserved errors and no valid metadata.
+These receipts are separate from complete hosted source recovery acceptance.
+A static replay of one retained failure tail transforms 445866 display-input
+bytes into 207225 display bytes (46.477%), while retaining all 441320 native
+bytes separately. This is a tail-only presentation ratio, not a compiler or
+runtime speedup benchmark. No benchmark samples or historical failures change.
+
+* Retained-input direct compiler diagnosis
+
+At ef3a9f57 Ubuntu still refuses idle30 after the preprocessed linker reaches
+59703296 bytes. Receiver compaction preserves about 72 MB native stderr and
+1.9 MB native stdout in the uploaded artifact; reducing display is not a fix
+for absent upstream output. The compiler command retains O2, macro tracking
+zero, SDK ABI options, load-motion exclusion and original diagnostic options.
+The standard source gate remains unqualified on Linux at this revision.
+
+The next diagnostic retains generated program_link.c, program_link.i and the
+program manifest. After a rejected gate only, it selects exactly one confined
+nonempty input, queries C_COMPILER and FLAGS_OBJ from the paired SDK driver,
+and compiles that preprocessed input directly into separate temporary outputs.
+It records compiler version, exact arguments, input digest before/after, and
+actual received output chunk timestamps, byte counts and newline counts. The
+unchanged 1200/30 policy applies; no read-only input access or CPU activity
+counts as output. Input ambiguity, alias escape, observed mutation and original
+watchdog refusal remain failures. A replay does not rerun the original source
+acceptance or supply a replacement pass. Matching before/after digests are
+diagnostic observations, not a hostile-host immutability certificate.
+
+The standard Python suite passes all 81 cases after this diagnostic addition.
+A tiny local preprocessed input also completes through the selected real SDK
+compiler, records its identity and direct chunks, and keeps matching input
+digests. This newer installed SDK plumbing control is not a Linux root-cause
+result, a native-source qualification or a performance benchmark. Linux compiler
+silence versus Cargo forwarding remains an explicit unresolved obligation until
+the exact failed-input replay returns. No source dependency pin changes.
+
+* Authoritative ownership correction
+
+The consumer-side Python compiler controls and direct GCC replay were the wrong
+ownership boundary. They are removed, together with their compiler-policy tests
+and workflow hooks. Historical failures, raw diagnostics and benchmark samples
+remain retained. A diagnostic experiment is not justification for maintaining a
+second compiler policy in MRR Data.
+
+| Owner | Responsibility |
+|-------+----------------|
+| MRR build.ss | Scheme PackageSpec, module graph and package build declaration |
+| gerbil-scheme-rust build support | Generic GSC/C compilation, optimization, ABI, linking, compiler observations and replay |
+| MRR mrr-gerbil build.rs | Delegate package preparation and embedded archive construction to those owners |
+| MRR Data Rust tests/benchmarks | Data/source admission, borrowed guards, cancellation, recovery, unknown exposure and performance |
+| MRR Data Python | Invoke existing entrypoints, bound processes and retain artifacts; no GSC/GCC compilation policy |
+
+MRR Data has no independent Scheme package. Its base storage adapter does not
+embed Scheme. The optional source-handoff dependency path does bring embedded
+Scheme transitively: mrr-property-source depends on mrr-frontends, whose pinned
+default enables embedded-runtime, forwarding to mrr-gerbil/embedded-runtime.
+That crate's build.rs invokes mrr-gerbil-native-build; prepare_package invokes
+MRR's existing build.ss in isolated Cargo output. Additional native-inference
+features enable reasoning/search consumers of the same MRR runtime.
+
+The consumer CI therefore prepares MRR's dependencies and invokes Cargo. Its
+redundant preliminary gerbil build is removed; MRR's canonical build.rs/build.ss
+path still performs the actual build. No feature is disabled, no package graph
+is replaced, no dependency pin changes and no watchdog is relaxed. The Rust
+workspace's profile.test optimization remains a Rust workspace concern, distinct
+from Scheme/C flags owned by the bridge SDK. Existing source acceptance failures
+remain unresolved until their owning SDK/MRR layer is fixed and qualified.

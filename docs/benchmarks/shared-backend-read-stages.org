@@ -1,0 +1,379 @@
+#+TITLE: Native Read Stage Attribution and Independent-Domain Regression
+#+LANGUAGE: en
+#+OPTIONS: toc:2
+
+* Predeclared SysML contract
+
+The next [[file:shared-backend-bridge-commit-cpu.org][borrowed bridge and COMMIT CPU review]] preserves this failure,
+adds native synchronous CPU/notification evidence and keeps missing kernel
+attribution explicit.
+
+Weaver ControlActivation.GovernancePolicyProjection owns this review. The
+existing MRR Data backend Cargo targets own evidence. Run directly on the shared
+Host, never wait for a quiet runner, never drop slow cases, and never change pins
+or create another qualification package. All observations are diagnostic.
+
+Use actual available CPUs, minimum four, FULL, no retries and the unchanged
+30-second collection bound. Preserve borrowed callback ownership, original
+claim/reservation/history identity, accepted-work drain, terminal old owners,
+exact restart recovery and unknown exposure. An optimization, returned lease,
+historical result or cancelled caller cannot create a send permit or refund.
+
+* Questions and source-level boundaries
+
+The previous 0.475 TPS and 3.37 P95 observations are retained in
+[[file:shared-backend-host-envelope.org][the previous full diagnostic record]]. This experiment separates:
+
+1. Fresh uninstrumented A/AV/AV/A evidence, where A is ready admission and AV
+   adds Condvar. This is a conditional validator comparison, never AV/O.
+2. Test-only direct Connection.query versus split prepare/Statement.query
+   clocks within the same provider transaction, real verified content validator,
+   original authority checks, durable commit and exact recovery.
+3. Public driver stage evidence versus missing thread-CPU/kernel I/O evidence.
+
+Pinned Turso source: connection.rs query calls dangling-transaction handling,
+prepare and Statement.query. prepare calls prepare_single and builds a Statement.
+Statement.query acquires a shared-operation guard, resets, binds and returns Rows;
+it does not step the SELECT. Rows.next calls Statement.step, which both executes
+the VM and constructs owned SDK row values. The Io branch runs driver I/O and
+returns Pending. Row.get_value then performs another Blob to_vec copy.
+
+| Clock | Included work | Must not be claimed |
+|-------+---------------+---------------------|
+| prepare | Statement preparation and construction | Pure compiler CPU |
+| query | Guard, reset, binding and Rows; direct form also includes prepare | SELECT execution |
+| next | VM stepping, driver I/O work and first row construction | Separately measured VM-only or first-copy cost |
+| owned_value | Row.get_value Blob copy and provider result construction | All materialization |
+| Pending gap | End of Pending poll to next poll entry | Device-only latency |
+| poll | Time inside Future.poll, including locks, synchronous I/O and preemption | Thread CPU |
+| cleanup | Row/Rows destruction | Authoritative completion |
+| outer residual | Runtime entry, clock/glue and uncovered teardown | An inferred additive I/O wait |
+
+Poll and gap are nested inside stage wall time; never sum both with wall time.
+The split form omits the private dangling-transaction check; the provider uses
+explicit SQL BEGIN/COMMIT and never the driver's Transaction drop guard. This
+assumption is source-reviewed and the split form remains diagnostic, not a new
+production read path or semantic-equivalence theorem for arbitrary driver users.
+
+* Observer design and validity
+
+Only cfg(test) mounts tests/unit/native_read_timing.rs. Ordinary non-test builds
+retain the exact original query branch; no new production feature or public API
+is added. The unit suite reuses the existing concurrency_paired workload instead
+of copying its authority/commit/recovery logic. A case callback arms observation
+after preparation and disarms it after accepted jobs drain, before close/recovery.
+Every per-read sample is bounded, includes result status/size but no body/key
+content, and remains in temporary raw JSON outside Git. Collector append wait is
+separate from the measured read, but remains in outer get/API timing.
+
+A 100000-record per-case limit and preallocated per-thread buffers bound the
+observer. Worker-local slots are assigned once per case generation; the collector
+only drains them after accepted jobs complete. Contiguous sequence checks reject
+missing/duplicate samples. Clock calls and serialization still have effects. Serialization is after
+timed work and recovery. Compare intrusive direct reads with frozen uninstrumented
+controls; never promote a dispatcher from intrusive clocks alone. Safety tests
+cover immediate-ready versus Pending clocks, missing data, empty/65536-byte Blob,
+65537-byte refusal and non-Blob corruption for both read forms.
+
+* All uninstrumented results
+
+Four frozen-binary legs, 72 cases, 55296 successful commits and exact recoveries,
+12 runtime/write/shared workers and reusable capacity, 16 blocking threads.
+No unexpected refusal, error or Unknown; every process exits naturally. All raw
+request samples are retained. Start load1 readings were 17.70, 15.67, 24.87 and
+28.42; Host load does not stop this run or become a pure causal explanation.
+
+| Leg | Domain | Round | WAL TPS | Fresh TPS | Reuse TPS | Reuse P95 ms |
+|-----+--------+-------+---------+-----------+-----------+--------------|
+| A1 | Independent | 0 | 2724 | 1735 | 9472 | 1.744 |
+| A1 | Independent | 1 | 1353 | 1438 | 9410 | 1.874 |
+| A1 | Independent | 2 | 2468 | 2640 | 9365 | 1.941 |
+| A1 | Hot | 0 | 2252 | 741 | 1900 | 8.670 |
+| A1 | Hot | 1 | 2404 | 636 | 1282 | 39.975 |
+| A1 | Hot | 2 | 1638 | 849 | 2723 | 4.787 |
+| AV2 | Independent | 0 | 799 | 740 | 5656 | 5.920 |
+| AV2 | Independent | 1 | 678 | 1246 | 1878 | 20.809 |
+| AV2 | Independent | 2 | 2737 | 1613 | 5115 | 6.384 |
+| AV2 | Hot | 0 | 588 | 254 | 696 | 33.899 |
+| AV2 | Hot | 1 | 740 | 284 | 1741 | 17.219 |
+| AV2 | Hot | 2 | 598 | 242 | 678 | 47.370 |
+| AV3 | Independent | 0 | 725 | 1287 | 6623 | 4.793 |
+| AV3 | Independent | 1 | 749 | 1194 | 7020 | 4.704 |
+| AV3 | Independent | 2 | 878 | 865 | 6489 | 4.674 |
+| AV3 | Hot | 0 | 723 | 260 | 591 | 46.911 |
+| AV3 | Hot | 1 | 662 | 249 | 982 | 25.258 |
+| AV3 | Hot | 2 | 813 | 194 | 952 | 27.941 |
+| A4 | Independent | 0 | 650 | 798 | 6330 | 5.151 |
+| A4 | Independent | 1 | 1961 | 1237 | 4387 | 6.081 |
+| A4 | Independent | 2 | 2300 | 1485 | 2416 | 10.777 |
+| A4 | Hot | 0 | 1970 | 509 | 1096 | 26.230 |
+| A4 | Hot | 1 | 1276 | 511 | 1716 | 10.195 |
+| A4 | Hot | 2 | 1283 | 463 | 1761 | 11.558 |
+
+| Domain | Round | AV2/A1 TPS | P95 | AV3/A4 TPS | P95 |
+|--------+-------+------------+-----+------------+-----|
+| Independent | 0 | 0.597 | 3.395 | 1.046 | 0.931 |
+| Independent | 1 | 0.200 | 11.105 | 1.600 | 0.774 |
+| Independent | 2 | 0.546 | 3.288 | 2.686 | 0.434 |
+| Hot | 0 | 0.367 | 3.910 | 0.539 | 1.788 |
+| Hot | 1 | 1.358 | 0.431 | 0.572 | 2.478 |
+| Hot | 2 | 0.249 | 9.895 | 0.540 | 2.417 |
+
+Ratios use unrounded data. The most severe independent/reuse pair is now
+0.200 TPS and 11.105 P95, while the reverse-side matching pairs favor AV by
+1.046–2.686 TPS. This reproduces vulnerability to bad tails without establishing
+a fixed AV penalty. A reference also degrades markedly across the same block.
+
+* Existing phase evidence for independent/reuse
+
+| Leg | Round | Get us/read | Bridge us/commit | Pre-body us/commit | Post-body us/commit |
+|-----+-------+-------------+------------------+--------------------+---------------------|
+| A1 | 0 | 45.09 | 178.64 | 41.85 | 186.17 |
+| A1 | 1 | 42.49 | 183.05 | 43.93 | 230.49 |
+| A1 | 2 | 43.20 | 183.99 | 51.56 | 225.68 |
+| AV2 | 0 | 57.24 | 359.83 | 54.90 | 423.87 |
+| AV2 | 1 | 113.18 | 1864.47 | 146.74 | 1267.14 |
+| AV2 | 2 | 43.52 | 490.46 | 198.31 | 343.22 |
+| AV3 | 0 | 48.74 | 232.62 | 130.71 | 460.14 |
+| AV3 | 1 | 48.36 | 262.71 | 58.78 | 289.01 |
+| AV3 | 2 | 53.76 | 277.54 | 72.13 | 390.69 |
+| A4 | 0 | 61.47 | 268.23 | 100.32 | 298.22 |
+| A4 | 1 | 68.12 | 642.51 | 168.40 | 346.02 |
+| A4 | 2 | 71.39 | 901.59 | 98.96 | 760.34 |
+
+The worst AV2 round has 2.66x mean native get, 10.19x validation bridge and
+5.50x post-body time relative to A1 round 1. A4 round 2, using the same A binary,
+also reaches 71.39 us/read and 901.59 us/bridge. Native reads alone cannot explain
+all observed aggregate delay. These are concurrent operation aggregates, not a
+causal decomposition of the single request at P95; body/bridge/gets must retain
+their original nesting. Post-body includes commit and session release, not just
+fsync. No kernel or Condvar defect is proved by this data alone.
+
+* Intrusive stage results
+
+The following section is completed from the fixed diagnostic campaign; all raw
+samples, source identities, failed attempts and exact recovery counts are retained.
+
+** Retained global-recorder campaign and observer defect
+
+The first serialized read-stage ABBA has 72 successful cases, 55296 exact
+recoveries and 495936 read samples. All stage/count/nesting checks pass and no
+read future returns Pending. It is useful public-driver boundary evidence, but
+not tail-performance acceptance: the global observer mutex adds up to 17573.917
+us to one append. The per-case mean append for independent/reuse reaches 8.139
+us/read. This is observer interference, not intrinsic Turso time; it is outside
+read.total but inside outer get/API timing. A/AV split-path median preparation
+is 26.225/26.254 us and next is 9.356/9.050 us. No fixed native AV penalty follows.
+
+The final observer removes per-read cross-worker locking. It preallocates one
+buffer per blocking-worker slot before timing, uses a thread-local generation/
+slot identity and unique atomic sample sequence, and merges only after drain.
+The same OS thread exclusively appends to each slot. Slot/read limits fail rather
+than silently dropping samples or reducing worker counts. No key, value, authority
+decision, connection or borrowed guard is cached by the observer.
+
+Three earlier pilot legs remain separately retained: one A leg followed by two
+accidentally overlapping AV processes (54 successful cases). The overlap is an
+orchestration error, not Host noise. These are excluded from paired attribution;
+both processes drained and exited naturally. A new fixed serialized ABBA was
+explicitly declared and completed before inspecting its results. No poor sample
+is reclassified as passing or removed. The initial test-mount gate failure and
+strict-Clippy unit-pattern failure are also retained alongside their fixes.
+
+** Final sharded-observer campaign
+
+A new fixed A/AV/AV/A block uses the same frozen workload, three rotated mode
+rounds and alternating direct/split forms: 72 cases, 55296 successful commits,
+55296 exact recoveries and 495936 read samples. All 72 case/read-count joins,
+stage nesting and collector sequence checks pass. There are zero unexpected
+failures/refusals/Unknown outcomes and zero Pending polls/gaps across all reads.
+All four processes exit naturally with the original 30-second bound. Actual
+runtime/write/shared budgets and reusable capacity are 12, blocking budget 16.
+
+Every case-mean append is 0.042–0.288 us; the largest individual append remains
+812.750 us. The earlier global-lock maximum was 17573.917 us. The shared per-read
+lock is removed in source and smaller append costs are observed; shared-Host
+data does not isolate the causal magnitude or establish a controlled 21.6x gain.
+Preemption remains possible. No claim of intrinsic CPU/device latency follows.
+
+The table reports medians of six case means per variant/mode/form, and the worst
+observed per-case read P95. Component medians need not add to the median total.
+For direct reads, preparation is nested in query, so prepare=0 is unseparated,
+not free. Raw samples contain every clock and result size.
+
+| Variant | Mode | Form | Read us | Prepare us | Query us | Next us | Copy us | Cleanup us | Append us | Worst read P95 us |
+|---------+------+-------+---------+------------+----------+---------+---------+------------+-----------+-------------------|
+| A | wal | direct | 16.667 | 0.000 | 12.247 | 2.399 | 0.067 | 1.400 | 0.071 | 53.875 |
+| A | wal | split | 17.530 | 13.070 | 0.531 | 2.193 | 0.068 | 1.291 | 0.061 | 124.750 |
+| A | fresh-mvcc | direct | 53.482 | 0.000 | 34.302 | 11.294 | 0.160 | 4.521 | 0.191 | 159.791 |
+| A | fresh-mvcc | split | 50.759 | 30.785 | 1.357 | 10.806 | 0.153 | 4.392 | 0.166 | 138.167 |
+| A | reused-mvcc | direct | 43.521 | 0.000 | 26.829 | 9.203 | 0.147 | 4.149 | 0.188 | 92.625 |
+| A | reused-mvcc | split | 46.040 | 25.880 | 1.187 | 9.110 | 0.151 | 4.251 | 0.192 | 94.834 |
+| AV | wal | direct | 15.934 | 0.000 | 12.012 | 2.204 | 0.059 | 1.330 | 0.080 | 47.791 |
+| AV | wal | split | 15.736 | 11.203 | 0.521 | 2.200 | 0.060 | 1.302 | 0.060 | 40.917 |
+| AV | fresh-mvcc | direct | 49.705 | 0.000 | 31.071 | 10.387 | 0.157 | 4.822 | 0.201 | 149.875 |
+| AV | fresh-mvcc | split | 49.637 | 29.793 | 1.215 | 10.660 | 0.183 | 4.541 | 0.186 | 141.083 |
+| AV | reused-mvcc | direct | 49.032 | 0.000 | 29.227 | 10.329 | 0.172 | 4.884 | 0.205 | 99.875 |
+| AV | reused-mvcc | split | 47.090 | 27.988 | 1.268 | 9.936 | 0.171 | 4.984 | 0.213 | 96.750 |
+
+For independent/reuse split reads, preparation is approximately 56–59 percent
+of the displayed read median, next approximately one fifth, and subsequent owned
+copy less than 0.4 percent. A/AV preparation is 25.880/27.988 us, next
+9.110/9.936 us, owned copy 0.151/0.171 us and total 46.040/47.090 us.
+Small owned-copy costs and absent Pending identify this measured warm path;
+they do not retrospectively exclude an unobserved suspension or cost spike in
+the earlier bad-tail leg. The uninstrumented and intrusive campaigns are not
+joint per-request traces. Wall time in prepare/next still includes locks and
+Host preemption, so this is an attribution boundary rather than proof of a
+specific parser, VM or scheduler defect.
+
+Observed metadata result sizes range from absent to 525 bytes; 65536-byte Blob
+handling is a separate correctness control, not a throughput result. WAL
+serializes transactions while MVCC admits concurrent writers; WAL/MVCC stage
+differences include their different contention contexts and do not establish
+intrinsic MVCC instruction cost. Cold reads or other workloads can return
+Pending; zero here applies only to this measured original workload.
+
+** Every sharded case
+
+Every row has 768 commits/exact recoveries and 6888 observed reads. These intrusive
+TPS/tail values describe this observer/workload, not dispatcher promotion.
+Absolute means from separate campaigns are not a causal Host correction.
+
+| Leg | Round | Mode | Form | TPS | API P95 ms | Read mean us | Prepare us | Next us | Copy us | Append us |
+|-----+-------+------+-------+-----+------------+--------------+------------+---------+---------+-----------|
+| A1 | 0 | wal | direct | 2468 | 6.307 | 14.037 | 0.000 | 1.949 | 0.062 | 0.071 |
+| A1 | 0 | wal | split | 2322 | 6.774 | 14.994 | 10.760 | 2.081 | 0.061 | 0.059 |
+| A1 | 0 | fresh-mvcc | direct | 1229 | 22.439 | 73.309 | 0.000 | 13.297 | 0.193 | 0.182 |
+| A1 | 0 | fresh-mvcc | split | 1921 | 15.697 | 52.775 | 32.984 | 10.836 | 0.151 | 0.174 |
+| A1 | 0 | reused-mvcc | direct | 5187 | 2.973 | 49.130 | 0.000 | 9.999 | 0.182 | 0.227 |
+| A1 | 0 | reused-mvcc | split | 6670 | 3.899 | 47.700 | 28.231 | 9.108 | 0.174 | 0.180 |
+| A1 | 1 | fresh-mvcc | split | 1661 | 19.332 | 62.015 | 37.473 | 13.501 | 0.186 | 0.145 |
+| A1 | 1 | fresh-mvcc | direct | 1779 | 17.639 | 52.820 | 0.000 | 10.299 | 0.311 | 0.190 |
+| A1 | 1 | reused-mvcc | split | 8121 | 2.792 | 50.478 | 28.985 | 10.058 | 0.208 | 0.181 |
+| A1 | 1 | reused-mvcc | direct | 8688 | 3.093 | 47.181 | 0.000 | 9.269 | 0.198 | 0.177 |
+| A1 | 1 | wal | split | 1460 | 21.912 | 20.067 | 15.381 | 2.305 | 0.074 | 0.064 |
+| A1 | 1 | wal | direct | 1198 | 31.297 | 19.191 | 0.000 | 3.101 | 0.077 | 0.070 |
+| A1 | 2 | reused-mvcc | direct | 7185 | 3.236 | 43.273 | 0.000 | 9.137 | 0.167 | 0.168 |
+| A1 | 2 | reused-mvcc | split | 8093 | 2.095 | 41.287 | 24.689 | 8.436 | 0.168 | 0.216 |
+| A1 | 2 | wal | direct | 1379 | 12.928 | 20.273 | 0.000 | 2.766 | 0.085 | 0.078 |
+| A1 | 2 | wal | split | 840 | 29.124 | 34.708 | 25.342 | 4.804 | 0.137 | 0.180 |
+| A1 | 2 | fresh-mvcc | direct | 1403 | 27.589 | 54.144 | 0.000 | 11.901 | 0.157 | 0.211 |
+| A1 | 2 | fresh-mvcc | split | 2054 | 12.549 | 48.679 | 31.119 | 10.123 | 0.165 | 0.153 |
+| AV2 | 0 | wal | direct | 2415 | 6.325 | 14.776 | 0.000 | 2.124 | 0.052 | 0.079 |
+| AV2 | 0 | wal | split | 1619 | 18.986 | 17.361 | 12.312 | 2.555 | 0.064 | 0.081 |
+| AV2 | 0 | fresh-mvcc | direct | 2274 | 8.474 | 55.362 | 0.000 | 11.094 | 0.168 | 0.199 |
+| AV2 | 0 | fresh-mvcc | split | 2369 | 9.686 | 49.904 | 30.029 | 10.727 | 0.272 | 0.161 |
+| AV2 | 0 | reused-mvcc | direct | 3303 | 4.924 | 60.670 | 0.000 | 13.458 | 0.158 | 0.158 |
+| AV2 | 0 | reused-mvcc | split | 5732 | 3.524 | 47.008 | 28.087 | 9.711 | 0.170 | 0.165 |
+| AV2 | 1 | fresh-mvcc | split | 1364 | 25.525 | 54.918 | 33.310 | 12.636 | 0.183 | 0.151 |
+| AV2 | 1 | fresh-mvcc | direct | 2160 | 13.169 | 49.801 | 0.000 | 10.318 | 0.155 | 0.161 |
+| AV2 | 1 | reused-mvcc | split | 8957 | 2.721 | 50.068 | 27.889 | 10.439 | 0.211 | 0.210 |
+| AV2 | 1 | reused-mvcc | direct | 8919 | 1.883 | 44.330 | 0.000 | 9.760 | 0.171 | 0.192 |
+| AV2 | 1 | wal | split | 1681 | 15.617 | 18.379 | 13.253 | 2.561 | 0.063 | 0.071 |
+| AV2 | 1 | wal | direct | 1301 | 28.146 | 20.764 | 0.000 | 2.974 | 0.077 | 0.089 |
+| AV2 | 2 | reused-mvcc | direct | 9074 | 1.882 | 44.016 | 0.000 | 9.676 | 0.188 | 0.233 |
+| AV2 | 2 | reused-mvcc | split | 10732 | 1.576 | 42.484 | 25.434 | 9.226 | 0.196 | 0.216 |
+| AV2 | 2 | wal | direct | 1835 | 15.250 | 15.823 | 0.000 | 2.183 | 0.060 | 0.054 |
+| AV2 | 2 | wal | split | 2689 | 5.407 | 13.364 | 9.555 | 1.839 | 0.051 | 0.042 |
+| AV2 | 2 | fresh-mvcc | direct | 2707 | 5.961 | 46.620 | 0.000 | 10.334 | 0.229 | 0.202 |
+| AV2 | 2 | fresh-mvcc | split | 2646 | 6.599 | 46.117 | 28.481 | 9.971 | 0.198 | 0.288 |
+| AV3 | 0 | wal | direct | 1158 | 18.897 | 16.045 | 0.000 | 2.226 | 0.059 | 0.102 |
+| AV3 | 0 | wal | split | 2429 | 5.769 | 13.531 | 9.712 | 1.824 | 0.049 | 0.042 |
+| AV3 | 0 | fresh-mvcc | direct | 2750 | 5.710 | 51.468 | 0.000 | 10.635 | 0.140 | 0.208 |
+| AV3 | 0 | fresh-mvcc | split | 2671 | 6.299 | 50.506 | 30.537 | 10.981 | 0.143 | 0.203 |
+| AV3 | 0 | reused-mvcc | direct | 7681 | 3.175 | 53.733 | 0.000 | 11.051 | 0.153 | 0.242 |
+| AV3 | 0 | reused-mvcc | split | 10142 | 1.984 | 45.771 | 26.964 | 9.549 | 0.158 | 0.231 |
+| AV3 | 1 | fresh-mvcc | split | 1607 | 13.842 | 46.637 | 28.844 | 10.546 | 0.182 | 0.168 |
+| AV3 | 1 | fresh-mvcc | direct | 2576 | 6.258 | 49.610 | 0.000 | 10.440 | 0.150 | 0.195 |
+| AV3 | 1 | reused-mvcc | split | 4505 | 9.541 | 50.988 | 31.038 | 10.559 | 0.130 | 0.192 |
+| AV3 | 1 | reused-mvcc | direct | 11258 | 1.500 | 41.194 | 0.000 | 8.943 | 0.173 | 0.218 |
+| AV3 | 1 | wal | split | 1694 | 16.568 | 17.391 | 12.472 | 2.441 | 0.069 | 0.067 |
+| AV3 | 1 | wal | direct | 2514 | 6.093 | 13.727 | 0.000 | 1.904 | 0.055 | 0.044 |
+| AV3 | 2 | reused-mvcc | direct | 5658 | 5.594 | 57.298 | 0.000 | 10.899 | 0.182 | 0.189 |
+| AV3 | 2 | reused-mvcc | split | 7138 | 2.590 | 47.173 | 28.274 | 10.161 | 0.172 | 0.244 |
+| AV3 | 2 | wal | direct | 1052 | 13.685 | 27.649 | 0.000 | 6.093 | 0.071 | 0.080 |
+| AV3 | 2 | wal | split | 2365 | 6.993 | 14.112 | 10.095 | 1.960 | 0.057 | 0.053 |
+| AV3 | 2 | fresh-mvcc | direct | 1950 | 16.450 | 42.157 | 0.000 | 9.912 | 0.159 | 0.267 |
+| AV3 | 2 | fresh-mvcc | split | 2333 | 9.408 | 49.370 | 29.556 | 10.594 | 0.169 | 0.217 |
+| A4 | 0 | wal | direct | 2377 | 7.212 | 14.111 | 0.000 | 1.947 | 0.058 | 0.070 |
+| A4 | 0 | wal | split | 2481 | 7.911 | 14.243 | 10.255 | 1.935 | 0.053 | 0.048 |
+| A4 | 0 | fresh-mvcc | direct | 2529 | 7.201 | 56.781 | 0.000 | 11.365 | 0.163 | 0.191 |
+| A4 | 0 | fresh-mvcc | split | 2723 | 5.643 | 48.671 | 30.451 | 10.777 | 0.155 | 0.214 |
+| A4 | 0 | reused-mvcc | direct | 10650 | 1.544 | 41.901 | 0.000 | 9.370 | 0.126 | 0.214 |
+| A4 | 0 | reused-mvcc | split | 8325 | 2.528 | 44.380 | 24.592 | 9.111 | 0.133 | 0.196 |
+| A4 | 1 | fresh-mvcc | split | 2127 | 11.491 | 54.621 | 29.688 | 11.601 | 0.146 | 0.186 |
+| A4 | 1 | fresh-mvcc | direct | 2030 | 12.842 | 52.562 | 0.000 | 11.222 | 0.146 | 0.213 |
+| A4 | 1 | reused-mvcc | split | 5097 | 5.921 | 49.053 | 27.071 | 10.738 | 0.132 | 0.188 |
+| A4 | 1 | reused-mvcc | direct | 5126 | 5.231 | 43.768 | 0.000 | 8.795 | 0.101 | 0.158 |
+| A4 | 1 | wal | split | 2161 | 7.463 | 14.118 | 10.139 | 1.938 | 0.054 | 0.056 |
+| A4 | 1 | wal | direct | 2384 | 6.324 | 14.144 | 0.000 | 2.033 | 0.059 | 0.052 |
+| A4 | 2 | reused-mvcc | direct | 10182 | 1.661 | 41.270 | 0.000 | 9.131 | 0.128 | 0.199 |
+| A4 | 2 | reused-mvcc | split | 10738 | 1.545 | 40.053 | 23.792 | 9.065 | 0.127 | 0.208 |
+| A4 | 2 | wal | direct | 1033 | 44.621 | 22.105 | 0.000 | 3.200 | 0.071 | 0.089 |
+| A4 | 2 | wal | split | 658 | 56.211 | 40.279 | 29.180 | 5.738 | 0.147 | 0.188 |
+| A4 | 2 | fresh-mvcc | direct | 1636 | 22.771 | 49.907 | 0.000 | 10.443 | 0.096 | 0.144 |
+| A4 | 2 | fresh-mvcc | split | 1924 | 14.688 | 48.742 | 27.149 | 10.064 | 0.118 | 0.158 |
+
+
+* Remaining measurable obligations
+
+1. Measure per-thread CPU/preemption and process-scoped I/O for the original
+   uninstrumented bad-tail path. Stage wall clocks do not separate preemption,
+   driver locks, pure preparation CPU and FULL completion I/O.
+2. Separately instrument SDK VM step versus initial Row construction if that
+   split is required. Public Rows.next clocks deliberately keep these coupled;
+   subsequent get_value copying is the only isolated materialization/copy here.
+3. Review the existing driver prepare_cached API as a physical-statement-only
+   experiment, before any runtime change: rebind every key, preserve reset and
+   operation guards, read current transaction values and schema, discard unusable
+   sessions and preserve cancellation/retirement/restart/Unknown rules. Never
+   cache an authority decision, record value or send capability.
+4. Keep direct paired uninstrumented end-to-end confirmation as the promotion
+   gate. Favorable intrusive timing cannot repair the observed 0.200 TPS /
+   11.105 P95 regression or certify either rejected dispatcher candidate.
+
+* Standard entrypoint, provenance and safety
+
+Run the existing library test target with features turso,arrow-query,graph-publish.
+The exact ignored test is
+=providers::turso::read_timing::turso_original_transaction_read_stages= with
+=--ignored --nocapture --test-threads=1=.
+The libtest setting serializes scenarios; each workload retains the actual-CPU
+runtime/write/shared worker budget.
+Ordinary integration and unit targets continue to own borrowed-guard, once-only validation, cancellation, known-commit
+lost response, retired owner, close/restart and retained original exposure checks.
+
+Before switching worktrees sharing dependency artifacts, clean only the backend
+package, verify actual compile paths and the AV-specific close-order witness,
+then freeze binaries. Main source is based on 87900243; A/AV runtime patches
+remain isolated at 895a06c3 and are not promoted by this commit. Cargo.lock
+SHA-256 remains =13cd897e5e0d3f71f504213ad0b2ed33c64d8583f83005b0d47fd83e8206dcd6=.
+Final observer source SHA-256 is
+=b0b180dde85e475eb61ca72490105fa3a1acf741805b032c516e10dc5db10da6=.
+
+| Frozen binary | SHA-256 |
+|---------------+---------|
+| Uninstrumented A | 70515a49c49355129783089b6927e194b470d9bf8bc7c8dc5c31dc34ed6da3a8 |
+| Uninstrumented AV | b7f5c2929416599a1a10e749e8cb344fe944545cc471920945371a31ce8801c3 |
+| Global-observer A | 894aae70533efad766f0bc4c96141cebcdb2f0b556964a50820faa407472c80f |
+| Global-observer AV | 032301b4daa33dcb65c9dbb6e48f28f0b18d62e8f00fd2662eb9f87721b3c4cc |
+| Sharded-observer A | 0ad894d8a19018346dcfe53618910e45d084a6c97903b0af4aa3a7e57325f936 |
+| Sharded-observer AV | f95696482575e41b7fdf43ce733bd6ac22a195752da683bd211a2a4b89cc3668 |
+
+The temporary =/private/tmp/mrr-read-attribution-manifest-20261101.json= binds
+all original logs, binaries, source patches, Host observations and safety receipts.
+Raw families: =mrr-read-regression-{A1,AV2,AV3,A4}.log=,
+=mrr-read-stages-serial-{A1,AV2,AV3,A4}.log=,
+=mrr-read-sharded-{A1,AV2,AV3,A4}.log= and the separately retained pilot
+=mrr-read-stages-{A1,AV2,AV3}.log=. Every family is under =/private/tmp/=,
+not Git. Historical failure logs and pilot data remain available.
+
+Final expanded standard tests pass O=85, A=85 and AV=86; all three pass strict
+all-target Clippy with the declared feature set. This includes actual borrowed
+guard, cancellation, close/retirement, lost-response, restart and original
+exposure controls, rather than inferring safety from benchmark exit alone.
+The previous remote head 87900243 has twelve successful CI jobs and two failed
+property-snapshot jobs; the inspected Ubuntu failure is the existing cargo
+output-progress watchdog, not a new native test failure. Its log remains retained.
+New-head CI is not awaited or claimed green; no timeout/pin is changed to pass it.

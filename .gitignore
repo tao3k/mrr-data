@@ -1,1 +1,15 @@
 /target/
+
+python/.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+python/dist/
+
+# Raw qualification outputs belong to local/CI artifact storage.
+*.log
+*.log.gz
+/evidence/**/*.json
+/evidence/**/*.jsonl
+/python/src/mrr_data_testing/**/receipts/*.jsonl
+/crates/mrr-data-backend/tests/performance/receipts/*.jsonl
